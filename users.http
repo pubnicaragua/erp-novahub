@@ -1,0 +1,25 @@
+### Variables
+@baseUrl = http://localhost:3000
+
+### 1. Crear un Usuario (POST)
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "email": "admin@novahub.com",
+  "name": "Administrador Sistema",
+  "role": "ADMIN"
+}
+
+### 2. Intentar crear con ROL inválido (Debe fallar)
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "email": "test@novahub.com",
+  "name": "Falla",
+  "role": "SUPER_USER" 
+}
+
+### 3. Obtener todos los Usuarios (GET)
+GET {{baseUrl}}/users
