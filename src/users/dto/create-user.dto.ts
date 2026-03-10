@@ -3,6 +3,10 @@ import { IsString, IsEmail, IsEnum, IsOptional, IsBoolean, MinLength } from "cla
 import { SystemRole } from "@prisma/client";
 
 export class CreateUserDto {
+    @ApiProperty({ example: 'uuid-del-tenant', description: 'ID del tenant al que pertenece el usuario' })
+    @IsString()
+    tenantId: string;
+
     @ApiProperty({ example: 'admin@novahub.com' })
     @IsEmail()
     email: string;
