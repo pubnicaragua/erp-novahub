@@ -53,6 +53,11 @@ export class CreateProductDto {
     @IsOptional()
     @IsNumber()
     stock?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    initialStock?: number;
 }
 
 export class UpdateProductDto extends PartialType(CreateProductDto) {}

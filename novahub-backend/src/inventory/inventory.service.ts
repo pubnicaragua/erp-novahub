@@ -8,19 +8,67 @@ export class InventoryService {
 
   // ==================== PRODUCTS ====================
   async createProduct(data: any, clientTenantId: string) {
+    const { initialStock, ...productData } = data;
     const count = await this.prisma.product.count({ where: { clientTenantId } });
-    const code = data.code || `SKU-${String(count + 1).padStart(5, '0')}`;
+    const code = productData.code || `SKU-${String(count + 1).padStart(5, '0')}`;
     
-    return this.prisma.product.create({
+    // Create product
+    const product = await this.prisma.product.create({
       data: { 
-        ...data, 
+        ...productData, 
         code,
         clientTenantId,
-        taxRate: data.taxRate || 0.15,
-        costPrice: data.costPrice || 0,
+        taxRate: productData.taxRate || 0.15,
+        costPrice: productData.costPrice || 0,
+        salePrice: productData.salePrice || 0,
       },
       include: { category: true },
     });
+
+    // Create a default variant for the product
+    const variant = await this.prisma.productVariant.create({
+      data: {
+        productId: product.id,
+        sku: product.code, // Same as product code for the default variant
+        name: 'Estándar', // Default name
+      }
+    });
+
+    if (initialStock > 0) {
+      // Find the first active warehouse to assign initial stock
+      const warehouse = await this.prisma.warehouse.findFirst({
+        where: { clientTenantId, isActive: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (warehouse) {
+        await this.prisma.inventoryLevel.create({
+          data: {
+            clientTenantId,
+            productId: product.id,
+            warehouseId: warehouse.id,
+            variantId: variant.id,
+            quantity: initialStock,
+            minStock: 0,
+          },
+        });
+
+        // Also create an initial movement for history
+        await this.prisma.inventoryMovement.create({
+          data: {
+            clientTenantId,
+            productId: product.id,
+            warehouseId: warehouse.id,
+            variantId: variant.id,
+            type: 'IN',
+            quantity: initialStock,
+            reference: 'Stock inicial al crear producto',
+          },
+        });
+      }
+    }
+
+    return product;
   }
 
   async findAllProducts(clientTenantId: string, filters?: { search?: string; categoryId?: string }) {
