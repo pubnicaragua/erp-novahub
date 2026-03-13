@@ -1,0 +1,1209 @@
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Palette, RotateCcw, Save, Upload, Eye, Check, Paintbrush, Sparkles,
+  Package, ShoppingBag, DollarSign, Briefcase, ShieldCheck, Building2, Globe,
+  ShoppingCart, UserCheck, Users, Plus, Settings2, KeyRound, Layers,
+  Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
+  Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
+  BarChart3, X, Info
+} from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Separator } from './ui/separator';
+import { Badge } from './ui/badge';
+import { Switch } from './ui/switch';
+import { useTheme, type BrandColors } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { tenantsService } from '../services/tenants.service';
+import { rolesService } from '../services/roles.service';
+import { subscriptionsService } from '../services/subscriptions.service';
+import { brandingService, type Branding } from '../services/branding.service';
+import { toast } from 'sonner';
+import { cn } from './ui/utils';
+import { type RoleManagement, type Permission } from '../types';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Textarea } from './ui/textarea';
+
+const AVAILABLE_MODULES = [
+  { id: 'SALES', label: 'Ventas', icon: ShoppingBag, description: 'Cotizaciones, Facturación y Clientes' },
+  { id: 'INVENTORY', label: 'Inventario', icon: Package, description: 'Stock, Almacenes y SKU' },
+  { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General' },
+  { id: 'PURCHASES', label: 'Compras', icon: ShoppingCart, description: 'Proveedores y Órdenes de Compra' },
+  { id: 'HR', label: 'Recursos Humanos', icon: Users, description: 'Nómina y Gestión de Empleados' },
+  { id: 'PROJECTS', label: 'Proyectos', icon: Briefcase, description: 'Tareas y Cronogramas de Obra' },
+];
+
+// ---- Hex / OKLCH conversion helpers ----
+function hexToRgb(hex: string): [number, number, number] {
+  hex = hex.replace('#', '');
+  if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  const r = parseInt(hex.slice(0, 2), 16) / 255;
+  const g = parseInt(hex.slice(2, 4), 16) / 255;
+  const b = parseInt(hex.slice(4, 6), 16) / 255;
+  return [r, g, b];
+}
+
+function linearize(c: number): number {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+function rgbToOklch(r: number, g: number, b: number): string {
+  const lr = linearize(r), lg = linearize(g), lb = linearize(b);
+  const l_ = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb;
+  const m_ = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb;
+  const s_ = 0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb;
+  const l = Math.cbrt(l_), m = Math.cbrt(m_), s = Math.cbrt(s_);
+  const L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+  const a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+  const bv = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+  const C = Math.sqrt(a * a + bv * bv);
+  let h = Math.atan2(bv, a) * 180 / Math.PI;
+  if (h < 0) h += 360;
+  return `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${h.toFixed(3)})`;
+}
+
+function hexToOklch(hex: string): string {
+  const [r, g, b] = hexToRgb(hex);
+  return rgbToOklch(r, g, b);
+}
+
+function oklchToApproxHex(oklch: string): string {
+  // Simple approximation - extract lightness and hue for a rough color
+  const match = oklch.match(/oklch\(([\d.]+)\s+([\d.]+)\s+([\d.]+)\)/);
+  if (!match) return '#6366f1';
+  const L = parseFloat(match[1]);
+  const C = parseFloat(match[2]);
+  const h = parseFloat(match[3]);
+
+  // Very rough conversion back
+  const hRad = h * Math.PI / 180;
+  const a = C * Math.cos(hRad);
+  const b = C * Math.sin(hRad);
+
+  const l = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s = L - 0.0894841775 * a - 1.2914855480 * b;
+
+  const l3 = l * l * l, m3 = m * m * m, s3 = s * s * s;
+
+  let rr = 4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3;
+  let gg = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3;
+  let bb = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3;
+
+  const delinearize = (c: number) => c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+  rr = Math.round(Math.min(255, Math.max(0, delinearize(rr) * 255)));
+  gg = Math.round(Math.min(255, Math.max(0, delinearize(gg) * 255)));
+  bb = Math.round(Math.min(255, Math.max(0, delinearize(bb) * 255)));
+
+  return `#${rr.toString(16).padStart(2, '0')}${gg.toString(16).padStart(2, '0')}${bb.toString(16).padStart(2, '0')}`;
+}
+
+// ---- Color Presets ----
+interface ColorPreset {
+  name: string;
+  description: string;
+  primary: string;
+  sidebar: string;
+  accent: string;
+}
+
+const colorPresets: ColorPreset[] = [
+  { name: 'Emerald Default', description: 'Tema predeterminado Nova Hub', primary: '#10b981', sidebar: '#0c1a12', accent: '#064e3b' },
+  { name: 'Blue Corporate', description: 'Azul corporativo profesional', primary: '#2563eb', sidebar: '#0f172a', accent: '#1e3a5f' },
+  { name: 'Indigo', description: 'Indigo clasico', primary: '#6366f1', sidebar: '#1a1a2e', accent: '#312e81' },
+  { name: 'Rose', description: 'Rosa premium', primary: '#f43f5e', sidebar: '#1a0a10', accent: '#4c0519' },
+  { name: 'Amber', description: 'Dorado ejecutivo', primary: '#f59e0b', sidebar: '#1a1408', accent: '#451a03' },
+  { name: 'Violet', description: 'Violeta real', primary: '#8b5cf6', sidebar: '#150e24', accent: '#3b0764' },
+  { name: 'Teal', description: 'Teal moderno', primary: '#14b8a6', sidebar: '#0a1a18', accent: '#042f2e' },
+  { name: 'Orange', description: 'Naranja energico', primary: '#f97316', sidebar: '#1a1008', accent: '#431407' },
+];
+
+function generateThemeFromColor(hex: string, sidebarHex: string, accentHex: string): BrandColors {
+  const [r, g, b] = hexToRgb(hex);
+  // Generate foreground based on lightness
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  const fgColor = brightness > 0.5 ? '#000000' : '#ffffff';
+  const [sr, sg, sb] = hexToRgb(sidebarHex);
+  const sBrightness = (sr * 299 + sg * 587 + sb * 114) / 1000;
+  const sFgColor = sBrightness > 0.5 ? '#1a1a1a' : '#f5f5f5';
+
+  return {
+    primary: hexToOklch(hex),
+    primaryForeground: hexToOklch(fgColor),
+    accent: hexToOklch(accentHex),
+    accentForeground: hexToOklch('#f5f5f5'),
+    sidebar: hexToOklch(sidebarHex),
+    sidebarForeground: hexToOklch(sFgColor),
+    sidebarPrimary: hexToOklch(hex),
+    sidebarAccent: hexToOklch(accentHex),
+  };
+}
+
+// ---- Color Picker Component ----
+interface ColorFieldProps {
+  label: string;
+  description: string;
+  hexValue: string;
+  onHexChange: (hex: string) => void;
+}
+
+function ColorField({ label, description, hexValue, onHexChange }: ColorFieldProps) {
+  return (
+    <div className="flex items-center gap-4 rounded-lg border border-border/50 p-3 transition-colors hover:bg-muted/20">
+      <div className="relative">
+        <input
+          type="color"
+          value={hexValue}
+          onChange={e => onHexChange(e.target.value)}
+          className="absolute inset-0 opacity-0 cursor-pointer"
+        />
+        <div
+          className="size-10 rounded-lg border-2 border-border shadow-sm cursor-pointer transition-transform hover:scale-105"
+          style={{ backgroundColor: hexValue }}
+        />
+      </div>
+      <div className="flex-1">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <Input
+        value={hexValue}
+        onChange={e => { if (/^#[0-9a-fA-F]{0,6}$/.test(e.target.value)) onHexChange(e.target.value); }}
+        className="w-28 font-mono text-xs"
+      />
+    </div>
+  );
+}
+
+// ---- Storage Upload Helper ----
+async function uploadLogoToStorage(file: File, tenantId: string): Promise<string> {
+  const { storageService } = await import('../services/storage.service');
+  const url = await storageService.uploadTenantLogo(file, tenantId);
+  return url;
+}
+
+// ---- Scenario detection ----
+function getScenario(role?: string): 'superadmin' | 'partner' | 'client' {
+  if (!role) return 'client';
+  const r = role.toLowerCase();
+  if (r === 'admin' || r === 'superadmin') return 'superadmin';
+  if (r === 'partner') return 'partner';
+  return 'client';
+}
+
+// ---- TAB CONFIG per scenario ----
+interface TabDef { id: string; label: string; icon: React.ElementType; scenario: ('superadmin' | 'partner' | 'client')[] }
+const ALL_TABS: TabDef[] = [
+  { id: 'branding',      label: 'Marca & Tema',       icon: Palette,      scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'empresa',       label: 'Mi Empresa',          icon: Building2,    scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'roles',         label: 'Roles & Permisos',    icon: ShieldCheck,  scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'seguridad',     label: 'Seguridad',           icon: KeyRound,     scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'tenancy',       label: 'Multi-Tenancy',       icon: Layers,       scenario: ['superadmin', 'partner'] },
+  { id: 'plataforma',    label: 'Plataforma',          icon: Server,       scenario: ['superadmin'] },
+  { id: 'dominios',      label: 'Dominios',            icon: Globe,        scenario: ['superadmin', 'partner', 'client'] },
+];
+
+// ---- Main Component ----
+export function ConfiguracionPage() {
+  const { themeConfig, updateTheme, updateConfig, resetTheme } = useTheme();
+  const { user } = useAuth();
+  const scenario = getScenario(user?.role);
+  const visibleTabs = ALL_TABS.filter(t => t.scenario.includes(scenario));
+
+  // Hex state for the color pickers
+  const [primaryHex, setPrimaryHex] = useState(() => oklchToApproxHex(themeConfig.colors.primary));
+  const [sidebarHex, setSidebarHex] = useState(() => oklchToApproxHex(themeConfig.colors.sidebar));
+  const [accentHex, setAccentHex] = useState(() => oklchToApproxHex(themeConfig.colors.accent));
+  const [sidebarFgHex, setSidebarFgHex] = useState(() => oklchToApproxHex(themeConfig.colors.sidebarForeground));
+  const [primaryFgHex, setPrimaryFgHex] = useState(() => oklchToApproxHex(themeConfig.colors.primaryForeground));
+  const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [companyName, setCompanyName] = useState('');
+  const [companySlug, setCompanySlug] = useState('');
+  const [companyIndustry, setCompanyIndustry] = useState('OTHER');
+  const [activeTab, setActiveTab] = useState('branding');
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Security state
+  const [twoFaEnabled, setTwoFaEnabled] = useState(false);
+  const [sessionTimeout, setSessionTimeout] = useState('480');
+  const [ipWhitelist, setIpWhitelist] = useState('');
+
+  // Tenancy state
+  const [strictIsolation, setStrictIsolation] = useState(true);
+  const [whiteLabel, setWhiteLabel] = useState(false);
+  const [apiAccess, setApiAccess] = useState(false);
+  const [apiKey] = useState('nh_live_' + Math.random().toString(36).slice(2, 18).toUpperCase());
+
+  // New role dialog state
+  const [newRoleName, setNewRoleName] = useState('');
+  const [newRoleDesc, setNewRoleDesc] = useState('');
+  const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null);
+
+  // Load branding on mount
+  useEffect(() => {
+    fetchBranding();
+  }, []);
+
+  const fetchBranding = async () => {
+    try {
+      const b = await brandingService.getCurrent();
+      if (b.primaryColor) setPrimaryHex(b.primaryColor.startsWith('oklch') ? oklchToApproxHex(b.primaryColor) : b.primaryColor);
+      if (b.sidebarColor) setSidebarHex(b.sidebarColor.startsWith('oklch') ? oklchToApproxHex(b.sidebarColor) : b.sidebarColor);
+      if (b.accentColor) setAccentHex(b.accentColor.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : b.accentColor);
+      if (b.companyName) setCompanyName(b.companyName);
+      if (b.logo) setLogoPreview(b.logo);
+      if (b.whiteLabel !== undefined) setWhiteLabel(b.whiteLabel);
+      updateTheme(generateThemeFromColor(
+        b.primaryColor?.startsWith('oklch') ? oklchToApproxHex(b.primaryColor) : (b.primaryColor || '#10b981'),
+        b.sidebarColor?.startsWith('oklch') ? oklchToApproxHex(b.sidebarColor) : (b.sidebarColor || '#0c1a12'),
+        b.accentColor?.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : (b.accentColor || '#064e3b'),
+      ));
+    } catch (error) {
+      console.error('Error fetching branding:', error);
+    }
+  };
+
+  const applyPreset = useCallback((preset: ColorPreset) => {
+    setPrimaryHex(preset.primary);
+    setSidebarHex(preset.sidebar);
+    setAccentHex(preset.accent);
+
+    const [r, g, b] = hexToRgb(preset.primary);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    setPrimaryFgHex(brightness > 0.5 ? '#000000' : '#ffffff');
+    setSidebarFgHex('#f5f5f5');
+    setActivePreset(preset.name);
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      const colors = generateThemeFromColor(primaryHex, sidebarHex, accentHex);
+      colors.primaryForeground = hexToOklch(primaryFgHex);
+      colors.sidebarForeground = hexToOklch(sidebarFgHex);
+      
+      updateTheme(colors);
+      
+      await brandingService.update({
+        primaryColor: primaryHex,
+        sidebarColor: sidebarHex,
+        accentColor: accentHex,
+        logo: themeConfig.logo || undefined
+      });
+
+      toast.success('Marca actualizada correctamente', {
+        description: `Los cambios se guardaron para nivel: ${user?.role.toUpperCase()}`,
+      });
+    } catch (error) {
+      console.error('Error saving theme:', error);
+      toast.error('Error al guardar el tema en el servidor');
+    }
+  };
+
+  const handleReset = () => {
+    resetTheme();
+    setPrimaryHex('#10b981');
+    setSidebarHex('#0c1a12');
+    setAccentHex('#064e3b');
+    setPrimaryFgHex('#ffffff');
+    setSidebarFgHex('#f5f5f5');
+    setActivePreset('Emerald Default');
+    toast.info('Tema restaurado al predeterminado');
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setLogoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoSave = async () => {
+    if (!logoFile) return;
+    setLogoUploading(true);
+    try {
+      let logoUrl: string;
+      if (user?.tenantId) {
+        logoUrl = await uploadLogoToStorage(logoFile, user.tenantId);
+      } else {
+        logoUrl = logoPreview || '';
+      }
+      updateConfig({ logo: logoUrl });
+      await brandingService.update({ logo: logoUrl });
+      toast.success('Logo guardado en Supabase Storage ✓');
+    } catch (error) {
+      console.error('Logo upload error:', error);
+      // Fallback to base64 if storage fails
+      if (logoPreview) {
+        updateConfig({ logo: logoPreview });
+        await brandingService.update({ logo: logoPreview }).catch(() => {});
+        toast.success('Logo aplicado localmente');
+      } else {
+        toast.error('Error al subir el logo');
+      }
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const [roles, setRoles] = useState<RoleManagement[]>([]);
+  const [enabledModules, setEnabledModules] = useState<string[]>([]);
+  const [isLoadingModules, setIsLoadingModules] = useState(false);
+  const [isLoadingRoles, setIsLoadingRoles] = useState(false);
+
+  useEffect(() => {
+    if (user?.tenantId) {
+      fetchRoles();
+      fetchEnabledModules();
+    }
+  }, [user?.tenantId]);
+
+  const fetchRoles = async () => {
+    setIsLoadingRoles(true);
+    try {
+      const res = await rolesService.getAll();
+      setRoles(res.data || []);
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+    } finally {
+      setIsLoadingRoles(false);
+    }
+  };
+
+  const fetchEnabledModules = async () => {
+    if (!user?.tenantId) return;
+    setIsLoadingModules(true);
+    try {
+      const res = await subscriptionsService.getEnabledModules(user.tenantId);
+      setEnabledModules(res);
+    } catch (error) {
+      console.error('Error fetching modules:', error);
+    } finally {
+      setIsLoadingModules(false);
+    }
+  };
+
+  const handleSaveCompanyInfo = async () => {
+    try {
+      updateConfig({ tenantName: companyName });
+      await brandingService.update({ companyName });
+      toast.success('Información guardada');
+    } catch (error) {
+      toast.error('Error al guardar la información en el servidor');
+    }
+  };
+
+  const handleToggleModule = async (moduleId: string) => {
+    toast.info('La gestión de módulos se realiza desde la pestaña de Suscripciones para garantizar el registro de auditoría.');
+  };
+
+  const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<Partial<RoleManagement> | null>(null);
+
+  const handleEditRole = (role: RoleManagement) => {
+    setEditingRole(role);
+    setIsRoleDialogOpen(true);
+  };
+
+  const handleCreateRole = () => {
+    setEditingRole({
+      name: '',
+      description: '',
+      permissions: AVAILABLE_MODULES.map(m => ({
+        module: m.id,
+        read: true,
+        write: false,
+        delete: false
+      }))
+    });
+    setIsRoleDialogOpen(true);
+  };
+
+  const handleSaveRole = async () => {
+    if (!editingRole?.name) {
+      toast.error('El nombre del rol es obligatorio');
+      return;
+    }
+
+    try {
+      if (editingRole.id) {
+        await rolesService.update(editingRole.id, editingRole);
+        toast.success('Rol actualizado con éxito');
+      } else {
+        await rolesService.create(editingRole);
+        toast.success('Nuevo rol creado correctamente');
+      }
+      setIsRoleDialogOpen(false);
+      fetchRoles();
+    } catch (error) {
+      toast.error('Error al guardar el rol');
+    }
+  };
+
+  const togglePermission = (module: string, type: 'read' | 'write' | 'delete') => {
+    if (!editingRole) return;
+    const newPerms = (editingRole.permissions || []).map(p => {
+      if (p.module === module) {
+        return { ...p, [type]: !p[type] };
+      }
+      return p;
+    });
+    setEditingRole({ ...editingRole, permissions: newPerms });
+  };
+
+  return (
+    <div className="space-y-6 p-4 md:p-8 pb-24 max-w-[1920px] mx-auto">
+
+      {/* ── HEADER ── */}
+      <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+        className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-black tracking-tighter flex items-center gap-3 uppercase italic">
+            <Settings2 className="size-9 text-primary" />
+            Configuración <span className="text-primary">Sistema</span>
+          </h1>
+          <div className="flex items-center gap-2 mt-2">
+            <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+              {scenario === 'superadmin' ? 'Super Admin Console' : scenario === 'partner' ? 'Partner Panel' : 'Mi Configuración'}
+            </Badge>
+            <span className="text-muted-foreground/40 text-xs font-medium">
+              {user?.name}
+            </span>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ── TABS ── */}
+      <Tabs value={activeTab} className="space-y-6" onValueChange={setActiveTab}>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+          <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-border/40">
+            {visibleTabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <TabsTrigger key={tab.id} value={tab.id}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+                    data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
+                  <Icon className="size-4" />
+                  {tab.label}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </motion.div>
+
+        {/* ══════════ TAB: BRANDING ══════════ */}
+        <TabsContent value="branding" className="space-y-6 mt-0">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+            {/* Left: Presets + Colors */}
+            <div className="xl:col-span-2 space-y-6">
+              {/* Presets */}
+              <Card className="border-border/50 shadow-sm overflow-hidden">
+                <CardHeader className="border-b border-border/30 bg-muted/10">
+                  <CardTitle className="flex items-center gap-2 text-lg font-black"><Sparkles className="size-5 text-primary" />Paletas de Color</CardTitle>
+                  <CardDescription>Aplica un esquema completo con un solo click</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {colorPresets.map(preset => (
+                      <button key={preset.name} onClick={() => applyPreset(preset)}
+                        className={cn('relative flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all hover:shadow-xl hover:-translate-y-0.5',
+                          activePreset === preset.name ? 'border-primary shadow-lg shadow-primary/20 bg-primary/5' : 'border-border/50 hover:border-primary/30')}>
+                        {activePreset === preset.name && (
+                          <div className="absolute -right-1.5 -top-1.5 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md">
+                            <Check className="size-3.5" />
+                          </div>
+                        )}
+                        <div className="flex gap-1.5">
+                          <div className="size-7 rounded-full border-2 border-white/20 shadow-sm" style={{ backgroundColor: preset.primary }} />
+                          <div className="size-7 rounded-full border-2 border-white/20 shadow-sm" style={{ backgroundColor: preset.sidebar }} />
+                          <div className="size-7 rounded-full border-2 border-white/20 shadow-sm" style={{ backgroundColor: preset.accent }} />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs font-black">{preset.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{preset.description}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Custom Colors */}
+              <Card className="border-border/50 shadow-sm">
+                <CardHeader className="border-b border-border/30 bg-muted/10">
+                  <CardTitle className="flex items-center gap-2 text-lg font-black"><Palette className="size-5 text-primary" />Colores Personalizados</CardTitle>
+                  <CardDescription>Ajusta cada color individualmente</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-4">
+                  <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Colores Principales</p>
+                  <ColorField label="Color Primario" description="Botones, enlaces y elementos activos" hexValue={primaryHex} onHexChange={v => { setPrimaryHex(v); setActivePreset(null); }} />
+                  <ColorField label="Texto sobre Primario" description="Color del texto en botones primarios" hexValue={primaryFgHex} onHexChange={v => { setPrimaryFgHex(v); setActivePreset(null); }} />
+                  <ColorField label="Color de Acento" description="Elementos secundarios y hovers" hexValue={accentHex} onHexChange={v => { setAccentHex(v); setActivePreset(null); }} />
+                  <Separator className="my-2" />
+                  <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Colores del Sidebar</p>
+                  <ColorField label="Fondo del Sidebar" description="Color de fondo del menú lateral" hexValue={sidebarHex} onHexChange={v => { setSidebarHex(v); setActivePreset(null); }} />
+                  <ColorField label="Texto del Sidebar" description="Color del texto en el menú lateral" hexValue={sidebarFgHex} onHexChange={v => { setSidebarFgHex(v); setActivePreset(null); }} />
+                  <div className="flex gap-3 pt-2">
+                    <Button onClick={handleSave} className="rounded-xl gap-2 font-bold">
+                      <Save className="size-4" />Guardar Tema
+                    </Button>
+                    <Button variant="outline" onClick={handleReset} className="rounded-xl gap-2">
+                      <RotateCcw className="size-4" />Restaurar
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Right: Live Preview + Logo */}
+            <div className="space-y-6">
+              {/* Logo Upload */}
+              <Card className="border-border/50 shadow-sm">
+                <CardHeader className="border-b border-border/30 bg-muted/10">
+                  <CardTitle className="flex items-center gap-2 text-lg font-black"><Upload className="size-5 text-primary" />Logo Corporativo</CardTitle>
+                  <CardDescription>Almacenado en Supabase Storage</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-4">
+                  <div
+                    onClick={() => logoInputRef.current?.click()}
+                    className={cn('relative flex flex-col items-center justify-center h-40 rounded-2xl border-2 border-dashed cursor-pointer transition-all group',
+                      logoPreview ? 'border-primary/40 bg-primary/5' : 'border-border/50 hover:border-primary/40 hover:bg-primary/5')}>
+                    {logoPreview ? (
+                      <>
+                        <img src={logoPreview} alt="Logo" className="h-full w-full object-contain p-6 rounded-2xl" />
+                        <div className="absolute inset-0 bg-black/50 rounded-2xl opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                          <p className="text-white text-xs font-bold">Cambiar logo</p>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Upload className="size-10 opacity-30" />
+                        <p className="text-xs font-bold">Click para subir logo</p>
+                        <p className="text-[10px] opacity-60">PNG, SVG, JPG · Max 2MB</p>
+                      </div>
+                    )}
+                  </div>
+                  <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                  {logoFile && (
+                    <Button onClick={handleLogoSave} disabled={logoUploading} className="w-full rounded-xl gap-2 font-bold">
+                      {logoUploading ? <><RefreshCw className="size-4 animate-spin" />Subiendo...</> : <><Save className="size-4" />Guardar en Supabase</>}
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Live Preview */}
+              <Card className="border-border/50 shadow-sm">
+                <CardHeader className="border-b border-border/30 bg-muted/10">
+                  <CardTitle className="flex items-center gap-2 text-lg font-black"><Eye className="size-5 text-primary" />Vista Previa</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <div className="rounded-xl overflow-hidden border border-border shadow-lg" style={{ backgroundColor: sidebarHex }}>
+                    <div className="p-3 border-b" style={{ borderColor: `${sidebarFgHex}20` }}>
+                      <div className="flex items-center gap-2">
+                        {logoPreview ? (
+                          <img src={logoPreview} alt="Logo" className="size-8 object-contain rounded" />
+                        ) : (
+                          <div className="size-8 rounded-lg flex items-center justify-center font-black text-sm" style={{ backgroundColor: primaryHex, color: primaryFgHex }}>N</div>
+                        )}
+                        <div>
+                          <p className="text-xs font-bold" style={{ color: sidebarFgHex }}>{companyName || 'Mi Empresa'}</p>
+                          <p className="text-[9px] opacity-50" style={{ color: sidebarFgHex }}>Dashboard ERP</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-2 space-y-1">
+                      {['Dashboard', 'Ventas', 'Compras', 'Inventario'].map((item, i) => (
+                        <div key={item} className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
+                          style={i === 0 ? { backgroundColor: primaryHex, color: primaryFgHex } : { color: `${sidebarFgHex}99` }}>
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-3 border-t space-y-2" style={{ borderColor: `${sidebarFgHex}20` }}>
+                      <div className="flex gap-2">
+                        <button className="flex-1 rounded-lg px-2 py-1 text-[10px] font-bold transition-all" style={{ backgroundColor: primaryHex, color: primaryFgHex }}>Primario</button>
+                        <button className="flex-1 rounded-lg px-2 py-1 text-[10px] font-bold transition-all" style={{ backgroundColor: accentHex, color: sidebarFgHex }}>Acento</button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </motion.div>
+        </TabsContent>
+
+        {/* ══════════ TAB: EMPRESA ══════════ */}
+        <TabsContent value="empresa" className="space-y-6 mt-0">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <CardTitle className="flex items-center gap-2 font-black"><Building2 className="size-5 text-primary" />Datos Corporativos</CardTitle>
+                <CardDescription>Información principal de tu empresa en Nova Hub</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-5">
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre de la Empresa</Label>
+                  <Input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Ej: Empresa Demo S.A." className="rounded-xl h-11" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Slug / Identificador</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground font-mono bg-muted px-3 py-2 rounded-lg">novahub.io/</span>
+                    <Input value={companySlug || user?.tenantId || ''} onChange={e => setCompanySlug(e.target.value)} className="rounded-xl h-11 font-mono" placeholder="empresa-demo" />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Identificador único de tu instancia en la plataforma</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Industria</Label>
+                  <select value={companyIndustry} onChange={e => setCompanyIndustry(e.target.value)}
+                    className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <option value="RETAIL">Comercio / Retail</option>
+                    <option value="SERVICES">Servicios Profesionales</option>
+                    <option value="CONSTRUCTION">Construcción / Obras</option>
+                    <option value="MANUFACTURING">Manufactura / Industria</option>
+                    <option value="IT">Tecnología / IT</option>
+                    <option value="HEALTHCARE">Salud / Farmacia</option>
+                    <option value="EDUCATION">Educación</option>
+                    <option value="FOOD">Alimentos y Bebidas</option>
+                    <option value="OTHER">Otro</option>
+                  </select>
+                </div>
+                <Button onClick={handleSaveCompanyInfo} className="w-full rounded-xl gap-2 font-bold h-11">
+                  <Save className="size-4" />Guardar Información
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <CardTitle className="flex items-center gap-2 font-black"><Info className="size-5 text-primary" />Detalles del Tenant</CardTitle>
+                <CardDescription>Información técnica de tu instancia</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                {[
+                  { label: 'Tenant ID', value: user?.tenantId || 'N/A', mono: true },
+                  { label: 'Usuario ID', value: user?.id || 'N/A', mono: true },
+                  { label: 'Rol del Sistema', value: user?.role?.toUpperCase() || 'N/A', mono: false },
+                  { label: 'Email', value: user?.email || 'N/A', mono: false },
+                  { label: 'Escenario', value: scenario.toUpperCase(), mono: false },
+                ].map(({ label, value, mono }) => (
+                  <div key={label} className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/30">
+                    <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">{label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={cn('text-xs font-bold', mono && 'font-mono')}>{value}</span>
+                      {mono && (
+                        <button onClick={() => { navigator.clipboard.writeText(value); toast.success('Copiado'); }}
+                          className="text-muted-foreground hover:text-primary transition-colors">
+                          <Copy className="size-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Plan Badge */}
+                <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-widest text-primary">Plan Actual</p>
+                    <p className="text-2xl font-black mt-0.5">Enterprise</p>
+                  </div>
+                  <div className="p-3 bg-primary/10 rounded-xl">
+                    <Crown className="size-6 text-primary" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </TabsContent>
+
+        {/* ══════════ TAB: ROLES ══════════ */}
+        <TabsContent value="roles" className="space-y-6 mt-0">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 font-black"><ShieldCheck className="size-5 text-primary" />Gestión de Roles & Permisos</CardTitle>
+                    <CardDescription>Define niveles de acceso por módulo para cada rol de usuario</CardDescription>
+                  </div>
+                  <Button onClick={handleCreateRole} className="rounded-xl gap-2 font-black text-xs uppercase tracking-widest h-10">
+                    <Plus className="size-4" />Nuevo Rol
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                {isLoadingRoles ? (
+                  <div className="flex items-center justify-center h-40">
+                    <RefreshCw className="size-8 animate-spin text-primary/30" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {(roles || []).map((role: RoleManagement) => {
+                      const roleColors: Record<string, string> = {
+                        'Administrador': 'from-violet-500 to-purple-600',
+                        'Gerente': 'from-blue-500 to-indigo-600',
+                        'Empleado': 'from-emerald-500 to-teal-600',
+                        'Observador': 'from-slate-400 to-slate-500',
+                      };
+                      const gradient = roleColors[role.name] || 'from-primary to-primary/80';
+                      return (
+                        <div key={role.id}
+                          className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card hover:border-primary/30 hover:shadow-lg transition-all p-5">
+                          <div className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-5 transition-all" />
+
+                          {/* Role Header */}
+                          <div className="flex items-start justify-between mb-5">
+                            <div className="flex items-center gap-3">
+                              <div className={`size-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg text-white font-black text-lg`}>
+                                {role.name?.charAt(0) || 'R'}
+                              </div>
+                              <div>
+                                <h4 className="font-black text-base tracking-tight">{role.name}</h4>
+                                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{role.permissions?.length || 0} módulos configurados</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                              <button onClick={() => handleEditRole(role)}
+                                className="size-7 rounded-lg bg-primary/10 hover:bg-primary/20 flex items-center justify-center text-primary transition-all">
+                                <Edit2 className="size-3.5" />
+                              </button>
+                              {!['Administrador', 'Admin'].includes(role.name) && (
+                                <button onClick={async () => {
+                                  if (!confirm(`¿Eliminar el rol "${role.name}"?`)) return;
+                                  try { await rolesService.delete(role.id); toast.success('Rol eliminado'); fetchRoles(); }
+                                  catch { toast.error('Error al eliminar rol'); }
+                                }} className="size-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 flex items-center justify-center text-rose-500 transition-all">
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Permissions Matrix */}
+                          <div className="space-y-1.5 mb-5">
+                            {(role.permissions || []).slice(0, 4).map((p: Permission) => (
+                              <div key={p.module} className="flex items-center justify-between text-[11px] px-2 py-1 rounded-lg hover:bg-muted/20">
+                                <span className="font-bold capitalize text-muted-foreground">{p.module}</span>
+                                <div className="flex gap-1">
+                                  <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', p.read ? 'bg-blue-500/15 text-blue-500' : 'bg-muted/30 text-muted-foreground/30')}>R</span>
+                                  <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', p.write ? 'bg-emerald-500/15 text-emerald-500' : 'bg-muted/30 text-muted-foreground/30')}>W</span>
+                                  <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', p.delete ? 'bg-rose-500/15 text-rose-500' : 'bg-muted/30 text-muted-foreground/30')}>D</span>
+                                </div>
+                              </div>
+                            ))}
+                            {(role.permissions?.length || 0) > 4 && (
+                              <p className="text-[10px] text-muted-foreground/50 italic pl-2">+ {role.permissions.length - 4} módulos más</p>
+                            )}
+                          </div>
+
+                          <button onClick={() => handleEditRole(role)}
+                            className="w-full text-xs font-black uppercase tracking-widest py-2 rounded-xl border border-primary/20 text-primary hover:bg-primary/5 transition-all">
+                            Editar Permisos →
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    {/* Add New Role Card */}
+                    <button onClick={handleCreateRole}
+                      className="group flex flex-col items-center justify-center gap-3 p-5 rounded-2xl border-2 border-dashed border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all min-h-[200px]">
+                      <div className="size-12 rounded-xl bg-muted/20 group-hover:bg-primary/10 flex items-center justify-center transition-all">
+                        <Plus className="size-6 text-muted-foreground group-hover:text-primary transition-all" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs font-black uppercase tracking-widest">Nuevo Rol</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Crear rol personalizado</p>
+                      </div>
+                    </button>
+
+                    {roles.length === 0 && (
+                      <div className="col-span-full py-16 text-center border-2 border-dashed border-border/30 rounded-2xl">
+                        <ShieldCheck className="size-12 mx-auto text-muted-foreground/10 mb-3" />
+                        <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/30">Sin roles configurados</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Role Edit Dialog */}
+          <AnimatePresence>
+            {isRoleDialogOpen && editingRole && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                  className="w-full max-w-4xl bg-card border border-border/50 rounded-3xl shadow-2xl overflow-hidden">
+                  <div className="flex items-center justify-between p-6 border-b border-border/30 bg-muted/10">
+                    <div>
+                      <h3 className="text-lg font-black">{editingRole?.id ? 'Editar Rol' : 'Nuevo Rol'}</h3>
+                      <p className="text-sm text-muted-foreground">Define nombre y matriz de permisos</p>
+                    </div>
+                    <button onClick={() => setIsRoleDialogOpen(false)} className="size-8 rounded-xl hover:bg-muted flex items-center justify-center">
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                  <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre del Rol *</Label>
+                        <Input placeholder="Ej: Gerente de Ventas" className="rounded-xl h-11"
+                          value={editingRole?.name || ''} onChange={e => setEditingRole({ ...editingRole, name: e.target.value })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Descripción</Label>
+                        <Input placeholder="Descripción del rol" className="rounded-xl h-11"
+                          value={editingRole?.description || ''} onChange={e => setEditingRole({ ...editingRole, description: e.target.value })} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Matriz de Permisos por Módulo</Label>
+                        <div className="flex gap-4 text-[10px] font-black uppercase tracking-widest">
+                          <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-blue-500 inline-block" />Leer = ver registros</span>
+                          <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-500 inline-block" />Escribir = crear/editar</span>
+                          <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" />Borrar = eliminar</span>
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-border/40 overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/30">
+                            <tr>
+                              <th className="text-left px-4 py-3 text-xs font-black uppercase tracking-widest text-muted-foreground w-1/2">Módulo</th>
+                              <th className="px-4 py-3 text-center text-xs font-black text-blue-500 w-1/6">LEER</th>
+                              <th className="px-4 py-3 text-center text-xs font-black text-emerald-500 w-1/6">ESCRIBIR</th>
+                              <th className="px-4 py-3 text-center text-xs font-black text-rose-500 w-1/6">BORRAR</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/30">
+                            {(editingRole?.permissions || []).map((p) => {
+                              const mod = AVAILABLE_MODULES.find(m => m.id === p.module);
+                              const Icon = mod?.icon;
+                              return (
+                                <tr key={p.module} className="hover:bg-muted/10 transition-colors">
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className="size-8 rounded-lg bg-muted/30 flex items-center justify-center flex-shrink-0">
+                                        {Icon && <Icon className="size-4 text-muted-foreground" />}
+                                      </div>
+                                      <div>
+                                        <p className="font-bold text-sm">{mod?.label || p.module}</p>
+                                        <p className="text-[10px] text-muted-foreground">{mod?.description || ''}</p>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <Switch checked={p.read} onCheckedChange={() => togglePermission(p.module, 'read')} />
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <Switch checked={p.write} onCheckedChange={() => togglePermission(p.module, 'write')} />
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <Switch checked={p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 p-6 border-t border-border/30 bg-muted/10">
+                    <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setIsRoleDialogOpen(false)}>Cancelar</Button>
+                    <Button className="flex-1 rounded-xl gap-2 font-black" onClick={handleSaveRole}>
+                      <Save className="size-4" />Guardar Rol
+                    </Button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+        </TabsContent>
+
+        {/* ══════════ TAB: SEGURIDAD ══════════ */}
+        <TabsContent value="seguridad" className="space-y-6 mt-0">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <CardTitle className="flex items-center gap-2 font-black"><Shield className="size-5 text-primary" />Autenticación & Acceso</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                {[
+                  { label: 'Autenticación de Dos Factores (2FA)', desc: 'Protege el acceso con un segundo factor de verificación', value: twoFaEnabled, setter: setTwoFaEnabled, tag: 'Recomendado' },
+                  { label: 'Forzar 2FA para Administradores', desc: 'Todos los usuarios admin deben activar 2FA obligatoriamente', value: false, setter: () => {}, tag: 'Enterprise' },
+                  { label: 'Inicio de Sesión con Google SSO', desc: 'Permite autenticación con cuentas corporativas de Google', value: false, setter: () => {}, tag: 'Próximo' },
+                ].map(({ label, desc, value, setter, tag }) => (
+                  <div key={label} className="flex items-center justify-between p-4 rounded-xl border border-border/40 hover:border-border/70 transition-all bg-card">
+                    <div className="space-y-0.5 flex-1 mr-4">
+                      <div className="flex items-center gap-2">
+                        <Label className="font-bold text-sm cursor-pointer">{label}</Label>
+                        <Badge variant="outline" className="text-[9px] font-black uppercase">{tag}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{desc}</p>
+                    </div>
+                    <Switch checked={value} onCheckedChange={setter} />
+                  </div>
+                ))}
+                <div className="space-y-2 pt-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Tiempo de Expiración de Sesión</Label>
+                  <div className="flex items-center gap-3">
+                    <select value={sessionTimeout} onChange={e => setSessionTimeout(e.target.value)}
+                      className="flex h-11 flex-1 rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      <option value="15">15 minutos</option>
+                      <option value="30">30 minutos</option>
+                      <option value="60">1 hora</option>
+                      <option value="240">4 horas</option>
+                      <option value="480">8 horas</option>
+                      <option value="1440">24 horas</option>
+                    </select>
+                    <Button className="rounded-xl h-11 gap-2 font-bold" onClick={() => toast.success('Configuración guardada')}>
+                      <Save className="size-4" />Guardar
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-6">
+              <Card className="border-border/50 shadow-sm">
+                <CardHeader className="border-b border-border/30 bg-muted/10">
+                  <CardTitle className="flex items-center gap-2 font-black"><Lock className="size-5 text-primary" />Control de Acceso por IP</CardTitle>
+                  <CardDescription>Permite solo conexiones desde IPs autorizadas</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-4">
+                  <textarea value={ipWhitelist} onChange={e => setIpWhitelist(e.target.value)} rows={4} placeholder={'192.168.1.0/24\n10.0.0.1\n203.0.113.5'}
+                    className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm font-mono resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                  <Button className="w-full rounded-xl gap-2 font-bold" variant="outline" onClick={() => toast.success('Lista de IPs actualizada')}>
+                    <CheckCircle2 className="size-4" />Actualizar Whitelist
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/50 shadow-sm">
+                <CardHeader className="border-b border-border/30 bg-muted/10">
+                  <CardTitle className="flex items-center gap-2 font-black"><BarChart3 className="size-5 text-primary" />Registro de Auditoría</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-3">
+                  {[
+                    { action: 'Login exitoso', user: user?.email || 'admin@novahub.com', time: 'Hace 2 min', type: 'success' },
+                    { action: 'Rol editado', user: user?.email || 'admin@novahub.com', time: 'Hace 15 min', type: 'warning' },
+                    { action: 'Branding actualizado', user: user?.email || 'admin@novahub.com', time: 'Hace 1h', type: 'info' },
+                    { action: 'Usuario creado', user: 'partner@novahub.io', time: 'Hace 3h', type: 'success' },
+                  ].map(({ action, user: u, time, type }, i) => (
+                    <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-muted/10 border border-border/30">
+                      <div className={cn('size-2 rounded-full flex-shrink-0',
+                        type === 'success' ? 'bg-emerald-500' : type === 'warning' ? 'bg-amber-500' : 'bg-blue-500')} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold truncate">{action}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{u}</p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground flex-shrink-0">{time}</span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          </motion.div>
+        </TabsContent>
+
+        {/* ══════════ TAB: MULTI-TENANCY ══════════ */}
+        <TabsContent value="tenancy" className="space-y-6 mt-0">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <CardTitle className="flex items-center gap-2 font-black"><Layers className="size-5 text-primary" />Configuración de Tenancy</CardTitle>
+                <CardDescription>Ajustes de aislamiento y jerarquía del sistema multi-tenant</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                {[
+                  { label: 'Aislamiento Estricto de Datos', desc: 'Garantiza que ningún dato sea visible entre tenants, incluso en reportes globales', value: strictIsolation, setter: setStrictIsolation, locked: true },
+                  { label: 'White Label Branding', desc: 'Remueve las menciones de "NovaHub" y usa solo tu marca corporativa', value: whiteLabel, setter: setWhiteLabel, locked: false },
+                  { label: 'Acceso a API REST', desc: 'Habilita el endpoint REST para integraciones externas de tus clientes', value: apiAccess, setter: setApiAccess, locked: false },
+                ].map(({ label, desc, value, setter, locked }) => (
+                  <div key={label} className="flex items-center justify-between p-4 rounded-xl border border-border/40 hover:border-border/70 transition-all">
+                    <div className="flex-1 mr-4">
+                      <div className="flex items-center gap-2">
+                        <Label className="font-bold text-sm">{label}</Label>
+                        {locked && <Lock className="size-3 text-muted-foreground" />}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                    </div>
+                    <Switch checked={value} onCheckedChange={locked ? undefined : setter} disabled={locked} />
+                  </div>
+                ))}
+                <Button className="w-full rounded-xl gap-2 font-bold h-11" onClick={() => { brandingService.update({ whiteLabel }); toast.success('Configuración de tenancy guardada'); }}>
+                  <Save className="size-4" />Guardar Configuración
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <CardTitle className="flex items-center gap-2 font-black"><Server className="size-5 text-primary" />Infraestructura</CardTitle>
+                <CardDescription>Estado de la plataforma y recursos</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                {[
+                  { label: 'Base de Datos', value: 'PostgreSQL 15 · Supabase', status: 'ok' },
+                  { label: 'Almacenamiento', value: 'Supabase Storage · CDN activo', status: 'ok' },
+                  { label: 'Autenticación', value: 'JWT RS256 · 24h TTL', status: 'ok' },
+                  { label: 'API Backend', value: 'NestJS · localhost:3000', status: 'ok' },
+                  { label: 'Aislamiento Tenants', value: 'clientTenantId por query', status: 'ok' },
+                  { label: 'Dominio Frontend', value: 'Vite · localhost:5173', status: 'ok' },
+                ].map(({ label, value, status }) => (
+                  <div key={label} className="flex items-center justify-between p-3 rounded-xl bg-muted/10 border border-border/30">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{label}</p>
+                      <p className="text-sm font-bold mt-0.5">{value}</p>
+                    </div>
+                    <div className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black',
+                      status === 'ok' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500')}>
+                      <div className={cn('size-1.5 rounded-full', status === 'ok' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500')} />
+                      {status === 'ok' ? 'Activo' : 'Atención'}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </motion.div>
+        </TabsContent>
+
+        {/* ══════════ TAB: DOMINIOS ══════════ */}
+        <TabsContent value="dominios" className="space-y-6 mt-0">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+            <Card className="border-border/50 shadow-sm mb-6">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <CardTitle className="flex items-center gap-2 font-black"><Globe className="size-5 text-primary" />Dominios Personalizados</CardTitle>
+                <CardDescription>Accede a Nova Hub con tu propio dominio corporativo</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-primary/15 rounded-xl">
+                      <Rocket className="size-6 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-black text-base">Dominio Personalizado · Próximamente</p>
+                      <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                        Pronto podrás acceder al ERP con tu propia URL corporativa, por ejemplo: <code className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">erp.tuempresa.com</code>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Subdominio Nova Hub (Activo)</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex items-center gap-2 px-4 py-3 rounded-xl bg-muted/20 border border-border/40">
+                      <Globe className="size-4 text-muted-foreground flex-shrink-0" />
+                      <span className="font-mono text-sm">{user?.tenantId || 'empresa-demo'}.novahub.io</span>
+                    </div>
+                    <Button variant="outline" className="rounded-xl h-11 gap-2">
+                      <Copy className="size-4" />Copiar
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                  {[
+                    { title: 'Subdominio Gratis', price: 'Incluido', desc: 'empresa.novahub.io', current: true, features: ['SSL automático', 'CDN global', 'Soporte técnico'] },
+                    { title: 'Dominio Propio', price: '$29/mes', desc: 'erp.tuempresa.com', current: false, features: ['Tu dominio corporativo', 'SSL personalizado', 'Redirección automática', 'DNS configurado'] },
+                    { title: 'White Label Total', price: 'Enterprise', desc: 'app.tuempresa.com', current: false, features: ['Sin mención a NovaHub', 'Branding completo', 'Email corporativo', 'Support dedicado'] },
+                  ].map(({ title, price, desc, current, features }) => (
+                    <div key={title} className={cn('relative p-5 rounded-2xl border transition-all',
+                      current ? 'border-primary/40 bg-primary/5 shadow-lg' : 'border-border/50 hover:border-primary/20')}>
+                      {current && <div className="absolute -top-2 left-4 px-3 py-0.5 bg-primary text-primary-foreground text-[10px] font-black rounded-full uppercase tracking-widest">Activo</div>}
+                      <div className="mt-2">
+                        <p className="font-black text-base">{title}</p>
+                        <p className="text-2xl font-black text-primary mt-1">{price}</p>
+                        <p className="text-xs font-mono text-muted-foreground mt-1">{desc}</p>
+                      </div>
+                      <div className="space-y-2 mt-4">
+                        {features.map(f => (
+                          <div key={f} className="flex items-center gap-2 text-xs">
+                            <CheckCircle2 className="size-3.5 text-primary flex-shrink-0" />
+                            <span>{f}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <Button className="w-full mt-4 rounded-xl font-bold" variant={current ? 'outline' : 'default'} disabled={!current && price !== '$29/mes'}
+                        onClick={() => current ? toast.info('Ya estás usando este plan') : toast.info('Próximamente disponible')}>
+                        {current ? 'Plan Actual' : price === 'Enterprise' ? <><Rocket className="size-3.5 mr-1" />Contactar</> : <><ArrowRight className="size-3.5 mr-1" />Activar</>}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </TabsContent>
+
+        {/* ══════════ TAB: PLATAFORMA (Super Admin only) ══════════ */}
+        <TabsContent value="plataforma" className="space-y-6 mt-0">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <CardTitle className="flex items-center gap-2 font-black">
+                  <Crown className="size-5 text-violet-500" />
+                  Control de Plataforma
+                  <Badge className="bg-violet-500/10 text-violet-500 border-violet-500/20 text-[9px] font-black">SUPER ADMIN</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                {[
+                  { label: 'Modo Mantenimiento', desc: 'Bloquea el acceso de todos los tenants temporalmente', value: false },
+                  { label: 'Logs de Acceso Global', desc: 'Registra todas las acciones de todos los tenants', value: true },
+                  { label: 'Feature Flags Beta', desc: 'Habilita funcionalidades en fase beta para testing', value: false },
+                  { label: 'Notificaciones de Sistema', desc: 'Muestra banners de mantenimiento a los usuarios', value: false },
+                ].map(({ label, desc, value }) => (
+                  <div key={label} className="flex items-center justify-between p-4 rounded-xl border border-violet-500/10 bg-violet-500/5 hover:bg-violet-500/10 transition-all">
+                    <div className="flex-1 mr-4">
+                      <Label className="font-bold text-sm">{label}</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                    </div>
+                    <Switch defaultChecked={value} onCheckedChange={() => toast.success('Configuración actualizada')} />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <CardTitle className="flex items-center gap-2 font-black"><BarChart3 className="size-5 text-violet-500" />Estadísticas Globales</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    { label: 'Total Tenants', value: '1', color: 'from-violet-500 to-purple-600' },
+                    { label: 'Partners Activos', value: '1', color: 'from-blue-500 to-indigo-600' },
+                    { label: 'Usuarios Totales', value: '6', color: 'from-emerald-500 to-teal-600' },
+                    { label: 'Módulos Activos', value: '10', color: 'from-amber-500 to-orange-600' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className={`p-5 rounded-2xl bg-gradient-to-br ${color} text-white`}>
+                      <p className="text-3xl font-black">{value}</p>
+                      <p className="text-xs font-bold uppercase tracking-widest mt-1 opacity-80">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </TabsContent>
+
+      </Tabs>
+    </div>
+  );
+}
