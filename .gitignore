@@ -12,6 +12,9 @@ build/
 .env
 .env.local
 .env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
 **/.env
 **/.env.local
 
@@ -22,6 +25,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
 # OS files
 .DS_Store
@@ -31,8 +35,19 @@ Thumbs.db
 
 # IDE
 .vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 .idea/
 *.sublime-*
+*.sublime-workspace
+.project
+.classpath
+.c9/
+*.launch
+.settings/
 
 # Temporary files
 .temp/
@@ -51,7 +66,17 @@ coverage/
 # Prisma
 **/prisma/migrations/
 **/generated/
+/generated/prisma
 
 # Cache
 .cache/
 .parcel-cache/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
