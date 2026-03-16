@@ -54,14 +54,20 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
     }
     
     const product = products.find((p: any) => p.id === newTransfer.productId);
-    const variantSku = `SKU-${product?.code}`;
+    // Use the first variant of the product, or the product's default variant
+    const variantId = product?.variants?.[0]?.id || product?.id;
+    
+    if (!variantId) {
+      toast.error('El producto no tiene variantes configuradas');
+      return;
+    }
     
     setSaving(true);
     try {
       await inventoryService.createTransfer({
         fromId: newTransfer.fromId,
         toId: newTransfer.toId,
-        items: [{ variantId: variantSku, quantity: newTransfer.quantity }]
+        items: [{ variantId, quantity: newTransfer.quantity }]
       });
       toast.success('Transferencia creada');
       setIsCreating(false);

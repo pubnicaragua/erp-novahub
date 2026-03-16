@@ -52,8 +52,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
 // Convenience methods
 export const api = {
-  get: <T>(path: string, params?: Record<string, string | number | boolean | undefined>) =>
-    apiRequest<T>(path, { method: 'GET', params }),
+  get: <T>(path: string, options?: Record<string, any> | { params?: Record<string, any> }) => {
+    const params = options?.params ?? options;
+    return apiRequest<T>(path, { method: 'GET', params });
+  },
 
   post: <T>(path: string, body: unknown) =>
     apiRequest<T>(path, { method: 'POST', body }),

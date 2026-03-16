@@ -161,7 +161,7 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
                       record.status === 'REMOTE' ? 'bg-blue-100 text-blue-700' :
                       'bg-gray-100 text-gray-700'
                     }`}>
-                      {record.status}
+                      {record.status === 'PRESENT' ? 'Presente' : record.status === 'ABSENT' ? 'Ausente' : record.status === 'LATE' ? 'Tardanza' : record.status === 'REMOTE' ? 'Remoto' : record.status}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">

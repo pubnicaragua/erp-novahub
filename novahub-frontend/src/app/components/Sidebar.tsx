@@ -120,7 +120,20 @@ const menuItems: MenuItem[] = [
       { id: 'balance', label: 'Balance General', icon: <BarChart3 className="size-4" /> },
     ]
   },
-  { id: 'rh', label: 'Recursos Humanos', icon: <Users className="size-5" /> },
+  {
+    id: 'rh',
+    label: 'Recursos Humanos',
+    icon: <Users className="size-5" />,
+    submenu: [
+      { id: 'empleados', label: 'Empleados', icon: <Users className="size-4" /> },
+      { id: 'nominas', label: 'Nóminas', icon: <DollarSign className="size-4" /> },
+      { id: 'asistencia', label: 'Asistencia', icon: <CalendarClock className="size-4" /> },
+      { id: 'ausencias', label: 'Vacaciones', icon: <CalendarClock className="size-4" /> },
+      { id: 'evaluaciones', label: 'Desempeño', icon: <BarChart3 className="size-4" /> },
+      { id: 'capacitaciones', label: 'Capacitación', icon: <FileCheck className="size-4" /> },
+      { id: 'beneficios', label: 'Beneficios', icon: <Plus className="size-4" /> },
+    ]
+  },
   { id: 'actividades', label: 'Actividades', icon: <Activity className="size-5" />, section: 'Herramientas' },
   { id: 'tickets', label: 'Tickets y Soporte', icon: <Headphones className="size-5" /> },
   { id: 'documentos', label: 'Documentos', icon: <FolderOpen className="size-4" /> },

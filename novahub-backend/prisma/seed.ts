@@ -173,15 +173,53 @@ async function main() {
   }
   console.log('✅ 3 Proveedores creados');
 
-  // First create a default Account (needed by Expenses)
-  const account = await prisma.account.upsert({
-    where: { id: 'acct-001' },
-    update: {},
-    create: {
-      id: 'acct-001', clientTenantId: clientTenant.id,
-      code: 'GAST-001', name: 'Gastos Generales', type: 'EXPENSE' as any,
-    },
-  });
+  // ─── CUENTAS CONTABLES ─────────────────────────────────────────────────────
+  const accounts = [
+    { id: 'acct-001', code: '1000', name: 'Caja General', type: 'ASSET' },
+    { id: 'acct-002', code: '1100', name: 'Banco BAC', type: 'ASSET' },
+    { id: 'acct-003', code: '1200', name: 'Cuentas por Cobrar', type: 'ASSET' },
+    { id: 'acct-004', code: '2000', name: 'Cuentas por Pagar', type: 'LIABILITY' },
+    { id: 'acct-005', code: '3000', name: 'Capital Social', type: 'EQUITY' },
+    { id: 'acct-006', code: '4000', name: 'Ingresos por Ventas', type: 'INCOME' },
+    { id: 'acct-007', code: '4100', name: 'Ingresos por Servicios', type: 'INCOME' },
+    { id: 'acct-008', code: '5000', name: 'Gastos Operativos', type: 'EXPENSE' },
+    { id: 'acct-009', code: '5100', name: 'Gastos Administrativos', type: 'EXPENSE' },
+    { id: 'acct-010', code: '5200', name: 'Gastos de Nómina', type: 'EXPENSE' },
+  ];
+  for (const acc of accounts) {
+    await prisma.account.upsert({
+      where: { id: acc.id },
+      update: {},
+      create: { id: acc.id, clientTenantId: clientTenant.id, code: acc.code, name: acc.name, type: acc.type as any, balance: 0 },
+    });
+  }
+  console.log(`✅ ${accounts.length} Cuentas contables creadas`);
+
+  // ─── INGRESOS ────────────────────────────────────────────────────────────────
+  const ingresos = [
+    { id: 'inc-001', number: 'ING-001', source: 'Distribuidora Dos Pinos', amount: 12450, notes: 'Pago factura FAC-001' },
+    { id: 'inc-002', number: 'ING-002', source: 'Cervecería de Nicaragua', amount: 15200, notes: 'Pago factura FAC-003' },
+    { id: 'inc-003', number: 'ING-003', source: 'Venta mostrador', amount: 3500, notes: 'Ventas del día 15/03' },
+    { id: 'inc-004', number: 'ING-004', source: 'Consultoría IT', amount: 2800, notes: 'Servicio de soporte técnico' },
+    { id: 'inc-005', number: 'ING-005', source: 'Grupo Pellas', amount: 8750, notes: 'Abono a factura FAC-002' },
+    { id: 'inc-006', number: 'ING-006', source: 'Venta online', amount: 1890, notes: 'Pedido #1234' },
+    { id: 'inc-007', number: 'ING-007', source: 'Claro Nicaragua', amount: 4500, notes: 'Equipos de red' },
+  ];
+  for (const inc of ingresos) {
+    await prisma.income.upsert({
+      where: { id: inc.id },
+      update: {},
+      create: { 
+        id: inc.id, clientTenantId: clientTenant.id, number: inc.number, 
+        accountId: 'acct-006', source: inc.source, amount: inc.amount, 
+        notes: inc.notes, date: new Date(), currency: 'USD' 
+      },
+    });
+  }
+  console.log(`✅ ${ingresos.length} Ingresos creados`);
+
+  // Reference for expenses
+  const account = { id: 'acct-008' };
 
   // ─── 10. Facturas de venta ────────────────────────────────────────────────
   const facturas = [
@@ -223,6 +261,28 @@ async function main() {
     });
   }
   console.log(`✅ ${gastos.length} Gastos creados`);
+
+  // ─── GASTOS RECURRENTES ──────────────────────────────────────────────────────
+  const gastosRecurrentes = [
+    { id: 'rexp-001', desc: 'Alquiler de oficina', amount: 1200, freq: 'MONTHLY', cat: 'RENT' },
+    { id: 'rexp-002', desc: 'Internet Claro 100Mbps', amount: 85, freq: 'MONTHLY', cat: 'UTILITIES' },
+    { id: 'rexp-003', desc: 'Servicio de limpieza', amount: 150, freq: 'WEEKLY', cat: 'SERVICES' },
+    { id: 'rexp-004', desc: 'Licencia Microsoft 365', amount: 299, freq: 'YEARLY', cat: 'SOFTWARE' },
+    { id: 'rexp-005', desc: 'Seguro de equipos', amount: 450, freq: 'QUARTERLY', cat: 'INSURANCE' },
+    { id: 'rexp-006', desc: 'Mantenimiento AC', amount: 80, freq: 'MONTHLY', cat: 'MAINTENANCE' },
+  ];
+  for (const gr of gastosRecurrentes) {
+    await prisma.recurringExpense.upsert({
+      where: { id: gr.id },
+      update: {},
+      create: { 
+        id: gr.id, clientTenantId: clientTenant.id, accountId: 'acct-008',
+        description: gr.desc, amount: gr.amount, frequency: gr.freq as any, 
+        category: gr.cat, startDate: new Date(), status: 'ACTIVE' as any, currency: 'USD'
+      },
+    });
+  }
+  console.log(`✅ ${gastosRecurrentes.length} Gastos recurrentes creados`);
 
   // ─── 12. Empleados ────────────────────────────────────────────────────────
   // Skipping employee seed - use hr-seed.ts for HR module data

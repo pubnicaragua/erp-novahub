@@ -622,10 +622,10 @@ export function SuscripcionesPage() {
 
       <Tabs defaultValue="active" className="w-full">
         <TabsList className="grid w-full grid-cols-2 lg:w-[400px] bg-[#111] border border-white/5 p-1 h-12">
-          <TabsTrigger value="active" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-black tracking-widest gap-2">
+          <TabsTrigger value="active" className="text-white/70 hover:text-white hover:bg-white/10 data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-black tracking-widest gap-2">
             <Building2 className="size-4" /> Gestión Empresas
           </TabsTrigger>
-          <TabsTrigger value="requests" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-black tracking-widest gap-2">
+          <TabsTrigger value="requests" className="text-white/70 hover:text-white hover:bg-white/10 data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-black tracking-widest gap-2">
             <Clock className="size-4" /> {user?.role === 'admin' ? 'Aprobaciones' : 'Solicitudes'}
             {requests.filter(r => r.status === 'PENDING').length > 0 && (
               <Badge className="bg-rose-500 text-[10px] size-5 p-0 flex items-center justify-center rounded-full ml-1 animate-pulse border-none">

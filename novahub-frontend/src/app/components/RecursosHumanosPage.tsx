@@ -1,36 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
-import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from './ui/utils';
+import { motion } from 'framer-motion';
 import {
   Users,
   DollarSign,
   Calendar,
   Award,
   GraduationCap,
-  TrendingUp,
   UserCheck,
-  Clock,
-  FileText,
-  Plus,
-  Search,
-  Filter,
   Download,
-  RefreshCw,
   BarChart3,
-  Activity,
   Sparkles,
-  Gift,
   Building2,
-  Briefcase
 } from 'lucide-react';
 import { hrService } from '../services/hr.service';
-import { Input } from './ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { DashboardHRView } from './hr/DashboardHRView';
 import { EmpleadosView } from './hr/EmpleadosView';
 import { NominasView } from './hr/NominasView';
@@ -38,11 +25,37 @@ import { AsistenciaView } from './hr/AsistenciaView';
 import { AusenciasView } from './hr/AusenciasView';
 import { EvaluacionesView } from './hr/EvaluacionesView';
 import { CapacitacionesView } from './hr/CapacitacionesView';
+import { BeneficiosView } from './hr/BeneficiosView';
 
-export function RecursosHumanosPage() {
+interface RecursosHumanosPageProps {
+  activeSubModule?: string;
+}
+
+export function RecursosHumanosPage({ activeSubModule }: RecursosHumanosPageProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  
+  // Map sidebar submodule IDs to tab values
+  const subModuleToTab: Record<string, string> = {
+    'empleados': 'empleados',
+    'nominas': 'nominas',
+    'asistencia': 'asistencia',
+    'ausencias': 'ausencias',
+    'evaluaciones': 'evaluaciones',
+    'capacitaciones': 'capacitaciones',
+    'beneficios': 'beneficios',
+  };
+  
+  const [activeTab, setActiveTab] = useState(() => 
+    activeSubModule ? (subModuleToTab[activeSubModule] || 'dashboard') : 'dashboard'
+  );
+  
+  // Sync tab when activeSubModule changes from sidebar
+  React.useEffect(() => {
+    if (activeSubModule && subModuleToTab[activeSubModule]) {
+      setActiveTab(subModuleToTab[activeSubModule]);
+    }
+  }, [activeSubModule]);
   const [data, setData] = useState<any>({
     employees: [],
     departments: [],
@@ -86,16 +99,16 @@ export function RecursosHumanosPage() {
       ]);
 
       setData({
-        employees: employeesRes.data || [],
-        departments: departmentsRes.data || [],
-        positions: positionsRes.data || [],
-        payrolls: payrollsRes.data || [],
-        attendance: attendanceRes.data || [],
-        leaveRequests: leaveRequestsRes.data || [],
-        reviews: reviewsRes.data || [],
-        trainings: trainingsRes.data || [],
-        benefits: benefitsRes.data || [],
-        stats: statsRes.data || null,
+        employees: Array.isArray(employeesRes) ? employeesRes : (employeesRes?.data || []),
+        departments: Array.isArray(departmentsRes) ? departmentsRes : (departmentsRes?.data || []),
+        positions: Array.isArray(positionsRes) ? positionsRes : (positionsRes?.data || []),
+        payrolls: Array.isArray(payrollsRes) ? payrollsRes : (payrollsRes?.data || []),
+        attendance: Array.isArray(attendanceRes) ? attendanceRes : (attendanceRes?.data || []),
+        leaveRequests: Array.isArray(leaveRequestsRes) ? leaveRequestsRes : (leaveRequestsRes?.data || []),
+        reviews: Array.isArray(reviewsRes) ? reviewsRes : (reviewsRes?.data || []),
+        trainings: Array.isArray(trainingsRes) ? trainingsRes : (trainingsRes?.data || []),
+        benefits: Array.isArray(benefitsRes) ? benefitsRes : (benefitsRes?.data || []),
+        stats: statsRes || null,
       });
     } catch (error) {
       console.error('Error fetching HR data:', error);
@@ -139,48 +152,35 @@ export function RecursosHumanosPage() {
 
   return (
     <div className="space-y-6 p-4 md:p-8 pb-20 max-w-[1920px] mx-auto">
-      {/* Header con estilo Suscripciones */}
+      {/* Header matching Suscripciones style */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="flex flex-col md:flex-row md:items-center justify-between gap-4"
       >
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 blur-xl rounded-full" />
-            <div className="relative p-4 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-2xl shadow-indigo-900/30">
-              <Users className="size-7 text-white" />
-            </div>
-          </div>
-          <div>
-            <h1 className="text-3xl font-black tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-              Recursos Humanos
-            </h1>
-            <p className="text-sm font-medium text-muted-foreground mt-1">
-              <span className="font-bold text-indigo-600">{data.employees.length}</span> empleados activos · <span className="font-bold text-purple-600">{data.departments.length}</span> departamentos
-            </p>
+        <div>
+          <h1 className="text-4xl font-black tracking-tighter flex items-center gap-3 uppercase italic">
+            <Users className="size-9 text-primary" />
+            Recursos <span className="text-primary">Humanos</span>
+          </h1>
+          <div className="flex items-center gap-2 mt-2">
+            <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+              Gestión de Talento
+            </Badge>
+            <span className="text-muted-foreground/40 text-xs font-medium">
+              {data.employees.length} empleados · {data.departments.length} departamentos
+            </span>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
-            size="sm"
-            onClick={() => fetchData(true)}
-            disabled={refreshing}
-            className="rounded-xl border-border/50 hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all"
-          >
-            <RefreshCw className={`size-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            <span className="font-bold text-xs uppercase tracking-wider">Actualizar</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
             onClick={handleExportData}
-            className="rounded-xl border-border/50 hover:border-purple-500/50 hover:bg-purple-500/5 transition-all"
+            className="rounded-xl gap-2 font-bold hover:border-primary/50 hover:bg-primary/5 transition-all"
           >
-            <Download className="size-4 mr-2" />
-            <span className="font-bold text-xs uppercase tracking-wider">Exportar</span>
+            <Download className="size-4" />
+            Exportar
           </Button>
         </div>
       </motion.div>
@@ -188,35 +188,35 @@ export function RecursosHumanosPage() {
       {/* Main Navigation Tabs - Estilo Suscripciones */}
       <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
         <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 grid grid-cols-4 lg:grid-cols-8 gap-2 rounded-2xl border border-border/40">
-          <TabsTrigger value="dashboard" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-900/30 transition-all">
+          <TabsTrigger value="dashboard" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <BarChart3 className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Dashboard</span>
           </TabsTrigger>
-          <TabsTrigger value="empleados" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-900/30 transition-all">
+          <TabsTrigger value="empleados" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <Users className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Empleados</span>
           </TabsTrigger>
-          <TabsTrigger value="nominas" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-900/30 transition-all">
+          <TabsTrigger value="nominas" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <DollarSign className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Nóminas</span>
           </TabsTrigger>
-          <TabsTrigger value="asistencia" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-900/30 transition-all">
+          <TabsTrigger value="asistencia" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <UserCheck className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Asistencia</span>
           </TabsTrigger>
-          <TabsTrigger value="ausencias" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-900/30 transition-all">
+          <TabsTrigger value="ausencias" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <Calendar className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Vacaciones</span>
           </TabsTrigger>
-          <TabsTrigger value="evaluaciones" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-900/30 transition-all">
+          <TabsTrigger value="evaluaciones" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <Award className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Desempeño</span>
           </TabsTrigger>
-          <TabsTrigger value="capacitaciones" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-900/30 transition-all">
+          <TabsTrigger value="capacitaciones" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <GraduationCap className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Formación</span>
           </TabsTrigger>
-          <TabsTrigger value="beneficios" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-900/30 transition-all">
+          <TabsTrigger value="beneficios" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <Sparkles className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Beneficios</span>
           </TabsTrigger>
@@ -300,25 +300,7 @@ export function RecursosHumanosPage() {
               </TabsContent>
 
               <TabsContent value="beneficios" className="m-0">
-                <div className="rounded-lg border bg-card p-8 text-center">
-                  <Gift className="size-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">Gestión de Beneficios</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {data.benefits.length} beneficios disponibles
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
-                    {data.benefits.map((benefit: any) => (
-                      <div key={benefit.id} className="border rounded-lg p-4 text-left">
-                        <h4 className="font-semibold">{benefit.name}</h4>
-                        <p className="text-sm text-muted-foreground mt-1">{benefit.description}</p>
-                        <div className="flex items-center justify-between mt-3">
-                          <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">{benefit.type}</span>
-                          {benefit.cost && <span className="text-sm font-medium">${benefit.cost}/mes</span>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <BeneficiosView benefits={data.benefits} employees={data.employees} onRefresh={() => fetchData(true)} />
               </TabsContent>
             </>
           )}

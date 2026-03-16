@@ -300,7 +300,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                         emp.employmentStatus === 'INACTIVE' ? 'bg-gray-100 text-gray-700' :
                         'bg-orange-100 text-orange-700'
                       }`}>
-                        {emp.employmentStatus}
+                        {emp.employmentStatus === 'ACTIVE' ? 'Activo' : emp.employmentStatus === 'INACTIVE' ? 'Inactivo' : emp.employmentStatus === 'ON_LEAVE' ? 'Licencia' : emp.employmentStatus === 'TERMINATED' ? 'Terminado' : emp.employmentStatus}
                       </span>
                     </td>
                     <td className="px-4 py-2">
@@ -341,7 +341,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
             <div key={emp.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <div className="size-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
+                  <div className="size-12 rounded-full bg-primary flex items-center justify-center text-white font-bold text-lg">
                     {emp.firstName[0]}{emp.lastName[0]}
                   </div>
                   <div>
@@ -352,7 +352,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                 <span className={`text-xs px-2 py-1 rounded ${
                   emp.employmentStatus === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                 }`}>
-                  {emp.employmentStatus}
+                  {emp.employmentStatus === 'ACTIVE' ? 'Activo' : emp.employmentStatus === 'INACTIVE' ? 'Inactivo' : emp.employmentStatus}
                 </span>
               </div>
               <div className="space-y-2 text-sm">
@@ -370,7 +370,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Salario:</span>
-                  <span className="font-bold text-indigo-600">${emp.salary?.toLocaleString()}</span>
+                  <span className="font-bold text-primary">${emp.salary?.toLocaleString()}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-4 pt-3 border-t">

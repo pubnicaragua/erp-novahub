@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { BarChart3, Download, FileText, TrendingUp, Calendar, Filter, PieChart as PieChartIcon, Package, Wallet } from 'lucide-react';
+import { 
+  BarChart3, Download, FileText, TrendingUp, Calendar, Filter, 
+  DollarSign, Package, Users, Warehouse, RefreshCw, Printer, Share2,
+  ArrowUpRight, ArrowDownRight, PieChart as PieChartIcon
+} from 'lucide-react';
+import { Badge } from './ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import {
   Select,
@@ -74,72 +77,85 @@ const warehouseData = [
 
 export function ReportesPage() {
   const [dateRange, setDateRange] = useState('ultimo-mes');
-  const [reportType, setReportType] = useState('ventas');
+  const [activeTab, setActiveTab] = useState('ventas');
   const [realKpis, setRealKpis] = useState({
     totalSales: 0,
+    totalIncome: 0,
+    totalExpenses: 0,
     totalProfit: 0,
     margin: 0,
-    inventoryRotation: 4.2
+    inventoryValue: 0,
+    totalProducts: 0,
+    totalCustomers: 0
   });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchData = async (isRefresh = false) => {
+    try {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+      
+      const [salesRes, incomeRes, expensesRes, productsRes] = await Promise.all([
+        salesOrdersService.getAll(),
+        incomeService.getAll(),
+        expensesService.getAll(),
+        inventoryService.getProducts()
+      ]);
+
+      const sales = Array.isArray(salesRes) ? salesRes : salesRes?.data || [];
+      const income = Array.isArray(incomeRes) ? incomeRes : incomeRes?.data || [];
+      const expenses = Array.isArray(expensesRes) ? expensesRes : expensesRes?.data || [];
+      const products = Array.isArray(productsRes) ? productsRes : productsRes?.data || [];
+
+      const totalSales = sales.reduce((acc: number, curr: any) => acc + Number(curr.total || 0), 0);
+      const totalIncome = income.reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0);
+      const totalExpenses = expenses.reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0);
+      const inventoryValue = products.reduce((acc: number, curr: any) => acc + (Number(curr.stock || 0) * Number(curr.costPrice || 0)), 0);
+      
+      const totalProfit = totalIncome - totalExpenses;
+      const margin = totalIncome > 0 ? (totalProfit / totalIncome) * 100 : 0;
+
+      setRealKpis({
+        totalSales,
+        totalIncome,
+        totalExpenses,
+        totalProfit,
+        margin,
+        inventoryValue,
+        totalProducts: products.length,
+        totalCustomers: sales.length
+      });
+    } catch (error) {
+      console.error('Error fetching reporting data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [sales, income, expenses] = await Promise.all([
-          salesOrdersService.getAll(),
-          incomeService.getAll(),
-          expensesService.getAll()
-        ]);
-
-        const totalSales = (sales?.data || []).reduce((acc: number, curr: any) => acc + Number(curr.total || 0), 0);
-        const totalIncome = (income?.data || []).reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0);
-        const totalExpenses = (expenses?.data || []).reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0);
-        
-        const totalProfit = totalIncome - totalExpenses;
-        const margin = totalSales > 0 ? (totalProfit / totalSales) * 100 : 0;
-
-        setRealKpis(prev => ({
-          ...prev,
-          totalSales,
-          totalProfit,
-          margin
-        }));
-      } catch (error) {
-        console.error('Error fetching reporting data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, [dateRange]);
 
   return (
-    <div className="space-y-6 p-4 md:p-8 pb-24 max-w-[1800px] mx-auto">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-primary/10 rounded-xl">
-            <BarChart3 className="size-9 text-primary" />
+    <div className="flex flex-col h-full bg-background/50">
+      {/* Header - Consistent with other modules */}
+      <div className="border-b border-border/50 bg-background px-6 py-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between shrink-0">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1">
+            <BarChart3 className="size-3" /> Centro de Inteligencia NovaHub
           </div>
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-              Reportes <span className="text-primary">Avanzados</span>
-            </h1>
-            <div className="flex items-center gap-2 mt-2">
-              <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                4 Tipos de análisis · Rendimiento en tiempo real
-              </Badge>
-            </div>
-          </div>
+          <h1 className="text-2xl font-black text-foreground flex items-center gap-3">
+            Reportes y Análisis
+            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-black tracking-tighter">ANALYTICS</Badge>
+          </h1>
         </div>
-        
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-2 flex-wrap">
           <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-[180px] bg-muted/20 border-border/40 font-bold rounded-xl h-10">
-              <Calendar className="mr-2 size-4 text-primary" />
+            <SelectTrigger className="w-[160px] h-9 border-border bg-card">
+              <Calendar className="mr-2 size-4" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -150,337 +166,128 @@ export function ReportesPage() {
               <SelectItem value="ultimo-año">Último año</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" className="rounded-xl font-bold h-10 shadow-sm border-border/40">
-            <Download className="mr-2 size-4" />
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-9 border-border bg-card"
+            onClick={() => fetchData(true)}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`size-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Actualizar
+          </Button>
+          <Button variant="outline" size="sm" className="h-9 border-border bg-card">
+            <Download className="size-4 mr-2" />
             Exportar
           </Button>
-          <Button className="rounded-xl font-bold h-10 shadow-lg shadow-primary/20">
-            <FileText className="mr-2 size-4" />
+          <Button size="sm" className="h-9 bg-[#05602b] hover:bg-[#044c22]">
+            <Printer className="size-4 mr-2" />
             Generar Reporte
           </Button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="size-4" />
-              Ventas Totales
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-400">
-              ${realKpis.totalSales.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-green-400">+12.5%</span> vs mes anterior
-            </p>
-          </CardContent>
-        </Card>
+      <div className="flex-1 overflow-hidden">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+          <div className="px-6 py-2 border-b border-border/30 bg-background/60 backdrop-blur shrink-0 overflow-x-auto">
+            <TabsList className="bg-transparent h-auto p-0 gap-6">
+              <TabsTrigger value="ventas" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-1 py-3 text-sm font-bold gap-2">
+                <DollarSign className="size-4" /> Ventas
+              </TabsTrigger>
+              <TabsTrigger value="productos" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-blue-500 border-b-2 border-transparent data-[state=active]:border-blue-500 rounded-none px-1 py-3 text-sm font-bold gap-2">
+                <Package className="size-4" /> Productos
+              </TabsTrigger>
+              <TabsTrigger value="inventario" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-purple-500 border-b-2 border-transparent data-[state=active]:border-purple-500 rounded-none px-1 py-3 text-sm font-bold gap-2">
+                <Warehouse className="size-4" /> Inventario
+              </TabsTrigger>
+              <TabsTrigger value="financiero" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-emerald-500 border-b-2 border-transparent data-[state=active]:border-emerald-500 rounded-none px-1 py-3 text-sm font-bold gap-2">
+                <TrendingUp className="size-4" /> Financiero
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-        <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <BarChart3 className="size-4" />
-              Utilidad Neta
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-400">
-              ${realKpis.totalProfit.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-green-400">+8.3%</span> vs mes anterior
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-green-500/20 bg-gradient-to-br from-green-500/5 to-transparent">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="size-4" />
-              Margen Promedio
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-400">
-              {realKpis.margin.toFixed(1)}%
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-green-400">+2.1%</span> vs mes anterior
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <BarChart3 className="size-4" />
-              Rotación Inventario
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-400">
-              {realKpis.inventoryRotation}x
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-yellow-400">-0.3x</span> vs mes anterior
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tabs para diferentes reportes */}
-      <Tabs defaultValue="ventas" className="space-y-6" onValueChange={v => setReportType(v)}>
-        <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-border/40">
-          <TabsTrigger value="ventas" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-            <TrendingUp className="size-4" />
-            Ventas
-          </TabsTrigger>
-          <TabsTrigger value="productos" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-            <Package className="size-4" />
-            Productos
-          </TabsTrigger>
-          <TabsTrigger value="inventario" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-            <PieChartIcon className="size-4" />
-            Inventario
-          </TabsTrigger>
-          <TabsTrigger value="financiero" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-            <Wallet className="size-4" />
-            Financiero
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="ventas" className="m-0" asChild>
-          <motion.div 
-            initial={{ opacity: 0, y: 16 }} 
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-            className="space-y-4"
-          >
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Ventas vs Compras Mensuales</CardTitle>
+          <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+            {/* KPI Cards - Always visible */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+              <Card className="border-green-500/20 bg-gradient-to-br from-green-500/5 to-transparent">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <TrendingUp className="size-4 text-green-500" /> Ingresos Totales
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={salesData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="mes" stroke="#94a3b8" fontSize={12} />
-                      <YAxis stroke="#94a3b8" fontSize={12} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          borderRadius: '8px',
-                        }}
-                      />
-                      <Legend />
-                      <Bar dataKey="ventas" fill="#3b82f6" name="Ventas" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="compras" fill="#8b5cf6" name="Compras" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <div className="text-2xl font-bold text-green-400">
+                    ${realKpis.totalIncome.toLocaleString()}
+                  </div>
+                  <div className="flex items-center gap-1 mt-1">
+                    <ArrowUpRight className="size-3 text-green-500" />
+                    <span className="text-xs text-green-500 font-medium">+12.5% vs mes ant.</span>
+                  </div>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Tendencia de Utilidad</CardTitle>
+              <Card className="border-red-500/20 bg-gradient-to-br from-red-500/5 to-transparent">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <ArrowDownRight className="size-4 text-red-500" /> Gastos Totales
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={salesData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="mes" stroke="#94a3b8" fontSize={12} />
-                      <YAxis stroke="#94a3b8" fontSize={12} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          borderRadius: '8px',
-                        }}
-                      />
-                      <Legend />
-                      <Line 
-                        type="monotone" 
-                        dataKey="utilidad" 
-                        stroke="#10b981" 
-                        strokeWidth={3}
-                        name="Utilidad"
-                        dot={{ fill: '#10b981', r: 4 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <div className="text-2xl font-bold text-red-400">
+                    ${realKpis.totalExpenses.toLocaleString()}
+                  </div>
+                  <div className="flex items-center gap-1 mt-1">
+                    <ArrowDownRight className="size-3 text-red-500" />
+                    <span className="text-xs text-red-500 font-medium">+4.2% vs mes ant.</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <BarChart3 className="size-4 text-blue-500" /> Utilidad Neta
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${realKpis.totalProfit >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>
+                    ${realKpis.totalProfit.toLocaleString()}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 font-medium">
+                    Margen: {realKpis.margin.toFixed(1)}%
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <Package className="size-4 text-purple-500" /> Valor Inventario
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-purple-400">
+                    ${realKpis.inventoryValue.toLocaleString()}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 font-medium">
+                    {realKpis.totalProducts} productos activos
+                  </p>
                 </CardContent>
               </Card>
             </div>
 
+            {/* Tab de Ventas */}
+            <TabsContent value="ventas" className="m-0 space-y-6">
+          <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Distribución por Categoría</CardTitle>
+                <CardTitle className="text-base">Ventas vs Compras Mensuales</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={categoryData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, value }) => `${name}: ${value}%`}
-                      outerRadius={100}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {categoryData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #334155',
-                        borderRadius: '8px',
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>
-
-        <TabsContent value="productos" className="m-0" asChild>
-          <motion.div 
-            initial={{ opacity: 0, y: 16 }} 
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-            className="space-y-4"
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Top 5 Productos Más Vendidos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {topProductsData.map((product, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
-                            {index + 1}
-                          </div>
-                          <div>
-                            <p className="font-medium">{product.producto}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {product.ventas} unidades vendidas
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-green-400">
-                          ${product.ingresos.toLocaleString()}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Ingresos</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Rendimiento por Producto</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={topProductsData} layout="vertical">
+                  <BarChart data={salesData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis type="number" stroke="#94a3b8" fontSize={12} />
-                    <YAxis 
-                      type="category" 
-                      dataKey="producto" 
-                      stroke="#94a3b8" 
-                      fontSize={11}
-                      width={150}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #334155',
-                        borderRadius: '8px',
-                      }}
-                    />
-                    <Bar dataKey="ventas" fill="#3b82f6" name="Unidades" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>
-
-        <TabsContent value="inventario" className="m-0" asChild>
-          <motion.div 
-            initial={{ opacity: 0, y: 16 }} 
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-            className="space-y-4"
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Stock por Bodega</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {warehouseData.map((warehouse, index) => (
-                    <div key={index} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{warehouse.bodega}</span>
-                        <span className="text-sm text-muted-foreground">
-                          {warehouse.stock.toLocaleString()} unidades
-                        </span>
-                      </div>
-                      <div className="h-2 w-full rounded-full bg-muted">
-                        <div
-                          className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500"
-                          style={{ width: `${(warehouse.stock / 4520) * 100}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Valor: ${warehouse.valor.toLocaleString()}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Comparativa de Bodegas</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={warehouseData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="bodega" stroke="#94a3b8" fontSize={12} />
+                    <XAxis dataKey="mes" stroke="#94a3b8" fontSize={12} />
                     <YAxis stroke="#94a3b8" fontSize={12} />
                     <Tooltip
                       contentStyle={{
@@ -490,59 +297,19 @@ export function ReportesPage() {
                       }}
                     />
                     <Legend />
-                    <Bar dataKey="stock" fill="#3b82f6" name="Stock" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="ventas" fill="#3b82f6" name="Ventas" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="compras" fill="#8b5cf6" name="Compras" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-          </motion.div>
-        </TabsContent>
-
-        <TabsContent value="financiero" className="m-0" asChild>
-          <motion.div 
-            initial={{ opacity: 0, y: 16 }} 
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-            className="space-y-4"
-          >
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card className="border-green-500/20">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Ingresos Totales</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-400">$778,000</div>
-                  <p className="text-xs text-muted-foreground mt-1">Último año</p>
-                </CardContent>
-              </Card>
-
-              <Card className="border-red-500/20">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Gastos Totales</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-red-400">$529,000</div>
-                  <p className="text-xs text-muted-foreground mt-1">Último año</p>
-                </CardContent>
-              </Card>
-
-              <Card className="border-blue-500/20">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Balance Neto</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-blue-400">$249,000</div>
-                  <p className="text-xs text-muted-foreground mt-1">Utilidad neta</p>
-                </CardContent>
-              </Card>
-            </div>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Flujo de Caja Anual</CardTitle>
+                <CardTitle className="text-base">Tendencia de Utilidad</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
+                <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={salesData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                     <XAxis dataKey="mes" stroke="#94a3b8" fontSize={12} />
@@ -557,32 +324,269 @@ export function ReportesPage() {
                     <Legend />
                     <Line 
                       type="monotone" 
-                      dataKey="ventas" 
-                      stroke="#10b981" 
-                      strokeWidth={2}
-                      name="Ingresos"
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="compras" 
-                      stroke="#ef4444" 
-                      strokeWidth={2}
-                      name="Gastos"
-                    />
-                    <Line 
-                      type="monotone" 
                       dataKey="utilidad" 
-                      stroke="#3b82f6" 
+                      stroke="#10b981" 
                       strokeWidth={3}
-                      name="Balance"
+                      name="Utilidad"
+                      dot={{ fill: '#10b981', r: 4 }}
                     />
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-          </motion.div>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Distribución por Categoría</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={categoryData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, value }) => `${name}: ${value}%`}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {categoryData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1e293b',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         </TabsContent>
-      </Tabs>
+
+            {/* Tab de Productos */}
+            <TabsContent value="productos" className="m-0 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Top 5 Productos Más Vendidos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {topProductsData.map((product, index) => (
+                  <div key={index} className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
+                          {index + 1}
+                        </div>
+                        <div>
+                          <p className="font-medium">{product.producto}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {product.ventas} unidades vendidas
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-green-400">
+                        ${product.ingresos.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Ingresos</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Rendimiento por Producto</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={topProductsData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis type="number" stroke="#94a3b8" fontSize={12} />
+                  <YAxis 
+                    type="category" 
+                    dataKey="producto" 
+                    stroke="#94a3b8" 
+                    fontSize={11}
+                    width={150}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1e293b',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                    }}
+                  />
+                  <Bar dataKey="ventas" fill="#3b82f6" name="Unidades" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+            {/* Tab de Inventario */}
+            <TabsContent value="inventario" className="m-0 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Stock por Bodega</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {warehouseData.map((warehouse, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{warehouse.bodega}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {warehouse.stock.toLocaleString()} unidades
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-muted">
+                      <div
+                        className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500"
+                        style={{ width: `${(warehouse.stock / 4520) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Valor: ${warehouse.valor.toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Comparativa de Bodegas</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={warehouseData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="bodega" stroke="#94a3b8" fontSize={12} />
+                  <YAxis stroke="#94a3b8" fontSize={12} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1e293b',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="stock" fill="#3b82f6" name="Stock" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+            {/* Tab Financiero */}
+            <TabsContent value="financiero" className="m-0 space-y-6">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="border-green-500/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Ingresos Totales</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-400">$778,000</div>
+                <p className="text-xs text-muted-foreground mt-1">Último año</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-red-500/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Gastos Totales</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-400">$529,000</div>
+                <p className="text-xs text-muted-foreground mt-1">Último año</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-blue-500/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Balance Neto</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-400">$249,000</div>
+                <p className="text-xs text-muted-foreground mt-1">Utilidad neta</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Flujo de Caja Anual</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={350}>
+                <LineChart data={salesData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="mes" stroke="#94a3b8" fontSize={12} />
+                  <YAxis stroke="#94a3b8" fontSize={12} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1e293b',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                    }}
+                  />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey="ventas" 
+                    stroke="#10b981" 
+                    strokeWidth={2}
+                    name="Ingresos"
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="compras" 
+                    stroke="#ef4444" 
+                    strokeWidth={2}
+                    name="Gastos"
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="utilidad" 
+                    stroke="#3b82f6" 
+                    strokeWidth={3}
+                    name="Balance"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+            </TabsContent>
+          </div>
+        </Tabs>
+      </div>
+
+      {/* Quick Action Bar (Bottom) */}
+      <div className="h-14 border-t border-border/50 bg-background/80 backdrop-blur px-6 flex items-center justify-between shrink-0">
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#05602b]">
+          Datos en tiempo real • Actualizado automáticamente
+        </p>
+        <div className="flex items-center gap-4">
+          <button className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
+            <Download className="size-3.5" /> Descargar PDF
+          </button>
+          <button className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
+            <Share2 className="size-3.5" /> Compartir Reporte
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

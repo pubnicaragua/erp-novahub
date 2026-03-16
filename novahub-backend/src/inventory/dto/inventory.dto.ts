@@ -44,10 +44,10 @@ export class CreateProductDto {
     @IsNumber()
     taxRate?: number;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
-    @IsNotEmpty()
-    categoryId: string;
+    categoryId?: string;
 
     @ApiProperty({ required: false })
     @IsOptional()

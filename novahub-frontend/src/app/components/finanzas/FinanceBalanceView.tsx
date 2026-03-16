@@ -18,7 +18,7 @@ export function FinanceBalanceView() {
     try {
       setLoading(true);
       const res = await accountsService.getAll();
-      setAccounts(res.data || []);
+      setAccounts(Array.isArray(res) ? res : (res as any)?.data || []);
     } catch (error) {
       console.error('Error fetching accounts:', error);
     } finally {

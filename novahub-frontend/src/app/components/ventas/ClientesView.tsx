@@ -39,13 +39,16 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
 
   const handleAddClient = async () => {
     try {
+      const code = `CLI-${Date.now().toString().slice(-6)}`;
       const resp = await customersService.create({
+        code,
         name: 'Nuevo Cliente',
-        status: 'active'
+        type: 'COMPANY'
       });
       toast.success('Nuevo cliente creado');
       onRefresh();
     } catch (error) {
+      console.error('Error creating customer:', error);
       toast.error('Error al crear cliente');
     }
   };

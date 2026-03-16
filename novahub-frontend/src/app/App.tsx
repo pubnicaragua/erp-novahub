@@ -12,7 +12,7 @@ import { InventarioPage } from './components/InventarioPage';
 import { VentasPage } from './components/VentasPage';
 import { ComprasPage } from './components/ComprasPage';
 import { FinanzasPage } from './components/FinanzasPage';
-import { RecursosHumanosFinal as RecursosHumanosPage } from './components/RecursosHumanosFinal';
+import { RecursosHumanosPage } from './components/RecursosHumanosPage';
 import { ClientesPage } from './components/ClientesPage';
 import { ProveedoresPage } from './components/ProveedoresPage';
 import { ActividadesPage } from './components/ActividadesPage';
@@ -84,7 +84,7 @@ function DashboardLayout() {
       case 'ventas': return <VentasPage activeSubModule={activeSubModule} />;
       case 'compras': return <ComprasPage activeSubModule={activeSubModule} />;
       case 'finanzas': return <FinanzasPage activeSubModule={activeSubModule} />;
-      case 'rh': return <RecursosHumanosPage />;
+      case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} />;
       case 'clientes': return <ClientesPage />;
       case 'proveedores': return <ProveedoresPage />;
       case 'actividades': return <ActividadesPage />;

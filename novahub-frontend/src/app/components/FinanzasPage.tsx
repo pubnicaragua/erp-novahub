@@ -165,15 +165,7 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
         </div>
 
         <div className="flex items-center gap-2">
-           <div className="flex -space-x-2 mr-4">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="size-8 rounded-full border-2 border-background bg-muted flex items-center justify-center text-[10px] font-bold">
-                  U{i}
-                </div>
-              ))}
-              <div className="size-8 rounded-full border-2 border-background bg-primary/10 text-primary flex items-center justify-center text-[10px] font-black">+4</div>
-           </div>
-           <button className="flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/20 transition-all">
+           <button className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-bold text-foreground hover:bg-muted transition-all">
               <Landmark className="size-4" /> Conciliar Banco
            </button>
         </div>

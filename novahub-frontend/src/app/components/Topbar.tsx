@@ -143,7 +143,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           variant="outline" 
           size="sm" 
           onClick={toggleCurrency} 
-          className="h-9 gap-2 px-3 border-border/50 bg-muted/10 hover:bg-muted/20 hover:text-foreground"
+          className="h-9 gap-2 px-3 border-border bg-card hover:bg-muted"
           title="Cambiar Moneda"
         >
           {currency === 'USD' ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
@@ -157,7 +157,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         {/* Notifications */}
         <DropdownMenu onOpenChange={(open) => { if (!open && unreadCount > 0) markAllAsRead() }}>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:bg-primary/10 hover:text-primary">
+            <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
               <Bell className="size-5" />
               {unreadCount > 0 && (
                 <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center rounded-full p-0 text-[10px]">

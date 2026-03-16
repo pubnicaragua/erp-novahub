@@ -194,7 +194,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                       payroll.status === 'PENDING' ? 'bg-orange-100 text-orange-700' :
                       'bg-gray-100 text-gray-700'
                     }`}>
-                      {payroll.status}
+                      {payroll.status === 'PAID' ? 'Pagado' : payroll.status === 'PENDING' ? 'Pendiente' : payroll.status}
                     </span>
                   </td>
                 </tr>

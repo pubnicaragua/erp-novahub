@@ -226,7 +226,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">
-                      {request.leaveType}
+                      {request.leaveType === 'VACATION' ? 'Vacaciones' : request.leaveType === 'SICK' ? 'Enfermedad' : request.leaveType === 'PERSONAL' ? 'Personal' : request.leaveType === 'MATERNITY' ? 'Maternidad' : request.leaveType === 'PATERNITY' ? 'Paternidad' : request.leaveType === 'UNPAID' ? 'Sin Goce' : request.leaveType === 'BEREAVEMENT' ? 'Duelo' : request.leaveType}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm">
@@ -248,7 +248,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                       request.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
                       'bg-gray-100 text-gray-700'
                     }`}>
-                      {request.status}
+                      {request.status === 'APPROVED' ? 'Aprobada' : request.status === 'PENDING' ? 'Pendiente' : request.status === 'REJECTED' ? 'Rechazada' : request.status}
                     </span>
                   </td>
                   <td className="px-4 py-3">

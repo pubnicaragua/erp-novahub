@@ -244,7 +244,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                     />
                   ))}
                 </div>
-                <p className="text-sm font-bold text-yellow-600">{review.overallRating?.toFixed(1)}/5.0</p>
+                <p className="text-sm font-bold text-yellow-600">{Number(review.overallRating || 0).toFixed(1)}/5.0</p>
               </div>
             </div>
 
@@ -262,7 +262,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                   review.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
                   'bg-gray-100 text-gray-700'
                 }`}>
-                  {review.status}
+                  {review.status === 'COMPLETED' ? 'Completada' : review.status === 'IN_PROGRESS' ? 'En Progreso' : review.status === 'PENDING' ? 'Pendiente' : review.status}
                 </span>
               </div>
             </div>
