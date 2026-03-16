@@ -11,6 +11,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
 
@@ -22,6 +23,7 @@ import { ControlStockView } from './inventory/ControlStockView';
 import { MovimientosView } from './inventory/MovimientosView';
 
 import { inventoryService } from '../services/inventario.service';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export function InventarioPage() {
   const [loading, setLoading] = useState(true);
@@ -117,14 +119,18 @@ export function InventarioPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-[#05602b] rounded-xl">
-            <Package className="size-6 text-white" />
+          <div className="p-3 bg-primary/10 rounded-xl">
+            <Package className="size-9 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Inventario</h1>
-            <p className="text-sm text-muted-foreground">
-              {data.products.length} productos · {data.warehouses.length} almacenes
-            </p>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
+              Inventario <span className="text-primary">General</span>
+            </h1>
+            <div className="flex items-center gap-2 mt-2">
+              <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+                {data.products.length} productos · {data.warehouses.length} almacenes
+              </Badge>
+            </div>
           </div>
         </div>
         
@@ -132,16 +138,8 @@ export function InventarioPage() {
           <Button 
             variant="outline" 
             size="sm"
-            onClick={() => fetchData(true)}
-            disabled={refreshing}
-          >
-            <RefreshCw className={`size-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            Actualizar
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
             onClick={handleExportData}
+            className="rounded-xl font-bold"
           >
             <Download className="size-4 mr-2" />
             Exportar CSV
@@ -151,28 +149,46 @@ export function InventarioPage() {
 
       {/* Main Navigation Tabs */}
       <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
-        <TabsList className="w-full h-12 bg-muted/50 p-1">
-          <TabsTrigger value="dashboard" className="flex-1 gap-2 data-[state=active]:bg-background">
+        <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-border/40">
+          <TabsTrigger value="dashboard" 
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
             <BarChart3 className="size-4" />
             <span className="hidden sm:inline">Dashboard</span>
           </TabsTrigger>
-          <TabsTrigger value="productos" className="flex-1 gap-2 data-[state=active]:bg-background">
+          <TabsTrigger value="productos" 
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
             <Package className="size-4" />
             <span className="hidden sm:inline">Productos</span>
           </TabsTrigger>
-          <TabsTrigger value="almacenes" className="flex-1 gap-2 data-[state=active]:bg-background">
+          <TabsTrigger value="almacenes" 
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
             <Warehouse className="size-4" />
             <span className="hidden sm:inline">Almacenes</span>
           </TabsTrigger>
-          <TabsTrigger value="transferencias" className="flex-1 gap-2 data-[state=active]:bg-background">
+          <TabsTrigger value="transferencias" 
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
             <Truck className="size-4" />
             <span className="hidden sm:inline">Transferencias</span>
           </TabsTrigger>
-          <TabsTrigger value="ajustes" className="flex-1 gap-2 data-[state=active]:bg-background">
+          <TabsTrigger value="ajustes" 
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
             <Scale className="size-4" />
             <span className="hidden sm:inline">Ajustes</span>
           </TabsTrigger>
-          <TabsTrigger value="movimientos" className="flex-1 gap-2 data-[state=active]:bg-background">
+          <TabsTrigger value="movimientos" 
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
             <History className="size-4" />
             <span className="hidden sm:inline">Movimientos</span>
           </TabsTrigger>
@@ -185,50 +201,86 @@ export function InventarioPage() {
             </div>
           ) : (
             <>
-              <TabsContent value="dashboard" className="m-0">
-                <DashboardView 
-                  products={data.products} 
-                  warehouses={data.warehouses} 
-                  movements={data.movements}
-                  transfers={data.transfers}
-                  adjustments={data.adjustments}
-                />
+              <TabsContent value="dashboard" className="m-0" asChild>
+                <motion.div 
+                  initial={{ opacity: 0, y: 16 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }} // Bounce-like slide up
+                >
+                  <DashboardView 
+                    products={data.products} 
+                    warehouses={data.warehouses} 
+                    movements={data.movements}
+                    transfers={data.transfers}
+                    adjustments={data.adjustments}
+                  />
+                </motion.div>
               </TabsContent>
-              <TabsContent value="productos" className="m-0">
-                <ProductosView 
-                  products={data.products} 
-                  categories={data.categories}
-                  warehouses={data.warehouses}
-                  onRefresh={() => fetchData(true)}
-                />
+              <TabsContent value="productos" className="m-0" asChild>
+                <motion.div 
+                  initial={{ opacity: 0, y: 16 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <ProductosView 
+                    products={data.products} 
+                    categories={data.categories}
+                    warehouses={data.warehouses}
+                    onRefresh={() => fetchData(true)}
+                  />
+                </motion.div>
               </TabsContent>
-              <TabsContent value="almacenes" className="m-0">
-                <AlmacenesView 
-                  warehouses={data.warehouses}
-                  onRefresh={() => fetchData(true)}
-                />
+              <TabsContent value="almacenes" className="m-0" asChild>
+                <motion.div 
+                  initial={{ opacity: 0, y: 16 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <AlmacenesView 
+                    warehouses={data.warehouses}
+                    onRefresh={() => fetchData(true)}
+                  />
+                </motion.div>
               </TabsContent>
-              <TabsContent value="transferencias" className="m-0">
-                <TransferenciasView 
-                  transfers={data.transfers}
-                  warehouses={data.warehouses}
-                  products={data.products}
-                  onRefresh={() => fetchData(true)}
-                />
+              <TabsContent value="transferencias" className="m-0" asChild>
+                <motion.div 
+                  initial={{ opacity: 0, y: 16 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <TransferenciasView 
+                    transfers={data.transfers}
+                    warehouses={data.warehouses}
+                    products={data.products}
+                    onRefresh={() => fetchData(true)}
+                  />
+                </motion.div>
               </TabsContent>
-              <TabsContent value="ajustes" className="m-0">
-                <ControlStockView 
-                  adjustments={data.adjustments}
-                  warehouses={data.warehouses}
-                  products={data.products}
-                  onRefresh={() => fetchData(true)}
-                />
+              <TabsContent value="ajustes" className="m-0" asChild>
+                <motion.div 
+                  initial={{ opacity: 0, y: 16 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <ControlStockView 
+                    adjustments={data.adjustments}
+                    warehouses={data.warehouses}
+                    products={data.products}
+                    onRefresh={() => fetchData(true)}
+                  />
+                </motion.div>
               </TabsContent>
-              <TabsContent value="movimientos" className="m-0">
-                <MovimientosView 
-                  movements={data.movements}
-                  warehouses={data.warehouses}
-                />
+              <TabsContent value="movimientos" className="m-0" asChild>
+                <motion.div 
+                  initial={{ opacity: 0, y: 16 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <MovimientosView 
+                    movements={data.movements}
+                    warehouses={data.warehouses}
+                  />
+                </motion.div>
               </TabsContent>
             </>
           )}

@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface ProductosViewProps {
   products: any[];
@@ -23,10 +24,12 @@ interface EditingProduct {
   categoryId: string;
   salePrice: number;
   costPrice: number;
+  initialStock?: number;
   isNew?: boolean;
 }
 
 export function ProductosView({ products, categories, warehouses, onRefresh }: ProductosViewProps) {
+  const { formatAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [editingRows, setEditingRows] = useState<Map<string, EditingProduct>>(new Map());
@@ -56,6 +59,7 @@ export function ProductosView({ products, categories, warehouses, onRefresh }: P
       categoryId: categories[0]?.id || '',
       salePrice: 0,
       costPrice: 0,
+      initialStock: 0,
       isNew: true,
     };
     setEditingRows(new Map(editingRows.set(tempId, newProduct)));
@@ -83,7 +87,12 @@ export function ProductosView({ products, categories, warehouses, onRefresh }: P
   const handleUpdateField = (id: string, field: keyof EditingProduct, value: any) => {
     const current = editingRows.get(id);
     if (current) {
-      setEditingRows(new Map(editingRows.set(id, { ...current, [field]: value })));
+      let finalValue = value;
+      // Validate prices are non-negative
+      if (field === 'salePrice' || field === 'costPrice' || field === 'initialStock') {
+        finalValue = Math.max(0, value);
+      }
+      setEditingRows(new Map(editingRows.set(id, { ...current, [field]: finalValue })));
     }
   };
 
@@ -105,6 +114,7 @@ export function ProductosView({ products, categories, warehouses, onRefresh }: P
           categoryId: product.categoryId,
           salePrice: product.salePrice,
           costPrice: product.costPrice,
+          initialStock: product.initialStock || 0,
         });
         toast.success('Producto creado');
       } else {
@@ -190,7 +200,19 @@ export function ProductosView({ products, categories, warehouses, onRefresh }: P
           </Select>
         </TableCell>
         <TableCell className="text-right">
-          <span className="text-xs text-muted-foreground">-</span>
+          {product.isNew ? (
+            <Input
+              type="number"
+              value={product.initialStock}
+              onChange={(e) => handleUpdateField(product.id, 'initialStock', parseInt(e.target.value) || 0)}
+              onKeyDown={(e) => handleKeyDown(e, product.id)}
+              className="h-8 text-xs text-right w-20"
+              placeholder="Stock"
+              disabled={isSaving}
+            />
+          ) : (
+            <span className="text-xs text-muted-foreground">-</span>
+          )}
         </TableCell>
         <TableCell>
           <Input
@@ -266,7 +288,7 @@ export function ProductosView({ products, categories, warehouses, onRefresh }: P
         </div>
         <Button 
           size="sm" 
-          className="bg-[#05602b] hover:bg-[#044c22] gap-2"
+          className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
           onClick={handleAddNewRow}
         >
           <Plus className="size-4" />
@@ -278,14 +300,14 @@ export function ProductosView({ products, categories, warehouses, onRefresh }: P
       <div className="rounded-lg border overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="font-semibold text-xs w-28">Código</TableHead>
-              <TableHead className="font-semibold text-xs">Nombre</TableHead>
-              <TableHead className="font-semibold text-xs w-36">Categoría</TableHead>
-              <TableHead className="font-semibold text-xs text-right w-20">Stock</TableHead>
-              <TableHead className="font-semibold text-xs text-right w-28">Precio Venta</TableHead>
-              <TableHead className="font-semibold text-xs text-right w-28">Precio Costo</TableHead>
-              <TableHead className="font-semibold text-xs text-right w-24">Acciones</TableHead>
+            <TableRow className="bg-muted/50 border-b border-border/50">
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Código</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Nombre</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Categoría</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Venta</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Costo</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -330,10 +352,10 @@ export function ProductosView({ products, categories, warehouses, onRefresh }: P
                       <span className="text-xs text-muted-foreground">{product.category?.name || '-'}</span>
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">{product.stock || 0}</TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">${Number(product.salePrice || 0).toFixed(2)}</TableCell>
-                    <TableCell className="text-right text-muted-foreground tabular-nums">${Number(product.costPrice || 0).toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{formatAmount(product.salePrice || 0)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground tabular-nums">{formatAmount(product.costPrice || 0)}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1 transition-opacity">
                         <Button 
                           variant="ghost" 
                           size="icon" 
@@ -345,7 +367,7 @@ export function ProductosView({ products, categories, warehouses, onRefresh }: P
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="size-7 text-red-600 hover:text-red-700 hover:bg-red-500/10"
+                          className="size-7 text-red-600 hover:text-black hover:bg-red-500"
                           onClick={() => handleDeleteProduct(product.id)}
                         >
                           <Trash2 className="size-3.5" />

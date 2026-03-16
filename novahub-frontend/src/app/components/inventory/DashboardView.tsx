@@ -1,6 +1,7 @@
 import React from 'react';
 import { Package, Warehouse, AlertTriangle, TrendingUp, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 export function DashboardView({ products, warehouses, movements = [], transfers = [] }: any) {
   const totalValue = products.reduce((acc: number, p: any) => acc + ((p.stock || 0) * (p.costPrice || 0)), 0);
@@ -9,7 +10,7 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
   
   const stats = [
     { label: 'Total Productos', value: products.length, icon: Package, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { label: 'Valor Total', value: '$' + totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 }), icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-500/10' },
+    { label: 'Valor Total', value: totalValue, icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-500/10', isCurrency: true },
     { label: 'Almacenes', value: warehouses.length, icon: Warehouse, color: 'text-purple-500', bg: 'bg-purple-500/10' },
     { label: 'Stock Bajo', value: lowStockCount + outOfStockCount, icon: AlertTriangle, color: lowStockCount + outOfStockCount > 0 ? 'text-orange-500' : 'text-green-500', bg: lowStockCount + outOfStockCount > 0 ? 'bg-orange-500/10' : 'bg-green-500/10' },
   ];
@@ -41,8 +42,10 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-muted-foreground">{stat.label}</p>
-                  <h3 className="text-xl font-bold mt-1">{stat.value}</h3>
+                  <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">{stat.label}</p>
+                  <h3 className="text-2xl font-black mt-1 tracking-tighter italic">
+                    {stat.isCurrency ? useCurrency().formatAmount(stat.value as number) : stat.value}
+                  </h3>
                 </div>
                 <div className={`p-2 rounded-lg ${stat.bg}`}>
                   <stat.icon className={`size-4 ${stat.color}`} />
@@ -56,9 +59,9 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="border">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
               <AlertTriangle className="size-4 text-orange-500" />
-              Productos con Stock Bajo
+              Stock <span className="text-orange-500">Bajo</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -67,8 +70,8 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
                 {lowStockProducts.map((p: any, i: number) => (
                   <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
                     <div>
-                      <p className="text-sm font-medium">{p.name}</p>
-                      <p className="text-xs text-muted-foreground">{p.code}</p>
+                      <p className="text-sm font-bold italic">{p.name}</p>
+                      <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{p.code}</p>
                     </div>
                     <span className={`text-sm font-bold ${(p.stock || 0) === 0 ? 'text-red-600' : 'text-orange-600'}`}>
                       {p.stock || 0} uds
@@ -84,9 +87,9 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
 
         <Card className="border">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Clock className="size-4 text-[#05602b]" />
-              Actividad Reciente
+            <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+              <Clock className="size-4 text-primary" />
+              Actividad <span className="text-primary">Reciente</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -94,7 +97,7 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
               <div className="space-y-2">
                 {recentActivity.map((act: any, i: number) => (
                   <div key={i} className="flex items-start gap-2 py-2 border-b last:border-0">
-                    <div className={`mt-1.5 size-2 rounded-full ${act.alert ? 'bg-orange-500' : 'bg-[#05602b]'}`} />
+                    <div className={`mt-1.5 size-2 rounded-full ${act.alert ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]' : 'bg-primary shadow-[0_0_8px_rgba(6,114,49,0.5)]'}`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{act.desc}</p>
                       <p className="text-xs text-muted-foreground">{act.type} · {act.date.toLocaleDateString()}</p>

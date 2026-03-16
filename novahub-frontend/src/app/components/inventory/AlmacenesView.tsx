@@ -223,10 +223,14 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     <Card className="p-4 border bg-card rounded-xl">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="font-semibold">Almacenes</h3>
-          <p className="text-sm text-muted-foreground">{warehouses.length} almacenes configurados</p>
+          <h3 className="font-black text-lg uppercase tracking-tight italic">Almacenes</h3>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{warehouses.length} almacenes configurados</p>
         </div>
-        <Button size="sm" className="bg-[#05602b] hover:bg-[#044c22] gap-2" onClick={handleAddNewRow}>
+        <Button 
+          size="sm" 
+          className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6" 
+          onClick={handleAddNewRow}
+        >
           <Plus className="size-4" />
           Agregar Almacén
         </Button>
@@ -235,13 +239,13 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       <div className="rounded-lg border overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="font-semibold text-xs">Nombre</TableHead>
-              <TableHead className="font-semibold text-xs">Ubicación</TableHead>
-              <TableHead className="font-semibold text-xs w-36">Tipo</TableHead>
-              <TableHead className="font-semibold text-xs w-36">Almacén Padre</TableHead>
-              <TableHead className="font-semibold text-xs text-right w-20">Stock</TableHead>
-              <TableHead className="font-semibold text-xs text-right w-24">Acciones</TableHead>
+            <TableRow className="bg-muted/50 border-b border-border/50">
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Nombre</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Ubicación</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Tipo</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Almacén Padre</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -293,14 +297,14 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">{stockCount}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1 transition-opacity">
                         <Button variant="ghost" size="icon" className="size-7" onClick={() => handleEditRow(wh)}>
                           <Edit2 className="size-3.5" />
                         </Button>
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="size-7 text-red-600 hover:bg-red-500/10"
+                          className="size-7 text-red-600 hover:text-black hover:bg-red-500"
                           onClick={() => handleDeleteWarehouse(wh.id)}
                         >
                           <Trash2 className="size-3.5" />
@@ -315,7 +319,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         </Table>
       </div>
 
-      <div className="mt-3 text-xs text-muted-foreground">
+      <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
         Doble clic en una fila para editar · Enter para guardar · Esc para cancelar
       </div>
     </Card>

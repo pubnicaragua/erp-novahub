@@ -104,7 +104,7 @@ export function MovimientosView({ movements, warehouses }: MovimientosViewProps)
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" size="sm" className="gap-2" onClick={handleExport}>
+        <Button variant="outline" size="sm" className="gap-2 rounded-xl font-bold" onClick={handleExport}>
           <Download className="size-4" />
           Exportar CSV
         </Button>
@@ -113,13 +113,13 @@ export function MovimientosView({ movements, warehouses }: MovimientosViewProps)
       <div className="rounded-lg border overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="font-semibold text-xs w-40">Fecha</TableHead>
-              <TableHead className="font-semibold text-xs w-28">Tipo</TableHead>
-              <TableHead className="font-semibold text-xs">Producto</TableHead>
-              <TableHead className="font-semibold text-xs">Almacén</TableHead>
-              <TableHead className="font-semibold text-xs text-right w-20">Cantidad</TableHead>
-              <TableHead className="font-semibold text-xs">Referencia</TableHead>
+            <TableRow className="bg-muted/50 border-b border-border/50">
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-40">Fecha</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Tipo</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Producto</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Almacén</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Cantidad</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Referencia</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -157,7 +157,7 @@ export function MovimientosView({ movements, warehouses }: MovimientosViewProps)
         </Table>
       </div>
 
-      <div className="mt-3 text-xs text-muted-foreground">
+      <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
         {filteredMovements.length} de {movements.length} movimientos
       </div>
     </Card>

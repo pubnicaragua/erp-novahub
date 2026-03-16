@@ -88,7 +88,7 @@ export function ControlStockView({ adjustments, warehouses, products, onRefresh 
         </div>
         <Button 
           size="sm" 
-          className="bg-[#05602b] hover:bg-[#044c22] gap-2"
+          className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
           onClick={() => setIsCreating(true)}
           disabled={isCreating}
         >
@@ -100,14 +100,14 @@ export function ControlStockView({ adjustments, warehouses, products, onRefresh 
       <div className="rounded-lg border overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="font-semibold text-xs w-28">Número</TableHead>
-              <TableHead className="font-semibold text-xs">Almacén</TableHead>
-              <TableHead className="font-semibold text-xs">Razón</TableHead>
-              <TableHead className="font-semibold text-xs text-center w-20">Items</TableHead>
-              <TableHead className="font-semibold text-xs w-28">Fecha</TableHead>
-              <TableHead className="font-semibold text-xs w-28">Estado</TableHead>
-              <TableHead className="font-semibold text-xs text-right w-24">Acciones</TableHead>
+            <TableRow className="bg-muted/50 border-b border-border/50">
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Número</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Almacén</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Razón</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-20">Items</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Fecha</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Estado</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -207,7 +207,7 @@ export function ControlStockView({ adjustments, warehouses, products, onRefresh 
         </Table>
       </div>
 
-      <div className="mt-3 text-xs text-muted-foreground">
+      <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
         Los ajustes en borrador deben ser aprobados para aplicar cambios al stock
       </div>
     </Card>

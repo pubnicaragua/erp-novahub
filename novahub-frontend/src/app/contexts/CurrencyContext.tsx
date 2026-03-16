@@ -11,6 +11,8 @@ interface CurrencyContextType {
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
+const CONVERSION_RATE = 36.5; // 1 USD = 36.5 COR
+
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = useState<Currency>(() => {
     const saved = localStorage.getItem('erp-currency');
@@ -28,8 +30,10 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   };
 
   const formatAmount = (amount: number) => {
-    const symbol = currency === 'USD' ? '$' : 'C$';
-    return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const isCOR = currency === 'COR';
+    const symbol = isCOR ? 'C$' : '$';
+    const value = isCOR ? amount * CONVERSION_RATE : amount;
+    return `${symbol}${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   return (

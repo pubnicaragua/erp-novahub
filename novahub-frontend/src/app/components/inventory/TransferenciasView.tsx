@@ -26,7 +26,13 @@ const STATUS_OPTIONS = [
 export function TransferenciasView({ transfers, warehouses, products, onRefresh }: TransferenciasViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const [newTransfer, setNewTransfer] = useState({ fromId: '', toId: '', productId: '', quantity: 1 });
+  const [newTransfer, setNewTransfer] = useState({ 
+    fromId: '', 
+    toId: '', 
+    productId: '', 
+    quantity: 1,
+    date: new Date().toISOString().split('T')[0]
+  });
   const [saving, setSaving] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
@@ -59,7 +65,13 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
       });
       toast.success('Transferencia creada');
       setIsCreating(false);
-      setNewTransfer({ fromId: '', toId: '', productId: '', quantity: 1 });
+      setNewTransfer({ 
+        fromId: '', 
+        toId: '', 
+        productId: '', 
+        quantity: 1,
+        date: new Date().toISOString().split('T')[0]
+      });
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al crear transferencia');
@@ -97,7 +109,7 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
         </div>
         <Button 
           size="sm" 
-          className="bg-[#05602b] hover:bg-[#044c22] gap-2"
+          className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
           onClick={() => setIsCreating(true)}
           disabled={isCreating}
         >
@@ -109,14 +121,14 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
       <div className="rounded-lg border overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="font-semibold text-xs w-28">Guía</TableHead>
-              <TableHead className="font-semibold text-xs">Origen</TableHead>
-              <TableHead className="font-semibold text-xs text-center">→</TableHead>
-              <TableHead className="font-semibold text-xs">Destino</TableHead>
-              <TableHead className="font-semibold text-xs text-center w-20">Items</TableHead>
-              <TableHead className="font-semibold text-xs w-28">Fecha</TableHead>
-              <TableHead className="font-semibold text-xs w-36">Estado</TableHead>
+            <TableRow className="bg-muted/50 border-b border-border/50">
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Guía</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Origen</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center">→</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Destino</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-48">Items</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-40">Fecha</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Estado</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -141,22 +153,28 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
                   </Select>
                 </TableCell>
                 <TableCell>
-                  <div className="flex gap-1">
+                  <div className="flex gap-2 items-center">
                     <Select value={newTransfer.productId} onValueChange={(v) => setNewTransfer({...newTransfer, productId: v})}>
-                      <SelectTrigger className="h-8 text-xs w-24"><SelectValue placeholder="Prod" /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Prod" /></SelectTrigger>
                       <SelectContent>
                         {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    <Input 
+                      type="number" 
+                      value={newTransfer.quantity} 
+                      onChange={(e) => setNewTransfer({...newTransfer, quantity: parseInt(e.target.value) || 1})}
+                      className="h-8 text-xs w-16"
+                      min={1}
+                    />
                   </div>
                 </TableCell>
                 <TableCell>
                   <Input 
-                    type="number" 
-                    value={newTransfer.quantity} 
-                    onChange={(e) => setNewTransfer({...newTransfer, quantity: parseInt(e.target.value) || 1})}
-                    className="h-8 text-xs w-16"
-                    min={1}
+                    type="date" 
+                    value={newTransfer.date} 
+                    onChange={(e) => setNewTransfer({...newTransfer, date: e.target.value})}
+                    className="h-8 text-xs w-full min-w-[130px] pr-2"
                   />
                 </TableCell>
                 <TableCell>
@@ -213,7 +231,7 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
         </Table>
       </div>
 
-      <div className="mt-3 text-xs text-muted-foreground">
+      <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
         {filteredTransfers.length} transferencias
       </div>
     </Card>
