@@ -31,6 +31,7 @@ import { FacturasView } from './ventas/FacturasView';
 import { FacturasRecurrentesView } from './ventas/FacturasRecurrentesView';
 import { PagosRecibidosView } from './ventas/PagosRecibidosView';
 import { DevolucionesView } from './ventas/DevolucionesView';
+import { NotasCreditoView } from './ventas/NotasCreditoView';
 
 const SALES_SECTIONS = [
   { id: 'clientes', label: 'Clientes', icon: Users, description: 'Directorio y saldos' },
@@ -39,7 +40,8 @@ const SALES_SECTIONS = [
   { id: 'facturas', label: 'Facturas', icon: FileText, description: 'Control de cobros' },
   { id: 'recurrentes', label: 'Facturas Recurrentes', icon: RotateCcw, description: 'Suscripciones y contratos' },
   { id: 'pagos', label: 'Pagos Recibidos', icon: CreditCard, description: 'Historial de ingresos' },
-  { id: 'devoluciones', label: 'Devoluciones', icon: FileOutput, description: 'Notas de crédito y retornos' },
+  { id: 'devoluciones', label: 'Devoluciones', icon: FileOutput, description: 'Retornos de mercancía' },
+  { id: 'notas-credito', label: 'Notas de Crédito', icon: FileMinus, description: 'Ajustes y créditos emitidos' },
 ];
 
 interface VentasPageProps {
@@ -60,8 +62,7 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
         .replace('-recibidos', '')
         .replace('facturas-recurrentes', 'recurrentes')
         .replace('pagos-recibidos', 'pagos')
-        .replace('devoluciones-venta', 'devoluciones')
-        .replace('notas-credito', 'devoluciones'); // Notes redirect to returns for now
+        .replace('devoluciones-venta', 'devoluciones');
       
       const exists = SALES_SECTIONS.some(s => s.id === normalized);
       if (exists) {
@@ -99,14 +100,15 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
         salesReturnsService.getAll()
       ]);
       
+      const toArr = (r: any) => Array.isArray(r) ? r : (r?.data || []);
       setData({
-        clientes: cus.data || [],
-        estimaciones: est.data || [],
-        ordenes: ord.data || [],
-        facturas: inv.data || [],
-        recurrentes: rec.data || [],
-        pagos: pay.data || [],
-        devoluciones: ret.data || [],
+        clientes: toArr(cus),
+        estimaciones: toArr(est),
+        ordenes: toArr(ord),
+        facturas: toArr(inv),
+        recurrentes: toArr(rec),
+        pagos: toArr(pay),
+        devoluciones: toArr(ret),
       });
     } catch (error) {
       console.error('Error fetching sales data:', error);
@@ -119,22 +121,40 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
   const currentSectionInfo = SALES_SECTIONS.find(s => s.id === activeSection) || SALES_SECTIONS[0];
 
   const handleGenerateInvoice = async (order: SalesOrder) => {
-    toast.info(`Generando factura para orden ${order.number}...`);
-    // Placeholder for real logic
-    setTimeout(() => {
-      toast.success('Factura generada exitosamente');
+    try {
+      toast.info(`Generando factura para orden ${order.number}...`);
+      await invoicesService.create({
+        number: `FAC-${Date.now().toString().slice(-6)}`,
+        customerId: order.customerId,
+        date: new Date().toISOString(),
+        dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+        subtotal: order.subtotal,
+        taxAmount: order.taxAmount,
+        discountAmount: order.discountAmount,
+        total: order.total,
+        currency: order.currency || 'USD',
+        status: 'PENDING' as any,
+        amountPaid: 0,
+        balance: order.total,
+      });
+      await salesOrdersService.update(order.id, { status: 'DELIVERED' as any });
+      toast.success(`Factura generada para orden ${order.number}`);
       setActiveSection('facturas');
       fetchData();
-    }, 1000);
+    } catch {
+      toast.error('Error al generar factura');
+    }
   };
 
   const handleMarkAsPaid = async (invoice: Invoice) => {
-    toast.info(`Registrando pago para factura ${invoice.number}...`);
-    // Placeholder for real logic
-    setTimeout(() => {
-      toast.success('Pago registrado correctamente');
+    try {
+      toast.info(`Marcando factura ${invoice.number} como pagada...`);
+      await invoicesService.markAsPaid(invoice.id);
+      toast.success(`Factura ${invoice.number} marcada como pagada`);
       fetchData();
-    }, 1000);
+    } catch {
+      toast.error('Error al registrar pago');
+    }
   };
 
   return (
@@ -181,20 +201,23 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
               {activeSection === 'estimaciones' && (
                 <EstimacionesView data={data.estimaciones} loading={loading} onRefresh={fetchData} />
               )}
-              {activeSection === 'ordenes' || activeSection === 'ordenes-venta' && (
+              {(activeSection === 'ordenes' || activeSection === 'ordenes-venta') && (
                 <OrdenesVentaView data={data.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} />
               )}
               {activeSection === 'facturas' && (
                 <FacturasView data={data.facturas} loading={loading} onRefresh={fetchData} onMarkAsPaid={handleMarkAsPaid} />
               )}
-              {activeSection === 'recurrentes' || activeSection === 'facturas-recurrentes' && (
+              {(activeSection === 'recurrentes' || activeSection === 'facturas-recurrentes') && (
                 <FacturasRecurrentesView data={data.recurrentes} loading={loading} onRefresh={fetchData} />
               )}
-              {activeSection === 'pagos' || activeSection === 'pagos-recibidos' && (
+              {(activeSection === 'pagos' || activeSection === 'pagos-recibidos') && (
                 <PagosRecibidosView data={data.pagos} loading={loading} onRefresh={fetchData} />
               )}
-              {activeSection === 'devoluciones' || activeSection === 'devoluciones-venta' && (
+              {(activeSection === 'devoluciones' || activeSection === 'devoluciones-venta') && (
                 <DevolucionesView data={data.devoluciones} loading={loading} onRefresh={fetchData} />
+              )}
+              {activeSection === 'notas-credito' && (
+                <NotasCreditoView data={data.devoluciones} loading={loading} onRefresh={fetchData} />
               )}
             </motion.div>
           </AnimatePresence>

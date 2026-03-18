@@ -51,6 +51,24 @@ export class SalesController {
     return this.salesService.findAllEstimates(req.user.clientTenantId);
   }
 
+  @Patch('estimates/:id')
+  @ApiOperation({ summary: 'Actualizar cotización' })
+  updateEstimate(@Param('id') id: string, @Body() data: any, @Request() req) {
+    return this.salesService.updateEstimate(id, data, req.user.clientTenantId);
+  }
+
+  @Post('estimates/:id/convert-to-order')
+  @ApiOperation({ summary: 'Convertir cotización a orden de venta' })
+  convertEstimateToOrder(@Param('id') id: string, @Request() req) {
+    return this.salesService.convertEstimateToOrder(id, req.user.clientTenantId);
+  }
+
+  @Delete('estimates/:id')
+  @ApiOperation({ summary: 'Eliminar cotización' })
+  removeEstimate(@Param('id') id: string, @Request() req) {
+    return this.salesService.removeEstimate(id, req.user.clientTenantId);
+  }
+
   // ─── ÓRDENES DE VENTA ────────────────────────────────────────────────────
   @Post('orders')
   @ApiOperation({ summary: 'Crear nueva orden de venta' })
@@ -68,6 +86,12 @@ export class SalesController {
   @ApiOperation({ summary: 'Actualizar orden de venta' })
   updateSalesOrder(@Param('id') id: string, @Body() data: any, @Request() req) {
     return this.salesService.updateSalesOrder(id, data, req.user.clientTenantId);
+  }
+
+  @Delete('orders/:id')
+  @ApiOperation({ summary: 'Eliminar orden de venta' })
+  removeSalesOrder(@Param('id') id: string, @Request() req) {
+    return this.salesService.removeSalesOrder(id, req.user.clientTenantId);
   }
 
   // ─── FACTURAS ────────────────────────────────────────────────────────────
@@ -89,6 +113,18 @@ export class SalesController {
     return this.salesService.updateInvoice(id, data, req.user.clientTenantId);
   }
 
+  @Patch('invoices/:id/mark-paid')
+  @ApiOperation({ summary: 'Marcar factura como pagada' })
+  markInvoicePaid(@Param('id') id: string, @Request() req) {
+    return this.salesService.markInvoicePaid(id, req.user.clientTenantId);
+  }
+
+  @Delete('invoices/:id')
+  @ApiOperation({ summary: 'Eliminar factura' })
+  removeInvoice(@Param('id') id: string, @Request() req) {
+    return this.salesService.removeInvoice(id, req.user.clientTenantId);
+  }
+
   // ─── PAGOS ───────────────────────────────────────────────────────────────
   @Post('payments')
   @ApiOperation({ summary: 'Registrar pago de cliente' })
@@ -100,6 +136,18 @@ export class SalesController {
   @ApiOperation({ summary: 'Historial de pagos recibidos' })
   findAllPayments(@Request() req) {
     return this.salesService.findAllPayments(req.user.clientTenantId);
+  }
+
+  @Patch('payments/:id')
+  @ApiOperation({ summary: 'Actualizar pago recibido' })
+  updatePayment(@Param('id') id: string, @Body() data: any, @Request() req) {
+    return this.salesService.updatePayment(id, data, req.user.clientTenantId);
+  }
+
+  @Delete('payments/:id')
+  @ApiOperation({ summary: 'Eliminar pago recibido' })
+  removePayment(@Param('id') id: string, @Request() req) {
+    return this.salesService.removePayment(id, req.user.clientTenantId);
   }
 
   // ─── FACTURAS RECURRENTES ─────────────────────────────────────────────────
@@ -146,9 +194,21 @@ export class SalesController {
     return this.salesService.createReturn(data, req.user.clientTenantId);
   }
 
+  @Patch('returns/:id')
+  @ApiOperation({ summary: 'Actualizar devolución' })
+  updateReturn(@Param('id') id: string, @Body() data: any, @Request() req) {
+    return this.salesService.updateReturn(id, data, req.user.clientTenantId);
+  }
+
   @Patch('returns/:id/approve')
   @ApiOperation({ summary: 'Aprobar devolución' })
   approveReturn(@Param('id') id: string, @Request() req) {
     return this.salesService.approveReturn(id, req.user.clientTenantId);
+  }
+
+  @Delete('returns/:id')
+  @ApiOperation({ summary: 'Eliminar devolución' })
+  removeReturn(@Param('id') id: string, @Request() req) {
+    return this.salesService.removeReturn(id, req.user.clientTenantId);
   }
 }

@@ -24,7 +24,7 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // ─── Validation ─────────────────────────────────────────────────────────────
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: false }));
 
   // ─── Swagger ─────────────────────────────────────────────────────────────────
   const config = new DocumentBuilder()

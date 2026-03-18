@@ -81,6 +81,10 @@ export class FinancialsService {
     return this.prisma.recurringExpense.update({ where: { id, clientTenantId }, data });
   }
 
+  async removeRecurringExpense(id: string, clientTenantId: string) {
+    return this.prisma.recurringExpense.delete({ where: { id, clientTenantId } });
+  }
+
   // ─── ASIENTOS CONTABLES ───────────────────────────────────────────────────
   async createJournalEntry(data: any, clientTenantId: string) {
     const { lines, ...rest } = data;

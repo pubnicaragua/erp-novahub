@@ -2,11 +2,29 @@ import { Injectable, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import * as bcrypt from 'bcrypt';
-import { SystemRole } from '@prisma/client';
+import { SystemRole, BillingPlanType, IndustryType } from '@prisma/client';
 
 @Injectable()
 export class TenantsService {
   constructor(private prisma: PrismaService) {}
+
+  private toBillingPlanType(plan?: string): BillingPlanType {
+    if (!plan) return BillingPlanType.BASIC;
+    const upperPlan = plan.toUpperCase();
+    if (Object.values(BillingPlanType).includes(upperPlan as BillingPlanType)) {
+      return upperPlan as BillingPlanType;
+    }
+    return BillingPlanType.BASIC;
+  }
+
+  private toIndustryType(industry?: string): IndustryType {
+    if (!industry) return IndustryType.OTHER;
+    const upperIndustry = industry.toUpperCase();
+    if (Object.values(IndustryType).includes(upperIndustry as IndustryType)) {
+      return upperIndustry as IndustryType;
+    }
+    return IndustryType.OTHER;
+  }
 
   async create(partnerId: string, dto: CreateTenantDto) {
     const existing = await this.prisma.clientTenant.findUnique({
@@ -35,8 +53,9 @@ export class TenantsService {
       data: {
         name: dto.name,
         slug: dto.slug,
-        plan: dto.plan,
-        industry: dto.industry,
+        plan: this.toBillingPlanType(dto.plan),
+        industry: this.toIndustryType(dto.industry),
+        logo: dto.logo,
         partnerId: partnerId,
         users: {
           create: {
@@ -111,8 +130,9 @@ export class TenantsService {
       where: { id },
       data: {
         name: data.name,
-        industry: data.industry,
-        plan: data.plan,
+        industry: data.industry ? this.toIndustryType(data.industry) : undefined,
+        plan: data.plan ? this.toBillingPlanType(data.plan) : undefined,
+        logo: data.logo,
         isActive: data.isActive,
       },
     });
@@ -123,5 +143,37 @@ export class TenantsService {
       where: { id },
       data: { isActive: false },
     });
+  }
+
+  async addUser(data: { clientTenantId: string; name: string; email: string; password: string; role: string; avatar?: string | null }) {
+    const passwordHash = await bcrypt.hash(data.password, 10);
+    
+    // Convert role string to SystemRole enum
+    let role: SystemRole = SystemRole.EMPLOYEE;
+    const upperRole = data.role.toUpperCase();
+    if (Object.values(SystemRole).includes(upperRole as SystemRole)) {
+      role = upperRole as SystemRole;
+    }
+
+    return this.prisma.user.create({
+      data: {
+        clientTenantId: data.clientTenantId,
+        name: data.name,
+        email: data.email,
+        passwordHash: passwordHash,
+        role: role,
+        avatar: data.avatar,
+      },
+    });
+  }
+
+  async delete(id: string) {
+    // Delete in transaction to avoid FK constraint issues
+    await this.prisma.$transaction([
+      this.prisma.user.deleteMany({ where: { clientTenantId: id } }),
+      this.prisma.moduleSubscription.deleteMany({ where: { clientTenantId: id } }),
+      this.prisma.subscriptionRequest.deleteMany({ where: { clientTenantId: id } }),
+      this.prisma.clientTenant.delete({ where: { id } }),
+    ]);
   }
 }

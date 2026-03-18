@@ -1,142 +1,109 @@
-import React, { useState, useEffect } from 'react';
-import { Repeat, Plus, Printer, CalendarClock, ShieldCheck } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import React, { useState } from 'react';
+import { RotateCcw, Plus, Search, Eye, CalendarClock, TrendingDown, CheckCircle2, Clock } from 'lucide-react';
+import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { billsService } from '../../services/compras.service';
-import { EditableDataTable } from '../ui/EditableDataTable';
+import { recurringSupplierInvoicesService } from '../../services/compras.service';
+import type { RecurringSupplierInvoice } from '../../types';
+import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
+import { cn } from '../ui/utils';
 
-export function FacturasProveedorRecView() {
-  const [data, setData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; }
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const filtered = data.filter(r =>
+    ((r as any).description||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    ((r as any).supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      // Simulating recurring bills with filtered data if available, or just showing the table skeleton
-      const response = await billsService.getAll();
-      setData(response.data?.filter((b: any) => b.isRecurring) || []);
-    } catch (error) {
-      console.error('Error fetching recurring bills:', error);
-      toast.error('Error al cargar facturas recurrentes');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const columns = [
-    { key: 'description', header: 'Descripción', editable: true },
-    { 
-      key: 'supplier', 
-      header: 'Proveedor', 
-      editable: false,
-      render: (val: any) => val?.name || '-'
-    },
-    { 
-      key: 'frequency', 
-      header: 'Frecuencia', 
-      editable: true,
-      render: (val: string) => (
-        <Badge variant="outline" className="bg-purple-500/5 text-purple-400 border-purple-500/20">
-          {val || 'Mensual'}
-        </Badge>
-      )
-    },
-    { 
-      key: 'total', 
-      header: 'Monto Fijo', 
-      editable: true,
-      render: (val: number) => (
-        <span className="font-bold text-foreground">
-          ${val?.toLocaleString()}
-        </span>
-      )
-    },
-    { 
-      key: 'nextDate', 
-      header: 'Próxima Factura', 
-      editable: true,
-      render: (val: string) => val ? new Date(val).toLocaleDateString() : '01/04/2026'
-    },
-    { 
-      key: 'status', 
-      header: 'Estado', 
-      editable: true,
-      render: (val: string) => (
-        <Badge variant="secondary" className="bg-green-500/10 text-green-400">
-          Activo
-        </Badge>
-      )
-    },
+  const freqOpts = [
+    { label: 'Semanal',    value: 'WEEKLY' },  { label: 'Mensual', value: 'MONTHLY' },
+    { label: 'Trimestral', value: 'QUARTERLY' }, { label: 'Anual',   value: 'YEARLY' },
+  ];
+  const freqMap: Record<string,string> = { WEEKLY:'Semanal', MONTHLY:'Mensual', QUARTERLY:'Trimestral', YEARLY:'Anual' };
+  const statusOpts = [
+    { label: 'Activo',     value: 'ACTIVE',    color: 'bg-emerald-500/10 text-emerald-500' },
+    { label: 'Pausado',    value: 'PAUSED',    color: 'bg-amber-500/10 text-amber-500' },
+    { label: 'Cancelado',  value: 'CANCELLED', color: 'bg-muted/20 text-muted-foreground' },
   ];
 
-  const handleUpdate = async (id: string | number, updates: Partial<any>) => {
-    toast.info('Actualización de facturas recurrentes en desarrollo');
+  const columns: ColumnDef<RecurringSupplierInvoice>[] = [
+    { key: 'description' as any, header: 'Descripción', editable: true },
+    { key: 'supplier' as any,    header: 'Proveedor',
+      render: (_v, row) => <span className="font-bold text-sm">{(row as any).supplier?.name||'-'}</span> },
+    { key: 'amount' as any,      header: 'Monto',       width: '120px',
+      render: (val) => <span className="font-black tabular-nums text-rose-500">${Number(val||0).toLocaleString()}</span> },
+    { key: 'frequency' as any,   header: 'Frecuencia',  width: '120px', editable: true, type: 'select', options: freqOpts,
+      render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-purple-500/10 text-purple-500 border-none">{freqMap[(val||'').toUpperCase()]||val||'-'}</Badge> },
+    { key: 'status' as any,      header: 'Estado',      width: '110px', editable: true, type: 'select', options: statusOpts,
+      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
+  ];
+
+  const handleUpdate = async (id: string | number, updates: any) => {
+    try { await recurringSupplierInvoicesService.update(id as string, updates); toast.success('Actualizado'); onRefresh(); }
+    catch { toast.error('Error al actualizar'); }
   };
+
+  const handleAdd = async () => {
+    try {
+      await recurringSupplierInvoicesService.create({ supplierId: data[0]?.supplierId || 'temp-supplier-id', amount: 0, frequency: 'MONTHLY', startDate: new Date().toISOString() } as any);
+      toast.success('Factura recurrente creada'); onRefresh();
+    } catch { toast.error('Error al crear'); }
+  };
+
+  const monthly = data.filter(r => ((r as any).frequency||'').toUpperCase()==='MONTHLY').reduce((a,r) => a+Number((r as any).amount||0), 0);
+  const kpis = [
+    { title: 'Activas',         value: data.filter(r => ((r as any).status||'').toUpperCase()==='ACTIVE').length,  icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Total Config.',   value: data.length,                                                                  icon: RotateCcw,     color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
+    { title: 'Mensual Estimado',value: `$${monthly.toLocaleString()}`,                                               icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    { title: 'Pausadas',        value: data.filter(r => ((r as any).status||'').toUpperCase()==='PAUSED').length,   icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid gap-5 md:grid-cols-2">
-        <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-purple-500/20 rounded-xl">
-                <CalendarClock className="size-6 text-purple-500" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-purple-500/80">Suscripciones / Servicios</p>
-                <p className="text-2xl font-bold text-purple-500">{data.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-[#05602b]/10 to-[#05602b]/5 border-[#05602b]/20">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-[#05602b]/20 rounded-xl">
-                <ShieldCheck className="size-6 text-[#05602b]" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-[#05602b]/80">Auto-Generación</p>
-                <p className="text-2xl font-bold text-[#05602b]">Habilitado</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map((k, i) => (
+          <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
+            <CardContent className="p-5"><div className="flex items-center gap-4">
+              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
+              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
+            </div></CardContent>
+          </Card>
+        ))}
       </div>
-
-      <Card className="border-border/50 bg-card/30 backdrop-blur-sm overflow-hidden shadow-xl">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b border-border/10">
-          <div>
-            <CardTitle className="text-xl font-bold flex items-center gap-2">
-              <Repeat className="size-5 text-primary" />
-              Facturas Recurrentes
-            </CardTitle>
-            <CardDescription>Configuración de pagos automáticos y servicios fijos</CardDescription>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div><h2 className="text-xl font-black uppercase tracking-tight">Facturas Recurrentes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Servicios y pagos automáticos</p></div>
+          <div className="flex items-center gap-3">
+            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <Button onClick={handleAdd} className="bg-purple-600 hover:bg-purple-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Config.</Button>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm">
-              <Printer className="size-4 mr-2" /> Historial
+        </div>
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+          onBulkDelete={async (ids) => {
+            try {
+              for (const id of ids) {
+                if (String(id).startsWith('new-')) continue;
+                await recurringSupplierInvoicesService.delete(id as string);
+              }
+              toast.success('Elementos eliminados');
+              onRefresh();
+            } catch (e) {
+              toast.error('Error al eliminar');
+            }
+          }}
+          actions={(row) => (
+            <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
+              onClick={() => toast.info(`${(row as any).description||'Recurrente'} | ${(row as any).supplier?.name||'N/A'} | $${Number((row as any).amount||0).toLocaleString()}/${(row as any).frequency||'MONTHLY'}`)}>
+              <Eye className="size-4" />
             </Button>
-            <Button className="bg-[#05602b] hover:bg-[#044c22]">
-              <Plus className="mr-2 h-4 w-4" /> Nueva Configuración
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <EditableDataTable 
-            data={data} 
-            columns={columns} 
-            onRowUpdate={handleUpdate}
-            isLoading={loading}
-          />
-        </CardContent>
-      </Card>
+          )}
+        />
+      </div>
     </div>
   );
 }

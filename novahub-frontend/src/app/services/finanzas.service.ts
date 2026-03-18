@@ -8,14 +8,14 @@ export const accountsService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<Account>>('/financials/accounts', filters as any),
   getById: (id: string) => api.get<Account>(`/financials/accounts/${id}`),
   create: (data: Partial<Account>) => api.post<Account>('/financials/accounts', data),
-  update: (id: string, data: Partial<Account>) => api.put<Account>(`/financials/accounts/${id}`, data),
+  update: (id: string, data: Partial<Account>) => api.patch<Account>(`/financials/accounts/${id}`, data),
 };
 
 export const incomeService = {
   getAll: (filters?: ApiFilters) => api.get<Income[]>('/financials/income', filters as any),
   getById: (id: string) => api.get<Income>(`/financials/income/${id}`),
   create: (data: Partial<Income>) => api.post<Income>('/financials/income', data),
-  update: (id: string, data: Partial<Income>) => api.put<Income>(`/financials/income/${id}`, data),
+  update: (id: string, data: Partial<Income>) => api.patch<Income>(`/financials/income/${id}`, data),
   delete: (id: string) => api.delete<void>(`/financials/income/${id}`),
 };
 
@@ -23,15 +23,15 @@ export const expensesService = {
   getAll: (filters?: ApiFilters) => api.get<Expense[]>('/financials/expenses', filters as any),
   getById: (id: string) => api.get<Expense>(`/financials/expenses/${id}`),
   create: (data: Partial<Expense>) => api.post<Expense>('/financials/expenses', data),
-  update: (id: string, data: Partial<Expense>) => api.put<Expense>(`/financials/expenses/${id}`, data),
+  update: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/financials/expenses/${id}`, data),
   delete: (id: string) => api.delete<void>(`/financials/expenses/${id}`),
 };
 
-// ✅ CORRECTED: was /recurring-expenses (404) → now /financials/recurring-expenses
 export const recurringExpensesService = {
   getAll: (filters?: ApiFilters) => api.get<RecurringExpense[]>('/financials/recurring-expenses', filters as any),
   create: (data: Partial<RecurringExpense>) => api.post<RecurringExpense>('/financials/recurring-expenses', data),
-  update: (id: string, data: Partial<RecurringExpense>) => api.put<RecurringExpense>(`/financials/recurring-expenses/${id}`, data),
+  update: (id: string, data: Partial<RecurringExpense>) => api.patch<RecurringExpense>(`/financials/recurring-expenses/${id}`, data),
+  delete: (id: string) => api.delete<void>(`/financials/recurring-expenses/${id}`),
 };
 
 export const journalEntriesService = {

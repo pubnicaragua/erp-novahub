@@ -99,6 +99,12 @@ export class FinancialsController {
     return this.financialsService.updateRecurringExpense(id, data, req.user.clientTenantId);
   }
 
+  @Delete('recurring-expenses/:id')
+  @ApiOperation({ summary: 'Eliminar gasto recurrente' })
+  removeRecurringExpense(@Param('id') id: string, @Request() req) {
+    return this.financialsService.removeRecurringExpense(id, req.user.clientTenantId);
+  }
+
   // ─── ASIENTOS CONTABLES ───────────────────────────────────────────────────
   @Post('journals')
   @ApiOperation({ summary: 'Crear asiento contable' })

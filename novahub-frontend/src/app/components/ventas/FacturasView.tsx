@@ -20,15 +20,16 @@ interface FacturasViewProps {
 }
 
 const statusOptions = [
-  { label: 'Borrador', value: 'draft', color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Pendiente', value: 'pending', color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Pagada', value: 'paid', color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Vencida', value: 'overdue', color: 'bg-rose-500/10 text-rose-500' },
-  { label: 'Anulada', value: 'void', color: 'bg-muted/20 text-muted-foreground' },
+  { label: 'Borrador',  value: 'DRAFT',    color: 'bg-muted/20 text-muted-foreground' },
+  { label: 'Pendiente', value: 'PENDING',  color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Pagada',    value: 'PAID',     color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Vencida',   value: 'OVERDUE',  color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Reembolso', value: 'REFUNDED', color: 'bg-blue-500/10 text-blue-500' },
 ];
 
 export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: FacturasViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const filtered = data.filter(f => 
     f.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -44,6 +45,20 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: Factura
       toast.error('Error al actualizar');
       throw error;
     }
+  };
+
+  const handleAddInvoice = async () => {
+    try {
+      await invoicesService.create({
+        customerId: data[0]?.customerId || 'temp-customer-id',
+        number: `FAC-${Date.now().toString().slice(-6)}`,
+        date: new Date().toISOString(),
+        dueDate: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+        items: []
+      } as any);
+      toast.success('Nueva factura creada');
+      onRefresh();
+    } catch (e) { toast.error('Error al crear factura'); }
   };
 
   const handleBatchPay = async (ids: (string | number)[]) => {
@@ -80,7 +95,7 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: Factura
       render: (val, row) => (
         <span className={cn(
           "text-xs font-bold",
-          row.status === 'overdue' ? 'text-rose-500' : 'text-muted-foreground'
+          (row.status||'').toUpperCase() === 'OVERDUE' ? 'text-rose-500' : 'text-muted-foreground'
         )}>
           {new Date(val).toLocaleDateString()}
         </span>
@@ -90,7 +105,7 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: Factura
       key: 'total', 
       header: 'Total Neto', 
       width: '150px',
-      render: (val) => <span className="text-[13px] font-black tabular-nums text-foreground">${val.toLocaleString()}</span>
+      render: (val) => <span className="text-[13px] font-black tabular-nums text-foreground">${Number(val||0).toLocaleString()}</span>
     },
     { 
       key: 'status', 
@@ -100,7 +115,7 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: Factura
       type: 'select',
       options: statusOptions,
       render: (val) => {
-        const opt = statusOptions.find(o => o.value === val);
+        const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
         return (
           <Badge variant="outline" className={cn(
             "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
@@ -114,10 +129,10 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: Factura
   ];
 
   const kpis = [
-    { title: 'Facturado Mes', value: `$${data.reduce((acc, f) => acc + f.total, 0).toLocaleString()}`, icon: FileText, color: 'text-primary', bg: 'bg-primary/10' },
-    { title: 'Por Cobrar', value: `$${data.filter(f => f.status === 'pending' || f.status === 'overdue').reduce((acc, f) => acc + f.total, 0).toLocaleString()}`, icon: TrendingUp, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-    { title: 'Vencidas', value: data.filter(f => f.status === 'overdue').length, icon: AlertCircle, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-    { title: 'Cobrado (7d)', value: `$${(data.filter(f => f.status === 'paid').reduce((acc, f) => acc + f.total, 0) * 0.4).toLocaleString()}`, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Facturado Total',  value: `$${data.reduce((acc, f) => acc + Number(f.total||0), 0).toLocaleString()}`,                                                                            icon: FileText,     color: 'text-primary',      bg: 'bg-primary/10'      },
+    { title: 'Por Cobrar',       value: `$${data.filter(f => ['PENDING','OVERDUE'].includes((f.status||'').toUpperCase())).reduce((acc, f) => acc + Number(f.total||0), 0).toLocaleString()}`, icon: TrendingUp,   color: 'text-orange-500',   bg: 'bg-orange-500/10'   },
+    { title: 'Vencidas',         value: data.filter(f => (f.status||'').toUpperCase() === 'OVERDUE').length,                                                                                   icon: AlertCircle,  color: 'text-rose-500',     bg: 'bg-rose-500/10'     },
+    { title: 'Cobrado',          value: `$${data.filter(f => (f.status||'').toUpperCase() === 'PAID').reduce((acc, f) => acc + Number(f.total||0), 0).toLocaleString()}`,                      icon: CheckCircle2, color: 'text-emerald-500',  bg: 'bg-emerald-500/10'  },
   ];
 
   return (
@@ -156,7 +171,7 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: Factura
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+            <Button onClick={handleAddInvoice} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
               <Plus className="size-4" /> Nueva Factura
             </Button>
           </div>
@@ -184,7 +199,7 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: Factura
           )}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               {row.status !== 'paid' && (
+               {(row.status||'').toUpperCase() !== 'PAID' && (
                  <Button 
                    title="Marcar como Pagada" 
                    onClick={() => onMarkAsPaid(row)}
@@ -195,8 +210,8 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: Factura
                    <CreditCard className="size-4" />
                  </Button>
                )}
-               <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
-               <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => invoicesService.delete(row.id).then(() => onRefresh())}><Trash2 className="size-4" /></Button>
+               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={async () => { await invoicesService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />

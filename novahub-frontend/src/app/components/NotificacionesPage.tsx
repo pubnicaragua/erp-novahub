@@ -1,93 +1,96 @@
-import React, { useState } from 'react';
-import { BellRing, Check, CheckCheck, Trash2, AlertTriangle, Info, CheckCircle } from 'lucide-react';
-import { Card, CardContent } from './ui/card';
+import React, { useState, useEffect } from 'react';
+import { Card } from './ui/card';
 import { Button } from './ui/button';
-import { Badge } from './ui/badge';
+import { Bell, AlertTriangle, MessageSquare, Send } from 'lucide-react';
 import { cn } from './ui/utils';
+import { AlertasView } from './notificaciones/AlertasView';
+import { MensajesView } from './notificaciones/MensajesView';
+import { PushView } from './notificaciones/PushView';
+import { alertsService, messagesService, pushNotificationsService } from '../services/notificaciones.service';
 
-import { useNotifications } from '../hooks/useNotifications';
-import type { Notification } from '../types';
+export const NotificacionesPage = () => {
+  const [activeTab, setActiveTab] = useState('alertas');
+  const [data, setData] = useState<{ alertas: any[], mensajes: any[], push: any[] }>({
+    alertas: [],
+    mensajes: [],
+    push: []
+  });
+  const [loading, setLoading] = useState(true);
 
-const tipoConfig: Record<string, { icon: React.ReactNode; color: string }> = {
-  'warning': { icon: <AlertTriangle className="size-5" />, color: 'text-yellow-400 bg-yellow-500/10' },
-  'info': { icon: <Info className="size-5" />, color: 'text-blue-400 bg-blue-500/10' },
-  'success': { icon: <CheckCircle className="size-5" />, color: 'text-green-400 bg-green-500/10' },
-  'error': { icon: <AlertTriangle className="size-5" />, color: 'text-red-400 bg-red-500/10' },
-};
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [alertas, mensajes, push] = await Promise.all([
+        alertsService.getAll().catch(() => []),
+        messagesService.getAll().catch(() => []),
+        pushNotificationsService.getAll().catch(() => [])
+      ]);
+      setData({ alertas, mensajes, push });
+    } catch (error) {
+      console.error('Error fetching notificaciones:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-export function NotificacionesPage() {
-  const { notifications, unreadCount, markAllAsRead, markAsRead, clearAll } = useNotifications();
-  const [filtro, setFiltro] = useState<string>('todas');
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  const filtered: Notification[] = filtro === 'todas'
-    ? notifications
-    : filtro === 'no-leidas'
-      ? notifications.filter((n: Notification) => !n.read)
-      : notifications.filter((n: Notification) => n.type.toLowerCase() === filtro.toLowerCase());
+  const tabs = [
+    { id: 'alertas', label: 'Alertas', icon: AlertTriangle, color: 'text-rose-500' },
+    { id: 'mensajes', label: 'Mensajes', icon: MessageSquare, color: 'text-blue-500' },
+    { id: 'push', label: 'Push', icon: Send, color: 'text-emerald-500' }
+  ];
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            <BellRing className="size-6 text-primary" />
-            Notificaciones
-            {unreadCount > 0 && <Badge variant="destructive" className="ml-2">{unreadCount} nuevas</Badge>}
-          </h1>
-          <p className="text-sm text-muted-foreground">Centro de notificaciones del sistema</p>
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-muted/10 font-sans">
+      <div className="flex-none bg-background/80 backdrop-blur-2xl border-b border-border/50 sticky top-0 z-40">
+        <div className="p-4 sm:p-6 max-w-[1600px] mx-auto">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-2 bg-primary/10 rounded-xl">
+                  <Bell className="size-5 text-primary" />
+                </div>
+                <h1 className="text-2xl font-black tracking-tight uppercase">Notificaciones</h1>
+              </div>
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/50">
+                Centro de alertas y comunicaciones
+              </p>
+            </div>
+          </div>
         </div>
-        {unreadCount > 0 && (
-          <Button variant="outline" onClick={markAllAsRead}><CheckCheck className="mr-2 size-4" />Marcar todas como leídas</Button>
-        )}
+
+        <div className="px-4 sm:px-6 max-w-[1600px] mx-auto">
+          <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
+            {tabs.map(tab => (
+              <Button
+                key={tab.id}
+                variant={activeTab === tab.id ? 'default' : 'outline'}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "rounded-xl h-10 px-4 font-black uppercase text-[10px] tracking-widest transition-all duration-300 min-w-fit gap-2 border-none",
+                  activeTab === tab.id 
+                    ? "bg-primary text-primary-foreground shadow-sm" 
+                    : "bg-background/50 hover:bg-muted/50 text-muted-foreground"
+                )}
+              >
+                <tab.icon className={cn("size-4", activeTab === tab.id ? "" : tab.color)} />
+                {tab.label}
+              </Button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="flex gap-2 flex-wrap items-center">
-        {['todas', 'no-leidas', 'info', 'success', 'warning', 'error'].map(f => (
-          <Button key={f} variant={filtro === f ? 'default' : 'outline'} size="sm" onClick={() => setFiltro(f)} className="capitalize">
-            {f === 'no-leidas' ? 'No leídas' : f}
-          </Button>
-        ))}
-        {notifications.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={clearAll} className="ml-auto text-red-500 hover:text-red-600 hover:bg-red-500/10">
-            <Trash2 className="size-4 mr-1" /> Limpiar Todo
-          </Button>
-        )}
-      </div>
-
-      <div className="space-y-3">
-        {filtered.length === 0 ? (
-          <Card><CardContent className="py-12 text-center text-muted-foreground"><BellRing className="mx-auto size-12 opacity-30 mb-3" /><p>No hay notificaciones</p></CardContent></Card>
-        ) : (
-          filtered.map((n: Notification) => {
-            const config = tipoConfig[n.type] || tipoConfig['info'];
-            const dateObj = new Date(n.timestamp);
-            return (
-              <Card key={n.id} className={cn('transition-all hover:shadow-md cursor-pointer', !n.read && 'border-primary/30 bg-primary/5')} onClick={() => markAsRead(n.id)}>
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    <div className={cn('flex size-10 items-center justify-center rounded-lg shrink-0', config.color)}>{config.icon}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h3 className={cn('text-sm', !n.read ? 'font-semibold' : 'font-medium')}>{n.title}</h3>
-                          <p className="text-sm text-muted-foreground mt-1">{n.message}</p>
-                        </div>
-                        {!n.read && <div className="size-2.5 rounded-full bg-primary shrink-0 mt-1.5" />}
-                      </div>
-                      <div className="flex items-center gap-3 mt-2">
-                        <Badge variant="secondary" className="text-[10px] capitalize">{n.type}</Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {dateObj.toLocaleDateString()} - {dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })
-        )}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="max-w-[1600px] mx-auto">
+          {activeTab === 'alertas' && <AlertasView data={data.alertas} loading={loading} onRefresh={fetchData} />}
+          {activeTab === 'mensajes' && <MensajesView data={data.mensajes} loading={loading} onRefresh={fetchData} />}
+          {activeTab === 'push' && <PushView data={data.push} loading={loading} onRefresh={fetchData} />}
+        </div>
       </div>
     </div>
   );
-}
+};

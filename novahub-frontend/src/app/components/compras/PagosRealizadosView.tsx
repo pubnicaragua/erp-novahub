@@ -1,155 +1,105 @@
-import React, { useState, useEffect } from 'react';
-import { CreditCard, Plus, Printer, CheckCircle2, Wallet } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import React, { useState } from 'react';
+import { Banknote, Plus, Search, Eye, CheckCircle2, Wallet, TrendingDown, Hash } from 'lucide-react';
+import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { paymentsService } from '../../services/compras.service';
-import { EditableDataTable } from '../ui/EditableDataTable';
+import type { PaymentMade } from '../../types';
+import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
+import { cn } from '../ui/utils';
 
-export function PagosRealizadosView() {
-  const [data, setData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+interface Props { data: PaymentMade[]; loading: boolean; onRefresh: () => void; }
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const filtered = data.filter(p =>
+    (p.reference||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (p.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const response = await paymentsService.getAll();
-      setData(response.data || []);
-    } catch (error) {
-      console.error('Error fetching payments:', error);
-      toast.error('Error al cargar pagos');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const columns = [
-    { key: 'reference', header: 'Referencia', editable: true },
-    { 
-      key: 'supplier', 
-      header: 'Proveedor', 
-      editable: false,
-      render: (val: any) => val?.name || '-'
-    },
-    { 
-      key: 'paymentDate', 
-      header: 'Fecha Pago', 
-      editable: true,
-      render: (val: string) => val ? new Date(val).toLocaleDateString() : '-'
-    },
-    { 
-      key: 'amount', 
-      header: 'Monto Pagado', 
-      editable: true,
-      render: (val: number) => (
-        <span className="font-bold text-emerald-500">
-          ${val?.toLocaleString()}
-        </span>
-      )
-    },
-    { 
-      key: 'paymentMethod', 
-      header: 'Método', 
-      editable: true,
-      render: (val: string) => (
-        <Badge variant="outline" className="capitalize">
-          {val?.toLowerCase()}
-        </Badge>
-      )
-    },
-    { 
-      key: 'status', 
-      header: 'Estado', 
-      editable: true,
-      render: (val: string) => (
-        <Badge variant="secondary" className="bg-green-500/10 text-green-400">
-          Confirmado
-        </Badge>
-      )
-    },
+  const methodOpts = [
+    { label: 'Transferencia', value: 'TRANSFER' },
+    { label: 'Efectivo',      value: 'CASH' },
+    { label: 'Cheque',        value: 'CHECK' },
+    { label: 'Tarjeta',       value: 'CARD' },
   ];
 
-  const handleUpdate = async (id: string | number, updates: Partial<any>) => {
-    try {
-      await paymentsService.update(id as string, updates);
-      toast.success('Pago actualizado');
-      fetchData();
-    } catch (error) {
-      toast.error('Error al actualizar');
-    }
+  const columns: ColumnDef<PaymentMade>[] = [
+    { key: 'reference', header: 'Referencia', width: '130px', editable: true },
+    { key: 'supplier',  header: 'Proveedor',
+      render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
+    { key: 'date',      header: 'Fecha',      width: '110px',
+      render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
+    { key: 'amount',    header: 'Monto',      width: '130px',
+      render: (val) => <span className="font-black tabular-nums text-emerald-500">${Number(val||0).toLocaleString()}</span> },
+    { key: 'method',    header: 'Método',     width: '120px', editable: true, type: 'select', options: methodOpts,
+      render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{val||'-'}</Badge> },
+  ];
+
+  const handleUpdate = async (id: string | number, updates: Partial<PaymentMade>) => {
+    try { await paymentsService.update(id as string, updates); toast.success('Pago actualizado'); onRefresh(); }
+    catch { toast.error('Error al actualizar'); }
   };
 
-  const stats = {
-    totalPagado: data.reduce((acc, curr) => acc + (curr.amount || 0), 0),
-    transacciones: data.length,
+  const handleAdd = async () => {
+    try {
+      await paymentsService.create({ supplierId: data[0]?.supplierId || 'temp-supplier-id', amount: 0, date: new Date().toISOString(), method: 'TRANSFER' } as any);
+      toast.success('Pago registrado'); onRefresh();
+    } catch { toast.error('Error al registrar'); }
   };
+
+  const total = data.reduce((a, p) => a + Number(p.amount||0), 0);
+  const kpis = [
+    { title: 'Total Pagado',    value: `$${total.toLocaleString()}`,  icon: TrendingDown, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    { title: 'Transacciones',   value: data.length,                   icon: Hash,         color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
+    { title: 'Este Mes',        value: `$${data.filter(p => { const d=new Date(p.date||p.createdAt); return d.getMonth()===new Date().getMonth(); }).reduce((a,p)=>a+Number(p.amount||0),0).toLocaleString()}`, icon: Wallet, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Conciliados',     value: data.length,                   icon: CheckCircle2, color: 'text-purple-500', bg: 'bg-purple-500/10'  },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid gap-5 md:grid-cols-2">
-        <Card className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border-emerald-500/20">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-emerald-500/20 rounded-xl">
-                <Wallet className="size-6 text-emerald-500" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-emerald-500/80">Efectivo Desembolsado</p>
-                <p className="text-2xl font-bold text-emerald-500">${stats.totalPagado.toLocaleString()}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-500/20 rounded-xl">
-                <CheckCircle2 className="size-6 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-blue-500/80">Pagos Conciliados</p>
-                <p className="text-2xl font-bold text-blue-500">{stats.transacciones}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map((k, i) => (
+          <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
+            <CardContent className="p-5"><div className="flex items-center gap-4">
+              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
+              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
+            </div></CardContent>
+          </Card>
+        ))}
       </div>
-
-      <Card className="border-border/50 bg-card/30 backdrop-blur-sm overflow-hidden shadow-xl">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b border-border/10">
-          <div>
-            <CardTitle className="text-xl font-bold flex items-center gap-2">
-              <CreditCard className="size-5 text-primary" />
-              Pagos Realizados
-            </CardTitle>
-            <CardDescription>Registro histórico de desembolsos a proveedores</CardDescription>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div><h2 className="text-xl font-black uppercase tracking-tight">Pagos Realizados</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Desembolsos a proveedores</p></div>
+          <div className="flex items-center gap-3">
+            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <Button onClick={handleAdd} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Pago</Button>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm">
-              <Printer className="size-4 mr-2" /> Comprobantes
+        </div>
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+          onBulkDelete={async (ids) => {
+            try {
+              for (const id of ids) {
+                if (String(id).startsWith('new-')) continue;
+                await paymentsMadeService.delete(id as string);
+              }
+              toast.success('Elementos eliminados');
+              onRefresh();
+            } catch (e) {
+              toast.error('Error al eliminar');
+            }
+          }}
+          actions={(row) => (
+            <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
+              onClick={() => toast.info(`${row.reference||'PAG'} | ${row.supplier?.name||'N/A'} | $${Number(row.amount||0).toLocaleString()}`)}>
+              <Eye className="size-4" />
             </Button>
-            <Button className="bg-[#05602b] hover:bg-[#044c22]">
-              <Plus className="mr-2 h-4 w-4" /> Registrar Pago
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="p-4 bg-muted/20 border-b border-border/10 text-[11px] text-muted-foreground italic flex items-center gap-2">
-             <span>💡 Los pagos se asocian automáticamente a las facturas pendientes por fecha de vencimiento.</span>
-          </div>
-          <EditableDataTable 
-            data={data} 
-            columns={columns} 
-            onRowUpdate={handleUpdate}
-            isLoading={loading}
-          />
-        </CardContent>
-      </Card>
+          )}
+        />
+      </div>
     </div>
   );
 }

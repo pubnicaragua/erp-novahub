@@ -1,153 +1,106 @@
-import React, { useState, useEffect } from 'react';
-import { Truck, Plus, Eye, Edit, Trash2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import React, { useState } from 'react';
+import { Truck, Plus, Search, Eye, Trash2, Star, TrendingDown, CheckCircle2 } from 'lucide-react';
+import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { suppliersService } from '../../services/compras.service';
 import type { Supplier } from '../../types';
-import { EditableDataTable } from '../ui/EditableDataTable';
+import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
+import { cn } from '../ui/utils';
 
-export function ProveedoresView() {
-  const [data, setData] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
+interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; }
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewProps) {
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const response = await suppliersService.getAll();
-      setData(response.data || []);
-    } catch (error) {
-      console.error('Error fetching suppliers:', error);
-      toast.error('Error al cargar proveedores');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const filtered = data.filter(s =>
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (s.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const columns = [
-    { key: 'code', header: 'Código', editable: true },
-    { key: 'name', header: 'Nombre', editable: true },
-    { key: 'contactName', header: 'Contacto', editable: true },
-    { key: 'email', header: 'Email', editable: true },
-    { key: 'phone', header: 'Teléfono', editable: true },
-    { 
-      key: 'balance', 
-      header: 'Saldo', 
-      editable: false,
-      render: (val: number) => (
-        <span className="font-semibold text-primary">
-          ${val?.toLocaleString() || '0'}
-        </span>
-      )
+  const statusOptions = [
+    { label: 'Activo',   value: 'ACTIVE',   color: 'bg-emerald-500/10 text-emerald-500' },
+    { label: 'Inactivo', value: 'INACTIVE', color: 'bg-muted/20 text-muted-foreground' },
+  ];
+
+  const columns: ColumnDef<Supplier>[] = [
+    { key: 'code',        header: 'Código',    width: '110px', editable: true },
+    { key: 'name',        header: 'Nombre',    editable: true },
+    { key: 'contactName', header: 'Contacto',  editable: true },
+    { key: 'email',       header: 'Email',     editable: true },
+    { key: 'phone',       header: 'Teléfono',  width: '130px', editable: true },
+    { key: 'balance', header: 'Saldo', width: '130px',
+      render: (val) => <span className="font-black text-rose-500 tabular-nums">${Number(val||0).toLocaleString()}</span>
     },
-    { 
-      key: 'status', 
-      header: 'Estado', 
-      editable: true,
-      render: (val: string) => (
-        <Badge variant="secondary" className={
-          val === 'ACTIVE' || val === 'active' ? 'bg-green-500/10 text-green-400' : 'bg-gray-500/10 text-gray-400'
-        }>
-          {val}
-        </Badge>
-      )
+    { key: 'status', header: 'Estado', width: '120px', editable: true, type: 'select', options: statusOptions,
+      render: (val) => {
+        const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
+        return <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none', opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>;
+      }
     },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Supplier>) => {
-    try {
-      await suppliersService.update(id as string, updates);
-      toast.success('Proveedor actualizado');
-      fetchData();
-    } catch (error) {
-      toast.error('Error al actualizar');
-    }
+    try { await suppliersService.update(id as string, updates); toast.success('Proveedor actualizado'); onRefresh(); }
+    catch { toast.error('Error al actualizar'); }
   };
 
-  const handleAddSupplier = async () => {
+  const handleAdd = async () => {
     try {
-      const newSupplier = {
-        name: 'Nuevo Proveedor',
-        code: `PRV-${Date.now().toString().slice(-4)}`,
-        status: 'ACTIVE' as any,
-        balance: 0
-      };
-      await suppliersService.create(newSupplier as any);
-      toast.success('Proveedor añadido');
-      fetchData();
-    } catch (error) {
-      toast.error('Error al añadir proveedor');
-    }
+      await suppliersService.create({ name: 'Nuevo Proveedor' });
+      toast.success('Proveedor creado'); onRefresh();
+    } catch { toast.error('Error al crear proveedor'); }
   };
+
+  const kpis = [
+    { title: 'Total',     value: data.length,                                                                              icon: Truck,         color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
+    { title: 'Activos',   value: data.filter(s => (s.status||'').toUpperCase() === 'ACTIVE').length,                       icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Saldo Total', value: `$${data.reduce((a, s) => a + Number(s.balance||0), 0).toLocaleString()}`,              icon: TrendingDown,  color: 'text-rose-500',    bg: 'bg-rose-500/10'    },
+    { title: 'Rating Prom.', value: data.length ? (data.reduce((a, s) => a + Number(s.rating||0), 0) / data.length).toFixed(1) : '0', icon: Star, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid gap-5 md:grid-cols-3">
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-500/10 rounded-xl">
-                <Truck className="size-6 text-blue-500" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map((k, i) => (
+          <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
+            <CardContent className="p-5"><div className="flex items-center gap-4">
+              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
+              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p>
+                <p className="text-2xl font-black tabular-nums">{k.value}</p>
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Proveedores</p>
-                <p className="text-2xl font-bold">{data.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50 text-emerald-400">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-emerald-500/10 rounded-xl">
-                <Truck className="size-6 text-emerald-500" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground text-emerald-400/80">Activos</p>
-                <p className="text-2xl font-bold">{data.filter(s => s.status === 'ACTIVE' || s.status === 'active').length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50 text-orange-400">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-orange-500/10 rounded-xl">
-                <Truck className="size-6 text-orange-500" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground text-orange-400/80">Saldo Pendiente</p>
-                <p className="text-2xl font-bold">${data.reduce((acc, s) => acc + (s.balance || 0), 0).toLocaleString()}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </div></CardContent>
+          </Card>
+        ))}
       </div>
 
-      <Card className="border-border/50 bg-card/30 backdrop-blur-sm overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <CardTitle className="text-xl font-bold">Directorio de Proveedores</CardTitle>
-            <CardDescription>Gestión centralizada de aliados comerciales</CardDescription>
+            <h2 className="text-xl font-black uppercase tracking-tight">Proveedores</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Directorio de proveedores y aliados</p>
           </div>
-          <Button onClick={handleAddSupplier} className="bg-[#05602b] hover:bg-[#044c22]">
-            <Plus className="mr-2 h-4 w-4" /> Nuevo Proveedor
-          </Button>
-        </CardHeader>
-        <CardContent className="p-0">
-          <EditableDataTable 
-            data={data} 
-            columns={columns} 
-            onRowUpdate={handleUpdate}
-            isLoading={loading}
-          />
-        </CardContent>
-      </Card>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+              <Input placeholder="Buscar proveedor..." className="pl-9 h-10 w-60 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            </div>
+            <Button onClick={handleAdd} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2">
+              <Plus className="size-4" /> Nuevo Proveedor
+            </Button>
+          </div>
+        </div>
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+          actions={(row) => (
+            <div className="flex gap-1">
+              <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => toast.info(`${row.name} | ${row.email||'N/A'} | Saldo: $${Number(row.balance||0).toLocaleString()}`)}><Eye className="size-4" /></Button>
+              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { await suppliersService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
+            </div>
+          )}
+        />
+      </div>
     </div>
   );
 }

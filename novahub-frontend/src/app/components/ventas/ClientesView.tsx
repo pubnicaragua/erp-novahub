@@ -20,6 +20,7 @@ interface ClientesViewProps {
 
 export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const filtered = data.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -40,10 +41,10 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
   const handleAddClient = async () => {
     try {
       const code = `CLI-${Date.now().toString().slice(-6)}`;
-      const resp = await customersService.create({
+      await customersService.create({
         code,
         name: 'Nuevo Cliente',
-        type: 'COMPANY'
+        type: 'COMPANY' as any
       });
       toast.success('Nuevo cliente creado');
       onRefresh();
@@ -95,25 +96,25 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
       editable: true,
       type: 'select',
       options: [
-        { label: 'Operativo', value: 'active', color: 'bg-emerald-500/10 text-emerald-500' },
-        { label: 'Inactivo', value: 'inactive', color: 'bg-muted/20 text-muted-foreground' }
+        { label: 'Activo', value: 'ACTIVE', color: 'bg-emerald-500/10 text-emerald-500' },
+        { label: 'Inactivo', value: 'INACTIVE', color: 'bg-muted/20 text-muted-foreground' }
       ],
       render: (val) => (
         <Badge variant="outline" className={cn(
           "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
-          val === 'active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/20 text-muted-foreground'
+          (val || '').toUpperCase() === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/20 text-muted-foreground'
         )}>
-          {val === 'active' ? 'Operativo' : 'Inactivo'}
+          {(val || '').toUpperCase() === 'ACTIVE' ? 'Activo' : 'Inactivo'}
         </Badge>
       )
     }
   ];
 
   const kpis = [
-    { title: 'Clientes Activos', value: data.filter(c => c.status === 'active').length, icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Saldo Pendiente', value: `$${data.reduce((acc, c) => acc + (c.balance || 0), 0).toLocaleString()}`, icon: CreditCard, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Nuevos (Mes)', value: '12', icon: TrendingUp, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-    { title: 'Tasa Retención', value: '98%', icon: CheckCircle2, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { title: 'Clientes Activos', value: data.filter(c => (c.status || '').toUpperCase() === 'ACTIVE').length, icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Saldo Pendiente', value: `$${data.reduce((acc, c) => acc + Number(c.creditLimit || 0), 0).toLocaleString()}`, icon: CreditCard, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { title: 'Total Crédito', value: `$${data.reduce((acc, c) => acc + Number(c.creditLimit || 0), 0).toLocaleString()}`, icon: TrendingUp, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    { title: 'Empresas', value: data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length, icon: CheckCircle2, color: 'text-amber-500', bg: 'bg-amber-500/10' },
   ];
 
   return (
@@ -165,13 +166,25 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
 
         <EditableDataTable 
           data={filtered}
+          onBulkDelete={async (ids) => {
+            try {
+              for (const id of ids) {
+                if (String(id).startsWith('new-')) continue;
+                await customersService.delete(id as string);
+              }
+              toast.success('Elementos eliminados');
+              onRefresh();
+            } catch (e) {
+              toast.error('Error al eliminar');
+            }
+          }}
           columns={columns}
           onRowUpdate={handleUpdate}
           onAddRow={handleAddClient}
           isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
+               <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => customersService.delete(row.id).then(() => onRefresh())}><Trash2 className="size-4" /></Button>
             </div>
           )}

@@ -1,194 +1,106 @@
-import React, { useState, useEffect } from 'react';
-import { ClipboardList, Plus, Printer, Send, CheckCircle, XCircle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import React, { useState } from 'react';
+import { ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown } from 'lucide-react';
+import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { purchaseOrdersService } from '../../services/compras.service';
 import type { PurchaseOrder } from '../../types';
-import { EditableDataTable } from '../ui/EditableDataTable';
+import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
+import { cn } from '../ui/utils';
 
-export function OrdenesCompraView() {
-  const [data, setData] = useState<PurchaseOrder[]>([]);
-  const [loading, setLoading] = useState(true);
+interface Props { data: PurchaseOrder[]; loading: boolean; onRefresh: () => void; }
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const filtered = data.filter(o =>
+    (o.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (o.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const response = await purchaseOrdersService.getAll();
-      setData(response.data || []);
-    } catch (error) {
-      console.error('Error fetching purchase orders:', error);
-      toast.error('Error al cargar órdenes de compra');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const statusOpts = [
+    { label: 'Borrador',   value: 'DRAFT',      color: 'bg-muted/20 text-muted-foreground' },
+    { label: 'Enviada',    value: 'SENT',       color: 'bg-blue-500/10 text-blue-500' },
+    { label: 'Aprobada',   value: 'APPROVED',   color: 'bg-emerald-500/10 text-emerald-500' },
+    { label: 'Recibida',   value: 'RECEIVED',   color: 'bg-purple-500/10 text-purple-500' },
+    { label: 'Cancelada',  value: 'CANCELLED',  color: 'bg-rose-500/10 text-rose-500' },
+  ];
 
-  const columns = [
-    { key: 'number', header: 'Número', editable: false },
-    { 
-      key: 'supplier', 
-      header: 'Proveedor', 
-      editable: false,
-      render: (val: any) => val?.name || '-'
-    },
-    { 
-      key: 'date', 
-      header: 'Fecha Emisión', 
-      editable: true,
-      render: (val: string) => new Date(val).toLocaleDateString()
-    },
-    { 
-      key: 'expectedDelivery', 
-      header: 'Entrega Esperada', 
-      editable: true,
-      render: (val: string) => val ? new Date(val).toLocaleDateString() : '-'
-    },
-    { 
-      key: 'total', 
-      header: 'Total', 
-      editable: true,
-      render: (val: number) => (
-        <span className="font-bold text-foreground">
-          ${val?.toLocaleString()}
-        </span>
-      )
-    },
-    { 
-      key: 'status', 
-      header: 'Estado', 
-      editable: true,
-      render: (val: string) => {
-        const colors: Record<string, string> = {
-          'DRAFT': 'bg-gray-500/10 text-gray-400',
-          'SENT': 'bg-blue-500/10 text-blue-400',
-          'APPROVED': 'bg-green-500/10 text-green-400',
-          'CANCELLED': 'bg-red-500/10 text-red-400',
-          'draft': 'bg-gray-500/10 text-gray-400',
-          'sent': 'bg-blue-500/10 text-blue-400',
-          'approved': 'bg-green-500/10 text-green-400',
-          'cancelled': 'bg-red-500/10 text-red-400',
-        };
-        return (
-          <Badge variant="secondary" className={colors[val] || 'bg-primary/10'}>
-            {val}
-          </Badge>
-        );
-      }
-    },
-    { key: 'requestedBy', header: 'Solicitante', editable: true },
+  const columns: ColumnDef<PurchaseOrder>[] = [
+    { key: 'number',   header: 'Número',   width: '120px',
+      render: (val) => <span className="font-black font-mono text-primary text-xs">{val}</span> },
+    { key: 'supplier', header: 'Proveedor',
+      render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
+    { key: 'date',     header: 'Fecha',     width: '110px',
+      render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
+    { key: 'total',    header: 'Total',     width: '130px',
+      render: (val) => <span className="font-black tabular-nums text-foreground">${Number(val||0).toLocaleString()}</span> },
+    { key: 'status',   header: 'Estado',    width: '120px', editable: true, type: 'select', options: statusOpts,
+      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PurchaseOrder>) => {
-    try {
-      await purchaseOrdersService.update(id as string, updates);
-      toast.success('Orden de compra actualizada');
-      fetchData();
-    } catch (error) {
-      toast.error('Error al actualizar');
-    }
+    try { await purchaseOrdersService.update(id as string, updates); toast.success('Orden actualizada'); onRefresh(); }
+    catch { toast.error('Error al actualizar'); }
   };
 
-  const handleAddOrder = async () => {
+  const handleAdd = async () => {
     try {
-      const newOrder = {
-        number: `OC-${Date.now().toString().slice(-4)}`,
-        date: new Date().toISOString(),
-        status: 'DRAFT' as any,
-        total: 0,
-        requestedBy: 'Admin',
-        currency: 'USD'
-      };
-      await purchaseOrdersService.create(newOrder as any);
-      toast.success('Orden de compra creada como borrador');
-      fetchData();
-    } catch (error) {
-      toast.error('Error al crear orden');
-    }
+      await purchaseOrdersService.create({ supplierId: data[0]?.supplierId || 'temp-supplier-id', date: new Date().toISOString(), items: [] });
+      toast.success('Orden de compra creada'); onRefresh();
+    } catch { toast.error('Error al crear orden'); }
   };
 
-  const stats = {
-    pendientesAprobacion: data.filter(o => o.status === 'SENT' || o.status === 'sent').length,
-    aprobadasHoy: data.filter(o => (o.status === 'APPROVED' || o.status === 'approved') && new Date(o.createdAt).toDateString() === new Date().toDateString()).length,
-    totalMonto: data.reduce((acc, curr) => acc + (curr.total || 0), 0)
-  };
+  const kpis = [
+    { title: 'Total Ordenes',   value: data.length,                                                                     icon: ClipboardList, color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
+    { title: 'Por Aprobar',     value: data.filter(o => (o.status||'').toUpperCase() === 'SENT').length,                 icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
+    { title: 'Aprobadas',       value: data.filter(o => (o.status||'').toUpperCase() === 'APPROVED').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Monto Total',     value: `$${data.reduce((a,o) => a+Number(o.total||0), 0).toLocaleString()}`,             icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid gap-5 md:grid-cols-3">
-        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20 shadow-none">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-2.5 bg-blue-500/20 rounded-lg text-blue-500">
-                <Send className="size-5" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-blue-500/80">Por Aprobar</p>
-                <p className="text-2xl font-bold text-blue-500">{stats.pendientesAprobacion}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border-emerald-500/20 shadow-none">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-2.5 bg-emerald-500/20 rounded-lg text-emerald-500">
-                <CheckCircle className="size-5" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-emerald-500/80">Aprobadas</p>
-                <p className="text-2xl font-bold text-emerald-500">{data.filter(o => o.status === 'APPROVED' || o.status === 'approved').length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-[#05602b]/10 to-[#05602b]/5 border-[#05602b]/20 shadow-none">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-2.5 bg-[#05602b]/20 rounded-lg text-[#05602b]">
-                <ClipboardList className="size-5" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-[#05602b]/80">Total Gestión</p>
-                <p className="text-2xl font-bold text-[#05602b]">${stats.totalMonto.toLocaleString()}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map((k, i) => (
+          <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
+            <CardContent className="p-5"><div className="flex items-center gap-4">
+              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
+              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
+            </div></CardContent>
+          </Card>
+        ))}
       </div>
-
-      <Card className="border-border/50 bg-card/30 backdrop-blur-sm overflow-hidden shadow-2xl">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b border-border/10">
-          <div>
-            <CardTitle className="text-xl font-bold flex items-center gap-2">
-              <ClipboardList className="size-5 text-primary" />
-              Órdenes de Compra
-            </CardTitle>
-            <CardDescription>Planificación y aprobación de pedidos a proveedores</CardDescription>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div><h2 className="text-xl font-black uppercase tracking-tight">Órdenes de Compra</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Pedidos a proveedores</p></div>
+          <div className="flex items-center gap-3">
+            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Orden</Button>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="h-9">
-              <Printer className="size-4 mr-2" /> Imprimir Lote
-            </Button>
-            <Button onClick={handleAddOrder} className="bg-[#05602b] hover:bg-[#044c22] h-9">
-              <Plus className="mr-2 h-4 w-4" /> Crear Borrador
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <EditableDataTable 
-            data={data} 
-            columns={columns} 
-            onRowUpdate={handleUpdate}
-            isLoading={loading}
-          />
-        </CardContent>
-      </Card>
+        </div>
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+          onBulkDelete={async (ids) => {
+            try {
+              for (const id of ids) {
+                if (String(id).startsWith('new-')) continue;
+                await purchaseOrdersService.delete(id as string);
+              }
+              toast.success('Elementos eliminados');
+              onRefresh();
+            } catch (e) {
+              toast.error('Error al eliminar');
+            }
+          }}
+          actions={(row) => (
+            <div className="flex gap-1">
+              <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => toast.info(`${row.number} | ${row.supplier?.name||'N/A'} | $${Number(row.total||0).toLocaleString()}`)}><Eye className="size-4" /></Button>
+              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { try { await purchaseOrdersService.update(row.id, { status: 'CANCELLED' as any }); onRefresh(); } catch { toast.error('Error'); } }}><Trash2 className="size-4" /></Button>
+            </div>
+          )}
+        />
+      </div>
     </div>
   );
 }

@@ -101,7 +101,7 @@ async function main() {
       id: partnerUserId,
       email: 'partner@demo.com',
       passwordHash: passwordHash,
-      name: 'Partner Demo User',
+      name: 'Luis Solis',
       role: SystemRole.PARTNER,
       clientTenantId: partnerTenant.id,
     }

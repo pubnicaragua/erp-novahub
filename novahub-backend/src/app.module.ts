@@ -15,6 +15,9 @@ import { ToolsModule } from './tools/tools.module';
 import { RolesModule } from './roles/roles.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { BrandingModule } from './branding/branding.module';
+import { ActivitiesModule } from './activities/activities.module';
+import { DocumentsModule } from './documents/documents.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -31,7 +34,10 @@ import { BrandingModule } from './branding/branding.module';
     ToolsModule, 
     RolesModule, 
     SubscriptionsModule,
-    BrandingModule
+    BrandingModule,
+    ActivitiesModule,
+    DocumentsModule,
+    NotificationsModule
   ],
   controllers: [AppController],
   providers: [AppService],

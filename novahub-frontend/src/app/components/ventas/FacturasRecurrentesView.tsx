@@ -19,13 +19,14 @@ interface FacturasRecurrentesViewProps {
 }
 
 const statusOptions = [
-  { label: 'Activa', value: 'active', color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Pausada', value: 'paused', color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Finalizada', value: 'expired', color: 'bg-muted/20 text-muted-foreground' },
+  { label: 'Activa',     value: 'ACTIVE',  color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Pausada',    value: 'PAUSED',  color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Finalizada', value: 'EXPIRED', color: 'bg-muted/20 text-muted-foreground' },
 ];
 
 export function FacturasRecurrentesView({ data, loading, onRefresh }: FacturasRecurrentesViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const filtered = data.filter(r => 
     (r as any).profileName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -45,12 +46,12 @@ export function FacturasRecurrentesView({ data, loading, onRefresh }: FacturasRe
 
   const toggleStatus = async (row: RecurringInvoice) => {
     try {
-      if (row.status === 'active') {
+      if ((row.status||'').toUpperCase() === 'ACTIVE') {
         await recurringInvoicesService.pause(row.id);
-        toast.success('Suscripción pausada');
+        toast.success('Factura recurrente pausada');
       } else {
         await recurringInvoicesService.resume(row.id);
-        toast.success('Suscripción reanudada');
+        toast.success('Factura recurrente reanudada');
       }
       onRefresh();
     } catch (error) {
@@ -77,28 +78,32 @@ export function FacturasRecurrentesView({ data, loading, onRefresh }: FacturasRe
       editable: true,
       type: 'select',
       options: [
-        { label: 'Mensual', value: 'monthly' },
-        { label: 'Anual', value: 'yearly' },
-        { label: 'Semanal', value: 'weekly' }
+        { label: 'Semanal',    value: 'WEEKLY'    },
+        { label: 'Mensual',    value: 'MONTHLY'   },
+        { label: 'Trimestral', value: 'QUARTERLY' },
+        { label: 'Anual',      value: 'YEARLY'    },
       ],
-      render: (val) => (
-        <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-500 border-none">
-           {val === 'monthly' ? 'Mensual' : val === 'yearly' ? 'Anual' : 'Semanal'}
-        </Badge>
-      )
+      render: (val) => {
+        const freqMap: Record<string, string> = { WEEKLY: 'Semanal', MONTHLY: 'Mensual', QUARTERLY: 'Trimestral', YEARLY: 'Anual' };
+        return (
+          <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-500 border-none">
+            {freqMap[(val||'').toUpperCase()] || val}
+          </Badge>
+        );
+      }
     },
     { 
       key: 'total', 
       header: 'Monto Ciclo', 
       width: '150px',
-      render: (val) => <span className="text-[13px] font-black tabular-nums text-foreground">${val.toLocaleString()}</span>
+      render: (val) => <span className="text-[13px] font-black tabular-nums text-foreground">${Number(val||0).toLocaleString()}</span>
     },
     { 
       key: 'status', 
       header: 'Estado', 
       width: '130px',
       render: (val) => {
-        const opt = statusOptions.find(o => o.value === val);
+        const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
         return (
           <Badge variant="outline" className={cn(
             "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
@@ -122,27 +127,26 @@ export function FacturasRecurrentesView({ data, loading, onRefresh }: FacturasRe
   ];
 
   const kpis = [
-    { title: 'MRR (Mensual)', value: `$${data.reduce((acc, r) => acc + r.total, 0).toLocaleString()}`, icon: RotateCcw, color: 'text-primary', bg: 'bg-primary/10' },
-    { title: 'Suscripciones', value: data.length, icon: Calendar, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Próximos Cobros', value: '8', icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'Churn Rate', value: '1.2%', icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'MRR (Total)',    value: `$${data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').reduce((acc, r) => acc + Number(r.total||0), 0).toLocaleString()}`, icon: RotateCcw, color: 'text-primary',   bg: 'bg-primary/10'   },
+    { title: 'Activas',        value: data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length,                                                                  icon: Calendar,  color: 'text-blue-500',  bg: 'bg-blue-500/10'  },
+    { title: 'Pausadas',       value: data.filter(r => (r.status||'').toUpperCase() === 'PAUSED').length,                                                                  icon: Clock,     color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { title: 'Total Mensual',  value: `$${data.reduce((acc, r) => acc + Number(r.total||0), 0).toLocaleString()}`,                                                         icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   ];
 
   const handleAddRecurring = async () => {
     try {
       await recurringInvoicesService.create({
-        status: 'active',
-        frequency: 'monthly',
+        customerId: data[0]?.customerId || 'temp-customer-id',
+        status: 'ACTIVE' as any,
+        frequency: 'MONTHLY' as any,
         total: 0,
-        subtotal: 0,
-        taxAmount: 0,
-        nextInvoiceDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        startDate: new Date().toISOString()
+        startDate: new Date().toISOString(),
+        items: []
       });
-      toast.success('Nueva suscripción creada');
+      toast.success('Nueva factura recurrente creada');
       onRefresh();
     } catch (error) {
-      toast.error('Error al crear suscripción');
+      toast.error('Error al crear factura recurrente');
     }
   };
 
@@ -186,25 +190,37 @@ export function FacturasRecurrentesView({ data, loading, onRefresh }: FacturasRe
                onClick={handleAddRecurring}
                className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
             >
-              <Plus className="size-4" /> Nueva Suscripción
+              <Plus className="size-4" /> Nueva Recurrente
             </Button>
           </div>
         </div>
 
         <EditableDataTable 
           data={filtered}
+          onBulkDelete={async (ids) => {
+            try {
+              for (const id of ids) {
+                if (String(id).startsWith('new-')) continue;
+                await recurringInvoicesService.delete(id as string);
+              }
+              toast.success('Elementos eliminados');
+              onRefresh();
+            } catch (e) {
+              toast.error('Error al eliminar');
+            }
+          }}
           columns={columns}
           onRowUpdate={handleUpdate}
           onAddRow={handleAddRecurring}
           isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               {row.status === 'active' ? (
+               {(row.status||'').toUpperCase() === 'ACTIVE' ? (
                  <Button title="Pausar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors"><Pause className="size-4" /></Button>
                ) : (
                  <Button title="Reanudar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"><Play className="size-4" /></Button>
                )}
-               <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
+               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => recurringInvoicesService.delete(row.id).then(() => onRefresh())}><Trash2 className="size-4" /></Button>
             </div>
           )}

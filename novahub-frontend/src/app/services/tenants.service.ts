@@ -28,5 +28,5 @@ export const tenantsService = {
     password?: string;
     role?: string;
     avatar?: string | null;
-  }) => api.post('/users', data),
+  }) => api.post(`/tenants/${data.clientTenantId}/users`, data),
 };

@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  DollarSign, TrendingUp, TrendingDown, Wallet, BarChart3, 
-  CalendarClock, Plus, Receipt, Landmark, PieChart, ArrowLeftRight,
-  ChevronRight, Search, Filter, Download, MoreHorizontal, Share2
+  DollarSign, TrendingUp, TrendingDown, BarChart3, 
+  CalendarClock, Landmark, Download
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 import { FinanceDashboardView } from './finanzas/FinanceDashboardView';
 import { FinanceTableView } from './finanzas/FinanceTableView';
 import { FinanceBalanceView } from './finanzas/FinanceBalanceView';
-import { incomeService, expensesService, recurringExpensesService, balanceService } from '../services/finanzas.service';
+import { incomeService, expensesService, recurringExpensesService } from '../services/finanzas.service';
 import { toast } from 'sonner';
+import { motion } from 'framer-motion';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
@@ -150,122 +151,190 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
     }
   };
 
+  const totalIncome = incomes.reduce((acc, i) => acc + Number(i.amount || 0), 0);
+  const totalExpense = expenses.reduce((acc, e) => acc + Number(e.amount || 0), 0);
+
   return (
-    <div className="flex flex-col h-full bg-background/50">
-      {/* Finance Header */}
-      <div className="border-b border-border/50 bg-background px-6 py-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between shrink-0">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1">
-            <DollarSign className="size-3" /> Ecosistema Financiero NovaHub
+    <div className="space-y-4 p-4 md:p-6 pb-20 max-w-[1800px] mx-auto">
+      {/* Header - Inventario Style */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-emerald-500/10 rounded-xl">
+            <DollarSign className="size-9 text-emerald-500" />
           </div>
-          <h1 className="text-2xl font-black text-foreground flex items-center gap-3">
-            Gestión de Finanzas 
-            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-black tracking-tighter">REVOLUTION</Badge>
-          </h1>
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
+              Finanzas <span className="text-emerald-500">Empresariales</span>
+            </h1>
+            <div className="flex items-center gap-2 mt-2">
+              <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+                {incomes.length} ingresos · {expenses.length} gastos · Balance: ${(totalIncome - totalExpense).toLocaleString()}
+              </Badge>
+            </div>
+          </div>
         </div>
-
+        
         <div className="flex items-center gap-2">
-           <button className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-bold text-foreground hover:bg-muted transition-all">
-              <Landmark className="size-4" /> Conciliar Banco
-           </button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="rounded-xl font-bold"
+            onClick={() => {
+              const csvContent = [
+                ['Tipo', 'Descripción', 'Monto', 'Fecha'].join(','),
+                ...incomes.map(i => ['Ingreso', i.description || i.source || '', i.amount, i.date].join(',')),
+                ...expenses.map(e => ['Gasto', e.description || '', e.amount, e.date].join(','))
+              ].join('\n');
+              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+              const link = document.createElement('a');
+              link.href = URL.createObjectURL(blob);
+              link.download = `finanzas_${new Date().toISOString().split('T')[0]}.csv`;
+              link.click();
+              toast.success('Reporte financiero exportado');
+            }}
+          >
+            <Download className="size-4 mr-2" />
+            Exportar CSV
+          </Button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-          <div className="px-6 py-2 border-b border-border/30 bg-background/60 backdrop-blur shrink-0 overflow-x-auto">
-            <TabsList className="bg-transparent h-auto p-0 gap-6">
-              <TabsTrigger value="dashboard" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-1 py-3 text-sm font-bold gap-2">
-                <BarChart3 className="size-4" /> Dashboard
-              </TabsTrigger>
-              <TabsTrigger value="ingresos" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-green-500 border-b-2 border-transparent data-[state=active]:border-green-500 rounded-none px-1 py-3 text-sm font-bold gap-2">
-                <Receipt className="size-4" /> Ingresos
-              </TabsTrigger>
-              <TabsTrigger value="gastos" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-red-500 border-b-2 border-transparent data-[state=active]:border-red-500 rounded-none px-1 py-3 text-sm font-bold gap-2">
-                <Wallet className="size-4" /> Gastos
-              </TabsTrigger>
-              <TabsTrigger value="gastos-rec" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-purple-500 border-b-2 border-transparent data-[state=active]:border-purple-500 rounded-none px-1 py-3 text-sm font-bold gap-2">
-                <CalendarClock className="size-4" /> Recurrentes
-              </TabsTrigger>
-              <TabsTrigger value="balance" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-blue-500 border-b-2 border-transparent data-[state=active]:border-blue-500 rounded-none px-1 py-3 text-sm font-bold gap-2">
-                <Landmark className="size-4" /> Balance
-              </TabsTrigger>
-            </TabsList>
-          </div>
+      {/* Main Navigation Tabs - Inventario Style */}
+      <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
+        <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-border/40">
+          <TabsTrigger value="dashboard" 
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+              data-[state=active]:bg-gradient-to-br data-[state=active]:from-emerald-600 data-[state=active]:to-emerald-700
+              data-[state=active]:text-white data-[state=active]:shadow-lg transition-all">
+            <BarChart3 className="size-4" />
+            <span className="hidden sm:inline">Dashboard</span>
+          </TabsTrigger>
+          <TabsTrigger value="ingresos" 
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+              data-[state=active]:bg-gradient-to-br data-[state=active]:from-green-600 data-[state=active]:to-green-700
+              data-[state=active]:text-white data-[state=active]:shadow-lg transition-all">
+            <TrendingUp className="size-4" />
+            <span className="hidden sm:inline">Ingresos</span>
+          </TabsTrigger>
+          <TabsTrigger value="gastos" 
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+              data-[state=active]:bg-gradient-to-br data-[state=active]:from-red-600 data-[state=active]:to-red-700
+              data-[state=active]:text-white data-[state=active]:shadow-lg transition-all">
+            <TrendingDown className="size-4" />
+            <span className="hidden sm:inline">Gastos</span>
+          </TabsTrigger>
+          <TabsTrigger value="gastos-rec" 
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+              data-[state=active]:bg-gradient-to-br data-[state=active]:from-purple-600 data-[state=active]:to-purple-700
+              data-[state=active]:text-white data-[state=active]:shadow-lg transition-all">
+            <CalendarClock className="size-4" />
+            <span className="hidden sm:inline">Recurrentes</span>
+          </TabsTrigger>
+          <TabsTrigger value="balance" 
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+              data-[state=active]:bg-gradient-to-br data-[state=active]:from-blue-600 data-[state=active]:to-blue-700
+              data-[state=active]:text-white data-[state=active]:shadow-lg transition-all">
+            <Landmark className="size-4" />
+            <span className="hidden sm:inline">Balance</span>
+          </TabsTrigger>
+        </TabsList>
 
-          <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-            <TabsContent value="dashboard" className="m-0 focus-visible:outline-none">
-              <FinanceDashboardView incomes={incomes} expenses={expenses} recurringExpenses={recurringExpenses} />
-            </TabsContent>
+        <div className="mt-4 min-h-[600px]">
+          {loading ? (
+            <div className="flex items-center justify-center h-96">
+              <div className="size-10 border-4 border-muted border-t-emerald-600 rounded-full animate-spin" />
+            </div>
+          ) : (
+            <>
+              <TabsContent value="dashboard" className="m-0" asChild>
+                <motion.div 
+                  initial={{ opacity: 0, y: 16 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <FinanceDashboardView incomes={incomes} expenses={expenses} recurringExpenses={recurringExpenses} />
+                </motion.div>
+              </TabsContent>
 
-            <TabsContent value="ingresos" className="m-0 focus-visible:outline-none">
-              <FinanceTableView 
-                title="Libro de Ingresos Directos"
-                data={incomes}
-                columns={INCOME_COLUMNS}
-                onUpdate={handleUpdateIncome}
-                onAdd={handleAddIncome}
-                onDelete={async (id) => {
-                   await incomeService.delete(id);
-                   setIncomes(prev => prev.filter(i => i.id !== id));
-                   toast.success('Ingreso eliminado');
-                }}
-                loading={loading}
-              />
-            </TabsContent>
+              <TabsContent value="ingresos" className="m-0" asChild>
+                <motion.div 
+                  initial={{ opacity: 0, y: 16 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <FinanceTableView 
+                    title="Libro de Ingresos Directos"
+                    data={incomes}
+                    columns={INCOME_COLUMNS}
+                    onUpdate={handleUpdateIncome}
+                    onAdd={handleAddIncome}
+                    onDelete={async (id) => {
+                      await incomeService.delete(id);
+                      setIncomes(prev => prev.filter(i => i.id !== id));
+                      toast.success('Ingreso eliminado');
+                    }}
+                    loading={loading}
+                  />
+                </motion.div>
+              </TabsContent>
 
-            <TabsContent value="gastos" className="m-0 focus-visible:outline-none">
-              <FinanceTableView 
-                title="Control de Egresos Operativos"
-                data={expenses}
-                columns={EXPENSE_COLUMNS}
-                onUpdate={handleUpdateExpense}
-                onAdd={handleAddExpense}
-                onDelete={async (id) => {
-                   await expensesService.delete(id);
-                   setExpenses(prev => prev.filter(e => e.id !== id));
-                   toast.success('Gasto eliminado');
-                }}
-                loading={loading}
-              />
-            </TabsContent>
+              <TabsContent value="gastos" className="m-0" asChild>
+                <motion.div 
+                  initial={{ opacity: 0, y: 16 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <FinanceTableView 
+                    title="Control de Egresos Operativos"
+                    data={expenses}
+                    columns={EXPENSE_COLUMNS}
+                    onUpdate={handleUpdateExpense}
+                    onAdd={handleAddExpense}
+                    onDelete={async (id) => {
+                      await expensesService.delete(id);
+                      setExpenses(prev => prev.filter(e => e.id !== id));
+                      toast.success('Gasto eliminado');
+                    }}
+                    loading={loading}
+                  />
+                </motion.div>
+              </TabsContent>
 
-            <TabsContent value="gastos-rec" className="m-0 focus-visible:outline-none">
-              <FinanceTableView 
-                title="Configuración de Gastos Periódicos"
-                data={recurringExpenses}
-                columns={RECURRING_COLUMNS}
-                onUpdate={handleUpdateRecurring}
-                onAdd={handleAddRecurring}
-                onDelete={async (id) => {
-                   // Add delete for recurring if service supports it
-                   toast.info('Función de eliminación en desarrollo');
-                }}
-                loading={loading}
-              />
-            </TabsContent>
+              <TabsContent value="gastos-rec" className="m-0" asChild>
+                <motion.div 
+                  initial={{ opacity: 0, y: 16 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <FinanceTableView 
+                    title="Configuración de Gastos Periódicos"
+                    data={recurringExpenses}
+                    columns={RECURRING_COLUMNS}
+                    onUpdate={handleUpdateRecurring}
+                    onAdd={handleAddRecurring}
+                    onDelete={async (id) => {
+                      await recurringExpensesService.delete(id);
+                      setRecurringExpenses(prev => prev.filter(r => r.id !== id));
+                      toast.success('Gasto recurrente eliminado');
+                    }}
+                    loading={loading}
+                  />
+                </motion.div>
+              </TabsContent>
 
-            <TabsContent value="balance" className="m-0 focus-visible:outline-none">
-              <FinanceBalanceView />
-            </TabsContent>
-          </div>
-        </Tabs>
-      </div>
-      
-      {/* Quick Action Bar (Bottom) */}
-      <div className="h-14 border-t border-border/50 bg-background/80 backdrop-blur px-6 flex items-center justify-between shrink-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#05602b]">
-            Intelligente • Premium • Scalable
-          </p>
-        <div className="flex items-center gap-4">
-           <button className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
-              <Download className="size-3.5" /> Descargar CSV
-           </button>
-           <button className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
-              <Share2 className="size-3.5" /> Compartir Informe
-           </button>
+              <TabsContent value="balance" className="m-0" asChild>
+                <motion.div 
+                  initial={{ opacity: 0, y: 16 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <FinanceBalanceView />
+                </motion.div>
+              </TabsContent>
+            </>
+          )}
         </div>
-      </div>
+      </Tabs>
     </div>
   );
 }

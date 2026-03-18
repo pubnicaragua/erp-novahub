@@ -11,12 +11,12 @@ export class CreateTenantDto {
   slug: string;
 
   @IsOptional()
-  @IsEnum(BillingPlanType)
-  plan?: BillingPlanType;
+  @IsString()
+  plan?: string;
 
   @IsOptional()
-  @IsEnum(IndustryType)
-  industry?: IndustryType;
+  @IsString()
+  industry?: string;
 
   // Initial Admin User info
   @IsEmail()

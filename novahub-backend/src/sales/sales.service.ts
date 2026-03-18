@@ -65,9 +65,15 @@ export class SalesService {
   // ─── COTIZACIONES (ESTIMATES) ──────────────────────────────────────────────
   async createEstimate(data: any, clientTenantId: string) {
     const { items, ...rest } = data;
+    let customerId = rest.customerId;
+    if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
+      customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
+    }
+
     return this.prisma.estimate.create({
       data: {
         ...rest,
+        customerId,
         number: rest.number || genCode('COT'),
         status: toEnum(rest.status || 'DRAFT'),
         clientTenantId,
@@ -85,12 +91,55 @@ export class SalesService {
     });
   }
 
+  async updateEstimate(id: string, data: any, clientTenantId: string) {
+    return this.prisma.estimate.update({
+      where: { id, clientTenantId },
+      data: {
+        ...data,
+        ...(data.status && { status: toEnum(data.status) }),
+      },
+    });
+  }
+
+  async convertEstimateToOrder(id: string, clientTenantId: string) {
+    const estimate = await this.prisma.estimate.findFirst({ where: { id, clientTenantId }, include: { items: true } });
+    if (!estimate) throw new NotFoundException('Estimate not found');
+    const order = await this.prisma.salesOrder.create({
+      data: {
+        number: genCode('ORD'),
+        customerId: estimate.customerId,
+        date: new Date(),
+        subtotal: estimate.subtotal,
+        taxAmount: estimate.taxAmount,
+        discountAmount: estimate.discountAmount,
+        total: estimate.total,
+        currency: estimate.currency,
+        notes: estimate.notes,
+        status: 'CONFIRMED',
+        clientTenantId,
+      },
+      include: { customer: true },
+    });
+    await this.prisma.estimate.update({ where: { id }, data: { status: 'APPROVED' } });
+    return order;
+  }
+
+  async removeEstimate(id: string, clientTenantId: string) {
+    return this.prisma.estimate.delete({ where: { id, clientTenantId } });
+  }
+
   // ─── ÓRDENES DE VENTA ─────────────────────────────────────────────────────
   async createSalesOrder(data: any, clientTenantId: string) {
     const { items, ...rest } = data;
+    let customerId = rest.customerId;
+    if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
+      customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
+    }
+
     return this.prisma.salesOrder.create({
       data: {
         ...rest,
+        customerId,
         number: rest.number || genCode('ORD'),
         status: toEnum(rest.status || 'DRAFT'),
         clientTenantId,
@@ -118,12 +167,22 @@ export class SalesService {
     });
   }
 
+  async removeSalesOrder(id: string, clientTenantId: string) {
+    return this.prisma.salesOrder.delete({ where: { id, clientTenantId } });
+  }
+
   // ─── FACTURAS ─────────────────────────────────────────────────────────────
   async createInvoice(data: any, clientTenantId: string) {
     const { items, ...rest } = data;
+    let customerId = rest.customerId;
+    if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
+      customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
+    }
+
     return this.prisma.invoice.create({
       data: {
         ...rest,
+        customerId,
         number: rest.number || genCode('FAC'),
         status: toEnum(rest.status || 'DRAFT'),
         paymentStatus: toEnum(rest.paymentStatus || 'PENDING'),
@@ -153,11 +212,29 @@ export class SalesService {
     });
   }
 
+  async markInvoicePaid(id: string, clientTenantId: string) {
+    const inv = await this.prisma.invoice.findFirst({ where: { id, clientTenantId } });
+    if (!inv) throw new NotFoundException('Invoice not found');
+    return this.prisma.invoice.update({
+      where: { id },
+      data: { status: 'PAID', amountPaid: inv.total, balance: 0 },
+    });
+  }
+
+  async removeInvoice(id: string, clientTenantId: string) {
+    return this.prisma.invoice.delete({ where: { id, clientTenantId } });
+  }
+
   // ─── PAGOS RECIBIDOS ──────────────────────────────────────────────────────
   async createPayment(data: any, clientTenantId: string) {
+    let customerId = data.customerId;
+    if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
+      customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
+    }
     return this.prisma.paymentReceived.create({
       data: {
         ...data,
+        customerId,
         method: toEnum(data.method || 'CASH'),
         clientTenantId,
       },
@@ -167,9 +244,23 @@ export class SalesService {
   async findAllPayments(clientTenantId: string) {
     return this.prisma.paymentReceived.findMany({
       where: { clientTenantId },
-      include: { customer: true },
+      include: { customer: true, invoice: true },
       orderBy: { date: 'desc' },
     });
+  }
+
+  async updatePayment(id: string, data: any, clientTenantId: string) {
+    return this.prisma.paymentReceived.update({
+      where: { id, clientTenantId },
+      data: {
+        ...data,
+        ...(data.method && { method: toEnum(data.method) }),
+      },
+    });
+  }
+
+  async removePayment(id: string, clientTenantId: string) {
+    return this.prisma.paymentReceived.delete({ where: { id, clientTenantId } });
   }
 
   // ─── FACTURAS RECURRENTES ─────────────────────────────────────────────────
@@ -182,12 +273,17 @@ export class SalesService {
   }
 
   async createRecurringInvoice(data: any, clientTenantId: string) {
+    let customerId = data.customerId;
+    if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
+      customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
+    }
     return this.prisma.recurringInvoice.create({
       data: {
         ...data,
+        customerId,
         clientTenantId,
-        status: data.status ? toEnum<RecurringStatus>(data.status) : RecurringStatus.ACTIVE,
-        frequency: data.frequency ? toEnum<Frequency>(data.frequency) : Frequency.MONTHLY,
+        status: data.status ? toEnum<RecurringStatus>(data.status) : RecurringStatus.ACTIVE,      
+        frequency: data.frequency ? toEnum<Frequency>(data.frequency) : Frequency.MONTHLY,        
       },
     });
   }
@@ -220,13 +316,33 @@ export class SalesService {
   }
 
   async createReturn(data: any, clientTenantId: string) {
+    let customerId = data.customerId;
+    if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
+      customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
+    }
     return this.prisma.salesReturn.create({
       data: {
         ...data,
+        customerId,
+        number: data.number || genCode('DEV'),
         clientTenantId,
         status: data.status ? toEnum<ReturnStatus>(data.status) : ReturnStatus.PENDING,
       },
     });
+  }
+
+  async updateReturn(id: string, data: any, clientTenantId: string) {
+    return this.prisma.salesReturn.update({
+      where: { id, clientTenantId },
+      data: {
+        ...data,
+        ...(data.status && { status: toEnum(data.status) }),
+      },
+    });
+  }
+
+  async removeReturn(id: string, clientTenantId: string) {
+    return this.prisma.salesReturn.delete({ where: { id, clientTenantId } });
   }
 
   async approveReturn(id: string, clientTenantId: string) {

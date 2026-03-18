@@ -1,182 +1,108 @@
-import React, { useState, useEffect } from 'react';
-import { Wallet, Plus, Search, Filter } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import React, { useState } from 'react';
+import { Wallet, Plus, Search, Eye, Trash2, TrendingDown, Clock, Tag } from 'lucide-react';
+import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { expensesService } from '../../services/compras.service';
 import type { Expense } from '../../types';
-import { EditableDataTable } from '../ui/EditableDataTable';
+import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
+import { cn } from '../ui/utils';
 
-export function GastosView() {
-  const [data, setData] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
+interface GastosViewProps { data: Expense[]; loading: boolean; onRefresh: () => void; }
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+export function GastosView({ data, loading, onRefresh }: GastosViewProps) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const filtered = data.filter(e =>
+    (e.description||'').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const response = await expensesService.getAll();
-      setData(response.data || []);
-    } catch (error) {
-      console.error('Error fetching expenses:', error);
-      toast.error('Error al cargar gastos');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const statusOpts = [
+    { label: 'Pendiente', value: 'PENDING', color: 'bg-amber-500/10 text-amber-500' },
+    { label: 'Aprobado',  value: 'APPROVED', color: 'bg-blue-500/10 text-blue-500' },
+    { label: 'Pagado',    value: 'PAID',    color: 'bg-emerald-500/10 text-emerald-500' },
+    { label: 'Rechazado', value: 'REJECTED', color: 'bg-rose-500/10 text-rose-500' },
+  ];
 
-  const columns = [
-    { key: 'number', header: 'Número', editable: false },
+  const columns: ColumnDef<Expense>[] = [
+    { key: 'number',      header: 'Número',      width: '110px' },
     { key: 'description', header: 'Descripción', editable: true },
-    { 
-      key: 'supplier', 
-      header: 'Proveedor', 
-      editable: false,
-      render: (val: any) => val?.name || '-'
+    { key: 'category',    header: 'Categoría',   width: '120px', editable: true,
+      render: (val) => <Badge variant="outline" className="text-[9px] uppercase tracking-widest bg-blue-500/10 text-blue-500 border-none">{val||'-'}</Badge>
     },
-    { 
-      key: 'category', 
-      header: 'Categoría', 
-      editable: true,
-      render: (val: string) => (
-        <Badge variant="outline" className="capitalize">
-          {val?.toLowerCase()}
-        </Badge>
-      )
+    { key: 'amount', header: 'Monto', width: '130px',
+      render: (val) => <span className="font-black tabular-nums text-rose-500">${Number(val||0).toLocaleString()}</span>
     },
-    { 
-      key: 'amount', 
-      header: 'Monto', 
-      editable: true,
-      render: (val: number) => (
-        <span className="font-bold text-foreground">
-          ${val?.toLocaleString()}
-        </span>
-      )
+    { key: 'date', header: 'Fecha', width: '120px',
+      render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span>
     },
-    { 
-      key: 'date', 
-      header: 'Fecha', 
-      editable: true,
-      render: (val: string) => new Date(val).toLocaleDateString()
-    },
-    { 
-      key: 'status', 
-      header: 'Estado', 
-      editable: true,
-      render: (val: string) => (
-        <Badge variant="secondary" className={
-          val === 'PAID' || val === 'paid' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'
-        }>
-          {val}
-        </Badge>
-      )
+    { key: 'status', header: 'Estado', width: '120px', editable: true, type: 'select', options: statusOpts,
+      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; }
     },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Expense>) => {
-    try {
-      await expensesService.update(id as string, updates);
-      toast.success('Gasto actualizado');
-      fetchData();
-    } catch (error) {
-      toast.error('Error al actualizar');
-    }
+    try { await expensesService.update(id as string, updates); toast.success('Gasto actualizado'); onRefresh(); }
+    catch { toast.error('Error al actualizar'); }
   };
 
-  const handleAddExpense = async () => {
+  const handleAdd = async () => {
     try {
-      const newExpense = {
-        description: 'Nuevo Gasto Operativo',
-        amount: 0,
-        category: 'OTROS',
-        date: new Date().toISOString(),
-        status: 'PENDING' as any,
-        currency: 'USD',
-        // Note: accountId would be needed in a real scenario
-        accountId: 'acct-purchases-001' 
-      };
-      await expensesService.create(newExpense as any);
-      toast.success('Gasto registrado');
-      fetchData();
-    } catch (error) {
-      toast.error('Error al registrar gasto');
-    }
+      await expensesService.create({ accountId: 'temp-account-id', description: 'Nuevo gasto', amount: 0, date: new Date().toISOString() });
+      toast.success('Gasto registrado'); onRefresh();
+    } catch { toast.error('Error al registrar gasto'); }
   };
 
-  const totals = {
-    mes: data.reduce((acc, curr) => acc + (curr.amount || 0), 0),
-    pendientes: data.filter(e => e.status !== 'PAID' && e.status !== 'paid').length,
-    categorias: new Set(data.map(e => e.category)).size
-  };
+  const kpis = [
+    { title: 'Total Gastos',  value: `$${data.reduce((a, e) => a + Number(e.amount||0), 0).toLocaleString()}`, icon: TrendingDown, color: 'text-rose-500',   bg: 'bg-rose-500/10'   },
+    { title: 'Pendientes',    value: data.filter(e => (e.status||'').toUpperCase() === 'PENDING').length,                                                       icon: Clock,        color: 'text-amber-500', bg: 'bg-amber-500/10'  },
+    { title: 'Pagados',       value: data.filter(e => (e.status||'').toUpperCase() === 'PAID').length,                                                          icon: Wallet,       color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Categorías',    value: new Set(data.map(e => e.category)).size,                                                                                 icon: Tag,          color: 'text-blue-500',  bg: 'bg-blue-500/10'   },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid gap-5 md:grid-cols-3">
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-primary/10 rounded-xl font-bold text-primary">
-                $
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Gastos</p>
-                <p className="text-2xl font-bold">${totals.mes.toLocaleString()}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-yellow-500/10 rounded-xl">
-                <Filter className="size-6 text-yellow-500" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Pendientes de Pago</p>
-                <p className="text-2xl font-bold text-yellow-500">{totals.pendientes}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-500/10 rounded-xl">
-                <Wallet className="size-6 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Categorías</p>
-                <p className="text-2xl font-bold text-blue-500">{totals.categorias}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map((k, i) => (
+          <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
+            <CardContent className="p-5"><div className="flex items-center gap-4">
+              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
+              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
+            </div></CardContent>
+          </Card>
+        ))}
       </div>
-
-      <Card className="border-border/50 bg-card/30 backdrop-blur-sm overflow-hidden shadow-xl">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div>
-            <CardTitle className="text-xl font-bold">Registro de Gastos</CardTitle>
-            <CardDescription>Control detallado de salidas de efectivo operativas</CardDescription>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div><h2 className="text-xl font-black uppercase tracking-tight">Gastos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Registro de gastos operativos</p></div>
+          <div className="flex items-center gap-3">
+            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <Button onClick={handleAdd} className="bg-rose-600 hover:bg-rose-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Gasto</Button>
           </div>
-          <Button onClick={handleAddExpense} className="bg-[#05602b] hover:bg-[#044c22]">
-            <Plus className="mr-2 h-4 w-4" /> Registrar Gasto
-          </Button>
-        </CardHeader>
-        <CardContent className="p-0">
-          <EditableDataTable 
-            data={data} 
-            columns={columns} 
-            onRowUpdate={handleUpdate}
-            isLoading={loading}
-          />
-        </CardContent>
-      </Card>
+        </div>
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+          onBulkDelete={async (ids) => {
+            try {
+              for (const id of ids) {
+                if (String(id).startsWith('new-')) continue;
+                await expensesService.delete(id as string);
+              }
+              toast.success('Elementos eliminados');
+              onRefresh();
+            } catch (e) {
+              toast.error('Error al eliminar');
+            }
+          }}
+          actions={(row) => (
+            <div className="flex gap-1">
+              <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => toast.info(`${row.description||'Gasto'} | $${Number(row.amount||0).toLocaleString()} | ${row.status}`)}><Eye className="size-4" /></Button>
+              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { await expensesService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
+            </div>
+          )}
+        />
+      </div>
     </div>
   );
 }

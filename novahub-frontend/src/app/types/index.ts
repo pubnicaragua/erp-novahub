@@ -824,12 +824,17 @@ export interface Document {
   uploadedById: string;
 }
 
-export interface Notification {
-  id: string;
-  userId: string;
-  title: string;
-  message: string;
-  read: boolean;
-  link?: string;
-  createdAt: string;
-}
+export interface Task { id: string; title: string; description?: string; status: TaskStatus; priority: Priority; dueDate?: string; assignedTo?: string; createdAt: string; updatedAt: string; }
+export interface Event { id: string; title: string; description?: string; startDate: string; endDate: string; location?: string; attendees?: string[]; createdAt: string; }
+export interface Reminder { id: string; title: string; description?: string; reminderDate: string; status: string; createdAt: string; }
+export interface ActivityLog { id: string; action: string; entity: string; entityId: string; userId: string; timestamp: string; details?: string; }
+
+export interface Contract { id: string; number: string; title: string; clientId: string; startDate: string; endDate: string; value: number; status: string; createdAt: string; }
+export interface LegalInvoice { id: string; number: string; type: string; amount: number; issueDate: string; dueDate: string; status: string; createdAt: string; }
+export interface Report { id: string; title: string; type: string; generatedDate: string; format: string; size: number; createdBy: string; }
+export interface File { id: string; name: string; type: string; size: number; uploadDate: string; uploadedBy: string; category: string; url: string; }
+
+export interface Alert { id: string; title: string; message: string; type: string; severity: string; read: boolean; createdAt: string; }
+export interface Message { id: string; subject: string; body: string; from: string; to: string; read: boolean; sentAt: string; }
+export interface PushNotification { id: string; title: string; body: string; type: string; sent: boolean; sentAt: string; deviceId?: string; }
+

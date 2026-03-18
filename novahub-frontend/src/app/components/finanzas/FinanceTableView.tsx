@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '../ui/table';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { 
-  Plus, Save, Trash2, Search, Filter, Download, 
-  ChevronDown, MoreHorizontal, FileText, CheckCircle2, AlertCircle, Edit3
+  Plus, Trash2, Search, Filter, Download, 
+  MoreHorizontal, CheckCircle2, Edit3
 } from 'lucide-react';
 import { 
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger 
@@ -229,9 +229,6 @@ export function FinanceTableView({
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-40">
-                        <DropdownMenuItem className="gap-2">
-                          <FileText className="size-4" /> Detalle
-                        </DropdownMenuItem>
                         <DropdownMenuItem 
                           className="gap-2 text-destructive focus:text-destructive"
                           onClick={() => onDelete(item.id)}

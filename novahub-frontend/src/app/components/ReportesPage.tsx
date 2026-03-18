@@ -1,161 +1,239 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  BarChart3, Download, FileText, TrendingUp, Calendar, Filter, 
-  DollarSign, Package, Users, Warehouse, RefreshCw, Printer, Share2,
-  ArrowUpRight, ArrowDownRight, PieChart as PieChartIcon
+import { useState, useEffect, useMemo } from 'react';
+import {
+  BarChart3, Download, TrendingUp, TrendingDown, Calendar,
+  Package, Printer, ArrowUpRight, ArrowDownRight,
+  DollarSign, Users, ShoppingCart, Target,
+  AlertTriangle, CheckCircle2, Activity, PieChart as PieIcon,
+  FileText, BarChart2, Layers, Zap
 } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from './ui/select';
 import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  AreaChart, Area, RadarChart, Radar, PolarGrid, PolarAngleAxis,
+  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { salesOrdersService } from '../services/ventas.service';
+import { invoicesService, customersService, salesOrdersService, paymentsService } from '../services/ventas.service';
 import { inventoryService } from '../services/inventario.service';
 import { incomeService, expensesService } from '../services/finanzas.service';
+import { toast } from 'sonner';
+import { motion } from 'framer-motion';
 
-// Mock data para ventas mensuales
-const salesData = [
-  { mes: 'Ene', ventas: 45000, compras: 32000, utilidad: 13000 },
-  { mes: 'Feb', ventas: 52000, compras: 38000, utilidad: 14000 },
-  { mes: 'Mar', ventas: 48000, compras: 35000, utilidad: 13000 },
-  { mes: 'Abr', ventas: 61000, compras: 42000, utilidad: 19000 },
-  { mes: 'May', ventas: 55000, compras: 39000, utilidad: 16000 },
-  { mes: 'Jun', ventas: 67000, compras: 45000, utilidad: 22000 },
-  { mes: 'Jul', ventas: 72000, compras: 48000, utilidad: 24000 },
-  { mes: 'Ago', ventas: 69000, compras: 46000, utilidad: 23000 },
-  { mes: 'Sep', ventas: 58000, compras: 41000, utilidad: 17000 },
-  { mes: 'Oct', ventas: 75000, compras: 50000, utilidad: 25000 },
-  { mes: 'Nov', ventas: 81000, compras: 53000, utilidad: 28000 },
-  { mes: 'Dic', ventas: 95000, compras: 60000, utilidad: 35000 },
-];
+const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
+const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
-// Data para categorías
-const categoryData = [
-  { name: 'Electrónica', value: 35, color: '#3b82f6' },
-  { name: 'Accesorios', value: 28, color: '#8b5cf6' },
-  { name: 'Componentes', value: 22, color: '#ec4899' },
-  { name: 'Periféricos', value: 15, color: '#f59e0b' },
-];
-
-// Data para productos top
-const topProductsData = [
-  { producto: 'Laptop HP ProBook 450', ventas: 125, ingresos: 106250 },
-  { producto: 'Monitor Dell 27"', ventas: 98, ingresos: 31360 },
-  { producto: 'Mouse Logitech MX', ventas: 245, ingresos: 24255 },
-  { producto: 'Teclado Keychron K2', ventas: 187, ingresos: 22440 },
-  { producto: 'RAM DDR4 16GB', ventas: 156, ingresos: 13260 },
-];
-
-// Data para inventario por bodega
-const warehouseData = [
-  { bodega: 'Central', stock: 4520, valor: 1250000 },
-  { bodega: 'Norte', stock: 3180, valor: 890000 },
-  { bodega: 'Sur', stock: 2750, valor: 720000 },
-  { bodega: 'Este', stock: 1310, valor: 380000 },
-];
+function fmt(n: number) { return `$${n.toLocaleString('es-NI', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`; }
+function pct(v: number, t: number) { return t > 0 ? ((v / t) * 100).toFixed(1) + '%' : '0%'; }
 
 export function ReportesPage() {
   const [dateRange, setDateRange] = useState('ultimo-mes');
-  const [activeTab, setActiveTab] = useState('ventas');
-  const [realKpis, setRealKpis] = useState({
-    totalSales: 0,
-    totalIncome: 0,
-    totalExpenses: 0,
-    totalProfit: 0,
-    margin: 0,
-    inventoryValue: 0,
-    totalProducts: 0,
-    totalCustomers: 0
-  });
+  const [activeTab, setActiveTab] = useState('ejecutivo');
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchData = async (isRefresh = false) => {
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [incomes, setIncomes] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
+
+  // ── Core KPIs ──────────────────────────────────────────────────────────────
+  const totalIncome   = useMemo(() => incomes.reduce((a, i) => a + Number(i.amount || 0), 0), [incomes]);
+  const totalExpenses = useMemo(() => expenses.reduce((a, e) => a + Number(e.amount || 0), 0), [expenses]);
+  const netProfit     = totalIncome - totalExpenses;
+  const grossMargin   = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
+  const inventoryVal  = useMemo(() => products.reduce((a, p) => a + Number(p.stock || 0) * Number(p.costPrice || 0), 0), [products]);
+  const totalSales    = useMemo(() => invoices.reduce((a, i) => a + Number(i.total || 0), 0), [invoices]);
+  const totalPaid     = useMemo(() => payments.reduce((a, p) => a + Number(p.amount || 0), 0), [payments]);
+  const pendingOrders = useMemo(() => orders.filter(o => o.status === 'CONFIRMED' || o.status === 'IN_PROGRESS').length, [orders]);
+  const activeClients = useMemo(() => customers.filter(c => c.status === 'ACTIVE').length, [customers]);
+
+  // ROI: (income - expenses) / expenses * 100
+  const roi = totalExpenses > 0 ? ((netProfit / totalExpenses) * 100).toFixed(1) : '0';
+  // EBITDA approx = net profit + depreciation (assumed 5% of expenses)
+  const ebitda = netProfit + totalExpenses * 0.05;
+  // Current ratio approx
+  const currentRatio = totalExpenses > 0 ? (totalIncome / totalExpenses).toFixed(2) : '0';
+  // Break-even
+  const breakEven = totalExpenses;
+
+  // ── Monthly trends (last 6 months) ────────────────────────────────────────
+  const monthlyTrend = useMemo(() => {
+    const now = new Date().getMonth();
+    return Array.from({ length: 6 }, (_, i) => {
+      const idx = (now - (5 - i) + 12) % 12;
+      const mInc = incomes.filter(x => new Date(x.date).getMonth() === idx).reduce((a, x) => a + Number(x.amount || 0), 0);
+      const mExp = expenses.filter(x => new Date(x.date).getMonth() === idx).reduce((a, x) => a + Number(x.amount || 0), 0);
+      const mInv = invoices.filter(x => new Date(x.date).getMonth() === idx).reduce((a, x) => a + Number(x.total || 0), 0);
+      return { mes: MONTH_NAMES[idx], ingresos: mInc, gastos: mExp, facturas: mInv, utilidad: mInc - mExp };
+    });
+  }, [incomes, expenses, invoices]);
+
+  // ── Expense by category ────────────────────────────────────────────────────
+  const expByCat = useMemo(() => {
+    const map: Record<string, number> = {};
+    expenses.forEach(e => { const k = e.category || 'Otros'; map[k] = (map[k] || 0) + Number(e.amount || 0); });
+    return Object.entries(map).map(([name, value], i) => ({ name, value, color: COLORS[i % COLORS.length] }));
+  }, [expenses]);
+
+  // ── Top products by revenue value ─────────────────────────────────────────
+  const topProducts = useMemo(() =>
+    [...products]
+      .map(p => ({ name: p.name || '?', valor: Number(p.salePrice || 0) * Math.max(Number(p.stock || 0), 1), stock: Number(p.stock || 0), precio: Number(p.salePrice || 0) }))
+      .sort((a, b) => b.valor - a.valor)
+      .slice(0, 6),
+  [products]);
+
+  // ── Inventory ABC classification ───────────────────────────────────────────
+  const inventoryABC = useMemo(() => {
+    const sorted = [...products]
+      .map(p => ({ name: p.name || '?', valor: Number(p.salePrice || 0) * Math.max(Number(p.stock || 0), 1), stock: Number(p.stock || 0) }))
+      .sort((a, b) => b.valor - a.valor);
+    const total = sorted.reduce((a, p) => a + p.valor, 0);
+    let cum = 0;
+    return sorted.map(p => {
+      cum += p.valor;
+      const pctCum = total > 0 ? (cum / total) * 100 : 0;
+      return { ...p, clase: pctCum <= 70 ? 'A' : pctCum <= 90 ? 'B' : 'C' };
+    });
+  }, [products]);
+
+  // ── Customer segments by invoice value ────────────────────────────────────
+  const customerSegments = useMemo(() => {
+    const map: Record<string, number> = {};
+    invoices.forEach(inv => {
+      if (inv.customer?.name) map[inv.customer.name] = (map[inv.customer.name] || 0) + Number(inv.total || 0);
+    });
+    return Object.entries(map)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+  }, [invoices]);
+
+  // ── Invoice status breakdown ───────────────────────────────────────────────
+  const invoiceStatus = useMemo(() => {
+    const map: Record<string, number> = {};
+    invoices.forEach(i => { const k = i.status || 'UNKNOWN'; map[k] = (map[k] || 0) + 1; });
+    return Object.entries(map).map(([status, count], i) => ({ status, count, color: COLORS[i % COLORS.length] }));
+  }, [invoices]);
+
+  // ── Radar for financial health ─────────────────────────────────────────────
+  const radarData = [
+    { metric: 'Liquidez', value: Math.min(Number(currentRatio) * 50, 100) },
+    { metric: 'Margen', value: Math.min(Math.max(grossMargin, 0), 100) },
+    { metric: 'ROI', value: Math.min(Math.max(Number(roi), 0), 100) },
+    { metric: 'Cobertura', value: Math.min((totalPaid / Math.max(totalSales, 1)) * 100, 100) },
+    { metric: 'Inventario', value: Math.min((inventoryVal / Math.max(totalIncome, 1)) * 50, 100) },
+    { metric: 'Ventas', value: Math.min((totalSales / Math.max(totalIncome + totalSales, 1)) * 100, 100) },
+  ];
+
+  const fetchData = async () => {
     try {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      
-      const [salesRes, incomeRes, expensesRes, productsRes] = await Promise.all([
-        salesOrdersService.getAll(),
+      setLoading(true);
+      const [invR, incR, expR, prodR, catR, custR, ordR, payR] = await Promise.all([
+        invoicesService.getAll(),
         incomeService.getAll(),
         expensesService.getAll(),
-        inventoryService.getProducts()
+        inventoryService.getProducts(),
+        inventoryService.getCategories(),
+        customersService.getAll(),
+        salesOrdersService.getAll(),
+        paymentsService.getAll(),
       ]);
-
-      const sales = Array.isArray(salesRes) ? salesRes : salesRes?.data || [];
-      const income = Array.isArray(incomeRes) ? incomeRes : incomeRes?.data || [];
-      const expenses = Array.isArray(expensesRes) ? expensesRes : expensesRes?.data || [];
-      const products = Array.isArray(productsRes) ? productsRes : productsRes?.data || [];
-
-      const totalSales = sales.reduce((acc: number, curr: any) => acc + Number(curr.total || 0), 0);
-      const totalIncome = income.reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0);
-      const totalExpenses = expenses.reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0);
-      const inventoryValue = products.reduce((acc: number, curr: any) => acc + (Number(curr.stock || 0) * Number(curr.costPrice || 0)), 0);
-      
-      const totalProfit = totalIncome - totalExpenses;
-      const margin = totalIncome > 0 ? (totalProfit / totalIncome) * 100 : 0;
-
-      setRealKpis({
-        totalSales,
-        totalIncome,
-        totalExpenses,
-        totalProfit,
-        margin,
-        inventoryValue,
-        totalProducts: products.length,
-        totalCustomers: sales.length
-      });
-    } catch (error) {
-      console.error('Error fetching reporting data:', error);
+      const a = (r: any) => Array.isArray(r) ? r : (r?.data || []);
+      setInvoices(a(invR)); setIncomes(a(incR)); setExpenses(a(expR));
+      setProducts(a(prodR)); setCategories(a(catR)); setCustomers(a(custR));
+      setOrders(a(ordR)); setPayments(a(payR));
+    } catch (e) {
+      toast.error('Error al cargar datos del reporte');
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [dateRange]);
+  useEffect(() => { fetchData(); }, [dateRange]);
+
+  const handleExport = () => {
+    const rows = [
+      ['REPORTE EJECUTIVO CONSOLIDADO', ''],
+      ['Generado', new Date().toLocaleString()],
+      ['Período', dateRange],
+      [''],
+      ['=== KPIs EJECUTIVOS ===', ''],
+      ['Ingresos Totales', fmt(totalIncome)],
+      ['Gastos Totales', fmt(totalExpenses)],
+      ['Utilidad Neta', fmt(netProfit)],
+      ['Margen Bruto', grossMargin.toFixed(1) + '%'],
+      ['ROI', roi + '%'],
+      ['EBITDA', fmt(ebitda)],
+      ['Ratio Liquidez', currentRatio],
+      ['Punto de Equilibrio', fmt(breakEven)],
+      ['Valor Inventario', fmt(inventoryVal)],
+      ['Clientes Activos', activeClients],
+      ['Órdenes Pendientes', pendingOrders],
+      [''],
+      ['=== TOP PRODUCTOS ===', ''],
+      ['Producto', 'Valor', 'Stock', 'Precio'],
+      ...topProducts.map(p => [p.name, fmt(p.valor), p.stock, fmt(p.precio)]),
+      [''],
+      ['=== CLIENTES POR FACTURACIÓN ===', ''],
+      ['Cliente', 'Total Facturado'],
+      ...customerSegments.map(c => [c.name, fmt(c.value)]),
+    ].map(r => r.join(',')).join('\n');
+
+    const blob = new Blob([rows], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `reporte_ejecutivo_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    toast.success('Reporte ejecutivo exportado');
+  };
+
+  const tooltipStyle = { backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' };
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="text-center space-y-3">
+        <div className="size-12 border-4 border-muted border-t-primary rounded-full animate-spin mx-auto" />
+        <p className="text-sm text-muted-foreground font-medium">Cargando analytics...</p>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="flex flex-col h-full bg-background/50">
-      {/* Header - Consistent with other modules */}
-      <div className="border-b border-border/50 bg-background px-6 py-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between shrink-0">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1">
-            <BarChart3 className="size-3" /> Centro de Inteligencia NovaHub
+    <div className="space-y-4 p-4 md:p-6 pb-20 max-w-[1900px] mx-auto">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-primary/10 rounded-xl">
+            <BarChart3 className="size-9 text-primary" />
           </div>
-          <h1 className="text-2xl font-black text-foreground flex items-center gap-3">
-            Reportes y Análisis
-            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-black tracking-tighter">ANALYTICS</Badge>
-          </h1>
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
+              Reportes <span className="text-primary">Avanzados</span>
+            </h1>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+                {invoices.length} facturas · {customers.length} clientes · {products.length} productos
+              </Badge>
+              {netProfit >= 0
+                ? <Badge className="bg-green-500/10 text-green-500 border-green-500/20 px-2 py-1 text-[10px] font-black uppercase tracking-widest"><CheckCircle2 className="size-3 mr-1 inline" />Rentable</Badge>
+                : <Badge className="bg-red-500/10 text-red-500 border-red-500/20 px-2 py-1 text-[10px] font-black uppercase tracking-widest"><AlertTriangle className="size-3 mr-1 inline" />Déficit</Badge>
+              }
+            </div>
+          </div>
         </div>
-
         <div className="flex items-center gap-2 flex-wrap">
           <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-[160px] h-9 border-border bg-card">
-              <Calendar className="mr-2 size-4" />
+            <SelectTrigger className="w-[160px] rounded-xl font-bold bg-muted/20 border-border/40">
+              <Calendar className="mr-2 size-4 text-primary" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -166,427 +244,489 @@ export function ReportesPage() {
               <SelectItem value="ultimo-año">Último año</SelectItem>
             </SelectContent>
           </Select>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-9 border-border bg-card"
-            onClick={() => fetchData(true)}
-            disabled={refreshing}
-          >
-            <RefreshCw className={`size-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            Actualizar
+          <Button variant="outline" size="sm" className="rounded-xl font-bold" onClick={handleExport}>
+            <Download className="size-4 mr-2" />Exportar CSV
           </Button>
-          <Button variant="outline" size="sm" className="h-9 border-border bg-card">
-            <Download className="size-4 mr-2" />
-            Exportar
-          </Button>
-          <Button size="sm" className="h-9 bg-[#05602b] hover:bg-[#044c22]">
-            <Printer className="size-4 mr-2" />
-            Generar Reporte
+          <Button size="sm" className="rounded-xl font-bold bg-[#05602b] hover:bg-[#044c22]"
+            onClick={() => { window.print(); toast.success('Preparando impresión...'); }}>
+            <Printer className="size-4 mr-2" />Imprimir
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-          <div className="px-6 py-2 border-b border-border/30 bg-background/60 backdrop-blur shrink-0 overflow-x-auto">
-            <TabsList className="bg-transparent h-auto p-0 gap-6">
-              <TabsTrigger value="ventas" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-1 py-3 text-sm font-bold gap-2">
-                <DollarSign className="size-4" /> Ventas
-              </TabsTrigger>
-              <TabsTrigger value="productos" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-blue-500 border-b-2 border-transparent data-[state=active]:border-blue-500 rounded-none px-1 py-3 text-sm font-bold gap-2">
-                <Package className="size-4" /> Productos
-              </TabsTrigger>
-              <TabsTrigger value="inventario" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-purple-500 border-b-2 border-transparent data-[state=active]:border-purple-500 rounded-none px-1 py-3 text-sm font-bold gap-2">
-                <Warehouse className="size-4" /> Inventario
-              </TabsTrigger>
-              <TabsTrigger value="financiero" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-emerald-500 border-b-2 border-transparent data-[state=active]:border-emerald-500 rounded-none px-1 py-3 text-sm font-bold gap-2">
-                <TrendingUp className="size-4" /> Financiero
-              </TabsTrigger>
-            </TabsList>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-border/40">
+          {[
+            { id: 'ejecutivo', label: 'Ejecutivo', icon: Zap, color: 'from-primary to-primary/80' },
+            { id: 'financiero', label: 'Financiero', icon: DollarSign, color: 'from-emerald-600 to-emerald-700' },
+            { id: 'ventas', label: 'Ventas', icon: ShoppingCart, color: 'from-blue-600 to-blue-700' },
+            { id: 'inventario', label: 'Inventario', icon: Package, color: 'from-orange-600 to-orange-700' },
+            { id: 'clientes', label: 'Clientes', icon: Users, color: 'from-purple-600 to-purple-700' },
+          ].map(t => (
+            <TabsTrigger key={t.id} value={t.id}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+                data-[state=active]:bg-gradient-to-br data-[state=active]:${t.color}
+                data-[state=active]:text-white data-[state=active]:shadow-lg transition-all`}>
+              <t.icon className="size-4" />
+              <span className="hidden sm:inline">{t.label}</span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {/* ═══ TAB: EJECUTIVO ════════════════════════════════════════════════ */}
+        <TabsContent value="ejecutivo" className="m-0 mt-4 space-y-5">
+          {/* Strategic KPI Row */}
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+            {[
+              { label: 'Ingresos Totales', value: fmt(totalIncome), sub: `${incomes.length} transacciones`, icon: TrendingUp, color: 'green', trend: '+' },
+              { label: 'Gastos Totales',   value: fmt(totalExpenses), sub: `${expenses.length} registros`, icon: TrendingDown, color: 'red', trend: '-' },
+              { label: 'Utilidad Neta',    value: fmt(netProfit), sub: `Margen: ${grossMargin.toFixed(1)}%`, icon: DollarSign, color: netProfit >= 0 ? 'primary' : 'orange', trend: netProfit >= 0 ? '+' : '-' },
+              { label: 'Facturas Emitidas', value: fmt(totalSales), sub: `${invoices.length} facturas`, icon: FileText, color: 'blue', trend: '+' },
+            ].map((kpi, i) => (
+              <motion.div key={i} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+                <Card className={`border-${kpi.color === 'primary' ? 'primary' : kpi.color}-500/20 bg-gradient-to-br from-${kpi.color === 'primary' ? 'primary' : kpi.color}-500/5 to-transparent`}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                      <kpi.icon className={`size-4 text-${kpi.color === 'primary' ? 'primary' : kpi.color}-500`} />
+                      {kpi.label}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className={`text-2xl font-bold text-${kpi.color === 'primary' ? 'primary' : kpi.color}-400`}>{kpi.value}</div>
+                    <p className="text-xs text-muted-foreground mt-1">{kpi.sub}</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-            {/* KPI Cards - Always visible */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-              <Card className="border-green-500/20 bg-gradient-to-br from-green-500/5 to-transparent">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <TrendingUp className="size-4 text-green-500" /> Ingresos Totales
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-400">
-                    ${realKpis.totalIncome.toLocaleString()}
+          {/* Secondary KPI Row */}
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            {[
+              { label: 'ROI', value: `${roi}%`, icon: Target, color: 'text-emerald-400', bg: 'bg-emerald-500/10', desc: 'Retorno inversión' },
+              { label: 'EBITDA', value: fmt(ebitda), icon: BarChart2, color: 'text-blue-400', bg: 'bg-blue-500/10', desc: 'Resultado operativo' },
+              { label: 'Ratio Liquidez', value: currentRatio, icon: Activity, color: 'text-purple-400', bg: 'bg-purple-500/10', desc: 'Ingresos / Gastos' },
+              { label: 'Punto Equilibrio', value: fmt(breakEven), icon: Target, color: 'text-amber-400', bg: 'bg-amber-500/10', desc: 'Mínimo para cubrir costos' },
+            ].map((k, i) => (
+              <Card key={i} className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-xl p-2.5 ${k.bg}`}><k.icon className={`size-4 ${k.color}`} /></div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{k.label}</p>
+                    <p className={`text-lg font-black ${k.color}`}>{k.value}</p>
+                    <p className="text-[10px] text-muted-foreground/60">{k.desc}</p>
                   </div>
-                  <div className="flex items-center gap-1 mt-1">
-                    <ArrowUpRight className="size-3 text-green-500" />
-                    <span className="text-xs text-green-500 font-medium">+12.5% vs mes ant.</span>
-                  </div>
-                </CardContent>
+                </div>
               </Card>
+            ))}
+          </div>
 
-              <Card className="border-red-500/20 bg-gradient-to-br from-red-500/5 to-transparent">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <ArrowDownRight className="size-4 text-red-500" /> Gastos Totales
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-red-400">
-                    ${realKpis.totalExpenses.toLocaleString()}
-                  </div>
-                  <div className="flex items-center gap-1 mt-1">
-                    <ArrowDownRight className="size-3 text-red-500" />
-                    <span className="text-xs text-red-500 font-medium">+4.2% vs mes ant.</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <BarChart3 className="size-4 text-blue-500" /> Utilidad Neta
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`text-2xl font-bold ${realKpis.totalProfit >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>
-                    ${realKpis.totalProfit.toLocaleString()}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 font-medium">
-                    Margen: {realKpis.margin.toFixed(1)}%
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <Package className="size-4 text-purple-500" /> Valor Inventario
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-purple-400">
-                    ${realKpis.inventoryValue.toLocaleString()}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 font-medium">
-                    {realKpis.totalProducts} productos activos
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Tab de Ventas */}
-            <TabsContent value="ventas" className="m-0 space-y-6">
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Ventas vs Compras Mensuales</CardTitle>
+          {/* Charts Row */}
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-2">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <BarChart3 className="size-4 text-primary" /> Tendencia Financiera — Últimos 6 Meses
+                </CardTitle>
               </CardHeader>
               <CardContent>
+                <ResponsiveContainer width="100%" height={280}>
+                  <AreaChart data={monthlyTrend}>
+                    <defs>
+                      <linearGradient id="gInc" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
+                    <Legend iconType="circle" />
+                    <Area type="monotone" dataKey="ingresos" stroke="#10b981" fill="url(#gInc)" strokeWidth={2} name="Ingresos" />
+                    <Area type="monotone" dataKey="gastos"   stroke="#ef4444" fill="url(#gExp)" strokeWidth={2} name="Gastos" />
+                    <ReferenceLine y={breakEven / 6} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: 'Break-even', fill: '#f59e0b', fontSize: 10 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <PieIcon className="size-4 text-primary" /> Salud Financiera
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={280}>
+                  <RadarChart data={radarData}>
+                    <PolarGrid stroke="hsl(var(--border))" />
+                    <PolarAngleAxis dataKey="metric" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                    <Radar name="Score" dataKey="value" stroke="#10b981" fill="#10b981" fillOpacity={0.25} strokeWidth={2} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [v.toFixed(1), 'Score']} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Alerts */}
+          <div className="grid gap-3 md:grid-cols-3">
+            <Card className={`p-4 border-l-4 ${netProfit >= 0 ? 'border-l-green-500 bg-green-500/5' : 'border-l-red-500 bg-red-500/5'}`}>
+              <div className="flex items-center gap-2 mb-1">
+                {netProfit >= 0 ? <CheckCircle2 className="size-4 text-green-500" /> : <AlertTriangle className="size-4 text-red-500" />}
+                <p className="text-xs font-black uppercase tracking-widest">Rentabilidad</p>
+              </div>
+              <p className="text-lg font-black">{netProfit >= 0 ? 'Positiva' : 'Negativa'}</p>
+              <p className="text-[10px] text-muted-foreground">Margen neto: {grossMargin.toFixed(1)}%</p>
+            </Card>
+            <Card className="p-4 border-l-4 border-l-amber-500 bg-amber-500/5">
+              <div className="flex items-center gap-2 mb-1">
+                <Activity className="size-4 text-amber-500" />
+                <p className="text-xs font-black uppercase tracking-widest">Órdenes Activas</p>
+              </div>
+              <p className="text-lg font-black">{pendingOrders}</p>
+              <p className="text-[10px] text-muted-foreground">Pendientes de procesar</p>
+            </Card>
+            <Card className="p-4 border-l-4 border-l-blue-500 bg-blue-500/5">
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="size-4 text-blue-500" />
+                <p className="text-xs font-black uppercase tracking-widest">Cobranza</p>
+              </div>
+              <p className="text-lg font-black">{pct(totalPaid, totalSales)}</p>
+              <p className="text-[10px] text-muted-foreground">Del total facturado cobrado</p>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ═══ TAB: FINANCIERO ════════════════════════════════════════════════ */}
+        <TabsContent value="financiero" className="m-0 mt-4 space-y-5">
+          <div className="grid gap-4 md:grid-cols-3">
+            {[
+              { title: 'Ingresos Brutos', value: fmt(totalIncome), sub: `${incomes.length} registros`, c: 'green' },
+              { title: 'Gastos Operativos', value: fmt(totalExpenses), sub: `${expenses.length} egresos`, c: 'red' },
+              { title: 'Resultado Neto', value: fmt(netProfit), sub: `Margen: ${grossMargin.toFixed(1)}%`, c: netProfit >= 0 ? 'primary' : 'orange' },
+            ].map((k, i) => (
+              <Card key={i} className={`border-${k.c === 'primary' ? 'primary' : k.c}-500/20 bg-gradient-to-br from-${k.c === 'primary' ? 'primary' : k.c}-500/5 to-transparent`}>
+                <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{k.title}</CardTitle></CardHeader>
+                <CardContent>
+                  <p className={`text-2xl font-bold text-${k.c === 'primary' ? 'primary' : k.c}-400`}>{k.value}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{k.sub}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader><CardTitle className="text-sm">Ingresos vs Gastos Mensuales (P&L)</CardTitle></CardHeader>
+              <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={salesData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="mes" stroke="#94a3b8" fontSize={12} />
-                    <YAxis stroke="#94a3b8" fontSize={12} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #334155',
-                        borderRadius: '8px',
-                      }}
-                    />
+                  <BarChart data={monthlyTrend} barGap={6}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
                     <Legend />
-                    <Bar dataKey="ventas" fill="#3b82f6" name="Ventas" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="compras" fill="#8b5cf6" name="Compras" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="ingresos" fill="#10b981" name="Ingresos" radius={[4,4,0,0]} />
+                    <Bar dataKey="gastos"   fill="#ef4444" name="Gastos" radius={[4,4,0,0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Tendencia de Utilidad</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-sm">Distribución de Gastos por Categoría</CardTitle></CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={salesData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="mes" stroke="#94a3b8" fontSize={12} />
-                    <YAxis stroke="#94a3b8" fontSize={12} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #334155',
-                        borderRadius: '8px',
-                      }}
-                    />
+                {expByCat.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie data={expByCat} innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                        {expByCat.map((e, i) => <Cell key={i} fill={e.color} stroke="transparent" />)}
+                      </Pie>
+                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    <div className="text-center"><TrendingDown className="size-12 mx-auto mb-2 opacity-20" /><p className="text-sm">Sin gastos registrados</p></div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader><CardTitle className="text-sm">Flujo de Utilidad Mensual</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={monthlyTrend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
+                  <ReferenceLine y={0} stroke="hsl(var(--border))" />
+                  <Bar dataKey="utilidad" name="Utilidad" radius={[4,4,0,0]}
+                    fill="#10b981"
+                    label={{ position: 'top', fontSize: 10, formatter: (v: number) => v > 0 ? `+${(v/1000).toFixed(1)}k` : `${(v/1000).toFixed(1)}k` }}
+                  >
+                    {monthlyTrend.map((entry, i) => <Cell key={i} fill={entry.utilidad >= 0 ? '#10b981' : '#ef4444'} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ═══ TAB: VENTAS ════════════════════════════════════════════════════ */}
+        <TabsContent value="ventas" className="m-0 mt-4 space-y-5">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            {[
+              { label: 'Total Facturado', value: fmt(totalSales), c: 'text-green-400', bg: 'bg-green-500/10', icon: DollarSign },
+              { label: 'Total Cobrado',   value: fmt(totalPaid), c: 'text-blue-400', bg: 'bg-blue-500/10', icon: CheckCircle2 },
+              { label: 'Órds. Activas',  value: pendingOrders, c: 'text-amber-400', bg: 'bg-amber-500/10', icon: ShoppingCart },
+              { label: 'Facturas',        value: invoices.length, c: 'text-purple-400', bg: 'bg-purple-500/10', icon: FileText },
+            ].map((k, i) => (
+              <Card key={i} className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-xl p-2.5 ${k.bg}`}><k.icon className={`size-4 ${k.c}`} /></div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{k.label}</p>
+                    <p className={`text-lg font-black ${k.c}`}>{k.value}</p>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader><CardTitle className="text-sm">Facturación Mensual</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={monthlyTrend}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
                     <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="utilidad" 
-                      stroke="#10b981" 
-                      strokeWidth={3}
-                      name="Utilidad"
-                      dot={{ fill: '#10b981', r: 4 }}
-                    />
+                    <Line type="monotone" dataKey="ingresos" stroke="#10b981" strokeWidth={3} name="Ingresos" dot={{ fill: '#10b981', r: 4 }} />
+                    <Line type="monotone" dataKey="facturas" stroke="#3b82f6" strokeWidth={2} name="Facturas" dot={{ fill: '#3b82f6', r: 3 }} strokeDasharray="5 5" />
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-sm">Estado de Facturas</CardTitle></CardHeader>
+              <CardContent>
+                {invoiceStatus.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie data={invoiceStatus} dataKey="count" nameKey="status" cx="50%" cy="50%"
+                        outerRadius={100} label={({ status, count }) => `${status}: ${count}`} labelLine={false}>
+                        {invoiceStatus.map((e, i) => <Cell key={i} fill={e.color} stroke="transparent" />)}
+                      </Pie>
+                      <Tooltip contentStyle={tooltipStyle} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                    <p className="text-sm">Sin facturas registradas</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Distribución por Categoría</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-sm">Facturación por Cliente (Top)</CardTitle></CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={categoryData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, value }) => `${name}: ${value}%`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1e293b',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+              {customerSegments.length > 0 ? (
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={customerSegments} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <YAxis type="category" dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} width={160} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
+                    <Bar dataKey="value" name="Total Facturado" radius={[0, 4, 4, 0]}>
+                      {customerSegments.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[250px] flex items-center justify-center text-muted-foreground">
+                  <p className="text-sm">Sin facturas con clientes asignados</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-            {/* Tab de Productos */}
-            <TabsContent value="productos" className="m-0 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Top 5 Productos Más Vendidos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {topProductsData.map((product, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
-                          {index + 1}
-                        </div>
-                        <div>
-                          <p className="font-medium">{product.producto}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {product.ventas} unidades vendidas
-                          </p>
-                        </div>
+        {/* ═══ TAB: INVENTARIO ════════════════════════════════════════════════ */}
+        <TabsContent value="inventario" className="m-0 mt-4 space-y-5">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            {[
+              { label: 'Valor Inventario', value: fmt(inventoryVal), c: 'text-purple-400', bg: 'bg-purple-500/10', icon: Package },
+              { label: 'Productos',        value: products.length,   c: 'text-blue-400',   bg: 'bg-blue-500/10',   icon: Layers },
+              { label: 'Categorías',       value: categories.length, c: 'text-green-400',  bg: 'bg-green-500/10',  icon: PieIcon },
+              { label: 'Clase A (70%)',    value: inventoryABC.filter(p => p.clase === 'A').length, c: 'text-amber-400', bg: 'bg-amber-500/10', icon: Target },
+            ].map((k, i) => (
+              <Card key={i} className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-xl p-2.5 ${k.bg}`}><k.icon className={`size-4 ${k.c}`} /></div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{k.label}</p>
+                    <p className={`text-lg font-black ${k.c}`}>{k.value}</p>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader><CardTitle className="text-sm">Top Productos por Valor</CardTitle></CardHeader>
+              <CardContent>
+                {topProducts.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={topProducts}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={v => v.length > 12 ? v.slice(0, 12) + '…' : v} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
+                      <Bar dataKey="valor" name="Valor Total" radius={[4, 4, 0, 0]}>
+                        {topProducts.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                    <p className="text-sm">Sin productos registrados</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-sm">Clasificación ABC de Inventario</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                  {inventoryABC.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/20 hover:bg-muted/40 transition-colors">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Badge className={`text-[9px] font-black w-6 h-6 flex items-center justify-center rounded-lg p-0 ${
+                          p.clase === 'A' ? 'bg-green-500/15 text-green-500' :
+                          p.clase === 'B' ? 'bg-blue-500/15 text-blue-500' :
+                          'bg-muted/30 text-muted-foreground'}`}>
+                          {p.clase}
+                        </Badge>
+                        <span className="text-xs font-medium truncate">{p.name}</span>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xs font-bold">{fmt(p.valor)}</p>
+                        <p className="text-[10px] text-muted-foreground">{p.stock} uds</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-green-400">
-                        ${product.ingresos.toLocaleString()}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Ingresos</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Rendimiento por Producto</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={topProductsData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis type="number" stroke="#94a3b8" fontSize={12} />
-                  <YAxis 
-                    type="category" 
-                    dataKey="producto" 
-                    stroke="#94a3b8" 
-                    fontSize={11}
-                    width={150}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1e293b',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                    }}
-                  />
-                  <Bar dataKey="ventas" fill="#3b82f6" name="Unidades" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-            {/* Tab de Inventario */}
-            <TabsContent value="inventario" className="m-0 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Stock por Bodega</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {warehouseData.map((warehouse, index) => (
-                  <div key={index} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{warehouse.bodega}</span>
-                      <span className="text-sm text-muted-foreground">
-                        {warehouse.stock.toLocaleString()} unidades
-                      </span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-muted">
-                      <div
-                        className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500"
-                        style={{ width: `${(warehouse.stock / 4520) * 100}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Valor: ${warehouse.valor.toLocaleString()}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Comparativa de Bodegas</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={warehouseData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="bodega" stroke="#94a3b8" fontSize={12} />
-                  <YAxis stroke="#94a3b8" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1e293b',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="stock" fill="#3b82f6" name="Stock" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-            {/* Tab Financiero */}
-            <TabsContent value="financiero" className="m-0 space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="border-green-500/20">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Ingresos Totales</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-400">$778,000</div>
-                <p className="text-xs text-muted-foreground mt-1">Último año</p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-red-500/20">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Gastos Totales</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-400">$529,000</div>
-                <p className="text-xs text-muted-foreground mt-1">Último año</p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-blue-500/20">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Balance Neto</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-400">$249,000</div>
-                <p className="text-xs text-muted-foreground mt-1">Utilidad neta</p>
+                  ))}
+                  {inventoryABC.length === 0 && <p className="text-sm text-center text-muted-foreground py-8">Sin productos</p>}
+                </div>
+                <div className="grid grid-cols-3 gap-2 mt-3">
+                  {(['A', 'B', 'C'] as const).map(cls => {
+                    const count = inventoryABC.filter(p => p.clase === cls).length;
+                    const val   = inventoryABC.filter(p => p.clase === cls).reduce((a, p) => a + p.valor, 0);
+                    const colors = { A: 'text-green-400', B: 'text-blue-400', C: 'text-muted-foreground' };
+                    return (
+                      <div key={cls} className="text-center p-2 rounded-lg bg-muted/20">
+                        <p className={`text-lg font-black ${colors[cls]}`}>Clase {cls}</p>
+                        <p className="text-xs font-bold">{count} productos</p>
+                        <p className="text-[10px] text-muted-foreground">{fmt(val)}</p>
+                      </div>
+                    );
+                  })}
+                </div>
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Flujo de Caja Anual</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={350}>
-                <LineChart data={salesData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="mes" stroke="#94a3b8" fontSize={12} />
-                  <YAxis stroke="#94a3b8" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1e293b',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                    }}
-                  />
-                  <Legend />
-                  <Line 
-                    type="monotone" 
-                    dataKey="ventas" 
-                    stroke="#10b981" 
-                    strokeWidth={2}
-                    name="Ingresos"
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="compras" 
-                    stroke="#ef4444" 
-                    strokeWidth={2}
-                    name="Gastos"
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="utilidad" 
-                    stroke="#3b82f6" 
-                    strokeWidth={3}
-                    name="Balance"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-            </TabsContent>
+        {/* ═══ TAB: CLIENTES ══════════════════════════════════════════════════ */}
+        <TabsContent value="clientes" className="m-0 mt-4 space-y-5">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            {[
+              { label: 'Total Clientes',   value: customers.length, c: 'text-blue-400',   bg: 'bg-blue-500/10',   icon: Users },
+              { label: 'Activos',          value: activeClients,    c: 'text-green-400',  bg: 'bg-green-500/10',  icon: CheckCircle2 },
+              { label: 'Con Facturas',     value: customerSegments.length, c: 'text-purple-400', bg: 'bg-purple-500/10', icon: FileText },
+              { label: 'Ticket Promedio',  value: fmt(customers.length > 0 ? totalSales / Math.max(invoices.length, 1) : 0), c: 'text-amber-400', bg: 'bg-amber-500/10', icon: Target },
+            ].map((k, i) => (
+              <Card key={i} className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-xl p-2.5 ${k.bg}`}><k.icon className={`size-4 ${k.c}`} /></div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{k.label}</p>
+                    <p className={`text-lg font-black ${k.c}`}>{k.value}</p>
+                  </div>
+                </div>
+              </Card>
+            ))}
           </div>
-        </Tabs>
-      </div>
 
-      {/* Quick Action Bar (Bottom) */}
-      <div className="h-14 border-t border-border/50 bg-background/80 backdrop-blur px-6 flex items-center justify-between shrink-0">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#05602b]">
-          Datos en tiempo real • Actualizado automáticamente
-        </p>
-        <div className="flex items-center gap-4">
-          <button className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
-            <Download className="size-3.5" /> Descargar PDF
-          </button>
-          <button className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
-            <Share2 className="size-3.5" /> Compartir Reporte
-          </button>
-        </div>
-      </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader><CardTitle className="text-sm">Segmentación de Clientes por Tipo</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Empresa', value: customers.filter(c => c.type === 'COMPANY').length },
+                        { name: 'Individual', value: customers.filter(c => c.type === 'INDIVIDUAL').length },
+                        { name: 'Otro', value: customers.filter(c => c.type !== 'COMPANY' && c.type !== 'INDIVIDUAL').length },
+                      ].filter(d => d.value > 0)}
+                      cx="50%" cy="50%" outerRadius={100} dataKey="value"
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} labelLine={false}
+                    >
+                      {COLORS.map((c, i) => <Cell key={i} fill={c} stroke="transparent" />)}
+                    </Pie>
+                    <Tooltip contentStyle={tooltipStyle} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-sm">Top Clientes por Facturación</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {customerSegments.length > 0 ? customerSegments.map((c, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className="flex size-7 items-center justify-center rounded-lg text-xs font-black text-white"
+                        style={{ backgroundColor: COLORS[i % COLORS.length] }}>
+                        {i + 1}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold">{c.name}</p>
+                        <div className="mt-1 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: pct(c.value, customerSegments[0]?.value || 1), backgroundColor: COLORS[i % COLORS.length] }} />
+                        </div>
+                      </div>
+                      <p className="text-sm font-bold text-primary">{fmt(c.value)}</p>
+                    </div>
+                  )) : (
+                    <p className="text-sm text-center text-muted-foreground py-8">Sin datos de clientes con facturas</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

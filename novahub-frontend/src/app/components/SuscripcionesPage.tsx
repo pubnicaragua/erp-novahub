@@ -492,8 +492,8 @@ export function SuscripcionesPage() {
                         <SelectValue placeholder="Seleccionar plan..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="BASICO">Básico - Funcionalidades esenciales</SelectItem>
-                        <SelectItem value="PROFESIONAL">Profesional - Para empresas en crecimiento</SelectItem>
+                        <SelectItem value="BASIC">Básico - Funcionalidades esenciales</SelectItem>
+                        <SelectItem value="PROFESSIONAL">Profesional - Para empresas en crecimiento</SelectItem>
                         <SelectItem value="ENTERPRISE">Enterprise - Solución completa</SelectItem>
                         <SelectItem value="CUSTOM">Custom - Personalizado a medida</SelectItem>
                       </SelectContent>

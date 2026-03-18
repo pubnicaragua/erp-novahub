@@ -1,175 +1,201 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ShoppingCart, Plus, Search, Truck, Wallet, CalendarClock, 
-  ClipboardList, PackageCheck, FileInput, RotateCcw, 
-  Banknote, BadgeDollarSign, Filter, Download
+  ShoppingCart, Truck, Wallet, CalendarClock,
+  ClipboardList, PackageCheck, FileInput, RotateCcw,
+  Banknote, BadgeDollarSign, ChevronRight
 } from 'lucide-react';
-import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { cn } from './ui/utils';
+import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  suppliersService, expensesService, recurringExpensesService,
+  purchaseOrdersService, purchaseReceiptsService,
+  supplierInvoicesService, recurringSupplierInvoicesService,
+  paymentsMadeService, supplierCreditsService,
+} from '../services/compras.service';
+import type {
+  Supplier, Expense, RecurringExpense, PurchaseOrder,
+  PurchaseReceipt, SupplierInvoice, RecurringSupplierInvoice,
+  PaymentMade, SupplierCredit,
+} from '../types';
 
-// Import New Sub-Views
-import { ProveedoresView } from './compras/ProveedoresView';
-import { GastosView } from './compras/GastosView';
-import { GastosRecurrentesView } from './compras/GastosRecurrentesView';
-import { OrdenesCompraView } from './compras/OrdenesCompraView';
-import { RecepcionesCompraView } from './compras/RecepcionesCompraView';
-import { FacturasProveedorView } from './compras/FacturasProveedorView';
+import { ProveedoresView }         from './compras/ProveedoresView';
+import { GastosView }              from './compras/GastosView';
+import { GastosRecurrentesView }   from './compras/GastosRecurrentesView';
+import { OrdenesCompraView }       from './compras/OrdenesCompraView';
+import { RecepcionesCompraView }   from './compras/RecepcionesCompraView';
+import { FacturasProveedorView }   from './compras/FacturasProveedorView';
 import { FacturasProveedorRecView } from './compras/FacturasProveedorRecView';
-import { PagosRealizadosView } from './compras/PagosRealizadosView';
-import { CreditosProveedorView } from './compras/CreditosProveedorView';
+import { PagosRealizadosView }     from './compras/PagosRealizadosView';
+import { CreditosProveedorView }   from './compras/CreditosProveedorView';
+
+const COMPRAS_SECTIONS = [
+  { id: 'proveedores',    label: 'Proveedores',           icon: Truck,          description: 'Directorio de proveedores' },
+  { id: 'gastos',        label: 'Gastos',                icon: Wallet,         description: 'Registro de gastos' },
+  { id: 'gastos-rec',    label: 'Gastos Recurrentes',    icon: CalendarClock,  description: 'Gastos fijos periódicos' },
+  { id: 'ordenes',       label: 'Orden de Compra',       icon: ClipboardList,  description: 'Pedidos a proveedores' },
+  { id: 'recepciones',   label: 'Recepciones',           icon: PackageCheck,   description: 'Entrada de mercancía' },
+  { id: 'facturas-prov', label: 'Facturas Proveedor',    icon: FileInput,      description: 'Cuentas por pagar' },
+  { id: 'facturas-rec',  label: 'Facturas Recurrentes',  icon: RotateCcw,      description: 'Contratos periódicos' },
+  { id: 'pagos',         label: 'Pagos Realizados',      icon: Banknote,       description: 'Histórico de pagos' },
+  { id: 'creditos',      label: 'Créditos Proveedor',   icon: BadgeDollarSign, description: 'Notas de crédito recibidas' },
+];
 
 interface ComprasPageProps {
   activeSubModule?: string;
 }
 
-const subModuleTabMap: Record<string, string> = {
-  'proveedores': 'proveedores',
-  'gastos': 'gastos',
-  'gastos-recurrentes': 'gastos-rec',
-  'ordenes-compra': 'ordenes',
-  'recepciones-compra': 'recepciones',
-  'facturas-proveedor': 'facturas-prov',
-  'facturas-proveedor-rec': 'facturas-prov-rec',
-  'pagos-realizados': 'pagos',
-  'creditos-proveedor': 'creditos',
+type ComprasData = {
+  proveedores:   Supplier[];
+  gastos:        Expense[];
+  gastosRec:     RecurringExpense[];
+  ordenes:       PurchaseOrder[];
+  recepciones:   PurchaseReceipt[];
+  facturasProv:  SupplierInvoice[];
+  facturasRec:   RecurringSupplierInvoice[];
+  pagos:         PaymentMade[];
+  creditos:      SupplierCredit[];
 };
 
 export function ComprasPage({ activeSubModule }: ComprasPageProps) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState(() => 
-    activeSubModule ? (subModuleTabMap[activeSubModule] || 'proveedores') : 'proveedores'
-  );
+  const normalize = (s?: string) => {
+    if (!s) return 'proveedores';
+    const map: Record<string, string> = {
+      'proveedores': 'proveedores',
+      'gastos': 'gastos',
+      'gastos-recurrentes': 'gastos-rec',
+      'ordenes-compra': 'ordenes',
+      'recepciones-compra': 'recepciones',
+      'facturas-proveedor': 'facturas-prov',
+      'facturas-proveedor-rec': 'facturas-rec',
+      'pagos-realizados': 'pagos',
+      'creditos-proveedor': 'creditos',
+    };
+    return map[s] || s;
+  };
+
+  const [activeSection, setActiveSection] = useState(normalize(activeSubModule));
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<ComprasData>({
+    proveedores: [], gastos: [], gastosRec: [], ordenes: [],
+    recepciones: [], facturasProv: [], facturasRec: [], pagos: [], creditos: [],
+  });
 
   useEffect(() => {
-    if (activeSubModule) {
-      setActiveTab(subModuleTabMap[activeSubModule] || 'proveedores');
-    }
+    if (activeSubModule) setActiveSection(normalize(activeSubModule));
   }, [activeSubModule]);
 
+  useEffect(() => { fetchData(); }, [activeSection]);
+
+  const toArr = (r: any) => Array.isArray(r) ? r : (r?.data || []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [sup, exp, expRec, ord, rec, inv, invRec, pay, cred] = await Promise.all([
+        suppliersService.getAll().catch(() => []),
+        expensesService.getAll().catch(() => []),
+        recurringExpensesService.getAll().catch(() => []),
+        purchaseOrdersService.getAll().catch(() => []),
+        purchaseReceiptsService.getAll().catch(() => []),
+        supplierInvoicesService.getAll().catch(() => []),
+        recurringSupplierInvoicesService.getAll().catch(() => []),
+        paymentsMadeService.getAll().catch(() => []),
+        supplierCreditsService.getAll().catch(() => []),
+      ]);
+      setData({
+        proveedores:  toArr(sup),
+        gastos:       toArr(exp),
+        gastosRec:    toArr(expRec),
+        ordenes:      toArr(ord),
+        recepciones:  toArr(rec),
+        facturasProv: toArr(inv),
+        facturasRec:  toArr(invRec),
+        pagos:        toArr(pay),
+        creditos:     toArr(cred),
+      });
+    } catch (e) {
+      toast.error('Error al cargar módulo de Compras');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const current = COMPRAS_SECTIONS.find(s => s.id === activeSection) || COMPRAS_SECTIONS[0];
+
   return (
-    <div className="space-y-6 p-4 md:p-6 pb-20 max-w-[1600px] mx-auto animate-in fade-in duration-700">
-      {/* Header Section */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-card/40 backdrop-blur-xl p-6 rounded-3xl border border-border/50 shadow-2xl shadow-primary/5">
-        <div className="flex items-center gap-5">
-          <div className="p-4 bg-gradient-to-br from-[#05602b] to-[#044c22] rounded-2xl shadow-lg shadow-[#05602b]/20 rotate-3 group-hover:rotate-0 transition-transform duration-500">
-            <ShoppingCart className="size-8 text-white" />
+    <div className="flex h-screen overflow-hidden bg-background">
+      <main className="flex-1 overflow-y-auto custom-scrollbar relative">
+        {/* Sticky Header */}
+        <header className="sticky top-0 z-20 w-full h-20 bg-background/80 backdrop-blur-md border-b border-border/50 flex items-center justify-between px-6 md:px-10">
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2 text-muted-foreground/40 text-[10px] font-black uppercase tracking-widest mb-1">
+              <span>Abastecimiento</span>
+              <ChevronRight className="size-3" />
+              <span className="text-primary/60">{current.label}</span>
+            </div>
+            <h2 className="text-xl font-black text-foreground uppercase tracking-tighter">{current.label}</h2>
           </div>
-          <div>
-            <h1 className="text-3xl font-black tracking-tight text-foreground bg-clip-text">
-              Módulo de Compras
-            </h1>
-            <p className="text-sm text-muted-foreground font-medium flex items-center gap-2">
-              <span className="size-2 rounded-full bg-[#05602b] animate-pulse" />
-              Gestión inteligente de gastos, proveedores y abastecimiento
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative group">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
-            <Input 
-              placeholder="Buscar en compras..." 
-              className="pl-10 w-64 bg-background/50 border-border/50 focus:ring-primary/20 transition-all"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <Button variant="outline" className="gap-2 border-border/50 bg-background/50 hover:bg-muted/50 transition-all font-bold uppercase text-[10px] tracking-widest h-10 px-4">
-            <Download className="size-4" /> Exportar
+          <Button
+            onClick={fetchData}
+            variant="ghost"
+            size="icon"
+            className="size-10 rounded-full hover:bg-primary/10 transition-colors"
+            disabled={loading}
+          >
+            <RotateCcw className={cn('size-5 text-muted-foreground', loading && 'animate-spin')} />
           </Button>
-          <Button className="gap-2 bg-[#05602b] hover:bg-[#044c22] text-white shadow-xl shadow-[#05602b]/20 font-bold uppercase text-[10px] tracking-widest h-10 px-5">
-            <Plus className="size-4" /> Nuevo Registro
-          </Button>
-        </div>
-      </div>
+        </header>
 
-      {/* Main Tabs System */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <div className="sticky top-0 z-40 bg-background/80 backdrop-blur-md p-2 rounded-2xl border border-border/50 shadow-sm overflow-x-auto scrollbar-hide mb-8">
-          <TabsList className="bg-transparent h-auto p-0 flex gap-1 items-center justify-start lg:justify-between min-w-max">
-            <TabsTrigger value="proveedores" className="data-[state=active]:bg-[#05602b]/10 data-[state=active]:text-[#05602b] px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-tighter transition-all">
-              <Truck className="mr-2 size-4" /> Proveedores
-            </TabsTrigger>
-            <TabsTrigger value="gastos" className="data-[state=active]:bg-[#05602b]/10 data-[state=active]:text-[#05602b] px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-tighter transition-all">
-              <Wallet className="mr-2 size-4" /> Gastos
-            </TabsTrigger>
-            <TabsTrigger value="gastos-rec" className="data-[state=active]:bg-[#05602b]/10 data-[state=active]:text-[#05602b] px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-tighter transition-all">
-              <CalendarClock className="mr-2 size-4" /> Gastos Rec.
-            </TabsTrigger>
-            <TabsTrigger value="ordenes" className="data-[state=active]:bg-[#05602b]/10 data-[state=active]:text-[#05602b] px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-tighter transition-all">
-              <ClipboardList className="mr-2 size-4" /> Ordenes
-            </TabsTrigger>
-            <TabsTrigger value="recepciones" className="data-[state=active]:bg-[#05602b]/10 data-[state=active]:text-[#05602b] px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-tighter transition-all">
-              <PackageCheck className="mr-2 size-4" /> Recepciones
-            </TabsTrigger>
-            <TabsTrigger value="facturas-prov" className="data-[state=active]:bg-[#05602b]/10 data-[state=active]:text-[#05602b] px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-tighter transition-all">
-              <FileInput className="mr-2 size-4" /> Facturas Prod.
-            </TabsTrigger>
-            <TabsTrigger value="facturas-prov-rec" className="data-[state=active]:bg-[#05602b]/10 data-[state=active]:text-[#05602b] px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-tighter transition-all">
-              <RotateCcw className="mr-2 size-4" /> Fact. Rec.
-            </TabsTrigger>
-            <TabsTrigger value="pagos" className="data-[state=active]:bg-[#05602b]/10 data-[state=active]:text-[#05602b] px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-tighter transition-all">
-              <Banknote className="mr-2 size-4" /> Pagos
-            </TabsTrigger>
-            <TabsTrigger value="creditos" className="data-[state=active]:bg-[#05602b]/10 data-[state=active]:text-[#05602b] px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-tighter transition-all">
-              <BadgeDollarSign className="mr-2 size-4" /> Creditos
-            </TabsTrigger>
-          </TabsList>
+        {/* Section Nav Pills (horizontal scroll) */}
+        <div className="sticky top-20 z-10 bg-background/90 backdrop-blur-md border-b border-border/30 px-6 md:px-10 py-2 overflow-x-auto scrollbar-hide">
+          <div className="flex gap-1 min-w-max">
+            {COMPRAS_SECTIONS.map(s => {
+              const Icon = s.icon;
+              const active = s.id === activeSection;
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => setActiveSection(s.id)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap',
+                    active
+                      ? 'bg-primary/10 text-primary border border-primary/20'
+                      : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+                  )}
+                >
+                  <Icon className="size-3" />
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Dynamic Content Area */}
-        <div className="relative min-h-[600px]">
-          <TabsContent value="proveedores" className="mt-0 focus-visible:ring-0">
-            <ProveedoresView />
-          </TabsContent>
-          
-          <TabsContent value="gastos" className="mt-0 focus-visible:ring-0">
-            <GastosView />
-          </TabsContent>
-
-          <TabsContent value="gastos-rec" className="mt-0 focus-visible:ring-0">
-            <GastosRecurrentesView />
-          </TabsContent>
-
-          <TabsContent value="ordenes" className="mt-0 focus-visible:ring-0">
-            <OrdenesCompraView />
-          </TabsContent>
-
-          <TabsContent value="recepciones" className="mt-0 focus-visible:ring-0">
-            <RecepcionesCompraView />
-          </TabsContent>
-
-          <TabsContent value="facturas-prov" className="mt-0 focus-visible:ring-0">
-            <FacturasProveedorView />
-          </TabsContent>
-
-          <TabsContent value="facturas-prov-rec" className="mt-0 focus-visible:ring-0">
-            <FacturasProveedorRecView />
-          </TabsContent>
-
-          <TabsContent value="pagos" className="mt-0 focus-visible:ring-0">
-            <PagosRealizadosView />
-          </TabsContent>
-
-          <TabsContent value="creditos" className="mt-0 focus-visible:ring-0">
-            <CreditosProveedorView />
-          </TabsContent>
+        {/* Content */}
+        <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-8rem)]">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeSection}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {activeSection === 'proveedores'  && <ProveedoresView    data={data.proveedores}  loading={loading} onRefresh={fetchData} />}
+              {activeSection === 'gastos'        && <GastosView          data={data.gastos}        loading={loading} onRefresh={fetchData} />}
+              {activeSection === 'gastos-rec'    && <GastosRecurrentesView data={data.gastosRec}  loading={loading} onRefresh={fetchData} />}
+              {activeSection === 'ordenes'       && <OrdenesCompraView   data={data.ordenes}       loading={loading} onRefresh={fetchData} />}
+              {activeSection === 'recepciones'   && <RecepcionesCompraView data={data.recepciones} loading={loading} onRefresh={fetchData} />}
+              {activeSection === 'facturas-prov' && <FacturasProveedorView  data={data.facturasProv} loading={loading} onRefresh={fetchData} />}
+              {activeSection === 'facturas-rec'  && <FacturasProveedorRecView data={data.facturasRec} loading={loading} onRefresh={fetchData} />}
+              {activeSection === 'pagos'         && <PagosRealizadosView  data={data.pagos}         loading={loading} onRefresh={fetchData} />}
+              {activeSection === 'creditos'      && <CreditosProveedorView data={data.creditos}     loading={loading} onRefresh={fetchData} />}
+            </motion.div>
+          </AnimatePresence>
         </div>
-      </Tabs>
-
-      {/* Footer / Tip */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-6 py-3 bg-card/90 backdrop-blur-2xl border border-border/50 rounded-full shadow-2xl z-50 animate-in slide-in-from-bottom-5 duration-700 delay-500">
-        <div className="flex -space-x-2">
-          {[1,2,3].map(i => (
-            <div key={i} className={`size-6 rounded-full border-2 border-background bg-gradient-to-br from-[#05602b] to-[#044c22] ${i === 2 ? 'opacity-60' : i === 3 ? 'opacity-30' : ''}`} />
-          ))}
-        </div>
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#05602b]">
-          Intelligente • Premium • Scalable
-        </p>
-      </div>
+      </main>
     </div>
   );
 }

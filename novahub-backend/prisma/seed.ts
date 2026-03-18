@@ -175,22 +175,22 @@ async function main() {
 
   // ─── CUENTAS CONTABLES ─────────────────────────────────────────────────────
   const accounts = [
-    { id: 'acct-001', code: '1000', name: 'Caja General', type: 'ASSET' },
-    { id: 'acct-002', code: '1100', name: 'Banco BAC', type: 'ASSET' },
-    { id: 'acct-003', code: '1200', name: 'Cuentas por Cobrar', type: 'ASSET' },
-    { id: 'acct-004', code: '2000', name: 'Cuentas por Pagar', type: 'LIABILITY' },
-    { id: 'acct-005', code: '3000', name: 'Capital Social', type: 'EQUITY' },
-    { id: 'acct-006', code: '4000', name: 'Ingresos por Ventas', type: 'INCOME' },
-    { id: 'acct-007', code: '4100', name: 'Ingresos por Servicios', type: 'INCOME' },
-    { id: 'acct-008', code: '5000', name: 'Gastos Operativos', type: 'EXPENSE' },
-    { id: 'acct-009', code: '5100', name: 'Gastos Administrativos', type: 'EXPENSE' },
-    { id: 'acct-010', code: '5200', name: 'Gastos de Nómina', type: 'EXPENSE' },
+    { id: 'acct-001', code: '1000', name: 'Caja General', type: 'ASSET', balance: 15000 },
+    { id: 'acct-002', code: '1100', name: 'Banco BAC', type: 'ASSET', balance: 85000 },
+    { id: 'acct-003', code: '1200', name: 'Cuentas por Cobrar', type: 'ASSET', balance: 23050 },
+    { id: 'acct-004', code: '2000', name: 'Cuentas por Pagar', type: 'LIABILITY', balance: 12500 },
+    { id: 'acct-005', code: '3000', name: 'Capital Social', type: 'EQUITY', balance: 50000 },
+    { id: 'acct-006', code: '4000', name: 'Ingresos por Ventas', type: 'INCOME', balance: 49090 },
+    { id: 'acct-007', code: '4100', name: 'Ingresos por Servicios', type: 'INCOME', balance: 7300 },
+    { id: 'acct-008', code: '5000', name: 'Gastos Operativos', type: 'EXPENSE', balance: 2450 },
+    { id: 'acct-009', code: '5100', name: 'Gastos Administrativos', type: 'EXPENSE', balance: 1380 },
+    { id: 'acct-010', code: '5200', name: 'Gastos de Nómina', type: 'EXPENSE', balance: 8500 },
   ];
   for (const acc of accounts) {
     await prisma.account.upsert({
       where: { id: acc.id },
-      update: {},
-      create: { id: acc.id, clientTenantId: clientTenant.id, code: acc.code, name: acc.name, type: acc.type as any, balance: 0 },
+      update: { balance: acc.balance },
+      create: { id: acc.id, clientTenantId: clientTenant.id, code: acc.code, name: acc.name, type: acc.type as any, balance: acc.balance },
     });
   }
   console.log(`✅ ${accounts.length} Cuentas contables creadas`);
@@ -283,6 +283,119 @@ async function main() {
     });
   }
   console.log(`✅ ${gastosRecurrentes.length} Gastos recurrentes creados`);
+
+  // ─── ÓRDENES DE VENTA ────────────────────────────────────────────────────
+  const ordenes = [
+    { id: 'ord-001', number: 'ORD-001', custId: 'cust-001', total: 12450, status: 'CONFIRMED' },
+    { id: 'ord-002', number: 'ORD-002', custId: 'cust-002', total: 8750,  status: 'DRAFT' },
+    { id: 'ord-003', number: 'ORD-003', custId: 'cust-003', total: 15200, status: 'DELIVERED' },
+    { id: 'ord-004', number: 'ORD-004', custId: 'cust-004', total: 4500,  status: 'CONFIRMED' },
+    { id: 'ord-005', number: 'ORD-005', custId: 'cust-005', total: 9800,  status: 'IN_PROGRESS' },
+    { id: 'ord-006', number: 'ORD-006', custId: 'cust-001', total: 3200,  status: 'CONFIRMED' },
+  ];
+  for (const o of ordenes) {
+    await prisma.salesOrder.upsert({
+      where: { id: o.id },
+      update: {},
+      create: {
+        id: o.id, clientTenantId: clientTenant.id, number: o.number,
+        customerId: o.custId, date: new Date(),
+        subtotal: Math.round(o.total / 1.15), taxAmount: Math.round(o.total - o.total / 1.15),
+        discountAmount: 0, total: o.total, currency: 'USD', status: o.status as any,
+      },
+    });
+  }
+  console.log(`✅ ${ordenes.length} Órdenes de venta creadas`);
+
+  // ─── FACTURAS RECURRENTES ─────────────────────────────────────────────────
+  const recurringInvs = [
+    { id: 'rinv-001', custId: 'cust-001', total: 2500,  freq: 'MONTHLY', status: 'ACTIVE',  next: 15 },
+    { id: 'rinv-002', custId: 'cust-002', total: 8000,  freq: 'MONTHLY', status: 'ACTIVE',  next: 20 },
+    { id: 'rinv-003', custId: 'cust-003', total: 15000, freq: 'QUARTERLY', status: 'ACTIVE', next: 45 },
+    { id: 'rinv-004', custId: 'cust-004', total: 350,   freq: 'MONTHLY', status: 'PAUSED',  next: 30 },
+    { id: 'rinv-005', custId: 'cust-005', total: 500,   freq: 'WEEKLY',  status: 'ACTIVE',  next: 7  },
+  ];
+  for (const r of recurringInvs) {
+    await prisma.recurringInvoice.upsert({
+      where: { id: r.id },
+      update: {},
+      create: {
+        id: r.id, clientTenantId: clientTenant.id, customerId: r.custId,
+        frequency: r.freq as any, status: r.status as any,
+        subtotal: Math.round(r.total / 1.15), taxAmount: Math.round(r.total - r.total / 1.15),
+        total: r.total, currency: 'USD',
+        startDate: new Date(), nextInvoiceDate: new Date(Date.now() + r.next * 86400000),
+      },
+    });
+  }
+  console.log(`✅ ${recurringInvs.length} Facturas recurrentes creadas`);
+
+  // ─── PAGOS RECIBIDOS ──────────────────────────────────────────────────────
+  const pagos = [
+    { id: 'pay-001', number: 'PAG-001', custId: 'cust-001', invId: 'inv-001', amount: 12450, method: 'TRANSFER' },
+    { id: 'pay-002', number: 'PAG-002', custId: 'cust-002', invId: 'inv-002', amount: 5000,  method: 'TRANSFER' },
+    { id: 'pay-003', number: 'PAG-003', custId: 'cust-003', invId: 'inv-003', amount: 15200, method: 'CHECK'    },
+    { id: 'pay-004', number: 'PAG-004', custId: 'cust-004', invId: 'inv-005', amount: 4500,  method: 'CASH'     },
+    { id: 'pay-005', number: 'PAG-005', custId: 'cust-005', invId: null,      amount: 3800,  method: 'TRANSFER' },
+    { id: 'pay-006', number: 'PAG-006', custId: 'cust-001', invId: null,      amount: 2000,  method: 'CARD'     },
+  ];
+  for (const p of pagos) {
+    await prisma.paymentReceived.upsert({
+      where: { id: p.id },
+      update: {},
+      create: {
+        id: p.id, clientTenantId: clientTenant.id, number: p.number,
+        customerId: p.custId, amount: p.amount, method: p.method as any,
+        date: new Date(Date.now() - Math.floor(Math.random() * 30) * 86400000),
+        currency: 'USD', notes: `Pago por ${p.method}`,
+        ...(p.invId ? { invoiceId: p.invId } : {}),
+      },
+    });
+  }
+  console.log(`✅ ${pagos.length} Pagos recibidos creados`);
+
+  // ─── DEVOLUCIONES DE VENTA ───────────────────────────────────────────────
+  const devoluciones = [
+    { id: 'ret-001', number: 'DEV-001', custId: 'cust-001', invId: 'inv-001', total: 899,  status: 'APPROVED', reason: 'Producto defectuoso - Laptop HP' },
+    { id: 'ret-002', number: 'DEV-002', custId: 'cust-003', invId: 'inv-003', total: 249,  status: 'PENDING',  reason: 'Monitor con pantalla rallada' },
+    { id: 'ret-003', number: 'DEV-003', custId: 'cust-004', invId: 'inv-005', total: 65,   status: 'APPROVED', reason: 'Auriculares sin sonido canal derecho' },
+    { id: 'ret-004', number: 'DEV-004', custId: 'cust-002', invId: 'inv-002', total: 1798, status: 'REJECTED', reason: 'Fuera del período de garantía' },
+  ];
+  for (const d of devoluciones) {
+    await prisma.salesReturn.upsert({
+      where: { id: d.id },
+      update: {},
+      create: {
+        id: d.id, number: d.number, clientTenantId: clientTenant.id,
+        customerId: d.custId, invoiceId: d.invId,
+        date: new Date(Date.now() - Math.floor(Math.random() * 20) * 86400000),
+        total: d.total, reason: d.reason, status: d.status as any,
+      },
+    });
+  }
+  console.log(`✅ ${devoluciones.length} Devoluciones creadas`);
+
+  // ─── COTIZACIONES (ESTIMATES) ─────────────────────────────────────────────
+  const cotizaciones = [
+    { id: 'est-001', number: 'COT-001', custId: 'cust-001', total: 25000, status: 'SENT'      },
+    { id: 'est-002', number: 'COT-002', custId: 'cust-002', total: 12800, status: 'APPROVED'  },
+    { id: 'est-003', number: 'COT-003', custId: 'cust-003', total: 8500,  status: 'DRAFT'     },
+    { id: 'est-004', number: 'COT-004', custId: 'cust-004', total: 3200,  status: 'REJECTED'  },
+    { id: 'est-005', number: 'COT-005', custId: 'cust-005', total: 18750, status: 'SENT'      },
+  ];
+  for (const e of cotizaciones) {
+    await prisma.estimate.upsert({
+      where: { id: e.id },
+      update: {},
+      create: {
+        id: e.id, clientTenantId: clientTenant.id, number: e.number,
+        customerId: e.custId, date: new Date(), expiryDate: new Date(Date.now() + 30 * 86400000),
+        subtotal: Math.round(e.total / 1.15), taxAmount: Math.round(e.total - e.total / 1.15),
+        discountAmount: 0, total: e.total, currency: 'USD', status: e.status as any,
+      },
+    });
+  }
+  console.log(`✅ ${cotizaciones.length} Cotizaciones creadas`);
 
   // ─── 12. Empleados ────────────────────────────────────────────────────────
   // Skipping employee seed - use hr-seed.ts for HR module data

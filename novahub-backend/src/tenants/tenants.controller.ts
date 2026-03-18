@@ -58,4 +58,17 @@ export class TenantsController {
   update(@Param('id') id: string, @Body() updateTenantDto: any) {
     return this.tenantsService.update(id, updateTenantDto);
   }
+
+  @Post(':id/users')
+  async addUser(@Param('id') id: string, @Body() userData: any) {
+    return this.tenantsService.addUser({
+      clientTenantId: id,
+      ...userData,
+    });
+  }
+
+  @Delete(':id')
+  async delete(@Param('id') id: string) {
+    return this.tenantsService.delete(id);
+  }
 }

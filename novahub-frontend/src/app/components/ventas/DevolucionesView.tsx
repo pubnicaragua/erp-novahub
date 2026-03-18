@@ -19,13 +19,15 @@ interface DevolucionesViewProps {
 }
 
 const statusOptions = [
-  { label: 'Pendiente', value: 'pending', color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Aprobada', value: 'approved', color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Rechazada', value: 'rejected', color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Pendiente',  value: 'PENDING',   color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Aprobada',  value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Procesada', value: 'PROCESSED', color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Rechazada', value: 'REJECTED',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
 export function DevolucionesView({ data, loading, onRefresh }: DevolucionesViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const filtered = data.filter(d => 
     (d as any).number?.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -34,13 +36,12 @@ export function DevolucionesView({ data, loading, onRefresh }: DevolucionesViewP
 
   const handleUpdate = async (id: string | number, updates: Partial<SalesReturn>) => {
     try {
-      // Assuming approved endpoint exists or we use update
-      if (updates.status === 'approved') {
-         await salesReturnsService.approve(id.toString());
-         toast.success('Retorno aprobado');
+      if ((updates.status||'').toUpperCase() === 'APPROVED') {
+        await salesReturnsService.approve(id.toString());
+        toast.success('Devolución aprobada');
       } else {
-         // Generic update if needed
-         toast.info('Actualización de metadatos');
+        await salesReturnsService.update(id.toString(), updates);
+        toast.success('Devolución actualizada');
       }
       onRefresh();
     } catch (error) {
@@ -85,7 +86,7 @@ export function DevolucionesView({ data, loading, onRefresh }: DevolucionesViewP
       type: 'select',
       options: statusOptions,
       render: (val) => {
-        const opt = statusOptions.find(o => o.value === val);
+        const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
         return (
           <Badge variant="outline" className={cn(
             "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
@@ -99,24 +100,25 @@ export function DevolucionesView({ data, loading, onRefresh }: DevolucionesViewP
   ];
 
   const kpis = [
-    { title: 'Devoluciones Mes', value: `$${data.reduce((acc, d) => acc + (d.total || 0), 0).toLocaleString()}`, icon: FileOutput, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-    { title: 'Por Aprobar', value: data.filter(d => d.status === 'pending').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'Crédito Emitido', value: `$${(data.filter(d => d.status === 'approved').reduce((acc, d) => acc + (d.total || 0), 0)).toLocaleString()}`, icon: FileMinus, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Tasa Devolución', value: '2.4%', icon: AlertTriangle, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    { title: 'Total Devuelto', value: `$${data.reduce((acc, d) => acc + Number(d.total||0), 0).toLocaleString()}`,                                                                          icon: FileOutput,   color: 'text-rose-500',   bg: 'bg-rose-500/10'   },
+    { title: 'Por Aprobar',   value: data.filter(d => (d.status||'').toUpperCase() === 'PENDING').length,                                                                                   icon: Clock,        color: 'text-amber-500', bg: 'bg-amber-500/10'  },
+    { title: 'Aprobadas',     value: data.filter(d => (d.status||'').toUpperCase() === 'APPROVED').length,                                                                                  icon: FileMinus,    color: 'text-blue-500',  bg: 'bg-blue-500/10'   },
+    { title: 'Crédito Emitido',value: `$${data.filter(d => (d.status||'').toUpperCase() === 'APPROVED').reduce((acc, d) => acc + Number(d.total||0), 0).toLocaleString()}`,             icon: AlertTriangle, color: 'text-purple-500', bg: 'bg-purple-500/10' },
   ];
 
   const handleAddReturn = async () => {
     try {
       await salesReturnsService.create({
-        reason: 'Nueva Devolución',
-        status: 'pending',
+        invoiceId: data[0]?.invoiceId || 'temp-invoice-id',
+        customerId: data[0]?.customerId || 'temp-customer-id',
+        reason: 'Nueva devolución - editar detalles',
         date: new Date().toISOString(),
-        total: 0
+        items: []
       });
-      toast.success('Nueva factura recurrente creada');
+      toast.success('Devolución registrada');
       onRefresh();
     } catch (error) {
-      toast.error('Error al registrar retorno');
+      toast.error('Error al registrar devolución');
     }
   };
 
@@ -167,14 +169,26 @@ export function DevolucionesView({ data, loading, onRefresh }: DevolucionesViewP
 
         <EditableDataTable 
           data={filtered}
+          onBulkDelete={async (ids) => {
+            try {
+              for (const id of ids) {
+                if (String(id).startsWith('new-')) continue;
+                await salesReturnsService.delete(id as string);
+              }
+              toast.success('Elementos eliminados');
+              onRefresh();
+            } catch (e) {
+              toast.error('Error al eliminar');
+            }
+          }}
           columns={columns}
           onRowUpdate={handleUpdate}
           onAddRow={handleAddReturn}
           isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
-               <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors"><Trash2 className="size-4" /></Button>
+               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={async () => { await salesReturnsService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />
