@@ -18,10 +18,12 @@ import { BrandingModule } from './branding/branding.module';
 import { ActivitiesModule } from './activities/activities.module';
 import { DocumentsModule } from './documents/documents.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
     PrismaModule, 
+    CommonModule,
     UsersModule, 
     AuthModule, 
     SalesModule, 

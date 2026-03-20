@@ -9,10 +9,12 @@ import type { PaymentMade } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface Props { data: PaymentMade[]; loading: boolean; onRefresh: () => void; }
 
 export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
+  const { exchangeRate: globalRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const filtered = data.filter(p =>
@@ -34,7 +36,7 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
     { key: 'date',      header: 'Fecha',      width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'amount',    header: 'Monto',      width: '130px',
-      render: (val) => <span className="font-black tabular-nums text-emerald-500">${Number(val||0).toLocaleString()}</span> },
+      render: (val, row) => <span className="font-black tabular-nums text-emerald-500">{row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}</span> },
     { key: 'method',    header: 'Método',     width: '120px', editable: true, type: 'select', options: methodOpts,
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{val||'-'}</Badge> },
   ];
@@ -46,16 +48,17 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
 
   const handleAdd = async () => {
     try {
-      await paymentsService.create({ supplierId: data[0]?.supplierId || 'temp-supplier-id', amount: 0, date: new Date().toISOString(), method: 'TRANSFER' } as any);
+      await paymentsService.create({ supplierId: data[0]?.supplierId || 'temp-supplier-id', amount: 0, currency: 'NIO', exchangeRate: globalRate, date: new Date().toISOString(), method: 'transfer' } as any);
       toast.success('Pago registrado'); onRefresh();
     } catch { toast.error('Error al registrar'); }
   };
 
-  const total = data.reduce((a, p) => a + Number(p.amount||0), 0);
+  const total = data.reduce((a, p) => a + (p.baseAmount || (p.currency === 'USD' ? p.amount * globalRate : p.amount)), 0);
+  const totalNio = `C$ ${total.toLocaleString()}`;
   const kpis = [
-    { title: 'Total Pagado',    value: `$${total.toLocaleString()}`,  icon: TrendingDown, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    { title: 'Total Pagado (NIO)',    value: totalNio,  icon: TrendingDown, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
     { title: 'Transacciones',   value: data.length,                   icon: Hash,         color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
-    { title: 'Este Mes',        value: `$${data.filter(p => { const d=new Date(p.date||p.createdAt); return d.getMonth()===new Date().getMonth(); }).reduce((a,p)=>a+Number(p.amount||0),0).toLocaleString()}`, icon: Wallet, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Este Mes (NIO)',        value: `C$ ${data.filter(p => { const d=new Date(p.date||p.createdAt); return d.getMonth()===new Date().getMonth(); }).reduce((a,p) => a + (p.baseAmount || (p.currency === 'USD' ? p.amount * globalRate : p.amount)), 0).toLocaleString()}`, icon: Wallet, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Conciliados',     value: data.length,                   icon: CheckCircle2, color: 'text-purple-500', bg: 'bg-purple-500/10'  },
   ];
 
@@ -84,7 +87,7 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
-                await paymentsMadeService.delete(id as string);
+                await paymentsService.delete(id as string); // Assuming paymentsService is the correct one for deleting payments
               }
               toast.success('Elementos eliminados');
               onRefresh();

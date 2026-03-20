@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ExchangeRateService } from '../common/exchange-rate.service';
 import { TicketStatus, Priority, ActivityType, TaskStatus } from '@prisma/client';
 
 function genCode(prefix: string): string {
@@ -12,7 +13,40 @@ function toEnum<T extends string>(val: string): T {
 
 @Injectable()
 export class ToolsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private exchangeRateService: ExchangeRateService
+  ) {}
+
+  async getExchangeRate(clientTenantId: string) {
+    const tenant: any = await this.prisma.clientTenant.findUnique({
+      where: { id: clientTenantId },
+      select: { exchangeRateAuto: true, baseCurrency: true } as any
+    });
+
+    const rate = await this.exchangeRateService.getExchangeRate(clientTenantId);
+    
+    return {
+      rate,
+      auto: tenant?.exchangeRateAuto ?? true,
+      baseCurrency: tenant?.baseCurrency ?? 'NIO'
+    };
+  }
+
+  async updateExchangeRate(clientTenantId: string, data: { rate?: number; auto?: boolean }) {
+    if (data.auto !== undefined) {
+      await this.prisma.clientTenant.update({
+        where: { id: clientTenantId },
+        data: { exchangeRateAuto: data.auto } as any
+      });
+    }
+
+    if (data.rate !== undefined) {
+      await this.exchangeRateService.updateManualRate(clientTenantId, data.rate);
+    }
+
+    return this.getExchangeRate(clientTenantId);
+  }
 
   // ─── TICKETS ──────────────────────────────────────────────────────────────
   async createTicket(data: any, clientTenantId: string) {

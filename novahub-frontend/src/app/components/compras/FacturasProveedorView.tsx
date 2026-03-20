@@ -9,10 +9,12 @@ import type { SupplierInvoice } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface Props { data: SupplierInvoice[]; loading: boolean; onRefresh: () => void; }
 
 export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
+  const { exchangeRate: globalRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const filtered = data.filter(b =>
@@ -36,7 +38,7 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
     { key: 'dueDate',  header: 'Vencimiento', width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'total',    header: 'Total',      width: '130px',
-      render: (val) => <span className="font-black tabular-nums text-foreground">${Number(val||0).toLocaleString()}</span> },
+      render: (val, row) => <span className="font-black tabular-nums text-foreground">{row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}</span> },
     { key: 'status',   header: 'Estado',     width: '120px', editable: true, type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
@@ -48,15 +50,15 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
 
   const handleAdd = async () => {
     try {
-      await billsService.create({ supplierId: data[0]?.supplierId || 'temp-supplier-id', number: `FP-${Date.now().toString().slice(-5)}`, date: new Date().toISOString(), dueDate: new Date(Date.now()+30*86400000).toISOString(), total: 0 });
+      await billsService.create({ supplierId: data[0]?.supplierId || 'temp-supplier-id', number: `FP-${Date.now().toString().slice(-5)}`, currency: 'NIO', exchangeRate: globalRate, date: new Date().toISOString(), dueDate: new Date(Date.now()+30*86400000).toISOString(), total: 0 });
       toast.success('Factura creada'); onRefresh();
     } catch { toast.error('Error al crear'); }
   };
 
-  const porPagar = data.filter(b => ['OPEN','OVERDUE'].includes((b.status||'').toUpperCase())).reduce((a,b) => a + Number(b.total||0), 0);
+  const porPagar = data.filter(b => ['OPEN','OVERDUE'].includes((b.status||'').toUpperCase())).reduce((a,b) => a + (b.baseTotal || (b.currency === 'USD' ? b.total * globalRate : b.total)), 0);
   const kpis = [
     { title: 'Total Facturas',  value: data.length,                                                                    icon: FileStack,     color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Por Pagar',       value: `$${porPagar.toLocaleString()}`,                                                 icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    { title: 'Por Pagar (NIO)',  value: `C$ ${porPagar.toLocaleString()}`,                                                 icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
     { title: 'Vencidas',        value: data.filter(b => (b.status||'').toUpperCase() === 'OVERDUE').length,             icon: AlertTriangle, color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
     { title: 'Pagadas',         value: data.filter(b => (b.status||'').toUpperCase() === 'PAID').length,               icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   ];
@@ -86,7 +88,7 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
-                await supplierInvoicesService.delete(id as string);
+                await billsService.delete(id as string);
               }
               toast.success('Elementos eliminados');
               onRefresh();

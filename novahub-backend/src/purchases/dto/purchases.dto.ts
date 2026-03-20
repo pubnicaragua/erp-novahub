@@ -47,6 +47,21 @@ export class CreatePurchaseOrderDto {
     @IsOptional()
     @IsString()
     notes?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    currency?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    exchangeRate?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    baseTotal?: number;
 }
 
 export class CreatePurchaseReceiptDto {
@@ -88,4 +103,19 @@ export class CreateSupplierInvoiceDto {
     @ApiProperty()
     @IsNumber()
     total: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    currency?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    exchangeRate?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    baseTotal?: number;
 }

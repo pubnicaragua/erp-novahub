@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { api } from '../services/api';
 
 export type Currency = 'USD' | 'COR';
 
@@ -7,17 +8,33 @@ interface CurrencyContextType {
   setCurrency: (currency: Currency) => void;
   formatAmount: (amount: number) => string;
   toggleCurrency: () => void;
+  exchangeRate: number;
+  refreshRate: () => Promise<void>;
 }
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
-
-const CONVERSION_RATE = 36.5; // 1 USD = 36.5 COR
 
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = useState<Currency>(() => {
     const saved = localStorage.getItem('erp-currency');
     return (saved as Currency) || 'USD';
   });
+  const [exchangeRate, setExchangeRate] = useState<number>(36.5);
+
+  const refreshRate = async () => {
+    try {
+      const data = await api.get<{ rate: number }>('/tools/exchange-rate');
+      if (data && data.rate) {
+        setExchangeRate(data.rate);
+      }
+    } catch (error) {
+      console.error('Error fetching exchange rate:', error);
+    }
+  };
+
+  useEffect(() => {
+    refreshRate();
+  }, []);
 
   const setCurrency = (c: Currency) => {
     setCurrencyState(c);
@@ -32,12 +49,12 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const formatAmount = (amount: number) => {
     const isCOR = currency === 'COR';
     const symbol = isCOR ? 'C$' : '$';
-    const value = isCOR ? amount * CONVERSION_RATE : amount;
+    const value = isCOR ? amount * exchangeRate : amount;
     return `${symbol}${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   return (
-    <CurrencyContext.Provider value={{ currency, setCurrency, formatAmount, toggleCurrency }}>
+    <CurrencyContext.Provider value={{ currency, setCurrency, formatAmount, toggleCurrency, exchangeRate, refreshRate }}>
       {children}
     </CurrencyContext.Provider>
   );

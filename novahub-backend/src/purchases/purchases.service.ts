@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ExchangeRateService } from '../common/exchange-rate.service';
 
 function genCode(prefix: string): string {
   return `${prefix}-${Date.now().toString().slice(-6)}`;
@@ -11,7 +12,25 @@ function toEnum<T extends string>(val: string): T {
 
 @Injectable()
 export class PurchasesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private exchangeRateService: ExchangeRateService
+  ) {}
+
+  private async getDocumentCurrencyData(data: any, clientTenantId: string) {
+    const currency = data.currency || 'NIO';
+    const exchangeRate = data.exchangeRate || await this.exchangeRateService.getExchangeRate(clientTenantId);
+    
+    let baseTotal = data.baseTotal;
+    if (baseTotal === undefined && data.total !== undefined) {
+      baseTotal = currency === 'NIO' ? Number(data.total) : Number(data.total) * Number(exchangeRate);
+    } else if (baseTotal === undefined && data.amount !== undefined) {
+      // Para pagos o gastos que usan 'amount' en lugar de 'total'
+      baseTotal = currency === 'NIO' ? Number(data.amount) : Number(data.amount) * Number(exchangeRate);
+    }
+
+    return { currency, exchangeRate, baseTotal };
+  }
 
   // ─── PROVEEDORES ──────────────────────────────────────────────────────────
   async createSupplier(data: any, clientTenantId: string) {
@@ -51,12 +70,17 @@ export class PurchasesService {
   // ─── ÓRDENES DE COMPRA ────────────────────────────────────────────────────
   async createOrder(data: any, clientTenantId: string) {
     const { items, ...rest } = data;
+    const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(data, clientTenantId);
+
     return this.prisma.purchaseOrder.create({
       data: {
         ...rest,
         number: rest.number || genCode('PO'),
         status: toEnum(rest.status || 'DRAFT'),
         clientTenantId,
+        currency,
+        exchangeRate,
+        baseTotal,
         ...(items?.length > 0 && { items: { create: items } }),
       },
       include: { items: true, supplier: true },
@@ -106,6 +130,8 @@ export class PurchasesService {
   // ─── FACTURAS DE PROVEEDOR ────────────────────────────────────────────────
   async createInvoice(data: any, clientTenantId: string) {
     const { items, ...rest } = data;
+    const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(data, clientTenantId);
+
     return this.prisma.supplierInvoice.create({
       data: {
         ...rest,
@@ -113,6 +139,9 @@ export class PurchasesService {
         status: toEnum(rest.status || 'DRAFT'),
         paymentStatus: toEnum(rest.paymentStatus || 'PENDING'),
         clientTenantId,
+        currency,
+        exchangeRate,
+        baseTotal,
         ...(items?.length > 0 && { items: { create: items } }),
       },
       include: { items: true, supplier: true },
@@ -129,8 +158,16 @@ export class PurchasesService {
 
   // ─── FACTURAS RECURRENTES DE PROVEEDOR ────────────────────────────────────
   async createRecurringInvoice(data: any, clientTenantId: string) {
+    const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(data, clientTenantId);
+
     return this.prisma.recurringSupplierInvoice.create({
-      data: { ...data, clientTenantId },
+      data: { 
+        ...data, 
+        clientTenantId,
+        currency,
+        exchangeRate,
+        baseTotal,
+      },
     });
   }
 
@@ -144,11 +181,16 @@ export class PurchasesService {
 
   // ─── PAGOS REALIZADOS ─────────────────────────────────────────────────────
   async createPayment(data: any, clientTenantId: string) {
+    const { currency, exchangeRate, baseTotal: baseAmount } = await this.getDocumentCurrencyData(data, clientTenantId);
+
     return this.prisma.paymentMade.create({
       data: {
         ...data,
         method: toEnum(data.method || 'CASH'),
         clientTenantId,
+        currency,
+        exchangeRate,
+        baseAmount,
       },
     });
   }
@@ -182,7 +224,17 @@ export class PurchasesService {
 
   // ─── GASTOS ───────────────────────────────────────────────────────────────
   async createExpense(data: any, clientTenantId: string) {
-    return this.prisma.expense.create({ data: { ...data, clientTenantId } });
+    const { currency, exchangeRate, baseTotal: baseAmount } = await this.getDocumentCurrencyData(data, clientTenantId);
+
+    return this.prisma.expense.create({ 
+      data: { 
+        ...data, 
+        clientTenantId,
+        currency,
+        exchangeRate,
+        baseAmount,
+      } 
+    });
   }
 
   async findAllExpenses(clientTenantId: string) {
@@ -203,7 +255,17 @@ export class PurchasesService {
 
   // ─── GASTOS RECURRENTES ───────────────────────────────────────────────────
   async createRecurringExpense(data: any, clientTenantId: string) {
-    return this.prisma.recurringExpense.create({ data: { ...data, clientTenantId } });
+    const { currency, exchangeRate, baseTotal: baseAmount } = await this.getDocumentCurrencyData(data, clientTenantId);
+
+    return this.prisma.recurringExpense.create({ 
+      data: { 
+        ...data, 
+        clientTenantId,
+        currency,
+        exchangeRate,
+        baseAmount,
+      } 
+    });
   }
 
   async findAllRecurringExpenses(clientTenantId: string) {

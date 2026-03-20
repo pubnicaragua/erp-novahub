@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import type { PaymentReceived } from '../../types';
 import { Badge } from '../ui/badge';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -19,6 +20,7 @@ interface PagosRecibidosViewProps {
 }
 
 export function PagosRecibidosView({ data, loading, onRefresh }: PagosRecibidosViewProps) {
+  const { exchangeRate: globalRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -69,7 +71,11 @@ export function PagosRecibidosView({ data, loading, onRefresh }: PagosRecibidosV
       key: 'amount', 
       header: 'Monto', 
       width: '150px',
-      render: (val) => <span className="text-[13px] font-black tabular-nums text-emerald-500">${Number(val||0).toLocaleString()}</span>
+      render: (val, row) => (
+        <span className="text-[13px] font-black tabular-nums text-emerald-500">
+          {row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}
+        </span>
+      )
     },
     { 
       key: 'method', 
@@ -100,7 +106,7 @@ export function PagosRecibidosView({ data, loading, onRefresh }: PagosRecibidosV
     : 'N/A';
 
   const kpis = [
-    { title: 'Total Recaudado', value: `$${data.reduce((acc, p) => acc + Number(p.amount||0), 0).toLocaleString()}`, icon: TrendingUp,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Total Recaudado (NIO)', value: `C$ ${data.reduce((acc, p) => acc + (p.baseAmount || (p.currency === 'USD' ? p.amount * globalRate : p.amount)), 0).toLocaleString()}`, icon: TrendingUp,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Pagos',           value: data.length,                                                                   icon: CheckCircle2, color: 'text-blue-500',    bg: 'bg-blue-500/10'   },
     { title: 'Con Factura',     value: data.filter(p => p.invoice?.number).length,                                    icon: Clock,        color: 'text-amber-500',  bg: 'bg-amber-500/10'  },
     { title: 'Método Principal', value: mainMethod,                                                                  icon: Wallet,       color: 'text-purple-500', bg: 'bg-purple-500/10' },
@@ -144,7 +150,15 @@ export function PagosRecibidosView({ data, loading, onRefresh }: PagosRecibidosV
             </div>
             <Button onClick={async () => {
               try {
-                await paymentsService.create({ customerId: data[0]?.customerId || 'temp-customer-id', invoiceId: data[0]?.invoiceId || 'temp-invoice-id', amount: 0, paymentMethod: 'TRANSFER', date: new Date().toISOString() });
+                await paymentsService.create({ 
+                  customerId: data[0]?.customerId || 'temp-customer-id', 
+                  invoiceId: data[0]?.invoiceId || 'temp-invoice-id', 
+                  amount: 0, 
+                  currency: 'NIO',
+                  exchangeRate: globalRate,
+                  method: 'transfer', 
+                  date: new Date().toISOString() 
+                });
                 toast.success('Pago registrado');
                 onRefresh();
               } catch { toast.error('Error al registrar pago'); }

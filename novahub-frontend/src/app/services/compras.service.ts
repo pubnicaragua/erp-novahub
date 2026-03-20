@@ -21,6 +21,7 @@ export const purchaseOrdersService = {
   update: (id: string, data: Partial<PurchaseOrder>) => api.put<PurchaseOrder>(`/purchases/orders/${id}`, data),
   approve: (id: string) => api.patch<PurchaseOrder>(`/purchases/orders/${id}/approve`, {}),
   cancel: (id: string) => api.patch<PurchaseOrder>(`/purchases/orders/${id}/cancel`, {}),
+  delete: (id: string) => api.delete<void>(`/purchases/orders/${id}`),
 };
 
 // ✅ CORRECTED: was /purchase-receipts (404) → now /purchases/receipts
@@ -28,6 +29,7 @@ export const purchaseReceiptsService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<PurchaseReceipt>>('/purchases/receipts', filters as any),
   getById: (id: string) => api.get<PurchaseReceipt>(`/purchases/receipts/${id}`),
   create: (data: Partial<PurchaseReceipt>) => api.post<PurchaseReceipt>('/purchases/receipts', data),
+  delete: (id: string) => api.delete<void>(`/purchases/receipts/${id}`),
 };
 
 export const supplierInvoicesService = {
@@ -35,6 +37,7 @@ export const supplierInvoicesService = {
   getById: (id: string) => api.get<SupplierInvoice>(`/purchases/invoices/${id}`),
   create: (data: Partial<SupplierInvoice>) => api.post<SupplierInvoice>('/purchases/invoices', data),
   update: (id: string, data: Partial<SupplierInvoice>) => api.put<SupplierInvoice>(`/purchases/invoices/${id}`, data),
+  delete: (id: string) => api.delete<void>(`/purchases/invoices/${id}`),
 };
 
 // ✅ CORRECTED: was /recurring-supplier-invoices (404) → now /purchases/recurring-invoices
@@ -42,6 +45,7 @@ export const recurringSupplierInvoicesService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<RecurringSupplierInvoice>>('/purchases/recurring-invoices', filters as any),
   create: (data: Partial<RecurringSupplierInvoice>) => api.post<RecurringSupplierInvoice>('/purchases/recurring-invoices', data),
   update: (id: string, data: Partial<RecurringSupplierInvoice>) => api.put<RecurringSupplierInvoice>(`/purchases/recurring-invoices/${id}`, data),
+  delete: (id: string) => api.delete<void>(`/purchases/recurring-invoices/${id}`),
 };
 
 // ✅ CORRECTED: was /payments-made (404) → now /purchases/payments
@@ -49,6 +53,7 @@ export const paymentsMadeService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<PaymentMade>>('/purchases/payments', filters as any),
   create: (data: Partial<PaymentMade>) => api.post<PaymentMade>('/purchases/payments', data),
   update: (id: string, data: Partial<PaymentMade>) => api.put<PaymentMade>(`/purchases/payments/${id}`, data),
+  delete: (id: string) => api.delete<void>(`/purchases/payments/${id}`),
 };
 
 // ✅ CORRECTED: was /supplier-credits (404) → now /purchases/credits
@@ -56,6 +61,7 @@ export const supplierCreditsService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<SupplierCredit>>('/purchases/credits', filters as any),
   create: (data: Partial<SupplierCredit>) => api.post<SupplierCredit>('/purchases/credits', data),
   update: (id: string, data: Partial<SupplierCredit>) => api.put<SupplierCredit>(`/purchases/credits/${id}`, data),
+  delete: (id: string) => api.delete<void>(`/purchases/credits/${id}`),
 };
 
 export const expensesService = {
@@ -68,6 +74,7 @@ export const expensesService = {
 export const recurringExpensesService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<RecurringExpense>>('/purchases/recurring-expenses', filters as any),
   create: (data: Partial<RecurringExpense>) => api.post<RecurringExpense>('/purchases/recurring-expenses', data),
+  delete: (id: string) => api.delete<void>(`/purchases/recurring-expenses/${id}`),
 };
 
 // --- Aliases for better DX ---

@@ -26,6 +26,51 @@ export class CreateEstimateDto {
     @ApiProperty({ required: false })
     @IsOptional()
     @IsString()
+    number?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    status?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    currency?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    subtotal?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    taxAmount?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    discountAmount?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    total?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    exchangeRate?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    baseTotal?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
     notes?: string;
 }
 
@@ -42,6 +87,51 @@ export class CreateSalesOrderDto {
     @ApiProperty({ type: 'array', items: { type: 'object' } })
     @IsArray()
     items: any[];
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    number?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    status?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    currency?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    subtotal?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    taxAmount?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    discountAmount?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    total?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    exchangeRate?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    baseTotal?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()

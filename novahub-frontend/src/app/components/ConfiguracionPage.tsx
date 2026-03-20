@@ -6,7 +6,7 @@ import {
   ShoppingCart, UserCheck, Users, Plus, Settings2, KeyRound, Layers,
   Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
-  BarChart3, X, Info
+  BarChart3, X, Info, Coins
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -22,6 +22,7 @@ import { tenantsService } from '../services/tenants.service';
 import { rolesService } from '../services/roles.service';
 import { subscriptionsService } from '../services/subscriptions.service';
 import { brandingService, type Branding } from '../services/branding.service';
+import { api } from '../services/api';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
 import { type RoleManagement, type Permission } from '../types';
@@ -203,6 +204,7 @@ const ALL_TABS: TabDef[] = [
   { id: 'roles',         label: 'Roles & Permisos',    icon: ShieldCheck,  scenario: ['superadmin', 'partner', 'client'] },
   { id: 'seguridad',     label: 'Seguridad',           icon: KeyRound,     scenario: ['superadmin', 'partner', 'client'] },
   { id: 'tenancy',       label: 'Multi-Tenancy',       icon: Layers,       scenario: ['superadmin', 'partner'] },
+  { id: 'currency',      label: 'Moneda & Cambio',     icon: Coins,        scenario: ['superadmin', 'partner', 'client'] },
   { id: 'plataforma',    label: 'Plataforma',          icon: Server,       scenario: ['superadmin'] },
   { id: 'dominios',      label: 'Dominios',            icon: Globe,        scenario: ['superadmin', 'partner', 'client'] },
 ];
@@ -241,15 +243,37 @@ export function ConfiguracionPage() {
   const [apiAccess, setApiAccess] = useState(false);
   const [apiKey] = useState('nh_live_' + Math.random().toString(36).slice(2, 18).toUpperCase());
 
+  // Currency & Exchange Rate state
+  const [exchangeRateAuto, setExchangeRateAuto] = useState(true);
+  const [manualRate, setManualRate] = useState('36.50');
+  const [currentBackendRate, setCurrentBackendRate] = useState<number | null>(null);
+  const [isSavingCurrency, setIsSavingCurrency] = useState(false);
+
   // New role dialog state
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleDesc, setNewRoleDesc] = useState('');
   const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null);
 
-  // Load branding on mount
+  // Load branding and currency on mount
   useEffect(() => {
     fetchBranding();
+    fetchCurrencySettings();
   }, []);
+
+  const fetchCurrencySettings = async () => {
+    try {
+      const data = await api.get<{ rate: number, auto: boolean }>('/tools/exchange-rate');
+      if (data) {
+        setExchangeRateAuto(data.auto);
+        setCurrentBackendRate(data.rate);
+        if (!data.auto) {
+          setManualRate(data.rate.toString());
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching currency settings:', error);
+    }
+  };
 
   const fetchBranding = async () => {
     try {
@@ -398,6 +422,24 @@ export function ConfiguracionPage() {
       toast.success('Información guardada');
     } catch (error) {
       toast.error('Error al guardar la información en el servidor');
+    }
+  };
+
+  const handleSaveCurrencySettings = async () => {
+    setIsSavingCurrency(true);
+    try {
+      const resp = await api.post<{ rate: number, auto: boolean }>('/tools/exchange-rate', {
+        auto: exchangeRateAuto,
+        rate: exchangeRateAuto ? undefined : parseFloat(manualRate)
+      });
+      if (resp) {
+        setCurrentBackendRate(resp.rate);
+        toast.success('Configuración de moneda actualizada');
+      }
+    } catch (error) {
+      toast.error('Error al guardar configuración de moneda');
+    } finally {
+      setIsSavingCurrency(false);
     }
   };
 
@@ -1076,6 +1118,105 @@ export function ConfiguracionPage() {
                     </div>
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+          </motion.div>
+        </TabsContent>
+
+        {/* ══════════ TAB: MONEDA & CAMBIO ══════════ */}
+        <TabsContent value="currency" className="space-y-6 mt-0">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <CardTitle className="flex items-center gap-2 font-black"><Coins className="size-5 text-primary" />Moneda & Tasa de Cambio</CardTitle>
+                <CardDescription>Configura como el sistema gestiona NIO vs USD</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-6">
+                <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-sm font-black uppercase tracking-widest text-primary">Tasa de Cambio Automática (BCN)</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Sincroniza diariamente con el Banco Central de Nicaragua</p>
+                    </div>
+                    <Switch checked={exchangeRateAuto} onCheckedChange={setExchangeRateAuto} />
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-background border border-border/40">
+                    <span className="text-xs font-bold text-muted-foreground">Tasa Actual del Sistema</span>
+                    <span className="text-lg font-black text-primary">
+                      {currentBackendRate ? `C$ ${currentBackendRate.toFixed(4)}` : '---'}
+                    </span>
+                  </div>
+                </div>
+
+                <AnimatePresence>
+                  {!exchangeRateAuto && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="space-y-4 overflow-hidden">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Tasa de Cambio Manual</Label>
+                        <div className="flex gap-3">
+                          <div className="relative flex-1">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">C$</span>
+                            <Input value={manualRate} onChange={e => setManualRate(e.target.value)} type="number" step="0.01" className="pl-9 rounded-xl h-11 font-mono" />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-amber-600 font-bold italic">* Esta tasa se aplicará a todas las conversiones manuales del sistema</p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/30">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Moneda Base Contable</p>
+                      <p className="text-sm font-bold">Córdoba Nicaragüense (NIO)</p>
+                    </div>
+                    <Badge variant="outline" className="text-[9px] font-black uppercase">Fijo</Badge>
+                  </div>
+
+                  <Button onClick={handleSaveCurrencySettings} disabled={isSavingCurrency} className="w-full rounded-xl gap-2 font-black h-11">
+                    {isSavingCurrency ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
+                    Guardar Configuración
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <CardTitle className="flex items-center gap-2 font-black"><Info className="size-5 text-primary" />Información sobre Multimoneda</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                <div className="space-y-4">
+                  <div className="flex gap-4">
+                    <div className="size-8 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0 text-blue-500 font-black text-xs">1</div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      <strong className="text-foreground">Base en Córdobas:</strong> Toda la contabilidad y reportes del sistema se calculan en base a NIO para cumplir con regulaciones locales.
+                    </p>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="size-8 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0 text-blue-500 font-black text-xs">2</div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      <strong className="text-foreground">Soporte USD:</strong> Puedes emitir facturas, órdenes y pagos en Dólares. El sistema guardará el equivalente en Córdobas usando la tasa de cambio del momento.
+                    </p>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="size-8 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0 text-blue-500 font-black text-xs">3</div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      <strong className="text-foreground">Modo Híbrido:</strong> Al usar el modo automático, el sistema consulta al BCN cada madrugada. Si prefieres control total, usa el modo manual.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                  <p className="text-[11px] text-amber-600 font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <AlertCircle className="size-3" /> IMPORTANTE
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-amber-700/80">
+                    Cambiar la tasa de cambio manual no afectará transacciones ya realizadas. Las transacciones mantienen guardada la tasa con la que fueron creadas originalmente.
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </motion.div>

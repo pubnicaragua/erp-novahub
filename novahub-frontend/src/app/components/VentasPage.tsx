@@ -20,8 +20,10 @@ import {
 } from '../services/ventas.service';
 import type { 
   Customer, Estimate, SalesOrder, Invoice, 
-  PaymentReceived, RecurringInvoice, SalesReturn 
+  PaymentReceived, RecurringInvoice, SalesReturn,
+  Product
 } from '../types';
+import { inventoryService } from '../services/inventario.service';
 
 // New Sub-Views
 import { ClientesView } from './ventas/ClientesView';
@@ -80,6 +82,7 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
     recurrentes: [] as RecurringInvoice[],
     pagos: [] as PaymentReceived[],
     devoluciones: [] as SalesReturn[],
+    productos: [] as Product[],
   });
   const [loading, setLoading] = useState(true);
 
@@ -90,14 +93,15 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [cus, est, ord, inv, pay, rec, ret] = await Promise.all([
+      const [cus, est, ord, inv, pay, rec, ret, prod] = await Promise.all([
         customersService.getAll(),
         estimatesService.getAll(),
         salesOrdersService.getAll(),
         invoicesService.getAll(),
         paymentsService.getAll(),
         recurringInvoicesService.getAll(),
-        salesReturnsService.getAll()
+        salesReturnsService.getAll(),
+        inventoryService.getProducts()
       ]);
       
       const toArr = (r: any) => Array.isArray(r) ? r : (r?.data || []);
@@ -109,6 +113,7 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
         recurrentes: toArr(rec),
         pagos: toArr(pay),
         devoluciones: toArr(ret),
+        productos: toArr(prod),
       });
     } catch (error) {
       console.error('Error fetching sales data:', error);
@@ -199,10 +204,10 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
                 <ClientesView data={data.clientes} loading={loading} onRefresh={fetchData} />
               )}
               {activeSection === 'estimaciones' && (
-                <EstimacionesView data={data.estimaciones} loading={loading} onRefresh={fetchData} />
+                <EstimacionesView data={data.estimaciones} loading={loading} onRefresh={fetchData} customers={data.clientes} products={data.productos} />
               )}
               {(activeSection === 'ordenes' || activeSection === 'ordenes-venta') && (
-                <OrdenesVentaView data={data.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} />
+                <OrdenesVentaView data={data.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} customers={data.clientes} products={data.productos} />
               )}
               {activeSection === 'facturas' && (
                 <FacturasView data={data.facturas} loading={loading} onRefresh={fetchData} onMarkAsPaid={handleMarkAsPaid} />

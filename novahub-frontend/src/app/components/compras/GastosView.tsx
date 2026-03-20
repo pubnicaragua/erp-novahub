@@ -9,10 +9,12 @@ import type { Expense } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface GastosViewProps { data: Expense[]; loading: boolean; onRefresh: () => void; }
 
 export function GastosView({ data, loading, onRefresh }: GastosViewProps) {
+  const { exchangeRate: globalRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const filtered = data.filter(e =>
@@ -33,7 +35,7 @@ export function GastosView({ data, loading, onRefresh }: GastosViewProps) {
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase tracking-widest bg-blue-500/10 text-blue-500 border-none">{val||'-'}</Badge>
     },
     { key: 'amount', header: 'Monto', width: '130px',
-      render: (val) => <span className="font-black tabular-nums text-rose-500">${Number(val||0).toLocaleString()}</span>
+      render: (val, row) => <span className="font-black tabular-nums text-rose-500">{row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}</span>
     },
     { key: 'date', header: 'Fecha', width: '120px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span>
@@ -50,13 +52,13 @@ export function GastosView({ data, loading, onRefresh }: GastosViewProps) {
 
   const handleAdd = async () => {
     try {
-      await expensesService.create({ accountId: 'temp-account-id', description: 'Nuevo gasto', amount: 0, date: new Date().toISOString() });
+      await expensesService.create({ accountId: 'temp-account-id', description: 'Nuevo gasto', amount: 0, currency: 'NIO', exchangeRate: globalRate, date: new Date().toISOString() });
       toast.success('Gasto registrado'); onRefresh();
     } catch { toast.error('Error al registrar gasto'); }
   };
 
   const kpis = [
-    { title: 'Total Gastos',  value: `$${data.reduce((a, e) => a + Number(e.amount||0), 0).toLocaleString()}`, icon: TrendingDown, color: 'text-rose-500',   bg: 'bg-rose-500/10'   },
+    { title: 'Total Gastos (NIO)',  value: `C$ ${data.reduce((a, e) => a + (e.baseAmount || (e.currency === 'USD' ? e.amount * globalRate : e.amount)), 0).toLocaleString()}`, icon: TrendingDown, color: 'text-rose-500',   bg: 'bg-rose-500/10'   },
     { title: 'Pendientes',    value: data.filter(e => (e.status||'').toUpperCase() === 'PENDING').length,                                                       icon: Clock,        color: 'text-amber-500', bg: 'bg-amber-500/10'  },
     { title: 'Pagados',       value: data.filter(e => (e.status||'').toUpperCase() === 'PAID').length,                                                          icon: Wallet,       color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Categorías',    value: new Set(data.map(e => e.category)).size,                                                                                 icon: Tag,          color: 'text-blue-500',  bg: 'bg-blue-500/10'   },

@@ -76,6 +76,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
     },
     { key: 'contactName', header: 'Contacto', editable: true },
     { key: 'email', header: 'Email / Envío', editable: true },
+    { key: 'phone', header: 'Teléfono', width: '130px', editable: true },
     { 
       key: 'balance', 
       header: 'Saldo Deudor', 

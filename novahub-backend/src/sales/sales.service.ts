@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ExchangeRateService } from '../common/exchange-rate.service';
 import { CustomerType, EntityStatus, PaymentMethod, RecurringStatus, ReturnStatus, Frequency } from '@prisma/client';
 
 /** Genera un código único tipo CLI-0001 */
@@ -14,7 +15,24 @@ function toEnum<T extends string>(val: string): T {
 
 @Injectable()
 export class SalesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private exchangeRateService: ExchangeRateService
+  ) {}
+
+  private async getDocumentCurrencyData(data: any, clientTenantId: string) {
+    const currency = data.currency || 'NIO';
+    const exchangeRate = data.exchangeRate || await this.exchangeRateService.getExchangeRate(clientTenantId);
+    
+    // Si la moneda es la base (NIO), el baseTotal es igual al total.
+    // Si la moneda es USD, el baseTotal es total * exchangeRate.
+    let baseTotal = data.baseTotal;
+    if (baseTotal === undefined && data.total !== undefined) {
+      baseTotal = currency === 'NIO' ? Number(data.total) : Number(data.total) * Number(exchangeRate);
+    }
+
+    return { currency, exchangeRate, baseTotal };
+  }
 
   // ─── CLIENTES ─────────────────────────────────────────────────────────────
   async createCustomer(data: any, clientTenantId: string) {
@@ -48,10 +66,13 @@ export class SalesService {
   }
 
   async updateCustomer(id: string, data: any, clientTenantId: string) {
+    // Evitar actualizar campos protegidos o calculados
+    const { id: _, clientTenantId: __, createdAt, updatedAt, balance, ...cleanData } = data;
+
     return this.prisma.customer.update({
       where: { id, clientTenantId },
       data: {
-        ...data,
+        ...cleanData,
         ...(data.type && { type: toEnum(data.type) }),
         ...(data.status && { status: toEnum(data.status) }),
       },
@@ -67,8 +88,16 @@ export class SalesService {
     const { items, ...rest } = data;
     let customerId = rest.customerId;
     if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
-      customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
+      const firstCustomer = await this.prisma.customer.findFirst({ where: { clientTenantId } });
+      if (firstCustomer) {
+        customerId = firstCustomer.id;
+      } else {
+        const newCustomer = await this.createCustomer({ name: 'Cliente General' }, clientTenantId);
+        customerId = newCustomer.id;
+      }
     }
+
+    const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(data, clientTenantId);
 
     return this.prisma.estimate.create({
       data: {
@@ -77,6 +106,9 @@ export class SalesService {
         number: rest.number || genCode('COT'),
         status: toEnum(rest.status || 'DRAFT'),
         clientTenantId,
+        currency,
+        exchangeRate,
+        baseTotal,
         ...(items?.length > 0 && { items: { create: items } }),
       },
       include: { items: true, customer: true },
@@ -92,39 +124,86 @@ export class SalesService {
   }
 
   async updateEstimate(id: string, data: any, clientTenantId: string) {
+    const { items, status, ...rest } = data;
+    
+    let itemsMutation = {};
+    if (items && Array.isArray(items)) {
+      itemsMutation = {
+        items: {
+          deleteMany: {},
+          create: items.map(item => ({
+            description: item.description || '',
+            quantity: Number(item.quantity || 1),
+            unitPrice: Number(item.unitPrice || 0),
+            taxRate: Number(item.taxRate || 0),
+            discount: Number(item.discount || 0),
+            total: Number(item.total || 0),
+            productId: item.productId || null,
+          }))
+        }
+      };
+    }
+
     return this.prisma.estimate.update({
       where: { id, clientTenantId },
       data: {
-        ...data,
-        ...(data.status && { status: toEnum(data.status) }),
+        ...rest,
+        ...(status && { status: toEnum(status) }),
+        ...itemsMutation,
       },
+      include: { items: true, customer: true }
     });
   }
 
   async convertEstimateToOrder(id: string, clientTenantId: string) {
     const estimate = await this.prisma.estimate.findFirst({ where: { id, clientTenantId }, include: { items: true } });
     if (!estimate) throw new NotFoundException('Estimate not found');
+
+    // Build items payload from estimate items
+    const itemsCreate = (estimate.items || []).map(item => ({
+      productId: item.productId || null,
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      taxRate: item.taxRate,
+      discount: item.discount,
+      total: item.total,
+    }));
+
+    const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(estimate, clientTenantId);
+
+    const orderData: any = {
+      number: genCode('ORD'),
+      customerId: estimate.customerId,
+      estimateId: estimate.id,
+      date: new Date(),
+      subtotal: estimate.subtotal,
+      taxAmount: estimate.taxAmount,
+      discountAmount: estimate.discountAmount,
+      total: estimate.total,
+      currency,
+      exchangeRate,
+      baseTotal,
+      notes: estimate.notes ? `[Desde Cotización ${estimate.number}] ${estimate.notes}` : `Generado desde Cotización ${estimate.number}`,
+      status: 'PENDING_REVIEW',
+      clientTenantId,
+    };
+
+    if (itemsCreate.length > 0) {
+      orderData.items = { create: itemsCreate };
+    }
+
     const order = await this.prisma.salesOrder.create({
-      data: {
-        number: genCode('ORD'),
-        customerId: estimate.customerId,
-        date: new Date(),
-        subtotal: estimate.subtotal,
-        taxAmount: estimate.taxAmount,
-        discountAmount: estimate.discountAmount,
-        total: estimate.total,
-        currency: estimate.currency,
-        notes: estimate.notes,
-        status: 'CONFIRMED',
-        clientTenantId,
-      },
-      include: { customer: true },
+      data: orderData,
+      include: { items: true, customer: true },
     });
     await this.prisma.estimate.update({ where: { id }, data: { status: 'APPROVED' } });
     return order;
   }
 
   async removeEstimate(id: string, clientTenantId: string) {
+    // First delete all items to avoid FK constraint errors
+    await this.prisma.estimateItem.deleteMany({ where: { estimate: { id, clientTenantId } } });
     return this.prisma.estimate.delete({ where: { id, clientTenantId } });
   }
 
@@ -133,8 +212,16 @@ export class SalesService {
     const { items, ...rest } = data;
     let customerId = rest.customerId;
     if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
-      customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
+      const firstCustomer = await this.prisma.customer.findFirst({ where: { clientTenantId } });
+      if (firstCustomer) {
+        customerId = firstCustomer.id;
+      } else {
+        const newCustomer = await this.createCustomer({ name: 'Cliente General' }, clientTenantId);
+        customerId = newCustomer.id;
+      }
     }
+
+    const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(data, clientTenantId);
 
     return this.prisma.salesOrder.create({
       data: {
@@ -143,6 +230,9 @@ export class SalesService {
         number: rest.number || genCode('ORD'),
         status: toEnum(rest.status || 'DRAFT'),
         clientTenantId,
+        currency,
+        exchangeRate,
+        baseTotal,
         ...(items?.length > 0 && { items: { create: items } }),
       },
       include: { items: true, customer: true },
@@ -158,16 +248,40 @@ export class SalesService {
   }
 
   async updateSalesOrder(id: string, data: any, clientTenantId: string) {
+    const { items, status, ...rest } = data;
+    
+    let itemsMutation = {};
+    if (items && Array.isArray(items)) {
+      itemsMutation = {
+        items: {
+          deleteMany: {},
+          create: items.map(item => ({
+            description: item.description || '',
+            quantity: Number(item.quantity || 1),
+            unitPrice: Number(item.unitPrice || 0),
+            taxRate: Number(item.taxRate || 0),
+            discount: Number(item.discount || 0),
+            total: Number(item.total || 0),
+            productId: item.productId || null,
+          }))
+        }
+      };
+    }
+
     return this.prisma.salesOrder.update({
       where: { id, clientTenantId },
       data: {
-        ...data,
-        ...(data.status && { status: toEnum(data.status) }),
+        ...rest,
+        ...(status && { status: toEnum(status) }),
+        ...itemsMutation,
       },
+      include: { items: true, customer: true }
     });
   }
 
   async removeSalesOrder(id: string, clientTenantId: string) {
+    // First delete all items to avoid FK constraint errors
+    await this.prisma.salesOrderItem.deleteMany({ where: { salesOrder: { id, clientTenantId } } });
     return this.prisma.salesOrder.delete({ where: { id, clientTenantId } });
   }
 
@@ -179,6 +293,8 @@ export class SalesService {
       customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
     }
 
+    const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(data, clientTenantId);
+
     return this.prisma.invoice.create({
       data: {
         ...rest,
@@ -187,6 +303,9 @@ export class SalesService {
         status: toEnum(rest.status || 'DRAFT'),
         paymentStatus: toEnum(rest.paymentStatus || 'PENDING'),
         clientTenantId,
+        currency,
+        exchangeRate,
+        baseTotal,
         ...(items?.length > 0 && { items: { create: items } }),
       },
       include: { items: true, customer: true },
@@ -231,12 +350,19 @@ export class SalesService {
     if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
       customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
     }
+    const currency = data.currency || 'NIO';
+    const exchangeRate = data.exchangeRate || await this.exchangeRateService.getExchangeRate(clientTenantId);
+    const baseAmount = data.baseAmount || (currency === 'NIO' ? Number(data.amount) : Number(data.amount) * Number(exchangeRate));
+
     return this.prisma.paymentReceived.create({
       data: {
         ...data,
         customerId,
         method: toEnum(data.method || 'CASH'),
         clientTenantId,
+        currency,
+        exchangeRate,
+        baseAmount,
       },
     });
   }

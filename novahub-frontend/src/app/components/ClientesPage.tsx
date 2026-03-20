@@ -116,33 +116,33 @@ export function ClientesPage() {
                 </div>
                 <div className="grid gap-2">
                   <Label>Tipo</Label>
-                  <Select value={formData.type} onValueChange={v => setFormData({ ...formData, type: v as any })}>
+                  <Select value={formData.type?.toUpperCase() || 'COMPANY'} onValueChange={v => setFormData({ ...formData, type: v as any })}>
                     <SelectTrigger><SelectValue placeholder="Selecciona el tipo" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="company">Empresa</SelectItem>
-                      <SelectItem value="individual">Individual</SelectItem>
+                      <SelectItem value="COMPANY">Empresa</SelectItem>
+                      <SelectItem value="INDIVIDUAL">Individual</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="contacto">Nombre del Contacto</Label>
-                  <Input id="contacto" value={formData.contactName} onChange={e => setFormData({ ...formData, contactName: e.target.value })} />
+                  <Input id="contacto" value={formData.contactName || ''} onChange={e => setFormData({ ...formData, contactName: e.target.value })} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+                  <Input id="email" type="email" value={formData.email || ''} onChange={e => setFormData({ ...formData, email: e.target.value })} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="telefono">Teléfono</Label>
-                  <Input id="telefono" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
+                  <Input id="telefono" value={formData.phone || ''} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
                 </div>
                 <div className="grid gap-2">
                   <Label>Estado</Label>
-                  <Select value={formData.status} onValueChange={v => setFormData({ ...formData, status: v as any })}>
+                  <Select value={formData.status?.toUpperCase() || 'ACTIVE'} onValueChange={v => setFormData({ ...formData, status: v as any })}>
                     <SelectTrigger><SelectValue placeholder="Selecciona el estado" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="active">Activo</SelectItem>
-                      <SelectItem value="inactive">Inactivo</SelectItem>
+                      <SelectItem value="ACTIVE">Activo</SelectItem>
+                      <SelectItem value="INACTIVE">Inactivo</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -158,8 +158,8 @@ export function ClientesPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total Clientes</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-blue-400">{clientesData.length}</div></CardContent></Card>
-        <Card className="border-green-500/20 bg-gradient-to-br from-green-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Clientes Activos</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-400">{clientesData.filter(c => c.status === 'active').length}</div></CardContent></Card>
-        <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Nuevos este Mes</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-purple-400">{clientesData.filter(c => new Date(c.createdAt).getMonth() === new Date().getMonth()).length}</div></CardContent></Card>
+        <Card className="border-green-500/20 bg-gradient-to-br from-green-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Clientes Activos</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-400">{clientesData.filter(c => (c.status || '').toUpperCase() === 'ACTIVE').length}</div></CardContent></Card>
+        <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Nuevos este Mes</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-purple-400">{clientesData.filter(c => c.createdAt && new Date(c.createdAt).getMonth() === new Date().getMonth()).length}</div></CardContent></Card>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -187,13 +187,14 @@ export function ClientesPage() {
                       <TableCell>
                         <div className="flex flex-col">
                            <span className="font-semibold text-foreground">{c.name}</span>
-                          <span className="text-xs text-muted-foreground">{c.code || c.id} • {c.type === 'company' ? 'Empresa' : 'Individual'}</span>
+                          <span className="text-xs text-muted-foreground">{c.code || c.id} • {(c.type || '').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Individual'}</span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           <span className="text-sm flex items-center gap-1.5"><UserCircle className="size-3.5 text-muted-foreground" />{c.contactName || 'N/A'}</span>
                           <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Mail className="size-3.5" />{c.email || 'N/A'}</span>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Phone className="size-3.5" />{c.phone || 'N/A'}</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -214,8 +215,8 @@ export function ClientesPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className={c.status === 'active' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}>
-                          {c.status === 'active' ? 'Activo' : 'Inactivo'}
+                        <Badge variant="secondary" className={(c.status || '').toUpperCase() === 'ACTIVE' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}>
+                          {(c.status || '').toUpperCase() === 'ACTIVE' ? 'Activo' : 'Inactivo'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">

@@ -9,10 +9,9 @@ import {
 } from './table';
 import { Input } from './input';
 import { cn } from './utils';
-import { Check, X, Pencil, Trash2, Copy, Menu, Search, Filter, ChevronDown, Save, Eraser, Plus } from 'lucide-react';
+import { Pencil, Trash2, Copy, Eraser, Plus } from 'lucide-react';
 import { Button } from './button';
 import { Checkbox } from './checkbox';
-import { Badge } from './badge';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -45,9 +44,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   data: initialData,
   columns,
   onRowUpdate,
-  onRowDelete,
   onBulkDelete,
-  onBulkUpdate,
   idField = 'id' as keyof T,
   isLoading,
   actions,
@@ -79,24 +76,26 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     setEditValue(value);
   };
 
-  const handleSave = async (rowId: string | number, colKey: string) => {
-    if (!editingCell) return;
+  const handleSave = async (rowId: string | number, colKey: string, valueToSave?: any) => {
+    if (!editingCell && valueToSave === undefined) return;
     
+    const value = valueToSave !== undefined ? valueToSave : editValue;
     const originalRow = data.find(r => r[idField] === rowId);
-    if (!originalRow || originalRow[colKey] === editValue) {
+    
+    if (!originalRow || originalRow[colKey] === value) {
       setEditingCell(null);
       return;
     }
-
+ 
     // Optimistic Update
-    const newData = data.map(r => r[idField] === rowId ? { ...r, [colKey]: editValue } : r);
+    const newData = data.map(r => r[idField] === rowId ? { ...r, [colKey]: value } : r);
     setData(newData);
     setDraftRows(prev => new Set(prev).add(rowId));
     setEditingCell(null);
-
+ 
     if (onRowUpdate) {
       try {
-        await onRowUpdate(rowId, { [colKey]: editValue } as Partial<T>);
+        await onRowUpdate(rowId, { [colKey]: value } as Partial<T>);
         setDraftRows(prev => {
           const next = new Set(prev);
           next.delete(rowId);
@@ -251,7 +250,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((row, rowIndex) => {
+            {data.map((row) => {
               const rowId = row[idField];
               const isDraft = draftRows.has(rowId);
               const isSelected = selectedIds.has(rowId);
@@ -292,7 +291,12 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                             {col.type === 'select' ? (
                               <select
                                 value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
+                                onChange={(e) => {
+                                  const newVal = e.target.value;
+                                  setEditValue(newVal);
+                                  // For select, we often want to save immediately
+                                  handleSave(rowId, colKey, newVal);
+                                }}
                                 onBlur={() => handleSave(rowId, colKey)}
                                 className="h-full w-full bg-transparent border-none focus:ring-0 text-[13px] font-medium px-2 outline-none cursor-pointer"
                               >

@@ -24,6 +24,8 @@ model Partner {
   commissionRate       Decimal               @default(0.10)
   maxClients           Int                   @default(100)
   isActive             Boolean               @default(true)
+  baseCurrency         String                @default("NIO")
+  exchangeRateAuto     Boolean               @default(true)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   accentColor          String?               @default("#064e3b")
@@ -240,7 +242,9 @@ model Estimate {
   taxAmount      Decimal
   discountAmount Decimal        @default(0)
   total          Decimal
-  currency       String         @default("USD")
+  currency       String         @default("NIO")
+  exchangeRate   Decimal        @default(36.5)
+  baseTotal      Decimal?
   status         DocumentStatus @default(DRAFT)
   notes          String?
   createdAt      DateTime       @default(now())
@@ -275,7 +279,9 @@ model SalesOrder {
   taxAmount        Decimal
   discountAmount   Decimal          @default(0)
   total            Decimal
-  currency         String           @default("USD")
+  currency         String           @default("NIO")
+  exchangeRate     Decimal          @default(36.5)
+  baseTotal        Decimal?
   status           SalesOrderStatus @default(DRAFT)
   notes            String?
   createdAt        DateTime         @default(now())
@@ -313,7 +319,9 @@ model Invoice {
   total          Decimal
   amountPaid     Decimal           @default(0)
   balance        Decimal
-  currency       String            @default("USD")
+  currency       String            @default("NIO")
+  exchangeRate   Decimal           @default(36.5)
+  baseTotal      Decimal?
   status         PaymentStatus     @default(PENDING)
   notes          String?
   createdAt      DateTime          @default(now())
@@ -349,7 +357,9 @@ model RecurringInvoice {
   subtotal        Decimal
   taxAmount       Decimal
   total           Decimal
-  currency        String                 @default("USD")
+  currency        String                 @default("NIO")
+  exchangeRate    Decimal                @default(36.5)
+  baseTotal       Decimal?
   status          RecurringStatus        @default(ACTIVE)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
@@ -378,7 +388,9 @@ model PaymentReceived {
   invoiceId      String?
   date           DateTime
   amount         Decimal
-  currency       String        @default("USD")
+  currency       String        @default("NIO")
+  exchangeRate   Decimal       @default(36.5)
+  baseAmount     Decimal?
   method         PaymentMethod
   reference      String?
   notes          String?
@@ -480,7 +492,9 @@ model PurchaseOrder {
   subtotal         Decimal
   taxAmount        Decimal
   total            Decimal
-  currency         String              @default("USD")
+  currency         String              @default("NIO")
+  exchangeRate     Decimal             @default(36.5)
+  baseTotal        Decimal?
   status           PurchaseOrderStatus @default(DRAFT)
   requestedBy      String
   notes            String?
@@ -543,7 +557,9 @@ model SupplierInvoice {
   total           Decimal
   amountPaid      Decimal               @default(0)
   balance         Decimal
-  currency        String                @default("USD")
+  currency        String                @default("NIO")
+  exchangeRate    Decimal               @default(36.5)
+  baseTotal       Decimal?
   status          PaymentStatus         @default(PENDING)
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
@@ -572,7 +588,9 @@ model RecurringSupplierInvoice {
   endDate         DateTime?
   nextInvoiceDate DateTime
   total           Decimal
-  currency        String                         @default("USD")
+  currency        String                         @default("NIO")
+  exchangeRate    Decimal                        @default(36.5)
+  baseTotal       Decimal?
   status          RecurringStatus                @default(ACTIVE)
   createdAt       DateTime                       @default(now())
   clientTenantId  String
@@ -598,7 +616,9 @@ model PaymentMade {
   supplierInvoiceId String?
   date              DateTime
   amount            Decimal
-  currency          String        @default("USD")
+  currency          String        @default("NIO")
+  exchangeRate      Decimal       @default(36.5)
+  baseAmount        Decimal?
   method            PaymentMethod
   reference         String?
   notes             String?
@@ -642,7 +662,7 @@ model Account {
   type              AccountType
   parentId          String?
   balance           Decimal            @default(0)
-  currency          String             @default("USD")
+  currency          String             @default("NIO")
   isActive          Boolean            @default(true)
   createdAt         DateTime           @default(now())
   clientTenantId    String
@@ -662,7 +682,9 @@ model Income {
   accountId      String
   date           DateTime
   amount         Decimal
-  currency       String       @default("USD")
+  currency       String       @default("NIO")
+  exchangeRate   Decimal      @default(36.5)
+  baseAmount     Decimal?
   createdAt      DateTime     @default(now())
   clientTenantId String
   notes          String?
@@ -678,7 +700,9 @@ model Expense {
   supplierId     String?
   date           DateTime
   amount         Decimal
-  currency       String        @default("USD")
+  currency       String        @default("NIO")
+  exchangeRate   Decimal       @default(36.5)
+  baseAmount     Decimal?
   category       String
   description    String
   reference      String?
@@ -698,7 +722,9 @@ model RecurringExpense {
   startDate      DateTime
   endDate        DateTime?
   amount         Decimal
-  currency       String          @default("USD")
+  currency       String          @default("NIO")
+  exchangeRate   Decimal         @default(36.5)
+  baseAmount     Decimal?
   category       String?
   description    String
   status         RecurringStatus @default(ACTIVE)
@@ -1088,6 +1114,7 @@ enum CustomerType {
 }
 
 enum SalesOrderStatus {
+  PENDING_REVIEW
   DRAFT
   CONFIRMED
   IN_PROGRESS

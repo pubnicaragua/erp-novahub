@@ -9,10 +9,12 @@ import type { PurchaseOrder } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface Props { data: PurchaseOrder[]; loading: boolean; onRefresh: () => void; }
 
 export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
+  const { exchangeRate: globalRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const filtered = data.filter(o =>
@@ -36,7 +38,7 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
     { key: 'date',     header: 'Fecha',     width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'total',    header: 'Total',     width: '130px',
-      render: (val) => <span className="font-black tabular-nums text-foreground">${Number(val||0).toLocaleString()}</span> },
+      render: (val, row) => <span className="font-black tabular-nums text-foreground">{row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}</span> },
     { key: 'status',   header: 'Estado',    width: '120px', editable: true, type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
@@ -48,7 +50,7 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
 
   const handleAdd = async () => {
     try {
-      await purchaseOrdersService.create({ supplierId: data[0]?.supplierId || 'temp-supplier-id', date: new Date().toISOString(), items: [] });
+      await purchaseOrdersService.create({ supplierId: data[0]?.supplierId || 'temp-supplier-id', currency: 'NIO', exchangeRate: globalRate, date: new Date().toISOString(), items: [] });
       toast.success('Orden de compra creada'); onRefresh();
     } catch { toast.error('Error al crear orden'); }
   };
@@ -57,7 +59,7 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
     { title: 'Total Ordenes',   value: data.length,                                                                     icon: ClipboardList, color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Por Aprobar',     value: data.filter(o => (o.status||'').toUpperCase() === 'SENT').length,                 icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
     { title: 'Aprobadas',       value: data.filter(o => (o.status||'').toUpperCase() === 'APPROVED').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Monto Total',     value: `$${data.reduce((a,o) => a+Number(o.total||0), 0).toLocaleString()}`,             icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    { title: 'Monto Total (NIO)', value: `C$ ${data.reduce((a,o) => a + (o.baseTotal || (o.currency === 'USD' ? o.total * globalRate : o.total)), 0).toLocaleString()}`,             icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
   ];
 
   return (

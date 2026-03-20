@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import type { Invoice } from '../../types';
 import { Badge } from '../ui/badge';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -28,6 +29,7 @@ const statusOptions = [
 ];
 
 export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: FacturasViewProps) {
+  const { exchangeRate: globalRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -54,6 +56,8 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: Factura
         number: `FAC-${Date.now().toString().slice(-6)}`,
         date: new Date().toISOString(),
         dueDate: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+        currency: 'NIO',
+        exchangeRate: globalRate,
         items: []
       } as any);
       toast.success('Nueva factura creada');
@@ -105,7 +109,11 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: Factura
       key: 'total', 
       header: 'Total Neto', 
       width: '150px',
-      render: (val) => <span className="text-[13px] font-black tabular-nums text-foreground">${Number(val||0).toLocaleString()}</span>
+      render: (val, row) => (
+        <span className="text-[13px] font-black tabular-nums text-foreground">
+          {row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}
+        </span>
+      )
     },
     { 
       key: 'status', 
@@ -129,10 +137,10 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid }: Factura
   ];
 
   const kpis = [
-    { title: 'Facturado Total',  value: `$${data.reduce((acc, f) => acc + Number(f.total||0), 0).toLocaleString()}`,                                                                            icon: FileText,     color: 'text-primary',      bg: 'bg-primary/10'      },
-    { title: 'Por Cobrar',       value: `$${data.filter(f => ['PENDING','OVERDUE'].includes((f.status||'').toUpperCase())).reduce((acc, f) => acc + Number(f.total||0), 0).toLocaleString()}`, icon: TrendingUp,   color: 'text-orange-500',   bg: 'bg-orange-500/10'   },
-    { title: 'Vencidas',         value: data.filter(f => (f.status||'').toUpperCase() === 'OVERDUE').length,                                                                                   icon: AlertCircle,  color: 'text-rose-500',     bg: 'bg-rose-500/10'     },
-    { title: 'Cobrado',          value: `$${data.filter(f => (f.status||'').toUpperCase() === 'PAID').reduce((acc, f) => acc + Number(f.total||0), 0).toLocaleString()}`,                      icon: CheckCircle2, color: 'text-emerald-500',  bg: 'bg-emerald-500/10'  },
+    { title: 'Facturado Total (NIO)',  value: `C$ ${data.reduce((acc, f) => acc + (f.baseTotal || (f.currency === 'USD' ? f.total * globalRate : f.total)), 0).toLocaleString()}`,                                                                            icon: FileText,     color: 'text-primary',      bg: 'bg-primary/10'      },
+    { title: 'Por Cobrar (NIO)',       value: `C$ ${data.filter(f => ['PENDING','OVERDUE'].includes((f.status||'').toUpperCase())).reduce((acc, f) => acc + (f.baseTotal || (f.currency === 'USD' ? f.total * globalRate : f.total)), 0).toLocaleString()}`, icon: TrendingUp,   color: 'text-orange-500',   bg: 'bg-orange-500/10'   },
+    { title: 'Vencidas',               value: data.filter(f => (f.status||'').toUpperCase() === 'OVERDUE').length,                                                                                                                                           icon: AlertCircle,  color: 'text-rose-500',     bg: 'bg-rose-500/10'     },
+    { title: 'Cobrado (NIO)',          value: `C$ ${data.filter(f => (f.status||'').toUpperCase() === 'PAID').reduce((acc, f) => acc + (f.baseTotal || (f.currency === 'USD' ? f.total * globalRate : f.total)), 0).toLocaleString()}`,                      icon: CheckCircle2, color: 'text-emerald-500',  bg: 'bg-emerald-500/10'  },
   ];
 
   return (

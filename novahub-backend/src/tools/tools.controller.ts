@@ -98,4 +98,17 @@ export class ToolsController {
   readNotification(@Param('id') id: string) {
     return this.toolsService.readNotification(id);
   }
+
+  // ─── TASA DE CAMBIO ──────────────────────────────────────────────────────
+  @Get('exchange-rate')
+  @ApiOperation({ summary: 'Obtener tasa de cambio actual' })
+  getExchangeRate(@Request() req) {
+    return this.toolsService.getExchangeRate(req.user.clientTenantId);
+  }
+
+  @Post('exchange-rate')
+  @ApiOperation({ summary: 'Configurar tasa de cambio' })
+  updateExchangeRate(@Body() data: { rate?: number; auto?: boolean }, @Request() req) {
+    return this.toolsService.updateExchangeRate(req.user.clientTenantId, data);
+  }
 }

@@ -98,6 +98,8 @@ export interface Estimate {
   discountAmount: number;
   total: number;
   currency: Currency;
+  exchangeRate?: number;
+  baseTotal?: number;
   status: DocumentStatus;
   notes?: string;
   items: EstimateItem[];
@@ -132,7 +134,9 @@ export interface SalesOrder {
   discountAmount: number;
   total: number;
   currency: Currency;
-  status: 'draft' | 'confirmed' | 'in_progress' | 'shipped' | 'delivered' | 'cancelled';
+  exchangeRate?: number;
+  baseTotal?: number;
+  status: 'draft' | 'pending_review' | 'confirmed' | 'in_progress' | 'shipped' | 'delivered' | 'cancelled';
   notes?: string;
   items: SalesOrderItem[];
   createdAt: string;
@@ -168,6 +172,8 @@ export interface Invoice {
   amountPaid: number;
   balance: number;
   currency: Currency;
+  exchangeRate?: number;
+  baseTotal?: number;
   status: PaymentStatus;
   notes?: string;
   items: InvoiceItem[];
@@ -201,6 +207,8 @@ export interface RecurringInvoice {
   taxAmount: number;
   total: number;
   currency: Currency;
+  exchangeRate?: number;
+  baseTotal?: number;
   status: 'active' | 'paused' | 'expired' | 'cancelled';
   items: RecurringInvoiceItem[];
   createdAt: string;
@@ -232,6 +240,8 @@ export interface PaymentReceived {
   date: string;
   amount: number;
   currency: Currency;
+  exchangeRate?: number;
+  baseAmount?: number;
   method: PaymentMethod;
   reference?: string;
   notes?: string;
@@ -335,6 +345,8 @@ export interface PurchaseOrder {
   taxAmount: number;
   total: number;
   currency: Currency;
+  exchangeRate?: number;
+  baseTotal?: number;
   status: PurchaseOrderStatus;
   requestedBy: string;
   notes?: string;
@@ -398,6 +410,8 @@ export interface SupplierInvoice {
   amountPaid: number;
   balance: number;
   currency: Currency;
+  exchangeRate?: number;
+  baseTotal?: number;
   status: PaymentStatus;
   notes?: string;
   items: SupplierInvoiceItem[];
@@ -427,6 +441,8 @@ export interface RecurringSupplierInvoice {
   nextInvoiceDate: string;
   total: number;
   currency: Currency;
+  exchangeRate?: number;
+  baseTotal?: number;
   status: 'active' | 'paused' | 'expired' | 'cancelled';
   items: RecurringSupplierInvoiceItem[];
   createdAt: string;
@@ -453,6 +469,8 @@ export interface PaymentMade {
   date: string;
   amount: number;
   currency: Currency;
+  exchangeRate?: number;
+  baseAmount?: number;
   method: PaymentMethod;
   reference?: string;
   notes?: string;
@@ -517,6 +535,8 @@ export interface Income {
   date: string;
   amount: number;
   currency: Currency;
+  exchangeRate?: number;
+  baseAmount?: number;
   category: string;
   description: string;
   reference?: string;
@@ -536,6 +556,8 @@ export interface Expense {
   date: string;
   amount: number;
   currency: Currency;
+  exchangeRate?: number;
+  baseAmount?: number;
   category: string;
   description: string;
   reference?: string;
@@ -560,6 +582,8 @@ export interface RecurringExpense {
   nextDate: string;
   amount: number;
   currency: Currency;
+  exchangeRate?: number;
+  baseAmount?: number;
   category: string;
   description: string;
   status: RecurringExpenseStatus;
