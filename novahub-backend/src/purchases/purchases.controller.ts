@@ -5,11 +5,13 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { 
   CreateSupplierDto, UpdateSupplierDto, 
   CreatePurchaseOrderDto, UpdatePurchaseOrderDto, 
-  CreatePurchaseReceiptDto, 
+  CreatePurchaseReceiptDto, UpdatePurchaseReceiptDto,
   CreateSupplierInvoiceDto, UpdateSupplierInvoiceDto,
-  CreateRecurringSupplierInvoiceDto, CreatePaymentMadeDto,
-  CreateSupplierCreditDto, CreateExpenseDto, UpdateExpenseDto,
-  CreateRecurringExpenseDto
+  CreateRecurringSupplierInvoiceDto, UpdateRecurringSupplierInvoiceDto,
+  CreatePaymentMadeDto, UpdatePaymentMadeDto,
+  CreateSupplierCreditDto, UpdateSupplierCreditDto,
+  CreateExpenseDto, UpdateExpenseDto,
+  CreateRecurringExpenseDto, UpdateRecurringExpenseDto
 } from './dto/purchases.dto';
 @ApiTags('purchases')
 @ApiBearerAuth()
