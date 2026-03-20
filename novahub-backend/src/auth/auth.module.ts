@@ -15,7 +15,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'super-secret-novahub-key-123',
-      signOptions: { expiresIn: '1d' },
+      signOptions: { expiresIn: '7d' },
     }),
   ],
   providers: [AuthService, JwtStrategy],

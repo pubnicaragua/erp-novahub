@@ -52,7 +52,7 @@ export class CreateSupplierDto {
     @ApiProperty({ required: false })
     @IsOptional()
     @IsString()
-    contact?: string; // Alias defensivo para evitar fallos de persistencia en el frontend
+    contact?: string;
 
     @ApiProperty({ required: false })
     @IsOptional()
@@ -79,23 +79,27 @@ export class CreatePurchaseOrderItemDto {
     description: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     quantity: number;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     unitPrice: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     taxRate?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     total?: number;
@@ -114,33 +118,37 @@ export class CreatePurchaseOrderDto {
 
     @ApiProperty()
     @IsDateString()
-    date: Date;
+    date: string;
 
     @ApiProperty({ required: false })
     @IsOptional()
     @IsDateString()
-    expectedDelivery?: Date;
+    expectedDelivery?: string;
 
-    @ApiProperty({ type: [CreatePurchaseOrderItemDto] })
+    @ApiProperty({ type: [CreatePurchaseOrderItemDto], required: false })
+    @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => CreatePurchaseOrderItemDto)
-    items: CreatePurchaseOrderItemDto[];
+    items?: CreatePurchaseOrderItemDto[];
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     subtotal?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     taxAmount?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     total?: number;
@@ -152,12 +160,14 @@ export class CreatePurchaseOrderDto {
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     exchangeRate?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     baseTotal?: number;
@@ -191,11 +201,13 @@ export class CreatePurchaseReceiptItemDto {
     description: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     quantityOrdered: number;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     quantityReceived: number;
@@ -217,7 +229,7 @@ export class CreatePurchaseReceiptDto {
 
     @ApiProperty()
     @IsDateString()
-    date: Date;
+    date: string;
 
     @ApiProperty({ required: false })
     @IsOptional()
@@ -229,11 +241,12 @@ export class CreatePurchaseReceiptDto {
     @IsString()
     notes?: string;
 
-    @ApiProperty({ type: [CreatePurchaseReceiptItemDto] })
+    @ApiProperty({ type: [CreatePurchaseReceiptItemDto], required: false })
+    @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => CreatePurchaseReceiptItemDto)
-    items: CreatePurchaseReceiptItemDto[];
+    items?: CreatePurchaseReceiptItemDto[];
 }
 
 export class UpdatePurchaseReceiptDto extends PartialType(CreatePurchaseReceiptDto) {}
@@ -245,23 +258,27 @@ export class CreateSupplierInvoiceItemDto {
     description: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     quantity: number;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     unitPrice: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     taxRate?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     total?: number;
@@ -284,26 +301,29 @@ export class CreateSupplierInvoiceDto {
 
     @ApiProperty()
     @IsDateString()
-    date: Date;
+    date: string;
 
     @ApiProperty()
     @IsDateString()
-    dueDate: Date;
+    dueDate: string;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     subtotal?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     taxAmount?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     total?: number;
@@ -315,12 +335,14 @@ export class CreateSupplierInvoiceDto {
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     exchangeRate?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     baseTotal?: number;
@@ -335,11 +357,12 @@ export class CreateSupplierInvoiceDto {
     @IsString()
     paymentStatus?: string;
 
-    @ApiProperty({ type: [CreateSupplierInvoiceItemDto] })
+    @ApiProperty({ type: [CreateSupplierInvoiceItemDto], required: false })
+    @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => CreateSupplierInvoiceItemDto)
-    items: CreateSupplierInvoiceItemDto[];
+    items?: CreateSupplierInvoiceItemDto[];
 }
 
 export class UpdateSupplierInvoiceDto extends PartialType(CreateSupplierInvoiceDto) {}
@@ -351,17 +374,20 @@ export class CreateRecurringSupplierInvoiceItemDto {
     description: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     quantity: number;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     unitPrice: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     total?: number;
@@ -378,19 +404,20 @@ export class CreateRecurringSupplierInvoiceDto {
 
     @ApiProperty()
     @IsDateString()
-    startDate: Date;
+    startDate: string;
 
     @ApiProperty({ required: false })
     @IsOptional()
     @IsDateString()
-    endDate?: Date;
+    endDate?: string;
 
     @ApiProperty()
     @IsDateString()
-    nextInvoiceDate: Date;
+    nextInvoiceDate: string;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     total?: number;
@@ -402,12 +429,14 @@ export class CreateRecurringSupplierInvoiceDto {
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     exchangeRate?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     baseTotal?: number;
@@ -445,9 +474,10 @@ export class CreatePaymentMadeDto {
 
     @ApiProperty()
     @IsDateString()
-    date: Date;
+    date: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     amount: number;
@@ -459,12 +489,14 @@ export class CreatePaymentMadeDto {
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     exchangeRate?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     baseAmount?: number;
@@ -493,17 +525,20 @@ export class CreateSupplierCreditItemDto {
     description: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     quantity: number;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     unitPrice: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     total?: number;
@@ -526,9 +561,10 @@ export class CreateSupplierCreditDto {
 
     @ApiProperty()
     @IsDateString()
-    date: Date;
+    date: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     total: number;
@@ -542,11 +578,12 @@ export class CreateSupplierCreditDto {
     @IsString()
     status?: string;
 
-    @ApiProperty({ type: [CreateSupplierCreditItemDto] })
+    @ApiProperty({ type: [CreateSupplierCreditItemDto], required: false })
+    @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => CreateSupplierCreditItemDto)
-    items: CreateSupplierCreditItemDto[];
+    items?: CreateSupplierCreditItemDto[];
 }
 
 export class UpdateSupplierCreditDto extends PartialType(CreateSupplierCreditDto) {}
@@ -569,9 +606,10 @@ export class CreateExpenseDto {
 
     @ApiProperty()
     @IsDateString()
-    date: Date;
+    date: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     amount: number;
@@ -583,12 +621,14 @@ export class CreateExpenseDto {
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     exchangeRate?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     baseAmount?: number;
@@ -631,14 +671,15 @@ export class CreateRecurringExpenseDto {
 
     @ApiProperty()
     @IsDateString()
-    startDate: Date;
+    startDate: string;
 
     @ApiProperty({ required: false })
     @IsOptional()
     @IsDateString()
-    endDate?: Date;
+    endDate?: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     amount: number;
@@ -650,12 +691,14 @@ export class CreateRecurringExpenseDto {
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     exchangeRate?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     baseAmount?: number;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { CalendarClock, Plus, Search, Eye, RotateCcw, TrendingDown, Clock, Trash2, ChevronLeft } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -6,7 +6,8 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { recurringExpensesService, suppliersService } from '../../services/compras.service';
-import type { RecurringExpense, Supplier } from '../../types';
+import { accountsService } from '../../services/finanzas.service';
+import type { RecurringExpense, Supplier, Account } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
@@ -31,6 +32,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
   const { exchangeRate: globalRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<RecurringExpense> | null>(null);
@@ -40,20 +42,25 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
       const list = Array.isArray(res) ? res : (res as any).data || [];
       setSuppliers(list);
     }).catch();
+
+    accountsService.getAll().then(res => {
+      const list = Array.isArray(res) ? res : (res as any).data || [];
+      setAccounts(list);
+    }).catch();
   }, []);
 
   useEffect(() => {
     if (editingId) {
       if (editingId === 'NEW') {
          setLocalDoc({
-           accountId: 'default', // Ideally comes from real account list
+           accountId: '',
            description: '',
-           frequency: 'MONTHLY',
+           frequency: 'monthly',
            startDate: new Date().toISOString(),
            amount: 0,
            currency: 'NIO',
            exchangeRate: globalRate,
-           status: 'ACTIVE',
+           status: 'active',
            category: 'OPERACIONAL'
          });
       } else {
@@ -87,17 +94,24 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
   const handleSaveDoc = async () => {
     if (!localDoc?.description) return toast.error('La descripción es obligatoria');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
+    if (!localDoc?.accountId) return toast.error('Debe seleccionar una cuenta contable');
     
+    // Clean data
+    const cleanedDoc = {
+      ...localDoc,
+      amount: Number(localDoc.amount),
+      exchangeRate: Number(localDoc.exchangeRate),
+      baseAmount: Number(localDoc.baseAmount),
+    };
+    delete (cleanedDoc as any).account;
+    delete (cleanedDoc as any).supplier;
+
     try {
       if (editingId === 'NEW') {
-        const payload = {
-            ...localDoc, 
-            accountId: localDoc.accountId || 'default', // Fallback
-        } as any;
-        await recurringExpensesService.create(payload);
+        await recurringExpensesService.create(cleanedDoc as any);
         toast.success('Gasto recurrente configurado');
       } else {
-        await recurringExpensesService.update(editingId!, localDoc as any);
+        await recurringExpensesService.update(editingId!, cleanedDoc as any);
         toast.success('Gasto recurrente actualizado');
       }
       setEditingId(null);
@@ -158,6 +172,15 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
                     placeholder="Asociar a un proveedor..."
                   />
                 </div>
+                <div className="md:col-span-2">
+                  <p className="text-[10px] text-muted-foreground mb-1 font-black uppercase text-primary">Cuenta Contable (Egreso)</p>
+                  <Combobox 
+                    options={accounts.filter(a => a.type?.toLowerCase() === 'expense' || a.type?.toLowerCase() === 'asset').map(a => ({ label: `${a.code} - ${a.name}`, value: a.id, description: a.type }))}
+                    value={localDoc.accountId || ''}
+                    onChange={(val) => setLocalDoc({ ...localDoc, accountId: val })}
+                    placeholder="Seleccionar Cuenta de Gasto..."
+                  />
+                </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha de Inicio</p>
                   <Input type="date" value={localDoc.startDate ? new Date(localDoc.startDate).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, startDate: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
@@ -174,7 +197,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
                   <p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
                   <select 
                     value={localDoc.frequency || 'MONTHLY'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, frequency: e.target.value })}
+                    onChange={(e) => setLocalDoc({ ...localDoc, frequency: e.target.value as RecurringExpense['frequency'] })}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase text-primary"
                   >
                     {freqOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -203,7 +226,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
                         <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
                         <select 
                           value={localDoc.currency || 'NIO'} 
-                          onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value, exchangeRate: globalRate })}
+                          onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
                           className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
                         >
                           <option value="NIO">NIO</option>

@@ -53,6 +53,7 @@ export class FinancialsService {
   async findAllExpenses(clientTenantId: string) {
     return this.prisma.expense.findMany({
       where: { clientTenantId },
+      include: { account: true, supplier: true } as any,
       orderBy: { date: 'desc' },
     });
   }
@@ -73,6 +74,7 @@ export class FinancialsService {
   async findAllRecurringExpenses(clientTenantId: string) {
     return this.prisma.recurringExpense.findMany({
       where: { clientTenantId },
+      include: { account: true, supplier: true } as any,
       orderBy: { createdAt: 'desc' },
     });
   }

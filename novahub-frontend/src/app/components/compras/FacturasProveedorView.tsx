@@ -17,11 +17,11 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 interface Props { data: SupplierInvoice[]; loading: boolean; onRefresh: () => void; }
 
 const statusOpts = [
-  { label: 'Borrador',   value: 'DRAFT',     color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Abierta',    value: 'OPEN',      color: 'bg-blue-500/10 text-blue-500' },
-  { label: 'Pagada',     value: 'PAID',      color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Vencida',    value: 'OVERDUE',   color: 'bg-rose-500/10 text-rose-500' },
-  { label: 'Anulada',    value: 'VOIDED',    color: 'bg-muted/30 text-muted-foreground/50' },
+  { label: 'Pendiente',   value: 'PENDING',  color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Parcial',     value: 'PARTIAL',  color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Pagada',      value: 'PAID',     color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Vencida',     value: 'OVERDUE',  color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Reembolsada', value: 'REFUNDED', color: 'bg-muted/30 text-muted-foreground/50' },
 ];
 
 export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
@@ -48,7 +48,7 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
            dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
            currency: 'NIO',
            exchangeRate: globalRate,
-           status: 'DRAFT',
+           status: 'PENDING',
            paymentStatus: 'UNPAID',
            items: [],
            subtotal: 0,
@@ -203,7 +203,7 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <select 
-                    value={localDoc.status || 'DRAFT'} 
+                    value={localDoc.status || 'PENDING'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                     className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
                   >
@@ -305,7 +305,7 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
 
   const kpis = [
      { title: 'Facturas',        value: data.length,                   icon: FileStack, color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
-     { title: 'Por Pagar (NIO)', value: `C$ ${data.filter(b => (b.status||'').toUpperCase() === 'OPEN').reduce((a,b) => a + (b.baseTotal || (b.currency === 'USD' ? b.total * globalRate : b.total)), 0).toLocaleString()}`, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+     { title: 'Por Pagar (NIO)', value: `C$ ${data.filter(b => ['PENDING', 'PARTIAL'].includes((b.status||'').toUpperCase())).reduce((a,b) => a + (b.baseTotal || (b.currency === 'USD' ? b.total * globalRate : b.total)), 0).toLocaleString()}`, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
      { title: 'Vencidas',        value: data.filter(b => new Date(b.dueDate).getTime() < Date.now() && (b.status||'').toUpperCase() !== 'PAID').length, icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10' },
      { title: 'Pagadas (Mes)',   value: data.filter(b => (b.status||'').toUpperCase() === 'PAID').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   ];

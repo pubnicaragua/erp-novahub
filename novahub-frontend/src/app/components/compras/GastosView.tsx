@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Wallet, Plus, Search, Eye, Trash2, TrendingDown, Clock, Tag, ChevronLeft
 } from 'lucide-react';
@@ -8,7 +8,8 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { expensesService, suppliersService } from '../../services/compras.service';
-import type { Expense, Supplier } from '../../types';
+import { accountsService } from '../../services/finanzas.service';
+import type { Expense, Supplier, Account } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
@@ -27,6 +28,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
   const { exchangeRate: globalRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<Expense> | null>(null);
@@ -35,6 +37,11 @@ export function GastosView({ data, loading, onRefresh }: Props) {
     suppliersService.getAll().then(res => {
       const list = Array.isArray(res) ? res : (res as any).data || [];
       setSuppliers(list);
+    }).catch();
+
+    accountsService.getAll().then(res => {
+      const list = Array.isArray(res) ? res : (res as any).data || [];
+      setAccounts(list);
     }).catch();
   }, []);
 
@@ -49,7 +56,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
            category: 'OPERACIONAL',
            description: '',
            status: 'PENDING',
-           accountId: 'dummy-account-id',
+           accountId: '',
          });
       } else {
          const found = data.find(x => x.id === editingId);
@@ -83,17 +90,27 @@ export function GastosView({ data, loading, onRefresh }: Props) {
     try { await expensesService.update(id as string, updates); toast.success('Gasto actualizado'); onRefresh(); }
     catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
   };
-
   const handleSaveDoc = async () => {
     if (!localDoc?.description) return toast.error('La descripción es obligatoria');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
+    if (!localDoc?.accountId) return toast.error('Debe seleccionar una cuenta contable');
     
+    // Clean data (ensure numbers and remove nested objects)
+    const cleanedDoc = {
+      ...localDoc,
+      amount: Number(localDoc.amount),
+      exchangeRate: Number(localDoc.exchangeRate),
+      baseAmount: Number(localDoc.baseAmount),
+    };
+    delete (cleanedDoc as any).account;
+    delete (cleanedDoc as any).supplier;
+
     try {
       if (editingId === 'NEW') {
-        await expensesService.create(localDoc as any);
+        await expensesService.create(cleanedDoc as any);
         toast.success('Gasto registrado');
       } else {
-        await expensesService.update(editingId!, localDoc as any);
+        await expensesService.update(editingId!, cleanedDoc as any);
         toast.success('Gasto guardado');
       }
       setEditingId(null);
@@ -165,6 +182,15 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                     <Input type="date" value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
                   </div>
                   <div className="col-span-2">
+                    <p className="text-[10px] text-muted-foreground mb-1 font-black uppercase text-primary">Cuenta Contable (Egreso)</p>
+                    <Combobox 
+                      options={accounts.filter(a => a.type?.toLowerCase() === 'expense' || a.type?.toLowerCase() === 'asset').map(a => ({ label: `${a.code} - ${a.name}`, value: a.id, description: a.type }))}
+                      value={localDoc.accountId || ''}
+                      onChange={(val) => setLocalDoc({ ...localDoc, accountId: val })}
+                      placeholder="Seleccionar Cuenta de Gasto..."
+                    />
+                  </div>
+                  <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Proveedor (Opcional)</p>
                     <Combobox 
                       options={suppliers.map(c => ({ label: c.name, value: c.id, description: c.phone || 'Sin teléfono' }))}
@@ -201,7 +227,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                       <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
                       <select 
                         value={localDoc.currency || 'NIO'} 
-                        onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value, exchangeRate: globalRate })}
+                        onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
                         className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
                       >
                         <option value="NIO">NIO</option>

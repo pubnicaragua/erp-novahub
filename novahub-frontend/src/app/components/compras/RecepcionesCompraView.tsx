@@ -16,9 +16,10 @@ import { cn } from '../ui/utils';
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; }
 
 const statusOpts = [
-  { label: 'Borrador',  value: 'DRAFT',     color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Recibido',  value: 'RECEIVED',  color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Anulado',   value: 'VOIDED',    color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Pendiente',  value: 'PENDING',  color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Parcial',    value: 'PARTIAL',  color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Recibido',   value: 'RECEIVED', color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Rechazado',  value: 'REJECTED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
 export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
@@ -34,7 +35,10 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
       const list = Array.isArray(res) ? res : (res as any).data || [];
       setSuppliers(list);
     }).catch();
-    purchaseOrdersService.getAll().then(res => setOrders(res.data || [])).catch();
+    purchaseOrdersService.getAll().then(res => {
+      const list = Array.isArray(res) ? res : (res as any).data || [];
+      setOrders(list);
+    }).catch();
   }, []);
 
   useEffect(() => {
@@ -44,7 +48,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
            supplierId: '',
            purchaseOrderId: '',
            date: new Date().toISOString(),
-           status: 'DRAFT',
+           status: 'PENDING' as any,
            items: [],
          });
       } else {
@@ -75,19 +79,20 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PurchaseReceipt>) => {
-    try { await purchaseReceiptsService.update(id as string, updates); toast.success('Recepción actualizada'); onRefresh(); }
+    try { await (purchaseReceiptsService as any).update(id as string, updates); toast.success('Recepción actualizada'); onRefresh(); }
     catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
   };
 
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
+    if (!localDoc?.purchaseOrderId) return toast.error('Debe seleccionar una orden de compra');
     
     try {
       if (editingId === 'NEW') {
         await purchaseReceiptsService.create(localDoc as any);
         toast.success('Recepción creada');
       } else {
-        await purchaseReceiptsService.update(editingId!, localDoc as any);
+        await (purchaseReceiptsService as any).update(editingId!, localDoc as any);
         toast.success('Recepción guardada');
       }
       setEditingId(null);
@@ -161,7 +166,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
                   />
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Orden de Compra (Opcional)</p>
+                  <p className="text-[10px] text-muted-foreground mb-1">Orden de Compra</p>
                   <Combobox 
                     options={currentAvailableOrders.map(c => ({ label: `${c.number} (Total: ${c.total})`, value: c.id }))}
                     value={localDoc.purchaseOrderId || ''}
@@ -185,7 +190,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <select 
-                    value={localDoc.status || 'DRAFT'} 
+                    value={localDoc.status || 'PENDING'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                     className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
                   >

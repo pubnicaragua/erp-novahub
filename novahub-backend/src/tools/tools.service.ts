@@ -21,24 +21,27 @@ export class ToolsService {
   async getExchangeRate(clientTenantId: string) {
     const tenant: any = await this.prisma.clientTenant.findUnique({
       where: { id: clientTenantId },
-      select: { exchangeRateAuto: true, baseCurrency: true } as any
+      include: { partner: true }
     });
 
     const rate = await this.exchangeRateService.getExchangeRate(clientTenantId);
     
     return {
       rate,
-      auto: tenant?.exchangeRateAuto ?? true,
-      baseCurrency: tenant?.baseCurrency ?? 'NIO'
+      auto: tenant?.partner?.exchangeRateAuto ?? true,
+      baseCurrency: tenant?.partner?.baseCurrency ?? 'NIO'
     };
   }
 
   async updateExchangeRate(clientTenantId: string, data: { rate?: number; auto?: boolean }) {
     if (data.auto !== undefined) {
-      await this.prisma.clientTenant.update({
-        where: { id: clientTenantId },
-        data: { exchangeRateAuto: data.auto } as any
-      });
+      const tenant = await this.prisma.clientTenant.findUnique({ where: { id: clientTenantId }});
+      if (tenant && tenant.partnerId) {
+        await this.prisma.partner.update({
+          where: { id: tenant.partnerId },
+          data: { exchangeRateAuto: data.auto }
+        });
+      }
     }
 
     if (data.rate !== undefined) {

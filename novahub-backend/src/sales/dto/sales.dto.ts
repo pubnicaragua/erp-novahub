@@ -19,31 +19,36 @@ export class CreateEstimateItemDto {
     description: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     quantity: number;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     unitPrice: number;
 
     @ApiProperty({ required: false, default: 0 })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     taxRate?: number;
 
     @ApiProperty({ required: false, default: 0 })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     discount?: number;
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     total?: number;
 }
 
@@ -85,36 +90,42 @@ export class CreateEstimateDto {
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     subtotal?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     taxAmount?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     discountAmount?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     total?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     exchangeRate?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     baseTotal?: number;
@@ -139,31 +150,36 @@ export class CreateSalesOrderItemDto {
     description: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     quantity: number;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     unitPrice: number;
 
     @ApiProperty({ required: false, default: 0 })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     taxRate?: number;
 
     @ApiProperty({ required: false, default: 0 })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     discount?: number;
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     total?: number;
 }
 
@@ -200,36 +216,42 @@ export class CreateSalesOrderDto {
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     subtotal?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     taxAmount?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     discountAmount?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     total?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     exchangeRate?: number;
 
     @ApiProperty({ required: false })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     baseTotal?: number;
@@ -259,6 +281,7 @@ export class CreatePaymentDto {
     number?: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     amount: number;
@@ -278,15 +301,17 @@ export class CreatePaymentDto {
     currency?: string;
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     exchangeRate?: number;
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     baseAmount?: number;
 
     @ApiProperty({ required: false })
@@ -314,25 +339,29 @@ export class CreateRecurringInvoiceItemDto {
     description: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     quantity: number;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     unitPrice: number;
 
     @ApiProperty({ required: false, default: 0 })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     taxRate?: number;
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     total?: number;
 }
 
@@ -369,21 +398,24 @@ export class CreateRecurringInvoiceDto {
     items?: CreateRecurringInvoiceItemDto[];
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     subtotal?: number;
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     taxAmount?: number;
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     total?: number;
 
     @ApiProperty({ required: false, default: 'NIO' })
@@ -392,15 +424,17 @@ export class CreateRecurringInvoiceDto {
     currency?: string;
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     exchangeRate?: number;
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     baseTotal?: number;
 
     @ApiProperty({ required: false })
@@ -423,19 +457,22 @@ export class CreateSalesReturnItemDto {
     description: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     quantity: number;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     unitPrice: number;
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     total?: number;
 }
 
@@ -472,9 +509,10 @@ export class CreateSalesReturnDto {
     items?: CreateSalesReturnItemDto[];
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     total?: number;
 
     @ApiProperty({ required: false })
@@ -492,19 +530,22 @@ export class CreateCreditNoteItemDto {
     description: string;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     quantity: number;
 
     @ApiProperty()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     unitPrice: number;
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     total?: number;
 }
 
@@ -546,9 +587,10 @@ export class CreateCreditNoteDto {
     items?: CreateCreditNoteItemDto[];
 
     @ApiProperty({ required: false })
+    @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
-    @IsOptional()
     total?: number;
 
     @ApiProperty({ required: false })

@@ -17,6 +17,50 @@ export class PurchasesService {
     private exchangeRateService: ExchangeRateService
   ) {}
 
+  /** Prepara ítems para Órdenes de Compra (con productId, taxRate) */
+  private prepareOrderItems(items: any[]) {
+    return items.map(item => ({
+      productId: item.productId || null,
+      description: (item.description || '').trim(),
+      quantity: Number(item.quantity || 1),
+      unitPrice: Number(item.unitPrice || 0),
+      taxRate: Number(item.taxRate || 0),
+      total: Number(item.total || (Number(item.quantity || 1) * Number(item.unitPrice || 0))),
+    }));
+  }
+
+  /** Prepara ítems para Facturas de Proveedor (sin productId, con taxRate) */
+  private prepareInvoiceItems(items: any[]) {
+    return items.map(item => ({
+      description: (item.description || '').trim(),
+      quantity: Number(item.quantity || 1),
+      unitPrice: Number(item.unitPrice || 0),
+      taxRate: Number(item.taxRate || 0),
+      total: Number(item.total || (Number(item.quantity || 1) * Number(item.unitPrice || 0))),
+    }));
+  }
+
+  /** Prepara ítems para Créditos y Recurrentes (sin productId, sin taxRate) */
+  private prepareCreditItems(items: any[]) {
+    return items.map(item => ({
+      description: (item.description || '').trim(),
+      quantity: Number(item.quantity || 1),
+      unitPrice: Number(item.unitPrice || 0),
+      total: Number(item.total || (Number(item.quantity || 1) * Number(item.unitPrice || 0))),
+    }));
+  }
+
+
+  /** Prepara ítems para recibos (cantidad ordenada vs recibida) */
+  private prepareReceiptItemsCreate(items: any[]) {
+    return items.map(item => ({
+      productId: item.productId || null,
+      description: (item.description || '').trim(),
+      quantityOrdered: Number(item.quantityOrdered || 0),
+      quantityReceived: Number(item.quantityReceived || 0),
+    }));
+  }
+
   private async getDocumentCurrencyData(data: any, clientTenantId: string) {
     const currency = data.currency || 'NIO';
     const exchangeRate = data.exchangeRate || await this.exchangeRateService.getExchangeRate(clientTenantId);
@@ -78,9 +122,9 @@ export class PurchasesService {
     const { items, ...rest } = data;
     const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(data, clientTenantId);
 
-    let calculatedSubtotal = rest.subtotal || 0;
-    let calculatedTaxAmount = rest.taxAmount || 0;
-    let calculatedTotal = rest.total || 0;
+    let calculatedSubtotal = Number(rest.subtotal || 0);
+    let calculatedTaxAmount = Number(rest.taxAmount || 0);
+    let calculatedTotal = Number(rest.total || 0);
 
     if (!calculatedTotal && items && items.length > 0) {
       calculatedSubtotal = items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
@@ -95,17 +139,21 @@ export class PurchasesService {
 
     return this.prisma.purchaseOrder.create({
       data: {
-        ...rest,
         number: rest.number || genCode('PO'),
+        supplierId: rest.supplierId,
+        date: rest.date ? new Date(rest.date) : new Date(),
+        expectedDelivery: rest.expectedDelivery ? new Date(rest.expectedDelivery) : null,
         subtotal: calculatedSubtotal,
         taxAmount: calculatedTaxAmount,
         total: calculatedTotal,
-        status: toEnum(rest.status || 'DRAFT'),
-        clientTenantId,
         currency,
-        exchangeRate,
-        baseTotal: finalBaseTotal,
-        ...(items?.length > 0 && { items: { create: items } }),
+        exchangeRate: Number(exchangeRate),
+        baseTotal: Number(finalBaseTotal),
+        status: toEnum(rest.status || 'DRAFT') as any,
+        requestedBy: rest.requestedBy || 'Admin',
+        notes: rest.notes,
+        clientTenantId,
+        ...(items?.length > 0 && { items: { create: this.prepareOrderItems(items) } }),
       },
       include: { items: true, supplier: true },
     });
@@ -144,17 +192,19 @@ export class PurchasesService {
     return this.prisma.$transaction(async (prisma) => {
       const receipt = await prisma.purchaseReceipt.create({
         data: {
-          ...rest,
           number: rest.number || genCode('REC'),
+          purchaseOrderId: rest.purchaseOrderId,
+          supplierId: rest.supplierId,
+          date: rest.date ? new Date(rest.date) : new Date(),
+          notes: rest.notes,
           clientTenantId,
-          status: toEnum(rest.status || 'RECEIVED'),
-          ...(items?.length > 0 && { items: { create: items } }),
+          status: toEnum(rest.status || 'RECEIVED') as any,
+          ...(items?.length > 0 && { items: { create: this.prepareReceiptItemsCreate(items) } }),
         },
         include: { items: true },
       });
 
       if (rest.purchaseOrderId) {
-        // Optional: Update purchase order status to received if needed
         await prisma.purchaseOrder.update({
           where: { id: rest.purchaseOrderId },
           data: { status: 'RECEIVED' }
@@ -186,9 +236,9 @@ export class PurchasesService {
     const { items, ...rest } = data;
     const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(data, clientTenantId);
 
-    let calculatedSubtotal = rest.subtotal || 0;
-    let calculatedTaxAmount = rest.taxAmount || 0;
-    let calculatedTotal = rest.total || 0;
+    let calculatedSubtotal = Number(rest.subtotal || 0);
+    let calculatedTaxAmount = Number(rest.taxAmount || 0);
+    let calculatedTotal = Number(rest.total || 0);
 
     if (!calculatedTotal && items && items.length > 0) {
       calculatedSubtotal = items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
@@ -204,19 +254,21 @@ export class PurchasesService {
     return this.prisma.$transaction(async (prisma) => {
       const invoice = await prisma.supplierInvoice.create({
         data: {
-          ...rest,
           number: rest.number || genCode('FP'),
+          supplierId: rest.supplierId,
+          purchaseOrderId: rest.purchaseOrderId || null,
+          date: rest.date ? new Date(rest.date) : new Date(),
+          dueDate: rest.dueDate ? new Date(rest.dueDate) : new Date(),
           subtotal: calculatedSubtotal,
           taxAmount: calculatedTaxAmount,
           total: calculatedTotal,
           balance: calculatedTotal,
-          status: toEnum(rest.status || 'DRAFT'),
-          paymentStatus: toEnum(rest.paymentStatus || 'PENDING'),
+          status: toEnum(rest.status || 'PENDING') as any,
           clientTenantId,
           currency,
-          exchangeRate,
-          baseTotal: finalBaseTotal,
-          ...(items?.length > 0 && { items: { create: items } }),
+          exchangeRate: Number(exchangeRate),
+          baseTotal: Number(finalBaseTotal),
+          ...(items?.length > 0 && { items: { create: this.prepareInvoiceItems(items) } }),
         },
         include: { items: true, supplier: true },
       });
@@ -267,7 +319,7 @@ export class PurchasesService {
     const { items, ...rest } = data;
     const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(rest, clientTenantId);
 
-    let calculatedTotal = rest.total || 0;
+    let calculatedTotal = Number(rest.total || 0);
     if (!calculatedTotal && items && items.length > 0) {
       calculatedTotal = items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
     }
@@ -279,14 +331,18 @@ export class PurchasesService {
 
     return this.prisma.recurringSupplierInvoice.create({
       data: { 
-        ...rest,
+        supplierId: rest.supplierId,
+        frequency: toEnum(rest.frequency || 'MONTHLY') as any,
+        startDate: rest.startDate ? new Date(rest.startDate) : new Date(),
+        endDate: rest.endDate ? new Date(rest.endDate) : null,
+        nextInvoiceDate: rest.nextInvoiceDate ? new Date(rest.nextInvoiceDate) : new Date(),
         total: calculatedTotal,
         clientTenantId,
         currency,
-        exchangeRate,
-        baseTotal: finalBaseTotal,
-        status: toEnum(rest.status || 'ACTIVE'),
-        ...(items?.length > 0 && { items: { create: items } }),
+        exchangeRate: Number(exchangeRate),
+        baseTotal: Number(finalBaseTotal),
+        status: toEnum(rest.status || 'ACTIVE') as any,
+        ...(items?.length > 0 && { items: { create: this.prepareCreditItems(items) } }),
       },
       include: { items: true, supplier: true }
     });
@@ -315,20 +371,25 @@ export class PurchasesService {
     return this.prisma.$transaction(async (prisma) => {
       const payment = await prisma.paymentMade.create({
         data: {
-          ...data,
           number: data.number || genCode('PM'),
-          method: toEnum(data.method || 'CASH'),
-          clientTenantId,
+          supplierId: data.supplierId,
+          supplierInvoiceId: data.supplierInvoiceId || null,
+          date: data.date ? new Date(data.date) : new Date(),
+          amount: Number(data.amount),
           currency,
-          exchangeRate,
-          baseAmount,
+          exchangeRate: Number(exchangeRate),
+          baseAmount: Number(baseAmount),
+          method: toEnum(data.method || 'CASH') as any,
+          reference: data.reference,
+          notes: data.notes,
+          clientTenantId,
         },
       });
 
       // Decrease supplier balance
       await prisma.supplier.update({
         where: { id: data.supplierId },
-        data: { balance: { decrement: data.amount } }
+        data: { balance: { decrement: Number(data.amount) } }
       });
 
       // If supplierInvoiceId is provided, decrease invoice balance
@@ -340,7 +401,7 @@ export class PurchasesService {
             where: { id: data.supplierInvoiceId },
             data: { 
               balance: Math.max(0, newBalance),
-              amountPaid: { increment: data.amount },
+              amountPaid: { increment: Number(data.amount) },
               status: newBalance <= 0 ? 'PAID' : 'PARTIAL'
             }
           });
@@ -394,7 +455,7 @@ export class PurchasesService {
   async createCredit(data: any, clientTenantId: string) {
     const { items, ...rest } = data;
 
-    let calculatedTotal = rest.total || 0;
+    let calculatedTotal = Number(rest.total || 0);
     if (!calculatedTotal && items && items.length > 0) {
       calculatedTotal = items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
     }
@@ -402,12 +463,15 @@ export class PurchasesService {
     return this.prisma.$transaction(async (prisma) => {
       const credit = await prisma.supplierCredit.create({
         data: {
-          ...rest,
-          total: calculatedTotal,
           number: rest.number || genCode('SC'),
-          status: toEnum(rest.status || 'DRAFT'),
+          supplierId: rest.supplierId,
+          supplierInvoiceId: rest.supplierInvoiceId || null,
+          date: rest.date ? new Date(rest.date) : new Date(),
+          total: calculatedTotal,
+          status: toEnum(rest.status || 'DRAFT') as any,
+          reason: rest.reason || '',
           clientTenantId,
-          ...(items?.length > 0 && { items: { create: items } }),
+          ...(items?.length > 0 && { items: { create: this.prepareCreditItems(items) } }),
         },
         include: { items: true, supplier: true }
       });
@@ -453,15 +517,36 @@ export class PurchasesService {
   async createExpense(data: any, clientTenantId: string) {
     const { currency, exchangeRate, baseTotal: baseAmount } = await this.getDocumentCurrencyData(data, clientTenantId);
 
+    // Validate accountId
+    let accountId = data.accountId;
+    if (accountId) {
+      const account = await this.prisma.account.findUnique({ where: { id: accountId } });
+      if (!account) {
+        const firstAccount = await this.prisma.account.findFirst({ where: { clientTenantId, type: 'EXPENSE' } });
+        accountId = firstAccount?.id || accountId;
+      }
+    } else {
+      const firstAccount = await this.prisma.account.findFirst({ where: { clientTenantId, type: 'EXPENSE' } });
+      accountId = firstAccount?.id;
+    }
+
+    if (!accountId) throw new Error('Se requiere una cuenta contable válida para registrar gastos.');
+
     return this.prisma.expense.create({ 
       data: { 
-        ...data, 
         number: data.number || genCode('EXP'),
-        status: toEnum(data.status || 'PENDING'),
-        clientTenantId,
+        accountId: accountId,
+        supplierId: data.supplierId || null,
+        date: data.date ? new Date(data.date) : new Date(),
+        amount: Number(data.amount),
         currency,
-        exchangeRate,
-        baseAmount,
+        exchangeRate: Number(exchangeRate),
+        baseAmount: Number(baseAmount),
+        category: data.category || 'OTROS',
+        description: data.description || '',
+        reference: data.reference,
+        status: toEnum(data.status || 'PENDING') as any,
+        clientTenantId,
       } 
     });
   }
@@ -488,12 +573,19 @@ export class PurchasesService {
 
     return this.prisma.recurringExpense.create({ 
       data: { 
-        ...data, 
-        clientTenantId,
+        accountId: data.accountId,
+        supplierId: data.supplierId || null,
+        frequency: toEnum(data.frequency || 'MONTHLY') as any,
+        startDate: data.startDate ? new Date(data.startDate) : new Date(),
+        endDate: data.endDate ? new Date(data.endDate) : null,
+        amount: Number(data.amount),
         currency,
-        exchangeRate,
-        baseAmount,
-        status: toEnum(data.status || 'ACTIVE'),
+        exchangeRate: Number(exchangeRate),
+        baseAmount: Number(baseAmount),
+        category: data.category || 'OTROS',
+        description: data.description || '',
+        status: toEnum(data.status || 'ACTIVE') as any,
+        clientTenantId,
       } 
     });
   }

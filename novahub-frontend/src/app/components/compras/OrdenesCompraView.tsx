@@ -18,7 +18,7 @@ interface Props { data: PurchaseOrder[]; loading: boolean; onRefresh: () => void
 
 const statusOpts = [
   { label: 'Borrador',   value: 'DRAFT',      color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Enviada',    value: 'SENT',       color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Pendiente',  value: 'PENDING',    color: 'bg-amber-500/10 text-amber-500' },
   { label: 'Aprobada',   value: 'APPROVED',   color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Recibida',   value: 'RECEIVED',   color: 'bg-purple-500/10 text-purple-500' },
   { label: 'Cancelada',  value: 'CANCELLED',  color: 'bg-rose-500/10 text-rose-500' },
@@ -210,7 +210,7 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
                   <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
                   <select 
                     value={localDoc.currency || 'NIO'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value })}
+                    onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any })}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
                   >
                     <option value="NIO">NIO (Cordobas)</option>
@@ -301,7 +301,7 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
 
   const kpis = [
     { title: 'Total Ordenes',   value: data.length,                                                                     icon: ClipboardList, color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Por Aprobar',     value: data.filter(o => (o.status||'').toUpperCase() === 'SENT').length,                 icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
+    { title: 'Por Aprobar',     value: data.filter(o => (o.status||'').toUpperCase() === 'PENDING').length,                 icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
     { title: 'Aprobadas',       value: data.filter(o => (o.status||'').toUpperCase() === 'APPROVED').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Monto Total',     value: `C$ ${data.reduce((a,o) => a + (o.baseTotal || (o.currency === 'USD' ? o.total * globalRate : o.total)), 0).toLocaleString()}`,             icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
   ];
