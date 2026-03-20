@@ -2,8 +2,15 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request }
 import { PurchasesService } from './purchases.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { CreateSupplierDto, UpdateSupplierDto, CreatePurchaseOrderDto, CreatePurchaseReceiptDto, CreateSupplierInvoiceDto } from './dto/purchases.dto';
-
+import { 
+  CreateSupplierDto, UpdateSupplierDto, 
+  CreatePurchaseOrderDto, UpdatePurchaseOrderDto, 
+  CreatePurchaseReceiptDto, 
+  CreateSupplierInvoiceDto, UpdateSupplierInvoiceDto,
+  CreateRecurringSupplierInvoiceDto, CreatePaymentMadeDto,
+  CreateSupplierCreditDto, CreateExpenseDto, UpdateExpenseDto,
+  CreateRecurringExpenseDto
+} from './dto/purchases.dto';
 @ApiTags('purchases')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -51,8 +58,20 @@ export class PurchasesController {
 
   @Patch('orders/:id')
   @ApiOperation({ summary: 'Actualizar orden de compra' })
-  updateOrder(@Param('id') id: string, @Body() data: any, @Request() req) {
+  updateOrder(@Param('id') id: string, @Body() data: UpdatePurchaseOrderDto, @Request() req) {
     return this.purchasesService.updateOrder(id, data, req.user.clientTenantId);
+  }
+
+  @Get('orders/:id')
+  @ApiOperation({ summary: 'Obtener orden de compra por ID' })
+  findOrderById(@Param('id') id: string, @Request() req) {
+    return this.purchasesService.findOrderById(id, req.user.clientTenantId);
+  }
+
+  @Delete('orders/:id')
+  @ApiOperation({ summary: 'Eliminar orden de compra' })
+  removeOrder(@Param('id') id: string, @Request() req) {
+    return this.purchasesService.removeOrder(id, req.user.clientTenantId);
   }
 
   // ─── RECEPCIONES DE COMPRA ───────────────────────────────────────────────
@@ -68,6 +87,18 @@ export class PurchasesController {
     return this.purchasesService.findAllReceipts(req.user.clientTenantId);
   }
 
+  @Get('receipts/:id')
+  @ApiOperation({ summary: 'Obtener recepción de compra por ID' })
+  findReceiptById(@Param('id') id: string, @Request() req) {
+    return this.purchasesService.findReceiptById(id, req.user.clientTenantId);
+  }
+
+  @Delete('receipts/:id')
+  @ApiOperation({ summary: 'Eliminar recepción de compra' })
+  removeReceipt(@Param('id') id: string, @Request() req) {
+    return this.purchasesService.removeReceipt(id, req.user.clientTenantId);
+  }
+
   // ─── FACTURAS DE PROVEEDOR ───────────────────────────────────────────────
   @Post('invoices')
   @ApiOperation({ summary: 'Registrar factura de proveedor' })
@@ -81,10 +112,28 @@ export class PurchasesController {
     return this.purchasesService.findAllInvoices(req.user.clientTenantId);
   }
 
+  @Get('invoices/:id')
+  @ApiOperation({ summary: 'Obtener factura de proveedor por ID' })
+  findInvoiceById(@Param('id') id: string, @Request() req) {
+    return this.purchasesService.findInvoiceById(id, req.user.clientTenantId);
+  }
+
+  @Patch('invoices/:id')
+  @ApiOperation({ summary: 'Actualizar factura de proveedor' })
+  updateInvoice(@Param('id') id: string, @Body() data: UpdateSupplierInvoiceDto, @Request() req) {
+    return this.purchasesService.updateInvoice(id, data, req.user.clientTenantId);
+  }
+
+  @Delete('invoices/:id')
+  @ApiOperation({ summary: 'Eliminar factura de proveedor' })
+  removeInvoice(@Param('id') id: string, @Request() req) {
+    return this.purchasesService.removeInvoice(id, req.user.clientTenantId);
+  }
+
   // ─── FACTURAS RECURRENTES PROVEEDOR ──────────────────────────────────────
   @Post('recurring-invoices')
   @ApiOperation({ summary: 'Crear factura recurrente de proveedor' })
-  createRecurringInvoice(@Body() data: any, @Request() req) {
+  createRecurringInvoice(@Body() data: CreateRecurringSupplierInvoiceDto, @Request() req) {
     return this.purchasesService.createRecurringInvoice(data, req.user.clientTenantId);
   }
 
@@ -94,10 +143,22 @@ export class PurchasesController {
     return this.purchasesService.findAllRecurringInvoices(req.user.clientTenantId);
   }
 
+  @Patch('recurring-invoices/:id')
+  @ApiOperation({ summary: 'Actualizar factura recurrente' })
+  updateRecurringInvoice(@Param('id') id: string, @Body() data: UpdateRecurringSupplierInvoiceDto, @Request() req) {
+    return this.purchasesService.updateRecurringInvoice(id, data, req.user.clientTenantId);
+  }
+
+  @Delete('recurring-invoices/:id')
+  @ApiOperation({ summary: 'Eliminar factura recurrente' })
+  removeRecurringInvoice(@Param('id') id: string, @Request() req) {
+    return this.purchasesService.removeRecurringInvoice(id, req.user.clientTenantId);
+  }
+
   // ─── PAGOS REALIZADOS ────────────────────────────────────────────────────
   @Post('payments')
   @ApiOperation({ summary: 'Registrar pago a proveedor' })
-  createPayment(@Body() data: any, @Request() req) {
+  createPayment(@Body() data: CreatePaymentMadeDto, @Request() req) {
     return this.purchasesService.createPayment(data, req.user.clientTenantId);
   }
 
@@ -107,10 +168,22 @@ export class PurchasesController {
     return this.purchasesService.findAllPayments(req.user.clientTenantId);
   }
 
+  @Patch('payments/:id')
+  @ApiOperation({ summary: 'Actualizar pago' })
+  updatePayment(@Param('id') id: string, @Body() data: UpdatePaymentMadeDto, @Request() req) {
+    return this.purchasesService.updatePayment(id, data, req.user.clientTenantId);
+  }
+
+  @Delete('payments/:id')
+  @ApiOperation({ summary: 'Eliminar pago' })
+  removePayment(@Param('id') id: string, @Request() req) {
+    return this.purchasesService.removePayment(id, req.user.clientTenantId);
+  }
+
   // ─── CRÉDITOS DE PROVEEDOR ───────────────────────────────────────────────
   @Post('credits')
   @ApiOperation({ summary: 'Registrar crédito de proveedor' })
-  createCredit(@Body() data: any, @Request() req) {
+  createCredit(@Body() data: CreateSupplierCreditDto, @Request() req) {
     return this.purchasesService.createCredit(data, req.user.clientTenantId);
   }
 
@@ -120,10 +193,22 @@ export class PurchasesController {
     return this.purchasesService.findAllCredits(req.user.clientTenantId);
   }
 
+  @Patch('credits/:id')
+  @ApiOperation({ summary: 'Actualizar crédito' })
+  updateCredit(@Param('id') id: string, @Body() data: UpdateSupplierCreditDto, @Request() req) {
+    return this.purchasesService.updateCredit(id, data, req.user.clientTenantId);
+  }
+
+  @Delete('credits/:id')
+  @ApiOperation({ summary: 'Eliminar crédito' })
+  removeCredit(@Param('id') id: string, @Request() req) {
+    return this.purchasesService.removeCredit(id, req.user.clientTenantId);
+  }
+
   // ─── GASTOS ─────────────────────────────────────────────────────────────
   @Post('expenses')
   @ApiOperation({ summary: 'Registrar gasto' })
-  createExpense(@Body() data: any, @Request() req) {
+  createExpense(@Body() data: CreateExpenseDto, @Request() req) {
     return this.purchasesService.createExpense(data, req.user.clientTenantId);
   }
 
@@ -135,7 +220,7 @@ export class PurchasesController {
 
   @Patch('expenses/:id')
   @ApiOperation({ summary: 'Actualizar gasto' })
-  updateExpense(@Param('id') id: string, @Body() data: any, @Request() req) {
+  updateExpense(@Param('id') id: string, @Body() data: UpdateExpenseDto, @Request() req) {
     return this.purchasesService.updateExpense(id, data, req.user.clientTenantId);
   }
 
@@ -148,7 +233,7 @@ export class PurchasesController {
   // ─── GASTOS RECURRENTES ──────────────────────────────────────────────────
   @Post('recurring-expenses')
   @ApiOperation({ summary: 'Crear gasto recurrente' })
-  createRecurringExpense(@Body() data: any, @Request() req) {
+  createRecurringExpense(@Body() data: CreateRecurringExpenseDto, @Request() req) {
     return this.purchasesService.createRecurringExpense(data, req.user.clientTenantId);
   }
 
@@ -156,5 +241,17 @@ export class PurchasesController {
   @ApiOperation({ summary: 'Listar gastos recurrentes' })
   findAllRecurringExpenses(@Request() req) {
     return this.purchasesService.findAllRecurringExpenses(req.user.clientTenantId);
+  }
+
+  @Patch('recurring-expenses/:id')
+  @ApiOperation({ summary: 'Actualizar gasto recurrente' })
+  updateRecurringExpense(@Param('id') id: string, @Body() data: UpdateRecurringExpenseDto, @Request() req) {
+    return this.purchasesService.updateRecurringExpense(id, data, req.user.clientTenantId);
+  }
+
+  @Delete('recurring-expenses/:id')
+  @ApiOperation({ summary: 'Eliminar gasto recurrente' })
+  removeRecurringExpense(@Param('id') id: string, @Request() req) {
+    return this.purchasesService.removeRecurringExpense(id, req.user.clientTenantId);
   }
 }

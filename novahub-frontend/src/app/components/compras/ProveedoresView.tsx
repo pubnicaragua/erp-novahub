@@ -43,8 +43,18 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Supplier>) => {
-    try { await suppliersService.update(id as string, updates); toast.success('Proveedor actualizado'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); }
+    try { 
+      const sanitized: any = { ...updates };
+      if (sanitized.email === '') sanitized.email = undefined;
+      
+      await suppliersService.update(id as string, sanitized); 
+      toast.success('Proveedor actualizado'); 
+      onRefresh(); 
+    }
+    catch (e: any) { 
+      toast.error('Error al actualizar: ' + (e.response?.data?.message || e.message)); 
+      throw e; // To trigger rollback in EditableDataTable
+    }
   };
 
   const handleAdd = async () => {
@@ -95,7 +105,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => toast.info(`${row.name} | ${row.email||'N/A'} | Saldo: $${Number(row.balance||0).toLocaleString()}`)}><Eye className="size-4" /></Button>
+              <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => toast.info(`${row.name} | Contacto: ${row.contactName||'N/A'} | ${row.email||'N/A'} | Saldo: $${Number(row.balance||0).toLocaleString()}`)}><Eye className="size-4" /></Button>
               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { await suppliersService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
             </div>
           )}

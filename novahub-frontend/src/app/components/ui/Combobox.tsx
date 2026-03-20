@@ -20,7 +20,7 @@ import {
 } from "./popover"
 
 interface ComboboxProps {
-  options: { label: string; value: string }[]
+  options: { label: string; value: string; description?: string }[]
   value?: string
   onChange: (value: string) => void
   placeholder?: string
@@ -62,7 +62,7 @@ export function Combobox({
               {options.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.label}
+                  value={`${option.label} ${option.description || ''}`}
                   onSelect={() => {
                     onChange(option.value === value ? "" : option.value)
                     setOpen(false)
@@ -71,11 +71,16 @@ export function Combobox({
                 >
                   <Check
                     className={cn(
-                      "mr-2 h-4 w-4",
+                      "mr-2 h-4 w-4 shrink-0",
                       value === option.value ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  {option.label}
+                  <div className="flex flex-col">
+                    <span>{option.label}</span>
+                    {option.description && (
+                      <span className="text-[9px] text-muted-foreground">{option.description}</span>
+                    )}
+                  </div>
                 </CommandItem>
               ))}
             </CommandGroup>

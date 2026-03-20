@@ -1,8 +1,23 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Catch, ExceptionFilter, ArgumentsHost, HttpException, BadRequestException } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as fs from 'fs';
+
+@Catch(BadRequestException)
+export class ValidationExceptionFilter implements ExceptionFilter {
+  catch(exception: BadRequestException, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse();
+    const request = ctx.getRequest();
+    const status = exception.getStatus();
+    const validationErrors = exception.getResponse();
+    fs.appendFileSync('validation-errors.log', JSON.stringify({ path: request.url, body: request.body, errors: validationErrors }) + '\n');
+    response.status(status).json(validationErrors);
+  }
+}
+
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -25,6 +40,7 @@ async function bootstrap() {
 
   // ─── Validation ─────────────────────────────────────────────────────────────
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: false }));
+  app.useGlobalFilters(new ValidationExceptionFilter());
 
   // ─── Swagger ─────────────────────────────────────────────────────────────────
   const config = new DocumentBuilder()

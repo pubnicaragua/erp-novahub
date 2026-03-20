@@ -60,7 +60,7 @@ export function ProveedoresPage() {
       });
     } else {
       setEditingProveedor(null);
-      setFormData({ name: '', email: '', phone: '', contactName: '', status: 'active' as EntityStatus });
+      setFormData({ name: '', email: '', phone: '', contactName: '', status: 'ACTIVE' as EntityStatus });
     }
     setIsDialogOpen(true);
   };
@@ -128,9 +128,9 @@ export function ProveedoresPage() {
                   <Select value={formData.status} onValueChange={(v: EntityStatus) => setFormData({ ...formData, status: v })}>
                     <SelectTrigger><SelectValue placeholder="Selecciona el estado" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="active">Activo</SelectItem>
-                      <SelectItem value="inactive">Inactivo</SelectItem>
-                      <SelectItem value="archived">Archivado</SelectItem>
+                      <SelectItem value="ACTIVE">Activo</SelectItem>
+                      <SelectItem value="INACTIVE">Inactivo</SelectItem>
+                      <SelectItem value="ARCHIVED">Archivado</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -146,7 +146,7 @@ export function ProveedoresPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total Proveedores</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-blue-400">{proveedoresData.length}</div></CardContent></Card>
-        <Card className="border-green-500/20 bg-gradient-to-br from-green-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Activos</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-400">{proveedoresData.filter(p => p.status === 'active').length}</div></CardContent></Card>
+        <Card className="border-green-500/20 bg-gradient-to-br from-green-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Activos</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-400">{proveedoresData.filter(p => p.status === 'ACTIVE').length}</div></CardContent></Card>
         <Card className="border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Calificacion Promedio</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-orange-400 flex items-center gap-1"><Star className="size-5 fill-orange-400" />{(proveedoresData.reduce((acc, p) => acc + (p.rating || 0), 0) / (proveedoresData.length || 1)).toFixed(1)}</div></CardContent></Card>
       </div>
 
@@ -215,7 +215,7 @@ export function ProveedoresPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        <Badge variant="secondary" className={`capitalize ${p.status === 'active' ? 'bg-green-500/10 text-green-500 hover:bg-green-500/20' : 'bg-gray-500/10 text-gray-500 hover:bg-gray-500/20'}`}>
+                        <Badge variant="secondary" className={`capitalize ${p.status === 'ACTIVE' ? 'bg-green-500/10 text-green-500 hover:bg-green-500/20' : 'bg-gray-500/10 text-gray-500 hover:bg-gray-500/20'}`}>
                           {p.status}
                         </Badge>
                       </TableCell>

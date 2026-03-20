@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExchangeRateService } from '../common/exchange-rate.service';
-import { CustomerType, EntityStatus, PaymentMethod, RecurringStatus, ReturnStatus, Frequency } from '@prisma/client';
+import { CustomerType, EntityStatus, PaymentStatus, PaymentMethod, RecurringStatus, ReturnStatus, Frequency, CreditNoteStatus } from '@prisma/client';
 
 /** Genera un código único tipo CLI-0001 */
 function genCode(prefix: string): string {
@@ -11,6 +11,52 @@ function genCode(prefix: string): string {
 /** Normaliza el valor de un enum a UPPERCASE si viene en minúscula */
 function toEnum<T extends string>(val: string): T {
   return val.toUpperCase() as T;
+}
+
+/** Calcula los totales a partir de los items */
+function calculateTotalsFromItems(items: any[]): { subtotal: number; taxAmount: number; total: number } {
+  let subtotal = 0;
+  let taxAmount = 0;
+
+  for (const item of items) {
+    const qty = Number(item.quantity || 0);
+    const price = Number(item.unitPrice || 0);
+    const discount = Number(item.discount || 0);
+    const taxRate = Number(item.taxRate || 0);
+
+    const lineSubtotal = qty * price - discount;
+    const lineTax = lineSubtotal * (taxRate / 100);
+
+    subtotal += lineSubtotal;
+    taxAmount += lineTax;
+  }
+
+  return { subtotal, taxAmount, total: subtotal + taxAmount };
+}
+
+/** Prepara items para escritura anidada (limpia campos extra) */
+function prepareItemsCreate(items: any[]) {
+  return items.map(item => ({
+    productId: item.productId || null,
+    description: (item.description || '').trim(),
+    quantity: Number(item.quantity || 1),
+    unitPrice: Number(item.unitPrice || 0),
+    taxRate: Number(item.taxRate || 0),
+    discount: Number(item.discount || 0),
+    total: Number(item.total || (Number(item.quantity || 1) * Number(item.unitPrice || 0))),
+  }));
+}
+
+/** Prepara items sin descuento (para ReturnItem, CreditNoteItem, RecurringInvoiceItem) */
+function prepareSimpleItemsCreate(items: any[], includeProductId = true) {
+  return items.map(item => ({
+    ...(includeProductId && { productId: item.productId || null }),
+    description: (item.description || '').trim(),
+    quantity: Number(item.quantity || 1),
+    unitPrice: Number(item.unitPrice || 0),
+    ...(item.taxRate !== undefined && { taxRate: Number(item.taxRate || 0) }),
+    total: Number(item.total || (Number(item.quantity || 1) * Number(item.unitPrice || 0))),
+  }));
 }
 
 @Injectable()
@@ -24,14 +70,24 @@ export class SalesService {
     const currency = data.currency || 'NIO';
     const exchangeRate = data.exchangeRate || await this.exchangeRateService.getExchangeRate(clientTenantId);
     
-    // Si la moneda es la base (NIO), el baseTotal es igual al total.
-    // Si la moneda es USD, el baseTotal es total * exchangeRate.
     let baseTotal = data.baseTotal;
     if (baseTotal === undefined && data.total !== undefined) {
       baseTotal = currency === 'NIO' ? Number(data.total) : Number(data.total) * Number(exchangeRate);
     }
 
     return { currency, exchangeRate, baseTotal };
+  }
+
+  private async resolveCustomerId(customerId: string | undefined, clientTenantId: string): Promise<string> {
+    if (customerId && !customerId.includes('temp-') && !customerId.includes('new-')) {
+      return customerId;
+    }
+    const first = await this.prisma.customer.findFirst({ where: { clientTenantId } });
+    if (first) return first.id;
+    const newCustomer = await this.prisma.customer.create({
+      data: { code: genCode('CLI'), name: 'Cliente General', clientTenantId },
+    });
+    return newCustomer.id;
   }
 
   // ─── CLIENTES ─────────────────────────────────────────────────────────────
@@ -66,9 +122,7 @@ export class SalesService {
   }
 
   async updateCustomer(id: string, data: any, clientTenantId: string) {
-    // Evitar actualizar campos protegidos o calculados
     const { id: _, clientTenantId: __, createdAt, updatedAt, balance, ...cleanData } = data;
-
     return this.prisma.customer.update({
       where: { id, clientTenantId },
       data: {
@@ -86,18 +140,17 @@ export class SalesService {
   // ─── COTIZACIONES (ESTIMATES) ──────────────────────────────────────────────
   async createEstimate(data: any, clientTenantId: string) {
     const { items, ...rest } = data;
-    let customerId = rest.customerId;
-    if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
-      const firstCustomer = await this.prisma.customer.findFirst({ where: { clientTenantId } });
-      if (firstCustomer) {
-        customerId = firstCustomer.id;
-      } else {
-        const newCustomer = await this.createCustomer({ name: 'Cliente General' }, clientTenantId);
-        customerId = newCustomer.id;
-      }
-    }
-
+    const customerId = await this.resolveCustomerId(rest.customerId, clientTenantId);
     const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(data, clientTenantId);
+
+    // Auto-calculate if not provided
+    let { subtotal, taxAmount, total } = rest;
+    if (items?.length > 0 && (!subtotal && !total)) {
+      const calc = calculateTotalsFromItems(items);
+      subtotal = calc.subtotal;
+      taxAmount = calc.taxAmount;
+      total = calc.total;
+    }
 
     return this.prisma.estimate.create({
       data: {
@@ -105,11 +158,14 @@ export class SalesService {
         customerId,
         number: rest.number || genCode('COT'),
         status: toEnum(rest.status || 'DRAFT'),
+        subtotal: Number(subtotal || 0),
+        taxAmount: Number(taxAmount || 0),
+        total: Number(total || 0),
         clientTenantId,
         currency,
         exchangeRate,
         baseTotal,
-        ...(items?.length > 0 && { items: { create: items } }),
+        ...(items?.length > 0 && { items: { create: prepareItemsCreate(items) } }),
       },
       include: { items: true, customer: true },
     });
@@ -131,15 +187,7 @@ export class SalesService {
       itemsMutation = {
         items: {
           deleteMany: {},
-          create: items.map(item => ({
-            description: item.description || '',
-            quantity: Number(item.quantity || 1),
-            unitPrice: Number(item.unitPrice || 0),
-            taxRate: Number(item.taxRate || 0),
-            discount: Number(item.discount || 0),
-            total: Number(item.total || 0),
-            productId: item.productId || null,
-          }))
+          create: prepareItemsCreate(items),
         }
       };
     }
@@ -159,7 +207,6 @@ export class SalesService {
     const estimate = await this.prisma.estimate.findFirst({ where: { id, clientTenantId }, include: { items: true } });
     if (!estimate) throw new NotFoundException('Estimate not found');
 
-    // Build items payload from estimate items
     const itemsCreate = (estimate.items || []).map(item => ({
       productId: item.productId || null,
       description: item.description,
@@ -202,7 +249,6 @@ export class SalesService {
   }
 
   async removeEstimate(id: string, clientTenantId: string) {
-    // First delete all items to avoid FK constraint errors
     await this.prisma.estimateItem.deleteMany({ where: { estimate: { id, clientTenantId } } });
     return this.prisma.estimate.delete({ where: { id, clientTenantId } });
   }
@@ -210,18 +256,16 @@ export class SalesService {
   // ─── ÓRDENES DE VENTA ─────────────────────────────────────────────────────
   async createSalesOrder(data: any, clientTenantId: string) {
     const { items, ...rest } = data;
-    let customerId = rest.customerId;
-    if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
-      const firstCustomer = await this.prisma.customer.findFirst({ where: { clientTenantId } });
-      if (firstCustomer) {
-        customerId = firstCustomer.id;
-      } else {
-        const newCustomer = await this.createCustomer({ name: 'Cliente General' }, clientTenantId);
-        customerId = newCustomer.id;
-      }
-    }
-
+    const customerId = await this.resolveCustomerId(rest.customerId, clientTenantId);
     const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(data, clientTenantId);
+
+    let { subtotal, taxAmount, total } = rest;
+    if (items?.length > 0 && (!subtotal && !total)) {
+      const calc = calculateTotalsFromItems(items);
+      subtotal = calc.subtotal;
+      taxAmount = calc.taxAmount;
+      total = calc.total;
+    }
 
     return this.prisma.salesOrder.create({
       data: {
@@ -229,11 +273,14 @@ export class SalesService {
         customerId,
         number: rest.number || genCode('ORD'),
         status: toEnum(rest.status || 'DRAFT'),
+        subtotal: Number(subtotal || 0),
+        taxAmount: Number(taxAmount || 0),
+        total: Number(total || 0),
         clientTenantId,
         currency,
         exchangeRate,
         baseTotal,
-        ...(items?.length > 0 && { items: { create: items } }),
+        ...(items?.length > 0 && { items: { create: prepareItemsCreate(items) } }),
       },
       include: { items: true, customer: true },
     });
@@ -255,15 +302,7 @@ export class SalesService {
       itemsMutation = {
         items: {
           deleteMany: {},
-          create: items.map(item => ({
-            description: item.description || '',
-            quantity: Number(item.quantity || 1),
-            unitPrice: Number(item.unitPrice || 0),
-            taxRate: Number(item.taxRate || 0),
-            discount: Number(item.discount || 0),
-            total: Number(item.total || 0),
-            productId: item.productId || null,
-          }))
+          create: prepareItemsCreate(items),
         }
       };
     }
@@ -280,7 +319,6 @@ export class SalesService {
   }
 
   async removeSalesOrder(id: string, clientTenantId: string) {
-    // First delete all items to avoid FK constraint errors
     await this.prisma.salesOrderItem.deleteMany({ where: { salesOrder: { id, clientTenantId } } });
     return this.prisma.salesOrder.delete({ where: { id, clientTenantId } });
   }
@@ -288,27 +326,58 @@ export class SalesService {
   // ─── FACTURAS ─────────────────────────────────────────────────────────────
   async createInvoice(data: any, clientTenantId: string) {
     const { items, ...rest } = data;
-    let customerId = rest.customerId;
-    if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
-      customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
-    }
-
+    const customerId = await this.resolveCustomerId(rest.customerId, clientTenantId);
     const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(data, clientTenantId);
 
-    return this.prisma.invoice.create({
-      data: {
-        ...rest,
-        customerId,
-        number: rest.number || genCode('FAC'),
-        status: toEnum(rest.status || 'DRAFT'),
-        paymentStatus: toEnum(rest.paymentStatus || 'PENDING'),
-        clientTenantId,
-        currency,
-        exchangeRate,
-        baseTotal,
-        ...(items?.length > 0 && { items: { create: items } }),
-      },
-      include: { items: true, customer: true },
+    // Auto-calculate totals from items if not provided
+    let subtotal = Number(rest.subtotal || 0);
+    let taxAmount = Number(rest.taxAmount || 0);
+    let discountAmount = Number(rest.discountAmount || 0);
+    let total = Number(rest.total || 0);
+
+    if (items?.length > 0 && total === 0) {
+      const calc = calculateTotalsFromItems(items);
+      subtotal = calc.subtotal;
+      taxAmount = calc.taxAmount;
+      total = calc.total - discountAmount;
+    }
+
+    const balance = total - Number(rest.amountPaid || 0);
+
+    return this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.create({
+        data: {
+          customerId,
+          number: rest.number || genCode('FAC'),
+          salesOrderId: rest.salesOrderId || null,
+          date: new Date(rest.date),
+          dueDate: rest.dueDate ? new Date(rest.dueDate) : new Date(Date.now() + 30 * 86400000),
+          subtotal,
+          taxAmount,
+          discountAmount,
+          total,
+          amountPaid: Number(rest.amountPaid || 0),
+          balance,
+          currency,
+          exchangeRate,
+          baseTotal: baseTotal ?? (currency === 'NIO' ? total : total * Number(exchangeRate)),
+          status: toEnum<PaymentStatus>(rest.status || 'PENDING'),
+          notes: rest.notes || null,
+          clientTenantId,
+          ...(items?.length > 0 && { items: { create: prepareItemsCreate(items) } }),
+        },
+        include: { items: true, customer: true },
+      });
+
+      // Update customer balance (increase what they owe)
+      if (balance > 0) {
+        await tx.customer.update({
+          where: { id: customerId },
+          data: { balance: { increment: balance } },
+        });
+      }
+
+      return invoice;
     });
   }
 
@@ -321,49 +390,123 @@ export class SalesService {
   }
 
   async updateInvoice(id: string, data: any, clientTenantId: string) {
+    const { items, status, ...rest } = data;
+    
+    let itemsMutation = {};
+    if (items && Array.isArray(items)) {
+      itemsMutation = {
+        items: {
+          deleteMany: {},
+          create: prepareItemsCreate(items),
+        }
+      };
+    }
+
     return this.prisma.invoice.update({
       where: { id, clientTenantId },
       data: {
-        ...data,
-        ...(data.status && { status: toEnum(data.status) }),
-        ...(data.paymentStatus && { paymentStatus: toEnum(data.paymentStatus) }),
+        ...rest,
+        ...(status && { status: toEnum(status) }),
+        ...itemsMutation,
       },
+      include: { items: true, customer: true },
     });
   }
 
   async markInvoicePaid(id: string, clientTenantId: string) {
     const inv = await this.prisma.invoice.findFirst({ where: { id, clientTenantId } });
     if (!inv) throw new NotFoundException('Invoice not found');
-    return this.prisma.invoice.update({
-      where: { id },
-      data: { status: 'PAID', amountPaid: inv.total, balance: 0 },
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.invoice.update({
+        where: { id },
+        data: { status: 'PAID', amountPaid: inv.total, balance: 0 },
+      });
+
+      // Decrease customer balance
+      const previousBalance = Number(inv.balance);
+      if (previousBalance > 0) {
+        await tx.customer.update({
+          where: { id: inv.customerId },
+          data: { balance: { decrement: previousBalance } },
+        });
+      }
+
+      return updated;
     });
   }
 
   async removeInvoice(id: string, clientTenantId: string) {
-    return this.prisma.invoice.delete({ where: { id, clientTenantId } });
+    return this.prisma.$transaction(async (tx) => {
+      const inv = await tx.invoice.findFirst({ where: { id, clientTenantId } });
+      if (!inv) throw new NotFoundException('Invoice not found');
+
+      // Restore customer balance if invoice had remaining balance
+      const invBalance = Number(inv.balance);
+      if (invBalance > 0) {
+        await tx.customer.update({
+          where: { id: inv.customerId },
+          data: { balance: { decrement: invBalance } },
+        });
+      }
+
+      await tx.invoiceItem.deleteMany({ where: { invoiceId: id } });
+      return tx.invoice.delete({ where: { id } });
+    });
   }
 
   // ─── PAGOS RECIBIDOS ──────────────────────────────────────────────────────
   async createPayment(data: any, clientTenantId: string) {
-    let customerId = data.customerId;
-    if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
-      customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
-    }
+    const customerId = await this.resolveCustomerId(data.customerId, clientTenantId);
     const currency = data.currency || 'NIO';
     const exchangeRate = data.exchangeRate || await this.exchangeRateService.getExchangeRate(clientTenantId);
-    const baseAmount = data.baseAmount || (currency === 'NIO' ? Number(data.amount) : Number(data.amount) * Number(exchangeRate));
+    const amount = Number(data.amount);
+    const baseAmount = data.baseAmount || (currency === 'NIO' ? amount : amount * Number(exchangeRate));
 
-    return this.prisma.paymentReceived.create({
-      data: {
-        ...data,
-        customerId,
-        method: toEnum(data.method || 'CASH'),
-        clientTenantId,
-        currency,
-        exchangeRate,
-        baseAmount,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const payment = await tx.paymentReceived.create({
+        data: {
+          number: data.number || genCode('PAG'),
+          customerId,
+          invoiceId: data.invoiceId || null,
+          date: new Date(data.date),
+          amount,
+          currency,
+          exchangeRate,
+          baseAmount,
+          method: toEnum<PaymentMethod>(data.method || 'CASH'),
+          reference: data.reference || null,
+          notes: data.notes || null,
+          clientTenantId,
+        },
+        include: { customer: true, invoice: true },
+      });
+
+      // If linked to an invoice, update invoice balance
+      if (data.invoiceId) {
+        const invoice = await tx.invoice.findUnique({ where: { id: data.invoiceId } });
+        if (invoice) {
+          const newAmountPaid = Number(invoice.amountPaid) + amount;
+          const newBalance = Number(invoice.total) - newAmountPaid;
+
+          await tx.invoice.update({
+            where: { id: data.invoiceId },
+            data: {
+              amountPaid: newAmountPaid,
+              balance: Math.max(0, newBalance),
+              status: newBalance <= 0 ? 'PAID' : 'PARTIAL',
+            },
+          });
+        }
+      }
+
+      // Decrease customer balance
+      await tx.customer.update({
+        where: { id: customerId },
+        data: { balance: { decrement: amount } },
+      });
+
+      return payment;
     });
   }
 
@@ -386,7 +529,35 @@ export class SalesService {
   }
 
   async removePayment(id: string, clientTenantId: string) {
-    return this.prisma.paymentReceived.delete({ where: { id, clientTenantId } });
+    return this.prisma.$transaction(async (tx) => {
+      const payment = await tx.paymentReceived.findFirst({ where: { id, clientTenantId } });
+      if (!payment) throw new NotFoundException('Payment not found');
+
+      // Reverse invoice balance
+      if (payment.invoiceId) {
+        const invoice = await tx.invoice.findUnique({ where: { id: payment.invoiceId } });
+        if (invoice) {
+          const newAmountPaid = Math.max(0, Number(invoice.amountPaid) - Number(payment.amount));
+          const newBalance = Number(invoice.total) - newAmountPaid;
+          await tx.invoice.update({
+            where: { id: payment.invoiceId },
+            data: {
+              amountPaid: newAmountPaid,
+              balance: newBalance,
+              status: newAmountPaid === 0 ? 'PENDING' : 'PARTIAL',
+            },
+          });
+        }
+      }
+
+      // Restore customer balance
+      await tx.customer.update({
+        where: { id: payment.customerId },
+        data: { balance: { increment: Number(payment.amount) } },
+      });
+
+      return tx.paymentReceived.delete({ where: { id } });
+    });
   }
 
   // ─── FACTURAS RECURRENTES ─────────────────────────────────────────────────
@@ -399,29 +570,67 @@ export class SalesService {
   }
 
   async createRecurringInvoice(data: any, clientTenantId: string) {
-    let customerId = data.customerId;
-    if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
-      customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
+    const { items, ...rest } = data;
+    const customerId = await this.resolveCustomerId(rest.customerId, clientTenantId);
+    const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(data, clientTenantId);
+
+    // Auto-calculate totals from items
+    let subtotal = Number(rest.subtotal || 0);
+    let taxAmount = Number(rest.taxAmount || 0);
+    let total = Number(rest.total || 0);
+
+    if (items?.length > 0 && total === 0) {
+      const calc = calculateTotalsFromItems(items);
+      subtotal = calc.subtotal;
+      taxAmount = calc.taxAmount;
+      total = calc.total;
     }
+
+    const nextInvoiceDate = rest.nextInvoiceDate || rest.startDate;
+
     return this.prisma.recurringInvoice.create({
       data: {
-        ...data,
         customerId,
+        frequency: rest.frequency ? toEnum<Frequency>(rest.frequency) : Frequency.MONTHLY,
+        startDate: new Date(rest.startDate),
+        endDate: rest.endDate ? new Date(rest.endDate) : null,
+        nextInvoiceDate: new Date(nextInvoiceDate),
+        subtotal,
+        taxAmount,
+        total,
+        currency,
+        exchangeRate,
+        baseTotal: baseTotal ?? (currency === 'NIO' ? total : total * Number(exchangeRate)),
+        status: rest.status ? toEnum<RecurringStatus>(rest.status) : RecurringStatus.ACTIVE,
         clientTenantId,
-        status: data.status ? toEnum<RecurringStatus>(data.status) : RecurringStatus.ACTIVE,      
-        frequency: data.frequency ? toEnum<Frequency>(data.frequency) : Frequency.MONTHLY,        
+        ...(items?.length > 0 && { items: { create: prepareSimpleItemsCreate(items) } }),
       },
+      include: { items: true, customer: true },
     });
   }
 
   async updateRecurringInvoice(id: string, data: any, clientTenantId: string) {
+    const { items, ...rest } = data;
+
+    let itemsMutation = {};
+    if (items && Array.isArray(items)) {
+      itemsMutation = {
+        items: {
+          deleteMany: {},
+          create: prepareSimpleItemsCreate(items),
+        }
+      };
+    }
+
     return this.prisma.recurringInvoice.update({
       where: { id, clientTenantId },
       data: {
-        ...data,
-        ...(data.status && { status: toEnum(data.status) }),
-        ...(data.frequency && { frequency: toEnum(data.frequency) }),
+        ...rest,
+        ...(rest.status && { status: toEnum(rest.status) }),
+        ...(rest.frequency && { frequency: toEnum(rest.frequency) }),
+        ...itemsMutation,
       },
+      include: { items: true, customer: true },
     });
   }
 
@@ -430,6 +639,11 @@ export class SalesService {
       where: { id, clientTenantId },
       data: { status: toEnum<RecurringStatus>(status) },
     });
+  }
+
+  async removeRecurringInvoice(id: string, clientTenantId: string) {
+    await this.prisma.recurringInvoiceItem.deleteMany({ where: { recurringInvoice: { id, clientTenantId } } });
+    return this.prisma.recurringInvoice.delete({ where: { id, clientTenantId } });
   }
 
   // ─── DEVOLUCIONES ──────────────────────────────────────────────────────────
@@ -442,39 +656,209 @@ export class SalesService {
   }
 
   async createReturn(data: any, clientTenantId: string) {
-    let customerId = data.customerId;
-    if (!customerId || customerId.includes('temp-') || customerId.includes('new-')) {
-      customerId = (await this.prisma.customer.findFirst({ where: { clientTenantId } }))?.id;
+    const { items, ...rest } = data;
+    const customerId = await this.resolveCustomerId(rest.customerId, clientTenantId);
+
+    // Auto-calculate total from items
+    let total = Number(rest.total || 0);
+    if (items?.length > 0 && total === 0) {
+      total = items.reduce((acc: number, item: any) =>
+        acc + Number(item.total || Number(item.quantity || 1) * Number(item.unitPrice || 0)),
+        0
+      );
     }
+
     return this.prisma.salesReturn.create({
       data: {
-        ...data,
+        number: rest.number || genCode('DEV'),
         customerId,
-        number: data.number || genCode('DEV'),
+        invoiceId: rest.invoiceId,
+        date: new Date(rest.date),
+        total,
+        reason: (rest.reason || '').trim(),
+        status: rest.status ? toEnum<ReturnStatus>(rest.status) : ReturnStatus.PENDING,
         clientTenantId,
-        status: data.status ? toEnum<ReturnStatus>(data.status) : ReturnStatus.PENDING,
+        ...(items?.length > 0 && { items: { create: prepareSimpleItemsCreate(items) } }),
       },
+      include: { items: true, customer: true },
     });
   }
 
   async updateReturn(id: string, data: any, clientTenantId: string) {
+    const { items, ...rest } = data;
+
+    let itemsMutation = {};
+    if (items && Array.isArray(items)) {
+      itemsMutation = {
+        items: {
+          deleteMany: {},
+          create: prepareSimpleItemsCreate(items),
+        }
+      };
+    }
+
     return this.prisma.salesReturn.update({
       where: { id, clientTenantId },
       data: {
-        ...data,
-        ...(data.status && { status: toEnum(data.status) }),
+        ...rest,
+        ...(rest.status && { status: toEnum(rest.status) }),
+        ...itemsMutation,
       },
+      include: { items: true, customer: true },
     });
   }
 
   async removeReturn(id: string, clientTenantId: string) {
+    await this.prisma.salesReturnItem.deleteMany({ where: { salesReturn: { id, clientTenantId } } });
     return this.prisma.salesReturn.delete({ where: { id, clientTenantId } });
   }
 
   async approveReturn(id: string, clientTenantId: string) {
-    return this.prisma.salesReturn.update({
-      where: { id, clientTenantId },
-      data: { status: toEnum<ReturnStatus>('approved') },
+    return this.prisma.$transaction(async (tx) => {
+      const ret = await tx.salesReturn.findFirst({
+        where: { id, clientTenantId },
+        include: { items: true },
+      });
+      if (!ret) throw new NotFoundException('Sales return not found');
+
+      // Approve the return
+      await tx.salesReturn.update({
+        where: { id },
+        data: { status: 'APPROVED' },
+      });
+
+      // Auto-generate Credit Note
+      const creditNote = await tx.creditNote.create({
+        data: {
+          number: genCode('NC'),
+          customerId: ret.customerId,
+          invoiceId: ret.invoiceId,
+          salesReturnId: ret.id,
+          date: new Date(),
+          total: ret.total,
+          status: 'ISSUED',
+          reason: ret.reason || `Nota de crédito por devolución ${ret.number}`,
+          clientTenantId,
+          ...(ret.items.length > 0 && {
+            items: {
+              create: ret.items.map(item => ({
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                total: item.total,
+              })),
+            },
+          }),
+        },
+      });
+
+      // Adjust customer balance (reduce what they owe)
+      await tx.customer.update({
+        where: { id: ret.customerId },
+        data: { balance: { decrement: Number(ret.total) } },
+      });
+
+      return { salesReturn: ret, creditNote };
     });
+  }
+
+  // ─── NOTAS DE CRÉDITO ────────────────────────────────────────────────────
+  async findAllCreditNotes(clientTenantId: string) {
+    return this.prisma.creditNote.findMany({
+      where: { clientTenantId },
+      include: { items: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createCreditNote(data: any, clientTenantId: string) {
+    const { items, ...rest } = data;
+
+    let total = Number(rest.total || 0);
+    if (items?.length > 0 && total === 0) {
+      total = items.reduce((acc: number, item: any) =>
+        acc + Number(item.total || Number(item.quantity || 1) * Number(item.unitPrice || 0)),
+        0
+      );
+    }
+
+    return this.prisma.creditNote.create({
+      data: {
+        number: rest.number || genCode('NC'),
+        customerId: rest.customerId,
+        invoiceId: rest.invoiceId || null,
+        salesReturnId: rest.salesReturnId || null,
+        date: new Date(rest.date),
+        total,
+        status: rest.status ? toEnum<CreditNoteStatus>(rest.status) : CreditNoteStatus.DRAFT,
+        reason: (rest.reason || '').trim(),
+        clientTenantId,
+        ...(items?.length > 0 && {
+          items: {
+            create: items.map((item: any) => ({
+              description: (item.description || '').trim(),
+              quantity: Number(item.quantity || 1),
+              unitPrice: Number(item.unitPrice || 0),
+              total: Number(item.total || Number(item.quantity || 1) * Number(item.unitPrice || 0)),
+            })),
+          },
+        }),
+      },
+      include: { items: true },
+    });
+  }
+
+  async updateCreditNote(id: string, data: any, clientTenantId: string) {
+    const { items, ...rest } = data;
+
+    let itemsMutation = {};
+    if (items && Array.isArray(items)) {
+      itemsMutation = {
+        items: {
+          deleteMany: {},
+          create: items.map((item: any) => ({
+            description: (item.description || '').trim(),
+            quantity: Number(item.quantity || 1),
+            unitPrice: Number(item.unitPrice || 0),
+            total: Number(item.total || Number(item.quantity || 1) * Number(item.unitPrice || 0)),
+          })),
+        },
+      };
+    }
+
+    return this.prisma.creditNote.update({
+      where: { id, clientTenantId },
+      data: {
+        ...rest,
+        ...(rest.status && { status: toEnum(rest.status) }),
+        ...itemsMutation,
+      },
+      include: { items: true },
+    });
+  }
+
+  async issueCreditNote(id: string, clientTenantId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const cn = await tx.creditNote.findFirst({ where: { id, clientTenantId } });
+      if (!cn) throw new NotFoundException('Credit note not found');
+
+      const updated = await tx.creditNote.update({
+        where: { id },
+        data: { status: 'ISSUED' },
+      });
+
+      // Reduce customer balance
+      await tx.customer.update({
+        where: { id: cn.customerId },
+        data: { balance: { decrement: Number(cn.total) } },
+      });
+
+      return updated;
+    });
+  }
+
+  async removeCreditNote(id: string, clientTenantId: string) {
+    await this.prisma.creditNoteItem.deleteMany({ where: { creditNote: { id, clientTenantId } } });
+    return this.prisma.creditNote.delete({ where: { id, clientTenantId } });
   }
 }

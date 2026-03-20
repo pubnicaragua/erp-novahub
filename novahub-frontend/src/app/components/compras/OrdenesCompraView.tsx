@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
-import { ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, Package, FilePlus
+} from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { purchaseOrdersService } from '../../services/compras.service';
-import type { PurchaseOrder } from '../../types';
+import { Combobox } from '../ui/Combobox';
+import { purchaseOrdersService, suppliersService } from '../../services/compras.service';
+import type { PurchaseOrder, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
@@ -13,22 +16,58 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface Props { data: PurchaseOrder[]; loading: boolean; onRefresh: () => void; }
 
+const statusOpts = [
+  { label: 'Borrador',   value: 'DRAFT',      color: 'bg-muted/20 text-muted-foreground' },
+  { label: 'Enviada',    value: 'SENT',       color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Aprobada',   value: 'APPROVED',   color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Recibida',   value: 'RECEIVED',   color: 'bg-purple-500/10 text-purple-500' },
+  { label: 'Cancelada',  value: 'CANCELLED',  color: 'bg-rose-500/10 text-rose-500' },
+];
+
 export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
   const { exchangeRate: globalRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [localDoc, setLocalDoc] = useState<Partial<PurchaseOrder> | null>(null);
+
+  useEffect(() => {
+    suppliersService.getAll().then(res => {
+      const list = Array.isArray(res) ? res : (res as any).data || [];
+      setSuppliers(list);
+    }).catch();
+  }, []);
+
+  useEffect(() => {
+    if (editingId) {
+      if (editingId === 'NEW') {
+         setLocalDoc({
+           supplierId: '',
+           date: new Date().toISOString(),
+           expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
+           currency: 'NIO',
+           exchangeRate: globalRate,
+           status: 'DRAFT',
+           requestedBy: 'Admin',
+           items: [],
+           subtotal: 0,
+           taxAmount: 0,
+           total: 0
+         });
+      } else {
+         const found = data.find(x => x.id === editingId);
+         setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+      }
+    } else {
+      setLocalDoc(null);
+    }
+  }, [editingId, data, globalRate]);
+
   const filtered = data.filter(o =>
     (o.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (o.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const statusOpts = [
-    { label: 'Borrador',   value: 'DRAFT',      color: 'bg-muted/20 text-muted-foreground' },
-    { label: 'Enviada',    value: 'SENT',       color: 'bg-blue-500/10 text-blue-500' },
-    { label: 'Aprobada',   value: 'APPROVED',   color: 'bg-emerald-500/10 text-emerald-500' },
-    { label: 'Recibida',   value: 'RECEIVED',   color: 'bg-purple-500/10 text-purple-500' },
-    { label: 'Cancelada',  value: 'CANCELLED',  color: 'bg-rose-500/10 text-rose-500' },
-  ];
 
   const columns: ColumnDef<PurchaseOrder>[] = [
     { key: 'number',   header: 'Número',   width: '120px',
@@ -45,21 +84,226 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
 
   const handleUpdate = async (id: string | number, updates: Partial<PurchaseOrder>) => {
     try { await purchaseOrdersService.update(id as string, updates); toast.success('Orden actualizada'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); }
+    catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
   };
 
-  const handleAdd = async () => {
+  const handleSaveDoc = async () => {
+    if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
+    
     try {
-      await purchaseOrdersService.create({ supplierId: data[0]?.supplierId || 'temp-supplier-id', currency: 'NIO', exchangeRate: globalRate, date: new Date().toISOString(), items: [] });
-      toast.success('Orden de compra creada'); onRefresh();
-    } catch { toast.error('Error al crear orden'); }
+      if (editingId === 'NEW') {
+        await purchaseOrdersService.create(localDoc as any);
+        toast.success('Orden creada');
+      } else {
+        await purchaseOrdersService.update(editingId!, localDoc as any);
+        toast.success('Orden guardada');
+      }
+      setEditingId(null);
+      onRefresh();
+    } catch (e: any) {
+      toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
+    }
   };
+
+  const handleDeleteItem = (idx: number) => {
+    if (!localDoc) return;
+    const newItems = [...(localDoc.items || [])];
+    newItems.splice(idx, 1);
+    recalculateTotals(newItems);
+  };
+
+  const handleItemChange = (idx: number, field: string, value: any) => {
+    if (!localDoc) return;
+    const newItems = [...(localDoc.items || [])];
+    newItems[idx] = { ...newItems[idx], [field]: value };
+    
+    if (['quantity', 'unitPrice', 'taxRate'].includes(field)) {
+       const q = Number(newItems[idx].quantity || 0);
+       const p = Number(newItems[idx].unitPrice || 0);
+       const t = Number(newItems[idx].taxRate || 0);
+       const sub = q * p;
+       const tax = sub * (t / 100);
+       newItems[idx].total = sub + tax;
+    }
+    recalculateTotals(newItems);
+  };
+
+  const recalculateTotals = (items: any[]) => {
+    const subtotal = items.reduce((acc, it) => acc + (Number(it.quantity||0) * Number(it.unitPrice||0)), 0);
+    const taxAmount = items.reduce((acc, it) => acc + ((Number(it.quantity||0) * Number(it.unitPrice||0)) * (Number(it.taxRate||0)/100)), 0);
+    const total = subtotal + taxAmount;
+    setLocalDoc(prev => ({ ...prev!, items, subtotal, taxAmount, total }));
+  };
+
+  if (editingId && localDoc) {
+    const isNew = editingId === 'NEW';
+    const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
+    
+    return (
+      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
+              <ChevronLeft className="size-5" />
+            </Button>
+            <div>
+              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Orden de Compra' : `Orden ${localDoc.number}`}</h2>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle del registro</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+             {!isNew && (
+                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                  onClick={async () => {
+                     if(confirm('¿Seguro que deseas eliminar?')){
+                         try { await purchaseOrdersService.delete(editingId); toast.success('Eliminado'); setEditingId(null); onRefresh(); } catch { toast.error('Error'); }
+                     }
+                  }}>
+                  <Trash2 className="size-3 mr-2" /> Eliminar
+                </Button>
+             )}
+            <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+              Guardar
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <Card className="rounded-2xl border-border/50">
+            <CardContent className="p-6 space-y-3">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {!isNew && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1">Número</p>
+                    <Input value={localDoc.number || ''} disabled className="h-8 text-xs font-black uppercase bg-muted/20" />
+                  </div>
+                )}
+                <div className={isNew ? 'col-span-2' : ''}>
+                  <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
+                  <Combobox 
+                    options={suppliers.map(c => ({ label: c.name, value: c.id, description: c.phone || 'Sin teléfono' }))}
+                    value={localDoc.supplierId || ''}
+                    onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
+                    placeholder="Seleccionar Proveedor"
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
+                  <Input type="date" value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Entrega Esperada</p>
+                  <Input type="date" value={localDoc.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, expectedDelivery: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
+                  <select 
+                    value={localDoc.status || 'DRAFT'} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
+                    className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
+                  >
+                    {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
+                  <select 
+                    value={localDoc.currency || 'NIO'} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value })}
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
+                  >
+                    <option value="NIO">NIO (Cordobas)</option>
+                    <option value="USD">USD (Dolares)</option>
+                  </select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-border/50">
+            <CardContent className="p-6 flex flex-col justify-center h-full space-y-4">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="font-bold tabular-nums">${Number(localDoc.subtotal||0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Impuesto</span>
+                  <span className="font-bold tabular-nums text-rose-500">${Number(localDoc.taxAmount||0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
+                  <span className="font-black uppercase text-xs tracking-widest">Total</span>
+                  <span className="font-black text-xl text-primary tabular-nums text-right">
+                     {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.total||0).toLocaleString()}
+                     {localDoc.currency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ $ {(Number(localDoc.total||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}</span>}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="rounded-2xl border-border/50">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Ítems de Orden</p>
+              <Button variant="outline" size="sm" onClick={() => {
+                const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, taxRate: 0, total: 0 }];
+                setLocalDoc({ ...localDoc, items: newItems as any });
+              }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                <Plus className="size-3 mr-2" /> Agregar Item
+              </Button>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+                <div className="col-span-4">Descripción</div>
+                <div className="col-span-2 text-right">Cant.</div>
+                <div className="col-span-2 text-right">Precio Unitario</div>
+                <div className="col-span-2 text-right">Imp. %</div>
+                <div className="col-span-2 text-right">Total</div>
+              </div>
+              {(localDoc.items || []).map((item: any, idx: number) => (
+                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
+                  <div className="col-span-4">
+                    <Input value={item.description || ''} onChange={(e) => handleItemChange(idx, 'description', e.target.value)} className="h-8 text-xs" placeholder="Descripción del producto" />
+                  </div>
+                  <div className="col-span-2">
+                    <Input type="number" min="0" value={item.quantity === 0 ? '' : item.quantity} onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
+                  </div>
+                  <div className="col-span-2">
+                    <Input type="number" min="0" value={item.unitPrice === 0 ? '' : item.unitPrice} onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
+                  </div>
+                  <div className="col-span-2">
+                    <Input type="number" min="0" value={item.taxRate === 0 ? '' : item.taxRate} onChange={(e) => handleItemChange(idx, 'taxRate', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
+                  </div>
+                  <div className="col-span-2 flex items-center justify-end gap-2">
+                    <span className="text-xs font-black w-20 text-right tabular-nums">${Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {(!localDoc.items || localDoc.items.length === 0) && (
+                <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">
+                  No hay ítems registrados.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const kpis = [
     { title: 'Total Ordenes',   value: data.length,                                                                     icon: ClipboardList, color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Por Aprobar',     value: data.filter(o => (o.status||'').toUpperCase() === 'SENT').length,                 icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
     { title: 'Aprobadas',       value: data.filter(o => (o.status||'').toUpperCase() === 'APPROVED').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Monto Total (NIO)', value: `C$ ${data.reduce((a,o) => a + (o.baseTotal || (o.currency === 'USD' ? o.total * globalRate : o.total)), 0).toLocaleString()}`,             icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    { title: 'Monto Total',     value: `C$ ${data.reduce((a,o) => a + (o.baseTotal || (o.currency === 'USD' ? o.total * globalRate : o.total)), 0).toLocaleString()}`,             icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
   ];
 
   return (
@@ -79,7 +323,7 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
           <div><h2 className="text-xl font-black uppercase tracking-tight">Órdenes de Compra</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Pedidos a proveedores</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Orden</Button>
+            <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Orden</Button>
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
@@ -97,8 +341,8 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
           }}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => toast.info(`${row.number} | ${row.supplier?.name||'N/A'} | $${Number(row.total||0).toLocaleString()}`)}><Eye className="size-4" /></Button>
-              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { try { await purchaseOrdersService.update(row.id, { status: 'CANCELLED' as any }); onRefresh(); } catch { toast.error('Error'); } }}><Trash2 className="size-4" /></Button>
+              <Button title="Editar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { try { await purchaseOrdersService.delete(row.id); onRefresh(); } catch { toast.error('Error'); } }}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />

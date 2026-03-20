@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  FileOutput, Plus, Search, TrendingUp, Clock, AlertTriangle, FileMinus, Eye, Trash2
+  FileOutput, Plus, Search, TrendingUp, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, ShieldCheck
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -9,184 +9,250 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { salesReturnsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
-import type { SalesReturn } from '../../types';
+import type { SalesReturn, Customer, Invoice, Product } from '../../types';
 import { Badge } from '../ui/badge';
+import { Combobox } from '../ui/Combobox';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface DevolucionesViewProps {
   data: SalesReturn[];
   loading: boolean;
   onRefresh: () => void;
+  customers?: Customer[];
+  invoices?: Invoice[];
+  products?: Product[];
 }
 
 const statusOptions = [
   { label: 'Pendiente',  value: 'PENDING',   color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Aprobada',  value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Procesada', value: 'PROCESSED', color: 'bg-blue-500/10 text-blue-500' },
-  { label: 'Rechazada', value: 'REJECTED',  color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Aprobada',   value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Procesada',  value: 'PROCESSED', color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Rechazada',  value: 'REJECTED',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function DevolucionesView({ data, loading, onRefresh }: DevolucionesViewProps) {
+export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [] }: DevolucionesViewProps) {
+  const { exchangeRate: globalRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [localDoc, setLocalDoc] = useState<any>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
-  const filtered = data.filter(d => 
-    (d as any).number?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (d.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  useEffect(() => {
+    if (editingId) {
+      const r = data.find(x => x.id === editingId);
+      if (r) setLocalDoc(JSON.parse(JSON.stringify(r)));
+    } else if (!isCreating) {
+      setLocalDoc(null);
+    }
+  }, [editingId]);
+
+  const filtered = data.filter(r => 
+    r.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (r.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleUpdate = async (id: string | number, updates: Partial<SalesReturn>) => {
-    try {
-      if ((updates.status||'').toUpperCase() === 'APPROVED') {
-        await salesReturnsService.approve(id.toString());
-        toast.success('Devolución aprobada');
-      } else {
-        await salesReturnsService.update(id.toString(), updates);
-        toast.success('Devolución actualizada');
-      }
-      onRefresh();
-    } catch (error) {
-      toast.error('Error al actualizar');
-      throw error;
-    }
+  const startNew = () => {
+    setIsCreating(true);
+    setEditingId(null);
+    setLocalDoc({
+      customerId: '',
+      invoiceId: '',
+      date: new Date().toISOString().split('T')[0],
+      reason: '',
+      items: [],
+      total: 0,
+    });
   };
 
-  const columns: ColumnDef<SalesReturn>[] = [
-    { 
-      key: 'id', 
-      header: 'ID Retorno', 
-      width: '120px',
-      render: (val) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val.slice(0, 8)}</span>
-    },
-    { 
-      key: 'customer', 
-      header: 'Cliente', 
-      render: (val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span>
-    },
-    { 
-      key: 'invoiceId', 
-      header: 'Referencia / Factura', 
-      render: (val) => <span className="text-xs font-bold text-rose-500">{val || 'S/V'}</span>
-    },
-    { 
-      key: 'date', 
-      header: 'Fecha', 
-      render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span>
-    },
-    { 
-      key: 'total', 
-      header: 'Monto Crédito', 
-      width: '150px',
-      render: (val) => <span className="text-[13px] font-black tabular-nums text-rose-500">${(val || 0).toLocaleString()}</span>
-    },
-    { 
-      key: 'status', 
-      header: 'Estado', 
-      width: '130px',
-      editable: true,
-      type: 'select',
-      options: statusOptions,
-      render: (val) => {
-        const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
-        return (
-          <Badge variant="outline" className={cn(
-            "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
-            opt?.color || 'bg-muted/20 text-muted-foreground'
-          )}>
-            {opt?.label || val}
-          </Badge>
-        );
+  const recalcTotal = (items: any[]) => items.reduce((acc: number, it: any) => acc + Number(it.total || 0), 0);
+
+  const handleSave = async () => {
+    if (!localDoc) return;
+    if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
+    if (!localDoc.invoiceId) { toast.error('Selecciona la factura de origen'); return; }
+    if (!localDoc.reason.trim()) { toast.error('Ingresa la razón de la devolución'); return; }
+    try {
+      if (isCreating) {
+        await salesReturnsService.create({
+          customerId: localDoc.customerId,
+          invoiceId: localDoc.invoiceId,
+          date: new Date(localDoc.date).toISOString(),
+          reason: localDoc.reason.trim(),
+          items: (localDoc.items || []).map((item: any) => ({
+            productId: item.productId || undefined,
+            description: item.description || '',
+            quantity: Number(item.quantity || 1),
+            unitPrice: Number(item.unitPrice || 0),
+            total: Number(item.total || 0),
+          })),
+          total: localDoc.total,
+          status: 'PENDING',
+        } as any);
+        toast.success('Devolución registrada exitosamente');
+      } else {
+        await salesReturnsService.update(localDoc.id, localDoc);
+        toast.success('Devolución actualizada');
       }
-    }
+      setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
+    } catch { toast.error('Error al guardar'); }
+  };
+
+  const handleApprove = async (id: string) => {
+    try {
+      await salesReturnsService.approve(id);
+      toast.success('Devolución aprobada — Nota de crédito generada automáticamente');
+      onRefresh();
+    } catch { toast.error('Error al aprobar'); }
+  };
+
+  // Get invoices for selected customer
+  const customerInvoices = localDoc?.customerId
+    ? invoices.filter(i => i.customerId === localDoc.customerId)
+    : [];
+
+  const columns: ColumnDef<SalesReturn>[] = [
+    { key: 'number', header: 'Nº Devolución', width: '140px',
+      render: (val, row) => <span className="text-xs font-black font-mono text-primary cursor-pointer hover:underline" onClick={() => setEditingId(row.id)}>{val}</span> },
+    { key: 'customer', header: 'Cliente', render: (val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
+    { key: 'invoice', header: 'Factura Origen', render: (val, row) => <span className="text-xs font-bold text-blue-500">{row.invoice?.number || 'N/A'}</span> },
+    { key: 'date', header: 'Fecha', render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span> },
+    { key: 'total', header: 'Total', width: '130px', render: (val) => <span className="text-[13px] font-black tabular-nums text-rose-500">C$ {Number(val||0).toLocaleString()}</span> },
+    { key: 'status', header: 'Estado', width: '130px', render: (val) => {
+      const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
+      return <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none", opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>; } },
   ];
 
   const kpis = [
-    { title: 'Total Devuelto', value: `$${data.reduce((acc, d) => acc + Number(d.total||0), 0).toLocaleString()}`,                                                                          icon: FileOutput,   color: 'text-rose-500',   bg: 'bg-rose-500/10'   },
-    { title: 'Por Aprobar',   value: data.filter(d => (d.status||'').toUpperCase() === 'PENDING').length,                                                                                   icon: Clock,        color: 'text-amber-500', bg: 'bg-amber-500/10'  },
-    { title: 'Aprobadas',     value: data.filter(d => (d.status||'').toUpperCase() === 'APPROVED').length,                                                                                  icon: FileMinus,    color: 'text-blue-500',  bg: 'bg-blue-500/10'   },
-    { title: 'Crédito Emitido',value: `$${data.filter(d => (d.status||'').toUpperCase() === 'APPROVED').reduce((acc, d) => acc + Number(d.total||0), 0).toLocaleString()}`,             icon: AlertTriangle, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    { title: 'Total Devuelto',  value: `C$ ${data.reduce((acc, r) => acc + Number(r.total||0), 0).toLocaleString()}`, icon: FileOutput,   color: 'text-rose-500',    bg: 'bg-rose-500/10'    },
+    { title: 'Pendientes',      value: data.filter(r => (r.status||'').toUpperCase() === 'PENDING').length,           icon: Clock,        color: 'text-amber-500',   bg: 'bg-amber-500/10'   },
+    { title: 'Aprobadas',       value: data.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length,          icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Rechazadas',      value: data.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length,          icon: XCircle,      color: 'text-muted-foreground', bg: 'bg-muted/10' },
   ];
 
-  const handleAddReturn = async () => {
-    try {
-      await salesReturnsService.create({
-        invoiceId: data[0]?.invoiceId || 'temp-invoice-id',
-        customerId: data[0]?.customerId || 'temp-customer-id',
-        reason: 'Nueva devolución - editar detalles',
-        date: new Date().toISOString(),
-        items: []
-      });
-      toast.success('Devolución registrada');
-      onRefresh();
-    } catch (error) {
-      toast.error('Error al registrar devolución');
-    }
-  };
+  // ─── INLINE FORM ────────────────────────────────────────────────────
+  if ((editingId || isCreating) && localDoc) {
+    const statusOpt = statusOptions.find(o => o.value === (localDoc?.status || '').toUpperCase());
+    const canApprove = !isCreating && (localDoc?.status || '').toUpperCase() === 'PENDING';
+    return (
+      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setIsCreating(false); setLocalDoc(null); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
+            <div>
+              <h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Nueva Devolución' : `Devolución ${localDoc?.number}`}</h2>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Registrar nueva devolución' : 'Detalle de la devolución'}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+              onClick={async () => { await salesReturnsService.delete(localDoc.id); setEditingId(null); onRefresh(); }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
+            {canApprove && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+              onClick={() => { handleApprove(localDoc.id); setEditingId(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar y Generar NC</Button>}
+            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
+              {isCreating ? 'Registrar Devolución' : 'Guardar Cambios'}
+            </Button>
+          </div>
+        </div>
 
+        <div className="grid md:grid-cols-2 gap-4">
+          <Card className="rounded-2xl border-border/50">
+            <CardContent className="p-6 space-y-3">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
+                  <Combobox options={customers.map(c => ({ label: c.name, value: c.id }))} value={localDoc?.customerId || ''} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} placeholder="Seleccionar Cliente" /></div>
+                <div><p className="text-[10px] text-muted-foreground mb-1">Factura Origen</p>
+                  <Combobox options={customerInvoices.map(i => ({ label: `${i.number} — C$ ${Number(i.total||0).toLocaleString()}`, value: i.id }))} value={localDoc?.invoiceId || ''} onChange={(val) => setLocalDoc({ ...localDoc, invoiceId: val })} placeholder="Seleccionar Factura" /></div>
+                <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
+                  <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
+                {!isCreating && <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
+                  <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span></div>}
+              </div>
+              <div><p className="text-[10px] text-muted-foreground mb-1">Razón de la Devolución</p>
+                <textarea value={localDoc?.reason || ''} onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })}
+                  className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm resize-none" placeholder="Describe el motivo de la devolución..." /></div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border-border/50">
+            <CardContent className="p-6 space-y-3">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen</p>
+              <div className="flex justify-between items-center text-base border-b pb-3 border-border/50">
+                <span className="font-black">Total Devolución</span>
+                <span className="text-rose-500 font-black text-lg">C$ {Number(localDoc?.total||0).toLocaleString()}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground italic">Al aprobar esta devolución, se generará automáticamente una Nota de Crédito y se ajustará el balance del cliente.</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="rounded-2xl border-border/50">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos Devueltos</p>
+              <Button variant="outline" size="sm" onClick={() => {
+                const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0 }];
+                setLocalDoc({ ...localDoc, items: newItems });
+              }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar Item</Button>
+            </div>
+            <div className="space-y-2">
+              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+                <div className="col-span-5">Descripción</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div><div className="col-span-1"></div>
+              </div>
+              {(localDoc.items || []).map((item: any, idx: number) => (
+                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
+                  <div className="col-span-5"><Combobox options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
+                    onChange={(val) => { const ni = [...(localDoc.items || [])]; const prod = products.find(p => p.id === val);
+                      ni[idx] = { ...ni[idx], productId: val, description: prod?.name || '', unitPrice: Number(prod?.price || 0), total: Number(ni[idx].quantity || 1) * Number(prod?.price || 0) };
+                      setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} placeholder="Producto..." /></div>
+                  <div className="col-span-2"><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
+                    const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };
+                    setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-8 text-xs text-right" /></div>
+                  <div className="col-span-2"><Input type="number" min="0" value={Number(item.unitPrice) || ''} onChange={(e) => {
+                    const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
+                    setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-8 text-xs text-right" /></div>
+                  <div className="col-span-2 text-right"><span className="text-xs font-black text-rose-500">C$ {Number(item.total || 0).toLocaleString()}</span></div>
+                  <div className="col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
+                    onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }}><Trash2 className="size-3" /></Button></div>
+                </div>
+              ))}
+              {(!localDoc.items || localDoc.items.length === 0) && <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">Sin productos devueltos. Haz clic en "Agregar Item".</div>}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
           <Card key={i} className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-4">
-                <div className={cn("p-3 rounded-xl shadow-inner", kpi.bg, kpi.color)}>
-                  <kpi.icon className="size-5" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p>
-                  <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{kpi.value}</p>
-                </div>
-              </div>
-            </CardContent>
+            <CardContent className="p-5"><div className="flex items-center gap-4"><div className={cn("p-3 rounded-xl shadow-inner", kpi.bg, kpi.color)}><kpi.icon className="size-5" /></div>
+              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{kpi.value}</p></div></div></CardContent>
           </Card>
         ))}
       </div>
-
       <div className="flex flex-col gap-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
-          <div>
-            <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Devoluciones & Notas de Crédito</h2>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de retornos de mercadería y ajustes de cuenta por cobrar.</p>
-          </div>
+          <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground">Devoluciones de Venta</h2>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de retornos y aprobación de mercancía.</p></div>
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input 
-                placeholder="Buscar devolución..." 
-                className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <Button 
-               onClick={handleAddReturn}
-               className="bg-rose-500 hover:bg-rose-600 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-rose-500/20 border border-rose-500/20"
-            >
-              <Plus className="size-4" /> Registrar Retorno
-            </Button>
+            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+              <Input placeholder="Buscar devolución..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+            <Button onClick={startNew} className="bg-rose-500 hover:bg-rose-600 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-rose-500/20 border border-rose-500/20">
+              <Plus className="size-4" /> Nueva Devolución</Button>
           </div>
         </div>
-
-        <EditableDataTable 
-          data={filtered}
-          onBulkDelete={async (ids) => {
-            try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await salesReturnsService.delete(id as string);
-              }
-              toast.success('Elementos eliminados');
-              onRefresh();
-            } catch (e) {
-              toast.error('Error al eliminar');
-            }
-          }}
-          columns={columns}
-          onRowUpdate={handleUpdate}
-          onAddRow={handleAddReturn}
-          isLoading={loading}
+        <EditableDataTable data={filtered}
+          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch { toast.error('Error'); } }}
+          columns={columns} onRowUpdate={async () => {}} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
+               {(row.status||'').toUpperCase() === 'PENDING' && (
+                 <Button title="Aprobar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
+               )}
                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={async () => { await salesReturnsService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
             </div>

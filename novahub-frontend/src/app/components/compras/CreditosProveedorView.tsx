@@ -1,31 +1,66 @@
-import React, { useState } from 'react';
-import { BadgeDollarSign, Plus, Search, Eye, CheckCircle2, TrendingUp, Clock, Hash } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BadgeDollarSign, Plus, Search, Eye, CheckCircle2, TrendingUp, Hash, Trash2, ChevronLeft } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { vendorCreditsService } from '../../services/compras.service';
-import type { SupplierCredit } from '../../types';
+import { Combobox } from '../ui/Combobox';
+import { vendorCreditsService, suppliersService } from '../../services/compras.service';
+import type { SupplierCredit, Supplier, SupplierCreditItem } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; }
 
+const statusOpts = [
+  { label: 'Borrador',  value: 'DRAFT',   color: 'bg-muted/20 text-muted-foreground' },
+  { label: 'Emitido',   value: 'ISSUED',  color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Aplicado',  value: 'APPLIED', color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Anulado',   value: 'VOIDED',  color: 'bg-rose-500/10 text-rose-500' },
+];
+
 export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
+  const { exchangeRate: globalRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [localDoc, setLocalDoc] = useState<Partial<SupplierCredit> | null>(null);
+
+  useEffect(() => {
+    suppliersService.getAll().then(res => {
+      const list = Array.isArray(res) ? res : (res as any).data || [];
+      setSuppliers(list);
+    }).catch();
+  }, []);
+
+  useEffect(() => {
+    if (editingId) {
+      if (editingId === 'NEW') {
+         setLocalDoc({
+           supplierId: '',
+           date: new Date().toISOString(),
+           reason: '',
+           status: 'ISSUED',
+           items: [],
+           total: 0
+         });
+      } else {
+         const found = data.find(x => x.id === editingId);
+         setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+      }
+    } else {
+      setLocalDoc(null);
+    }
+  }, [editingId, data]);
+
   const filtered = data.filter(c =>
     (c.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (c.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const statusOpts = [
-    { label: 'Borrador',  value: 'draft',   color: 'bg-muted/20 text-muted-foreground' },
-    { label: 'Emitido',   value: 'issued',  color: 'bg-blue-500/10 text-blue-500' },
-    { label: 'Aplicado',  value: 'applied', color: 'bg-emerald-500/10 text-emerald-500' },
-    { label: 'Anulado',   value: 'voided',  color: 'bg-rose-500/10 text-rose-500' },
-  ];
 
   const columns: ColumnDef<SupplierCredit>[] = [
     { key: 'number',   header: 'Nota #',     width: '120px',
@@ -37,27 +72,191 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     { key: 'total',    header: 'Total',      width: '120px',
       render: (val) => <span className="font-black tabular-nums">${Number(val||0).toLocaleString()}</span> },
     { key: 'status',   header: 'Estado',     width: '110px', editable: true, type: 'select', options: statusOpts,
-      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toLowerCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
+      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<SupplierCredit>) => {
     try { await vendorCreditsService.update(id as string, updates); toast.success('Crédito actualizado'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); }
+    catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
   };
 
-  const handleAdd = async () => {
+  const recalculatedTotal = (localDoc?.items || []).reduce((acc, it) => acc + (Number(it.quantity || 0) * Number(it.unitPrice || 0)) * (1 + Number(it.taxRate||0)/100), 0);
+  
+  const handleSaveDoc = async () => {
+    if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
+    
     try {
-      await vendorCreditsService.create({ supplierId: data[0]?.supplierId || 'temp-supplier-id', total: 0, date: new Date().toISOString(), reason: 'Nuevo crédito' } as any);
-      toast.success('Crédito creado'); onRefresh();
-    } catch { toast.error('Error al crear'); }
+      const finalDoc = {
+          ...localDoc, 
+          total: recalculatedTotal
+      };
+      if (editingId === 'NEW') {
+        await vendorCreditsService.create(finalDoc as any);
+        toast.success('Crédito registrado exitosamente');
+      } else {
+        await vendorCreditsService.update(editingId!, finalDoc as any);
+        toast.success('Crédito guardado');
+      }
+      setEditingId(null);
+      onRefresh();
+    } catch (e: any) { 
+        toast.error('Error al registrar: ' + (e.response?.data?.message || 'Error')); 
+    }
   };
 
-  const disponible = data.filter(c => (c.status||'') === 'issued').reduce((a,c) => a+Number(c.total||0), 0);
+  const handleDeleteItem = (idx: number) => {
+    if (!localDoc) return;
+    const newItems = [...(localDoc.items || [])];
+    newItems.splice(idx, 1);
+    setLocalDoc({ ...localDoc, items: newItems as any });
+  };
+
+  const handleItemChange = (idx: number, field: string, value: any) => {
+    if (!localDoc) return;
+    const newItems = [...(localDoc.items || [])];
+    newItems[idx] = { ...newItems[idx], [field]: value };
+    
+    if (['quantity', 'unitPrice', 'taxRate'].includes(field)) {
+       const q = Number(newItems[idx].quantity || 0);
+       const p = Number(newItems[idx].unitPrice || 0);
+       const t = Number(newItems[idx].taxRate || 0);
+       const sub = q * p;
+       const tax = sub * (t / 100);
+       newItems[idx].total = sub + tax;
+    }
+    setLocalDoc({ ...localDoc, items: newItems as any });
+  };
+
+  if (editingId && localDoc) {
+    const isNew = editingId === 'NEW';
+    const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
+
+    return (
+      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
+              <ChevronLeft className="size-5" />
+            </Button>
+            <div>
+              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Nota de Crédito' : `Nota ${localDoc.number || 'de Crédito'}`}</h2>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+             {!isNew && (
+                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                  onClick={async () => {
+                     if(confirm('¿Seguro que deseas eliminar?')){
+                         toast.info('Eliminado (Simulación)'); setEditingId(null);
+                     }
+                  }}>
+                  <Trash2 className="size-3 mr-2" /> Eliminar
+                </Button>
+             )}
+            <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+              Guardar Nota
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <Card className="rounded-2xl border-border/50 col-span-2">
+            <CardContent className="p-6 space-y-3">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Datos del Crédito</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div className="md:col-span-2">
+                  <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
+                  <Combobox
+                    options={suppliers.map(s => ({ label: s.name, value: s.id, description: s.phone || 'Sin teléfono' }))}
+                    value={localDoc.supplierId || ''}
+                    onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
+                    placeholder="Seleccionar proveedor..."
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
+                  <Input type="date" value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
+                  <select 
+                    value={localDoc.status || 'ISSUED'} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
+                    className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
+                  >
+                    {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div className="md:col-span-4">
+                  <p className="text-[10px] text-muted-foreground mb-1">Razón / Concepto</p>
+                  <Input value={localDoc.reason || ''} onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })} className="h-8 text-xs" placeholder="Ej. Devolución de mercadería" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-border/50 col-span-2">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalles</p>
+                <Button variant="outline" size="sm" onClick={() => {
+                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, taxRate: 0, total: 0 }];
+                  setLocalDoc({ ...localDoc, items: newItems as any });
+                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                  <Plus className="size-3 mr-2" /> Agregar Item
+                </Button>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+                  <div className="col-span-4">Descripción</div>
+                  <div className="col-span-2 text-right">Cant.</div>
+                  <div className="col-span-2 text-right">Precio Unitario</div>
+                  <div className="col-span-2 text-right">Imp. %</div>
+                  <div className="col-span-2 text-right">Total</div>
+                </div>
+                {(localDoc.items || []).map((item: any, idx: number) => (
+                  <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
+                    <div className="col-span-4">
+                      <Input value={item.description || ''} onChange={(e) => handleItemChange(idx, 'description', e.target.value)} className="h-8 text-xs" placeholder="Concepto" />
+                    </div>
+                    <div className="col-span-2">
+                      <Input type="number" min="0" value={item.quantity === 0 ? '' : item.quantity} onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
+                    </div>
+                    <div className="col-span-2">
+                      <Input type="number" min="0" value={item.unitPrice === 0 ? '' : item.unitPrice} onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
+                    </div>
+                    <div className="col-span-2">
+                      <Input type="number" min="0" value={item.taxRate === 0 ? '' : item.taxRate} onChange={(e) => handleItemChange(idx, 'taxRate', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
+                    </div>
+                    <div className="col-span-2 flex items-center justify-end gap-2">
+                      <span className="text-xs font-black w-20 text-right tabular-nums">${Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                      <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
+                        <Trash2 className="size-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="flex justify-end mt-4">
+                 <div className="w-64 space-y-2 text-sm bg-muted/10 p-4 rounded-xl border border-border/50">
+                    <div className="flex justify-between pt-2 border-t font-black"><span className="uppercase text-[10px] tracking-widest">Total</span><span className="text-lg text-primary">${recalculatedTotal.toLocaleString()}</span></div>
+                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  const disponible = data.filter(c => (c.status||'').toUpperCase() === 'ISSUED').reduce((a,c) => a+Number(c.total||0), 0);
   const kpis = [
     { title: 'Crédito Disponible', value: `$${disponible.toLocaleString()}`,                                                icon: TrendingUp,      color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Total Notas',        value: data.length,                                                                         icon: Hash,            color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Emitidas',           value: data.filter(c => (c.status||'') === 'issued').length,                                icon: BadgeDollarSign, color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
-    { title: 'Aplicadas',          value: data.filter(c => (c.status||'') === 'applied').length,                              icon: CheckCircle2,    color: 'text-muted-foreground', bg: 'bg-muted/10'   },
+    { title: 'Emitidas',           value: data.filter(c => (c.status||'').toUpperCase() === 'ISSUED').length,                                icon: BadgeDollarSign, color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
   ];
 
   return (
@@ -74,30 +273,18 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Créditos de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Notas de crédito y saldos a favor</p></div>
+          <div><h2 className="text-xl font-black uppercase tracking-tight">Créditos de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={handleAdd} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Crédito</Button>
+            <Button onClick={() => setEditingId('NEW')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Crédito</Button>
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={async (ids) => {
-            try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await supplierCreditsService.delete(id as string);
-              }
-              toast.success('Elementos eliminados');
-              onRefresh();
-            } catch (e) {
-              toast.error('Error al eliminar');
-            }
-          }}
           actions={(row) => (
-            <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
-              onClick={() => toast.info(`${row.number||'NC'} | ${row.supplier?.name||'N/A'} | Total: $${Number(row.total||0).toLocaleString()}`)}>
-              <Eye className="size-4" />
-            </Button>
+             <div className="flex gap-1">
+              <Button title="Editar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { toast.info('Eliminado (Simulacro)'); onRefresh(); }}><Trash2 className="size-4" /></Button>
+            </div>
           )}
         />
       </div>

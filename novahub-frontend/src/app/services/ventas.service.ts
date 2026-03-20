@@ -76,8 +76,10 @@ export const salesReturnsService = {
 
 // ---- Credit Notes ----
 export const creditNotesService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<CreditNote>>('/credit-notes', filters as any),
-  getById: (id: string) => api.get<CreditNote>(`/credit-notes/${id}`),
-  create: (data: Partial<CreditNote>) => api.post<CreditNote>('/credit-notes', data),
-  issue: (id: string) => api.patch<CreditNote>(`/credit-notes/${id}/issue`, {}),
+  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<CreditNote>>('/sales/credit-notes', filters as any),
+  getById: (id: string) => api.get<CreditNote>(`/sales/credit-notes/${id}`),
+  create: (data: Partial<CreditNote>) => api.post<CreditNote>('/sales/credit-notes', data),
+  update: (id: string, data: Partial<CreditNote>) => api.patch<CreditNote>(`/sales/credit-notes/${id}`, data),
+  issue: (id: string) => api.patch<CreditNote>(`/sales/credit-notes/${id}/issue`, {}),
+  delete: (id: string) => api.delete<void>(`/sales/credit-notes/${id}`),
 };

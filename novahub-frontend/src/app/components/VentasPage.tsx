@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   Users, FileSpreadsheet, ClipboardList, FileText,
   RotateCcw, CreditCard, FileOutput, FileMinus,
-  LayoutDashboard, ChevronRight, Menu, X, ShoppingBag, Search, Plus
+  ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
 import { cn } from './ui/utils';
 import { 
   customersService, 
@@ -16,16 +15,17 @@ import {
   invoicesService, 
   paymentsService,
   recurringInvoicesService,
-  salesReturnsService
+  salesReturnsService,
+  creditNotesService,
 } from '../services/ventas.service';
 import type { 
   Customer, Estimate, SalesOrder, Invoice, 
   PaymentReceived, RecurringInvoice, SalesReturn,
-  Product
+  CreditNote, Product
 } from '../types';
 import { inventoryService } from '../services/inventario.service';
 
-// New Sub-Views
+// Sub-Views
 import { ClientesView } from './ventas/ClientesView';
 import { EstimacionesView } from './ventas/EstimacionesView';
 import { OrdenesVentaView } from './ventas/OrdenesVentaView';
@@ -52,13 +52,10 @@ interface VentasPageProps {
 
 export function VentasPage({ activeSubModule }: VentasPageProps) {
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Sync section with Sidebar prop
   useEffect(() => {
     if (activeSubModule) {
-      // Normalize IDs: 'ordenes-venta' -> 'ordenes', etc.
       const normalized = activeSubModule
         .replace('-venta', '')
         .replace('-recibidos', '')
@@ -82,18 +79,19 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
     recurrentes: [] as RecurringInvoice[],
     pagos: [] as PaymentReceived[],
     devoluciones: [] as SalesReturn[],
+    notasCredito: [] as CreditNote[],
     productos: [] as Product[],
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchData();
-  }, [activeSection]); // Refetch when section changes to ensure fresh data if needed, or just keep global
+  }, [activeSection]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [cus, est, ord, inv, pay, rec, ret, prod] = await Promise.all([
+      const [cus, est, ord, inv, pay, rec, ret, cn, prod] = await Promise.all([
         customersService.getAll(),
         estimatesService.getAll(),
         salesOrdersService.getAll(),
@@ -101,6 +99,7 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
         paymentsService.getAll(),
         recurringInvoicesService.getAll(),
         salesReturnsService.getAll(),
+        creditNotesService.getAll(),
         inventoryService.getProducts()
       ]);
       
@@ -113,6 +112,7 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
         recurrentes: toArr(rec),
         pagos: toArr(pay),
         devoluciones: toArr(ret),
+        notasCredito: toArr(cn),
         productos: toArr(prod),
       });
     } catch (error) {
@@ -164,7 +164,6 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto custom-scrollbar relative">
         <header className="sticky top-0 z-20 w-full h-20 bg-background/80 backdrop-blur-md border-b border-border/50 flex items-center justify-between px-6 md:px-10">
            <div className="flex flex-col">
@@ -210,19 +209,19 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
                 <OrdenesVentaView data={data.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} customers={data.clientes} products={data.productos} />
               )}
               {activeSection === 'facturas' && (
-                <FacturasView data={data.facturas} loading={loading} onRefresh={fetchData} onMarkAsPaid={handleMarkAsPaid} />
+                <FacturasView data={data.facturas} loading={loading} onRefresh={fetchData} onMarkAsPaid={handleMarkAsPaid} customers={data.clientes} products={data.productos} />
               )}
               {(activeSection === 'recurrentes' || activeSection === 'facturas-recurrentes') && (
-                <FacturasRecurrentesView data={data.recurrentes} loading={loading} onRefresh={fetchData} />
+                <FacturasRecurrentesView data={data.recurrentes} loading={loading} onRefresh={fetchData} customers={data.clientes} products={data.productos} />
               )}
               {(activeSection === 'pagos' || activeSection === 'pagos-recibidos') && (
-                <PagosRecibidosView data={data.pagos} loading={loading} onRefresh={fetchData} />
+                <PagosRecibidosView data={data.pagos} loading={loading} onRefresh={fetchData} customers={data.clientes} invoices={data.facturas} />
               )}
               {(activeSection === 'devoluciones' || activeSection === 'devoluciones-venta') && (
-                <DevolucionesView data={data.devoluciones} loading={loading} onRefresh={fetchData} />
+                <DevolucionesView data={data.devoluciones} loading={loading} onRefresh={fetchData} customers={data.clientes} invoices={data.facturas} products={data.productos} />
               )}
               {activeSection === 'notas-credito' && (
-                <NotasCreditoView data={data.devoluciones} loading={loading} onRefresh={fetchData} />
+                <NotasCreditoView data={data.notasCredito} loading={loading} onRefresh={fetchData} customers={data.clientes} />
               )}
             </motion.div>
           </AnimatePresence>

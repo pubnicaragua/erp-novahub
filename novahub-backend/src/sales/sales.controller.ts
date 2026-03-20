@@ -1,10 +1,13 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
-import { UpdateCustomerDto, CreateEstimateDto, CreateSalesOrderDto, CreatePaymentDto } from './dto/sales.dto';
+import {
+  UpdateCustomerDto, CreateEstimateDto, CreateSalesOrderDto, CreatePaymentDto,
+  CreateRecurringInvoiceDto, CreateSalesReturnDto, CreateCreditNoteDto,
+} from './dto/sales.dto';
 
 @ApiTags('sales')
 @ApiBearerAuth()
@@ -159,7 +162,7 @@ export class SalesController {
 
   @Post('recurring-invoices')
   @ApiOperation({ summary: 'Crear factura recurrente' })
-  createRecurringInvoice(@Body() data: any, @Request() req) {
+  createRecurringInvoice(@Body() data: CreateRecurringInvoiceDto, @Request() req) {
     return this.salesService.createRecurringInvoice(data, req.user.clientTenantId);
   }
 
@@ -181,6 +184,12 @@ export class SalesController {
     return this.salesService.setRecurringInvoiceStatus(id, 'active', req.user.clientTenantId);
   }
 
+  @Delete('recurring-invoices/:id')
+  @ApiOperation({ summary: 'Eliminar factura recurrente' })
+  removeRecurringInvoice(@Param('id') id: string, @Request() req) {
+    return this.salesService.removeRecurringInvoice(id, req.user.clientTenantId);
+  }
+
   // ─── DEVOLUCIONES ──────────────────────────────────────────────────────────
   @Get('returns')
   @ApiOperation({ summary: 'Listar devoluciones de venta' })
@@ -190,7 +199,7 @@ export class SalesController {
 
   @Post('returns')
   @ApiOperation({ summary: 'Registrar devolución' })
-  createReturn(@Body() data: any, @Request() req) {
+  createReturn(@Body() data: CreateSalesReturnDto, @Request() req) {
     return this.salesService.createReturn(data, req.user.clientTenantId);
   }
 
@@ -201,7 +210,7 @@ export class SalesController {
   }
 
   @Patch('returns/:id/approve')
-  @ApiOperation({ summary: 'Aprobar devolución' })
+  @ApiOperation({ summary: 'Aprobar devolución y generar nota de crédito' })
   approveReturn(@Param('id') id: string, @Request() req) {
     return this.salesService.approveReturn(id, req.user.clientTenantId);
   }
@@ -210,5 +219,36 @@ export class SalesController {
   @ApiOperation({ summary: 'Eliminar devolución' })
   removeReturn(@Param('id') id: string, @Request() req) {
     return this.salesService.removeReturn(id, req.user.clientTenantId);
+  }
+
+  // ─── NOTAS DE CRÉDITO ────────────────────────────────────────────────────
+  @Get('credit-notes')
+  @ApiOperation({ summary: 'Listar notas de crédito' })
+  findAllCreditNotes(@Request() req) {
+    return this.salesService.findAllCreditNotes(req.user.clientTenantId);
+  }
+
+  @Post('credit-notes')
+  @ApiOperation({ summary: 'Crear nota de crédito' })
+  createCreditNote(@Body() data: CreateCreditNoteDto, @Request() req) {
+    return this.salesService.createCreditNote(data, req.user.clientTenantId);
+  }
+
+  @Patch('credit-notes/:id')
+  @ApiOperation({ summary: 'Actualizar nota de crédito' })
+  updateCreditNote(@Param('id') id: string, @Body() data: any, @Request() req) {
+    return this.salesService.updateCreditNote(id, data, req.user.clientTenantId);
+  }
+
+  @Patch('credit-notes/:id/issue')
+  @ApiOperation({ summary: 'Emitir nota de crédito (aplicar al balance)' })
+  issueCreditNote(@Param('id') id: string, @Request() req) {
+    return this.salesService.issueCreditNote(id, req.user.clientTenantId);
+  }
+
+  @Delete('credit-notes/:id')
+  @ApiOperation({ summary: 'Eliminar nota de crédito' })
+  removeCreditNote(@Param('id') id: string, @Request() req) {
+    return this.salesService.removeCreditNote(id, req.user.clientTenantId);
   }
 }

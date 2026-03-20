@@ -1,42 +1,84 @@
-import React, { useState } from 'react';
-import { RotateCcw, Plus, Search, Eye, CalendarClock, TrendingDown, CheckCircle2, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { RotateCcw, Plus, Search, Eye, CalendarClock, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { recurringSupplierInvoicesService } from '../../services/compras.service';
-import type { RecurringSupplierInvoice } from '../../types';
+import { Combobox } from '../ui/Combobox';
+import { recurringSupplierInvoicesService, suppliersService } from '../../services/compras.service';
+import type { RecurringSupplierInvoice, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; }
 
+const freqOpts = [
+  { label: 'Semanal',    value: 'WEEKLY' },  
+  { label: 'Mensual',    value: 'MONTHLY' },
+  { label: 'Trimestral', value: 'QUARTERLY' }, 
+  { label: 'Anual',      value: 'YEARLY' },
+];
+const freqMap: Record<string,string> = { WEEKLY:'Semanal', MONTHLY:'Mensual', QUARTERLY:'Trimestral', YEARLY:'Anual' };
+const statusOpts = [
+  { label: 'Activo',     value: 'ACTIVE',    color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Pausado',    value: 'PAUSED',    color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Cancelado',  value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
+];
+
 export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
+  const { exchangeRate: globalRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [localDoc, setLocalDoc] = useState<Partial<RecurringSupplierInvoice> | null>(null);
+
+  useEffect(() => {
+    suppliersService.getAll().then(res => {
+      const list = Array.isArray(res) ? res : (res as any).data || [];
+      setSuppliers(list);
+    }).catch();
+  }, []);
+
+  useEffect(() => {
+    if (editingId) {
+      if (editingId === 'NEW') {
+         const nextMonth = new Date();
+         nextMonth.setMonth(nextMonth.getMonth() + 1);
+         setLocalDoc({
+           supplierId: '',
+           frequency: 'MONTHLY',
+           startDate: new Date().toISOString(),
+           nextInvoiceDate: nextMonth.toISOString(),
+           currency: 'NIO',
+           exchangeRate: globalRate,
+           status: 'ACTIVE',
+           items: [],
+           total: 0
+         } as any);
+      } else {
+         const found = data.find(x => x.id === editingId);
+         setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+      }
+    } else {
+      setLocalDoc(null);
+    }
+  }, [editingId, data, globalRate]);
+
   const filtered = data.filter(r =>
     ((r as any).description||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
     ((r as any).supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const freqOpts = [
-    { label: 'Semanal',    value: 'WEEKLY' },  { label: 'Mensual', value: 'MONTHLY' },
-    { label: 'Trimestral', value: 'QUARTERLY' }, { label: 'Anual',   value: 'YEARLY' },
-  ];
-  const freqMap: Record<string,string> = { WEEKLY:'Semanal', MONTHLY:'Mensual', QUARTERLY:'Trimestral', YEARLY:'Anual' };
-  const statusOpts = [
-    { label: 'Activo',     value: 'ACTIVE',    color: 'bg-emerald-500/10 text-emerald-500' },
-    { label: 'Pausado',    value: 'PAUSED',    color: 'bg-amber-500/10 text-amber-500' },
-    { label: 'Cancelado',  value: 'CANCELLED', color: 'bg-muted/20 text-muted-foreground' },
-  ];
-
   const columns: ColumnDef<RecurringSupplierInvoice>[] = [
-    { key: 'description' as any, header: 'Descripción', editable: true },
+    { key: 'description' as any, header: 'Descripción', editable: true, 
+      render: (val, row) => <span className="text-xs font-bold text-primary">{(row as any).description || 'Factura Automática'}</span> },
     { key: 'supplier' as any,    header: 'Proveedor',
       render: (_v, row) => <span className="font-bold text-sm">{(row as any).supplier?.name||'-'}</span> },
-    { key: 'amount' as any,      header: 'Monto',       width: '120px',
-      render: (val) => <span className="font-black tabular-nums text-rose-500">${Number(val||0).toLocaleString()}</span> },
+    { key: 'total' as any,       header: 'Monto Estimado',       width: '120px',
+      render: (val, row) => <span className="font-black tabular-nums text-rose-500">{row.currency === 'NIO' ? `C$ ${Number(val||(row as any).amount||0).toLocaleString()}` : `$ ${Number(val||(row as any).amount||0).toLocaleString()}`}</span> },
     { key: 'frequency' as any,   header: 'Frecuencia',  width: '120px', editable: true, type: 'select', options: freqOpts,
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-purple-500/10 text-purple-500 border-none">{freqMap[(val||'').toUpperCase()]||val||'-'}</Badge> },
     { key: 'status' as any,      header: 'Estado',      width: '110px', editable: true, type: 'select', options: statusOpts,
@@ -45,21 +87,218 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
 
   const handleUpdate = async (id: string | number, updates: any) => {
     try { await recurringSupplierInvoicesService.update(id as string, updates); toast.success('Actualizado'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); }
+    catch { toast.error('Error al actualizar'); throw new Error(); }
   };
 
-  const handleAdd = async () => {
+  const handleSaveDoc = async () => {
+    if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
+    if (!localDoc?.nextInvoiceDate) return toast.error('Debe configurar la próxima fecha de factura');
+
     try {
-      await recurringSupplierInvoicesService.create({ supplierId: data[0]?.supplierId || 'temp-supplier-id', amount: 0, frequency: 'MONTHLY', startDate: new Date().toISOString() } as any);
-      toast.success('Factura recurrente creada'); onRefresh();
-    } catch { toast.error('Error al crear'); }
+      if (editingId === 'NEW') {
+        const payload = {
+            ...localDoc, 
+            amount: localDoc.total, // For compatibility
+        } as any;
+        await recurringSupplierInvoicesService.create(payload);
+        toast.success('Configuración de factura recurrente creada');
+      } else {
+        await recurringSupplierInvoicesService.update(editingId!, localDoc as any);
+        toast.success('Configuración guardada');
+      }
+      setEditingId(null);
+      onRefresh();
+    } catch (e: any) { 
+        toast.error('Error al guardar: ' + (e.response?.data?.message || 'Revisa los campos requeridos')); 
+    }
   };
 
-  const monthly = data.filter(r => ((r as any).frequency||'').toUpperCase()==='MONTHLY').reduce((a,r) => a+Number((r as any).amount||0), 0);
+  const handleDeleteItem = (idx: number) => {
+    if (!localDoc) return;
+    const newItems = [...((localDoc as any).items || [])];
+    newItems.splice(idx, 1);
+    recalculateTotals(newItems);
+  };
+
+  const handleItemChange = (idx: number, field: string, value: any) => {
+    if (!localDoc) return;
+    const newItems = [...((localDoc as any).items || [])];
+    newItems[idx] = { ...newItems[idx], [field]: value };
+    
+    if (['quantity', 'unitPrice'].includes(field)) {
+       const q = Number(newItems[idx].quantity || 0);
+       const p = Number(newItems[idx].unitPrice || 0);
+       newItems[idx].total = q * p;
+    }
+    recalculateTotals(newItems);
+  };
+
+  const recalculateTotals = (items: any[]) => {
+    const total = items.reduce((acc, it) => acc + (Number(it.quantity||0) * Number(it.unitPrice||0)), 0);
+    setLocalDoc(prev => ({ ...prev!, items, total } as any));
+  };
+
+
+  if (editingId && localDoc) {
+    const isNew = editingId === 'NEW';
+    const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
+
+    return (
+      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
+              <ChevronLeft className="size-5" />
+            </Button>
+            <div>
+              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Config. Recurrente' : 'Editar Factura Recurrente'}</h2>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Creación automática de facturas</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+             {!isNew && (
+                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                  onClick={async () => {
+                     if(confirm('¿Seguro que deseas cancelar esta recurrencia?')){
+                         try { await recurringSupplierInvoicesService.delete(editingId); toast.success('Eliminado'); setEditingId(null); onRefresh(); } catch { toast.error('Error al eliminar'); }
+                     }
+                  }}>
+                  <Trash2 className="size-3 mr-2" /> Eliminar
+                </Button>
+             )}
+            <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+              Guardar Configuración
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <Card className="rounded-2xl border-border/50 col-span-2">
+            <CardContent className="p-6 space-y-3">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Reglas de Generación</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div className="md:col-span-2">
+                  <p className="text-[10px] text-muted-foreground mb-1">Nombre Descriptivo</p>
+                  <Input value={(localDoc as any).description || ''} onChange={(e) => setLocalDoc({ ...localDoc, description: e.target.value } as any)} className="h-8 text-xs font-bold" placeholder="Ej. Alquiler de Local (Oficina 2) Mensual" />
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-[10px] text-muted-foreground mb-1">Proveedor Obligatorio</p>
+                  <Combobox
+                    options={suppliers.map(s => ({ label: s.name, value: s.id, description: s.phone || 'Sin teléfono' }))}
+                    value={localDoc.supplierId || ''}
+                    onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
+                    placeholder="Seleccionar proveedor de la factura..."
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
+                  <select 
+                    value={localDoc.frequency || 'MONTHLY'} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, frequency: e.target.value })}
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase text-primary"
+                  >
+                    {freqOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Fecha de Inicio</p>
+                  <Input type="date" value={localDoc.startDate ? new Date(localDoc.startDate).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, startDate: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-rose-500 mb-1 tracking-widest">Siguiente Factura *</p>
+                  <Input type="date" value={(localDoc as any).nextInvoiceDate ? new Date((localDoc as any).nextInvoiceDate).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, nextInvoiceDate: new Date(e.target.value).toISOString() } as any)} className="h-8 text-xs font-bold border-rose-500/50" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
+                  <select 
+                    value={localDoc.status || 'ACTIVE'} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
+                    className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
+                  >
+                    {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-border/50 col-span-2">
+             <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Plantilla de Ítems</p>
+                  <Button variant="outline" size="sm" onClick={() => {
+                    const newItems = [...((localDoc as any).items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, total: 0 }];
+                    setLocalDoc({ ...localDoc, items: newItems } as any);
+                  }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                    <Plus className="size-3 mr-2" /> Agregar Item
+                  </Button>
+                </div>
+              
+                <div className="space-y-2">
+                  <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+                    <div className="col-span-6">Concepto a Facturar</div>
+                    <div className="col-span-2 text-right">Cant.</div>
+                    <div className="col-span-2 text-right">Precio Unitario</div>
+                    <div className="col-span-2 text-right">Total Base</div>
+                  </div>
+                  {((localDoc as any).items || []).map((item: any, idx: number) => (
+                    <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-6">
+                        <Input value={item.description || ''} onChange={(e) => handleItemChange(idx, 'description', e.target.value)} className="h-8 text-xs" placeholder="Concepto (mensualidad, alquiler, etc.)" />
+                      </div>
+                      <div className="col-span-2">
+                        <Input type="number" min="0" value={item.quantity === 0 ? '' : item.quantity} onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
+                      </div>
+                      <div className="col-span-2">
+                        <Input type="number" min="0" value={item.unitPrice === 0 ? '' : item.unitPrice} onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
+                      </div>
+                      <div className="col-span-2 flex items-center justify-end gap-2">
+                        <span className="text-xs font-black w-20 text-right tabular-nums">${Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
+                          <Trash2 className="size-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {(!(localDoc as any).items || (localDoc as any).items.length === 0) && (
+                    <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">
+                      Plantilla vacía. Agrega los ítems que se generarán automáticamente.
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex justify-end mt-4">
+                   <div className="w-64 space-y-4 text-sm bg-muted/10 p-4 rounded-xl border border-border/50">
+                      <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
+                         <div className="w-1/2">
+                            <select 
+                              value={localDoc.currency || 'NIO'} 
+                              onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value, exchangeRate: globalRate } as any)}
+                              className="h-6 w-full max-w-[80px] rounded-md border border-input bg-background px-1 text-[10px] font-bold uppercase"
+                            >
+                              <option value="NIO">NIO</option>
+                              <option value="USD">USD</option>
+                            </select>
+                         </div>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] uppercase tracking-widest font-black text-rose-500">
+                         <span>Suma Estimada:</span>
+                         <span className="text-sm">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number((localDoc as any).total||(localDoc as any).amount||0).toLocaleString()}</span>
+                      </div>
+                   </div>
+                </div>
+             </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  const monthly = data.filter(r => ((r as any).frequency||'').toUpperCase()==='MONTHLY').reduce((a,r) => a+(r.baseTotal || (r.currency === 'USD' ? (r as any).total * globalRate : (r as any).total)), 0);
   const kpis = [
     { title: 'Activas',         value: data.filter(r => ((r as any).status||'').toUpperCase()==='ACTIVE').length,  icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Total Config.',   value: data.length,                                                                  icon: RotateCcw,     color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Mensual Estimado',value: `$${monthly.toLocaleString()}`,                                               icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    { title: 'Est. Mensual(NIO)',value: `C$ ${monthly.toLocaleString()}`,                                               icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
     { title: 'Pausadas',        value: data.filter(r => ((r as any).status||'').toUpperCase()==='PAUSED').length,   icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
   ];
 
@@ -80,7 +319,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
           <div><h2 className="text-xl font-black uppercase tracking-tight">Facturas Recurrentes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Servicios y pagos automáticos</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={handleAdd} className="bg-purple-600 hover:bg-purple-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Config.</Button>
+            <Button onClick={() => setEditingId('NEW')} className="bg-purple-600 hover:bg-purple-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Config.</Button>
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
@@ -97,10 +336,10 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
             }
           }}
           actions={(row) => (
-            <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
-              onClick={() => toast.info(`${(row as any).description||'Recurrente'} | ${(row as any).supplier?.name||'N/A'} | $${Number((row as any).amount||0).toLocaleString()}/${(row as any).frequency||'MONTHLY'}`)}>
-              <Eye className="size-4" />
-            </Button>
+            <div className="flex gap-1">
+              <Button title="Editar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { try { await recurringSupplierInvoicesService.delete(row.id); onRefresh(); } catch { toast.error('Error'); } }}><Trash2 className="size-4" /></Button>
+            </div>
           )}
         />
       </div>
