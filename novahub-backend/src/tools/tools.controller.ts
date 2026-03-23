@@ -2,7 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request }
 import { ToolsService } from './tools.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { CreateTicketDto, UpdateTicketDto, CreateDocumentDto, CreateActivityDto } from './dto/tools.dto';
+import { CreateTicketDto, UpdateTicketDto, CreateDocumentDto, UpdateDocumentDto, CreateActivityDto } from './dto/tools.dto';
 
 @ApiTags('tools')
 @ApiBearerAuth()
@@ -24,6 +24,12 @@ export class ToolsController {
     return this.toolsService.findAllTickets(req.user.clientTenantId);
   }
 
+  @Get('tickets/:id')
+  @ApiOperation({ summary: 'Obtener ticket por ID' })
+  findTicketById(@Param('id') id: string, @Request() req) {
+    return this.toolsService.findTicketById(id, req.user.clientTenantId);
+  }
+
   @Patch('tickets/:id')
   @ApiOperation({ summary: 'Actualizar ticket' })
   updateTicket(@Param('id') id: string, @Body() data: UpdateTicketDto, @Request() req) {
@@ -40,13 +46,25 @@ export class ToolsController {
   @Post('documents')
   @ApiOperation({ summary: 'Registrar nuevo documento' })
   createDocument(@Body() data: CreateDocumentDto, @Request() req) {
-    return this.toolsService.createDocument(data, req.user.clientTenantId);
+    return this.toolsService.createDocument(data, req.user.clientTenantId, req.user.id);
   }
 
   @Get('documents')
   @ApiOperation({ summary: 'Listar documentos' })
   findAllDocuments(@Request() req) {
     return this.toolsService.findAllDocuments(req.user.clientTenantId);
+  }
+
+  @Get('documents/:id')
+  @ApiOperation({ summary: 'Obtener documento por ID' })
+  findDocumentById(@Param('id') id: string, @Request() req) {
+    return this.toolsService.findDocumentById(id, req.user.clientTenantId);
+  }
+
+  @Patch('documents/:id')
+  @ApiOperation({ summary: 'Actualizar documento' })
+  updateDocument(@Param('id') id: string, @Body() data: UpdateDocumentDto, @Request() req) {
+    return this.toolsService.updateDocument(id, data, req.user.clientTenantId, req.user.id);
   }
 
   @Delete('documents/:id')
