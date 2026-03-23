@@ -36,7 +36,7 @@ const frequencyOptions = [
 ];
 
 export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [] }: FacturasRecurrentesViewProps) {
-  const { exchangeRate: globalRate } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
@@ -145,17 +145,40 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       render: (val) => { const freqMap: Record<string, string> = { WEEKLY: 'Semanal', MONTHLY: 'Mensual', QUARTERLY: 'Trimestral', YEARLY: 'Anual' };
         return <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-500 border-none">{freqMap[(val||'').toUpperCase()] || val}</Badge>; } },
     { key: 'total', header: 'Monto Ciclo', width: '150px',
-      render: (val, row) => <span className="text-[13px] font-black tabular-nums text-foreground">{(row as any).currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}</span> },
+      render: (val, row) => (
+        <span className="text-[13px] font-black tabular-nums text-foreground">
+          {formatConvertedAmount(Number(val || 0), (row as any).currency, (row as any).exchangeRate)}
+        </span>
+      ) },
     { key: 'status', header: 'Estado', width: '130px', render: (val) => { const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
       return <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none", opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>; } },
     { key: 'nextInvoiceDate', header: 'Próxima Fecha', render: (val) => <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground"><Calendar className="size-3" />{new Date(val).toLocaleDateString()}</div> },
   ];
 
+  const activeRecurringInDisplayCurrency = data
+    .filter(recurring => (recurring.status || '').toUpperCase() === 'ACTIVE')
+    .reduce((acc, recurring) => acc + convertAmount(recurring.total || 0, (recurring as any).currency, (recurring as any).exchangeRate), 0);
+  const totalRecurringInDisplayCurrency = data.reduce(
+    (acc, recurring) => acc + convertAmount(recurring.total || 0, (recurring as any).currency, (recurring as any).exchangeRate),
+    0,
+  );
   const kpis = [
-    { title: 'MRR (Total)',    value: `C$ ${data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').reduce((acc, r) => acc + Number(r.total||0), 0).toLocaleString()}`, icon: RotateCcw, color: 'text-primary',   bg: 'bg-primary/10'   },
+    {
+      title: `MRR (Total ${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${activeRecurringInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: RotateCcw,
+      color: 'text-primary',
+      bg: 'bg-primary/10',
+    },
     { title: 'Activas',        value: data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length, icon: Calendar,  color: 'text-blue-500',  bg: 'bg-blue-500/10'  },
     { title: 'Pausadas',       value: data.filter(r => (r.status||'').toUpperCase() === 'PAUSED').length, icon: Clock,     color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'Total Mensual',  value: `C$ ${data.reduce((acc, r) => acc + Number(r.total||0), 0).toLocaleString()}`, icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    {
+      title: `Total Mensual (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${totalRecurringInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: TrendingUp,
+      color: 'text-emerald-500',
+      bg: 'bg-emerald-500/10',
+    },
   ];
 
   // ─── INLINE EDITOR ─────────────────────────────────────────────────────

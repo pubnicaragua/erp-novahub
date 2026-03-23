@@ -22,7 +22,7 @@ const methodOpts = [
 ];
 
 export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
-  const { exchangeRate: globalRate } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -74,7 +74,11 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
     { key: 'date',      header: 'Fecha',      width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'amount',    header: 'Monto',      width: '130px',
-      render: (val, row) => <span className="font-black tabular-nums text-emerald-500">{row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}</span> },
+      render: (val, row) => (
+        <span className="font-black tabular-nums text-emerald-500">
+          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
+        </span>
+      ) },
     { key: 'method',    header: 'Método',     width: '120px', editable: true, type: 'select', options: methodOpts,
       render: (val) => { const o = methodOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{o?.label||val||'-'}</Badge>; } },
   ];
@@ -228,9 +232,20 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
     );
   }
 
+  const paidTotalInDisplayCurrency = data.reduce(
+    (acc, payment) => acc + convertAmount(payment.amount || 0, payment.currency, payment.exchangeRate),
+    0,
+  );
+
   const kpis = [
     { title: 'Transacciones',   value: data.length,                   icon: Hash,         color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
-    { title: 'Pagos Realizados', value: `C$ ${data.reduce((a,p) => a + (p.baseAmount || (p.currency === 'USD' ? p.amount * globalRate : p.amount)), 0).toLocaleString()}`, icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+    {
+      title: `Pagos Realizados (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${paidTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: TrendingDown,
+      color: 'text-rose-500',
+      bg: 'bg-rose-500/10',
+    },
     { title: 'Conciliados',     value: data.length,                   icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   ];
 

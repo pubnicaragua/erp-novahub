@@ -25,7 +25,7 @@ const statusOpts = [
 ];
 
 export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
-  const { exchangeRate: globalRate } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   
@@ -77,7 +77,11 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
     { key: 'date',     header: 'Fecha',     width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'total',    header: 'Total',     width: '130px',
-      render: (val, row) => <span className="font-black tabular-nums text-foreground">{row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}</span> },
+      render: (val, row) => (
+        <span className="font-black tabular-nums text-foreground">
+          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
+        </span>
+      ) },
     { key: 'status',   header: 'Estado',    width: '120px', editable: true, type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
@@ -299,11 +303,21 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
     );
   }
 
+  const totalAmountInDisplayCurrency = data.reduce(
+    (acc, order) => acc + convertAmount(order.total || 0, order.currency, order.exchangeRate),
+    0,
+  );
   const kpis = [
     { title: 'Total Ordenes',   value: data.length,                                                                     icon: ClipboardList, color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Por Aprobar',     value: data.filter(o => (o.status||'').toUpperCase() === 'PENDING').length,                 icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
     { title: 'Aprobadas',       value: data.filter(o => (o.status||'').toUpperCase() === 'APPROVED').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Monto Total',     value: `C$ ${data.reduce((a,o) => a + (o.baseTotal || (o.currency === 'USD' ? o.total * globalRate : o.total)), 0).toLocaleString()}`,             icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    {
+      title: `Monto Total (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${totalAmountInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: TrendingDown,
+      color: 'text-rose-500',
+      bg: 'bg-rose-500/10',
+    },
   ];
 
   return (

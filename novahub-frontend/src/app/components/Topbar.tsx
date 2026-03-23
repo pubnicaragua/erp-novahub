@@ -81,7 +81,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     }
   };
 
-  const { currency, toggleCurrency } = useCurrency();
+  const { currency, toggleCurrency, currencyInteractionEnabled } = useCurrency();
 
   const getRoleBadge = (role: string) => {
     switch (role?.toLowerCase()) {
@@ -143,8 +143,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           variant="outline" 
           size="sm" 
           onClick={toggleCurrency} 
-          className="h-9 gap-2 px-3 border-border bg-card hover:bg-muted"
-          title="Cambiar Moneda"
+          className="h-9 gap-2 px-3 border-border bg-card hover:bg-muted disabled:opacity-60 disabled:cursor-not-allowed"
+          title={currencyInteractionEnabled ? 'Cambiar Moneda' : 'Cambio de moneda bloqueado por configuración'}
+          disabled={!currencyInteractionEnabled}
         >
           {currency === 'USD' ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
           <span className="text-xs font-bold">{currency}</span>

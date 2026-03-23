@@ -31,7 +31,7 @@ const statusOptions = [
 ];
 
 export function EstimacionesView({ data, loading: _loading, onRefresh, customers = [], products = [] }: EstimacionesViewProps) {
-  const { formatAmount: formatGlobal, exchangeRate: globalRate } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Estimate | null>(null);
@@ -161,7 +161,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
       width: '150px',
       render: (val, row) => (
         <span className="text-[13px] font-black tabular-nums text-foreground">
-          {row.currency === 'NIO' ? `C$ ${val.toLocaleString()}` : `$ ${val.toLocaleString()}`}
+          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
         </span>
       )
     },
@@ -196,8 +196,19 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
     }
   ];
 
+  const quotedTotalInDisplayCurrency = data.reduce(
+    (acc, estimate) => acc + convertAmount(estimate.total || 0, estimate.currency, estimate.exchangeRate),
+    0,
+  );
+
   const kpis = [
-    { title: 'Total Cotizado', value: `$${data.reduce((acc, e) => acc + Number(e.total || 0), 0).toLocaleString()}`, icon: FileSpreadsheet, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    {
+      title: `Total Cotizado (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${quotedTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: FileSpreadsheet,
+      color: 'text-blue-500',
+      bg: 'bg-blue-500/10',
+    },
     { title: 'Tasa Conversión', value: `${((data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (data.length || 1)) * 100).toFixed(0)}%`, icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Enviadas', value: data.filter(e => (e.status||'').toUpperCase() === 'SENT').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
     { title: 'Aprobadas', value: data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length, icon: CheckCircle2, color: 'text-purple-500', bg: 'bg-purple-500/10' },

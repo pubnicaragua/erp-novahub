@@ -18,6 +18,39 @@ export class ToolsService {
     private exchangeRateService: ExchangeRateService
   ) {}
 
+  private readonly FINANCE_SETTINGS_GROUP = 'FINANCY';
+
+  private async getTenantSetting(clientTenantId: string, key: string): Promise<string | null> {
+    const setting = await this.prisma.systemSetting.findFirst({
+      where: { clientTenantId, group: this.FINANCE_SETTINGS_GROUP, key },
+    });
+    return setting?.value ?? null;
+  }
+
+  private async upsertTenantSetting(clientTenantId: string, key: string, value: string): Promise<void> {
+    const existing = await this.prisma.systemSetting.findFirst({
+      where: { clientTenantId, group: this.FINANCE_SETTINGS_GROUP, key },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await this.prisma.systemSetting.update({
+        where: { id: existing.id },
+        data: { value },
+      });
+      return;
+    }
+
+    await this.prisma.systemSetting.create({
+      data: {
+        clientTenantId,
+        group: this.FINANCE_SETTINGS_GROUP,
+        key,
+        value,
+      },
+    });
+  }
+
   async getExchangeRate(clientTenantId: string) {
     const tenant: any = await this.prisma.clientTenant.findUnique({
       where: { id: clientTenantId },
@@ -25,15 +58,41 @@ export class ToolsService {
     });
 
     const rate = await this.exchangeRateService.getExchangeRate(clientTenantId);
+
+    const autoSetting = await this.getTenantSetting(clientTenantId, 'exchange_rate_auto');
+    const displayCurrencySetting = await this.getTenantSetting(clientTenantId, 'display_currency');
+    const allowCurrencySwitchSetting = await this.getTenantSetting(clientTenantId, 'allow_currency_switch');
+
+    const auto = autoSetting !== null
+      ? autoSetting === 'true'
+      : (tenant?.partner?.exchangeRateAuto ?? true);
+
+    const baseCurrency = (tenant?.partner?.baseCurrency ?? 'NIO') === 'USD' ? 'USD' : 'NIO';
+    const displayCurrency = (displayCurrencySetting === 'USD' || displayCurrencySetting === 'NIO')
+      ? displayCurrencySetting
+      : baseCurrency;
+    const allowCurrencySwitch = allowCurrencySwitchSetting !== null
+      ? allowCurrencySwitchSetting === 'true'
+      : true;
     
     return {
       rate,
-      auto: tenant?.partner?.exchangeRateAuto ?? true,
-      baseCurrency: tenant?.partner?.baseCurrency ?? 'NIO'
+      auto,
+      baseCurrency,
+      displayCurrency,
+      allowCurrencySwitch,
     };
   }
 
-  async updateExchangeRate(clientTenantId: string, data: { rate?: number; auto?: boolean }) {
+  async updateExchangeRate(
+    clientTenantId: string,
+    data: {
+      rate?: number;
+      auto?: boolean;
+      displayCurrency?: 'USD' | 'NIO';
+      allowCurrencySwitch?: boolean;
+    },
+  ) {
     if (data.auto !== undefined) {
       const tenant = await this.prisma.clientTenant.findUnique({ where: { id: clientTenantId }});
       if (tenant && tenant.partnerId) {
@@ -42,10 +101,24 @@ export class ToolsService {
           data: { exchangeRateAuto: data.auto }
         });
       }
+      await this.upsertTenantSetting(clientTenantId, 'exchange_rate_auto', data.auto ? 'true' : 'false');
     }
 
     if (data.rate !== undefined) {
       await this.exchangeRateService.updateManualRate(clientTenantId, data.rate);
+    }
+
+    if (data.displayCurrency !== undefined) {
+      const normalizedDisplayCurrency = data.displayCurrency === 'USD' ? 'USD' : 'NIO';
+      await this.upsertTenantSetting(clientTenantId, 'display_currency', normalizedDisplayCurrency);
+    }
+
+    if (data.allowCurrencySwitch !== undefined) {
+      await this.upsertTenantSetting(
+        clientTenantId,
+        'allow_currency_switch',
+        data.allowCurrencySwitch ? 'true' : 'false',
+      );
     }
 
     return this.getExchangeRate(clientTenantId);

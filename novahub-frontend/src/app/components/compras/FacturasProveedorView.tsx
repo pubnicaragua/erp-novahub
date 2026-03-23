@@ -25,7 +25,7 @@ const statusOpts = [
 ];
 
 export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
-  const { exchangeRate: globalRate } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   
@@ -79,7 +79,11 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
     { key: 'dueDate',  header: 'Vencimiento', width: '110px',
       render: (val) => { const isLate = new Date(val).getTime() < Date.now(); return <span className={cn("text-xs", isLate && "text-rose-500 font-bold")}>{val ? new Date(val).toLocaleDateString() : '-'}</span>; } },
     { key: 'total',    header: 'Total',       width: '130px',
-      render: (val, row) => <span className="font-black tabular-nums text-rose-500">{row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}</span> },
+      render: (val, row) => (
+        <span className="font-black tabular-nums text-rose-500">
+          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
+        </span>
+      ) },
     { key: 'status',   header: 'Estado',      width: '110px', editable: true, type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
@@ -303,9 +307,19 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
     );
   }
 
+  const pendingTotalInDisplayCurrency = data
+    .filter(invoice => ['PENDING', 'PARTIAL'].includes((invoice.status || '').toUpperCase()))
+    .reduce((acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate), 0);
+
   const kpis = [
      { title: 'Facturas',        value: data.length,                   icon: FileStack, color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
-     { title: 'Por Pagar (NIO)', value: `C$ ${data.filter(b => ['PENDING', 'PARTIAL'].includes((b.status||'').toUpperCase())).reduce((a,b) => a + (b.baseTotal || (b.currency === 'USD' ? b.total * globalRate : b.total)), 0).toLocaleString()}`, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+     {
+       title: `Por Pagar (${displayCurrency})`,
+       value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${pendingTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+       icon: Clock,
+       color: 'text-amber-500',
+       bg: 'bg-amber-500/10',
+     },
      { title: 'Vencidas',        value: data.filter(b => new Date(b.dueDate).getTime() < Date.now() && (b.status||'').toUpperCase() !== 'PAID').length, icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10' },
      { title: 'Pagadas (Mes)',   value: data.filter(b => (b.status||'').toUpperCase() === 'PAID').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   ];

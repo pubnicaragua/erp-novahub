@@ -33,7 +33,7 @@ const statusOptions = [
 ];
 
 export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers = [], products = [] }: FacturasViewProps) {
-  const { exchangeRate: globalRate } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
@@ -201,7 +201,7 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers
       width: '150px',
       render: (val, row) => (
         <span className="text-[13px] font-black tabular-nums text-foreground">
-          {row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}
+          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
         </span>
       )
     },
@@ -226,11 +226,40 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers
     }
   ];
 
+  const totalBilledInDisplayCurrency = data.reduce(
+    (acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate),
+    0,
+  );
+  const accountsReceivableInDisplayCurrency = data
+    .filter(invoice => ['PENDING', 'OVERDUE', 'PARTIAL'].includes((invoice.status || '').toUpperCase()))
+    .reduce((acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate), 0);
+  const paidInDisplayCurrency = data
+    .filter(invoice => (invoice.status || '').toUpperCase() === 'PAID')
+    .reduce((acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate), 0);
+
   const kpis = [
-    { title: 'Facturado Total (NIO)',  value: `C$ ${data.reduce((acc, f) => acc + (f.baseTotal || (f.currency === 'USD' ? f.total * globalRate : f.total)), 0).toLocaleString()}`,                                                                            icon: FileText,     color: 'text-primary',      bg: 'bg-primary/10'      },
-    { title: 'Por Cobrar (NIO)',       value: `C$ ${data.filter(f => ['PENDING','OVERDUE','PARTIAL'].includes((f.status||'').toUpperCase())).reduce((acc, f) => acc + (f.baseTotal || (f.currency === 'USD' ? f.total * globalRate : f.total)), 0).toLocaleString()}`, icon: TrendingUp,   color: 'text-orange-500',   bg: 'bg-orange-500/10'   },
+    {
+      title: `Facturado Total (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${totalBilledInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: FileText,
+      color: 'text-primary',
+      bg: 'bg-primary/10',
+    },
+    {
+      title: `Por Cobrar (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${accountsReceivableInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: TrendingUp,
+      color: 'text-orange-500',
+      bg: 'bg-orange-500/10',
+    },
     { title: 'Vencidas',               value: data.filter(f => (f.status||'').toUpperCase() === 'OVERDUE').length,                                                                                                                                           icon: AlertCircle,  color: 'text-rose-500',     bg: 'bg-rose-500/10'     },
-    { title: 'Cobrado (NIO)',          value: `C$ ${data.filter(f => (f.status||'').toUpperCase() === 'PAID').reduce((acc, f) => acc + (f.baseTotal || (f.currency === 'USD' ? f.total * globalRate : f.total)), 0).toLocaleString()}`,                      icon: CheckCircle2, color: 'text-emerald-500',  bg: 'bg-emerald-500/10'  },
+    {
+      title: `Cobrado (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${paidInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: CheckCircle2,
+      color: 'text-emerald-500',
+      bg: 'bg-emerald-500/10',
+    },
   ];
 
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────

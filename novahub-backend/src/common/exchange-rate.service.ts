@@ -66,7 +66,7 @@ export class ExchangeRateService {
    */
   async updateManualRate(clientTenantId: string, rate: number) {
     const setting = await this.prisma.systemSetting.findFirst({
-      where: { clientTenantId, key: 'manual_exchange_rate' }
+      where: { clientTenantId, group: 'FINANCY', key: 'manual_exchange_rate' }
     });
 
     if (setting) {

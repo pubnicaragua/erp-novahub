@@ -30,7 +30,7 @@ const methodOptions = [
 ];
 
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [] }: PagosRecibidosViewProps) {
-  const { exchangeRate: globalRate } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [localDoc, setLocalDoc] = useState<any>(null);
@@ -100,7 +100,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     { key: 'date', header: 'Fecha', render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span> },
     { key: 'amount', header: 'Monto', width: '150px', render: (val, row) => (
       <span className="text-[13px] font-black tabular-nums text-emerald-500">
-        {row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}
+        {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
       </span>) },
     { key: 'method', header: 'Método', width: '120px', editable: true, type: 'select', options: methodOptions,
       render: (val) => { const methodMap: Record<string,string> = { TRANSFER:'Transferencia', CASH:'Efectivo', CARD:'Tarjeta', CHECK:'Cheque' };
@@ -112,8 +112,19 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         .sort(([,a],[,b]) => b-a)[0]?.[0] || 'N/A'
     : 'N/A';
 
+  const totalCollectedInDisplayCurrency = data.reduce(
+    (acc, payment) => acc + convertAmount(payment.amount || 0, payment.currency, payment.exchangeRate),
+    0,
+  );
+
   const kpis = [
-    { title: 'Total Recaudado (NIO)', value: `C$ ${data.reduce((acc, p) => acc + (p.baseAmount || (p.currency === 'USD' ? p.amount * globalRate : p.amount)), 0).toLocaleString()}`, icon: TrendingUp,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    {
+      title: `Total Recaudado (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${totalCollectedInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: TrendingUp,
+      color: 'text-emerald-500',
+      bg: 'bg-emerald-500/10',
+    },
     { title: 'Pagos',           value: data.length,                                                                   icon: CheckCircle2, color: 'text-blue-500',    bg: 'bg-blue-500/10'   },
     { title: 'Con Factura',     value: data.filter(p => p.invoice?.number).length,                                    icon: Clock,        color: 'text-amber-500',  bg: 'bg-amber-500/10'  },
     { title: 'Método Principal', value: mainMethod,                                                                  icon: Wallet,       color: 'text-purple-500', bg: 'bg-purple-500/10' },
@@ -144,7 +155,10 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox options={customers.map(c => ({ label: c.name, value: c.id }))} value={localDoc.customerId} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} placeholder="Seleccionar Cliente" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Factura (Opcional)</p>
-                  <Combobox options={customerInvoices.map(i => ({ label: `${i.number} — ${i.currency === 'NIO' ? 'C$' : '$'} ${Number(i.balance||0).toLocaleString()} pend.`, value: i.id }))} 
+                  <Combobox options={customerInvoices.map(i => ({
+                    label: `${i.number} — ${formatConvertedAmount(Number(i.balance || 0), i.currency, i.exchangeRate)} pend.`,
+                    value: i.id,
+                  }))} 
                     value={localDoc.invoiceId} onChange={(val) => {
                       const inv = invoices.find(i => i.id === val);
                       setLocalDoc({ ...localDoc, invoiceId: val, amount: inv ? Number(inv.balance || 0) : localDoc.amount });

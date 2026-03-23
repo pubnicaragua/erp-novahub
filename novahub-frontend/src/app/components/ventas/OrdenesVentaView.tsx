@@ -34,7 +34,7 @@ const statusOptions = [
 ];
 
 export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, customers = [], products = [] }: OrdenesVentaViewProps) {
-  const { formatAmount: formatGlobal, exchangeRate: globalRate } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<SalesOrder | null>(null);
@@ -156,7 +156,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       width: '150px',
       render: (val, row) => (
         <span className="text-[13px] font-black tabular-nums text-emerald-500">
-          {row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}
+          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
         </span>
       )
     },
@@ -191,9 +191,19 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     }
   ];
 
+  const confirmedAmountInDisplayCurrency = data
+    .filter(order => (order.status || '').toUpperCase() === 'CONFIRMED')
+    .reduce((acc, order) => acc + convertAmount(order.total || 0, order.currency, order.exchangeRate), 0);
+
   const kpis = [
     { title: 'Órdenes Abiertas',  value: data.filter(o => (o.status||'').toUpperCase() === 'CONFIRMED').length, icon: Package, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-    { title: 'Monto Confirmado', value: `$${data.filter(o => (o.status||'').toUpperCase() === 'CONFIRMED').reduce((acc, o) => acc + Number(o.total||0), 0).toLocaleString()}`, icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    {
+      title: `Monto Confirmado (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${confirmedAmountInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: TrendingUp,
+      color: 'text-emerald-500',
+      bg: 'bg-emerald-500/10',
+    },
     { title: 'En Proceso',        value: data.filter(o => (o.status||'').toUpperCase() === 'IN_PROGRESS').length, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-500/10' },
     { title: 'Total del Mes',     value: data.length, icon: ClipboardList, color: 'text-purple-500', bg: 'bg-purple-500/10' },
   ];

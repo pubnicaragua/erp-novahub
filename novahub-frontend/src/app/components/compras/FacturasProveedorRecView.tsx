@@ -28,7 +28,7 @@ const statusOpts = [
 ];
 
 export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
-  const { exchangeRate: globalRate } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
@@ -78,7 +78,11 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
     { key: 'supplier' as any,    header: 'Proveedor',
       render: (_v, row) => <span className="font-bold text-sm">{(row as any).supplier?.name||'-'}</span> },
     { key: 'total' as any,       header: 'Monto Estimado',       width: '120px',
-      render: (val, row) => <span className="font-black tabular-nums text-rose-500">{row.currency === 'NIO' ? `C$ ${Number(val||(row as any).amount||0).toLocaleString()}` : `$ ${Number(val||(row as any).amount||0).toLocaleString()}`}</span> },
+      render: (val, row) => (
+        <span className="font-black tabular-nums text-rose-500">
+          {formatConvertedAmount(Number(val || (row as any).amount || 0), row.currency, row.exchangeRate)}
+        </span>
+      ) },
     { key: 'frequency' as any,   header: 'Frecuencia',  width: '120px', editable: true, type: 'select', options: freqOpts,
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-purple-500/10 text-purple-500 border-none">{freqMap[(val||'').toUpperCase()]||val||'-'}</Badge> },
     { key: 'status' as any,      header: 'Estado',      width: '110px', editable: true, type: 'select', options: statusOpts,
@@ -294,11 +298,22 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
     );
   }
 
-  const monthly = data.filter(r => ((r as any).frequency||'').toUpperCase()==='MONTHLY').reduce((a,r) => a+(r.baseTotal || (r.currency === 'USD' ? (r as any).total * globalRate : (r as any).total)), 0);
+  const monthly = data
+    .filter(r => ((r as any).frequency || '').toUpperCase() === 'MONTHLY')
+    .reduce((acc, recurring) => {
+      const sourceAmount = (recurring as any).total ?? (recurring as any).amount ?? 0;
+      return acc + convertAmount(sourceAmount, recurring.currency, recurring.exchangeRate);
+    }, 0);
   const kpis = [
     { title: 'Activas',         value: data.filter(r => ((r as any).status||'').toUpperCase()==='ACTIVE').length,  icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Total Config.',   value: data.length,                                                                  icon: RotateCcw,     color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Est. Mensual(NIO)',value: `C$ ${monthly.toLocaleString()}`,                                               icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    {
+      title: `Est. Mensual (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${monthly.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: TrendingDown,
+      color: 'text-rose-500',
+      bg: 'bg-rose-500/10',
+    },
     { title: 'Pausadas',        value: data.filter(r => ((r as any).status||'').toUpperCase()==='PAUSED').length,   icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
   ];
 

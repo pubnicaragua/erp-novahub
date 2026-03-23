@@ -18,6 +18,7 @@ import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
 import { useTheme, type BrandColors } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useCurrency } from '../contexts/CurrencyContext';
 import { tenantsService } from '../services/tenants.service';
 import { rolesService } from '../services/roles.service';
 import { subscriptionsService } from '../services/subscriptions.service';
@@ -213,6 +214,7 @@ const ALL_TABS: TabDef[] = [
 export function ConfiguracionPage() {
   const { themeConfig, updateTheme, updateConfig, resetTheme } = useTheme();
   const { user } = useAuth();
+  const { refreshRate: refreshCurrencyContext } = useCurrency();
   const scenario = getScenario(user?.role);
   const visibleTabs = ALL_TABS.filter(t => t.scenario.includes(scenario));
 
@@ -247,6 +249,8 @@ export function ConfiguracionPage() {
   const [exchangeRateAuto, setExchangeRateAuto] = useState(true);
   const [manualRate, setManualRate] = useState('36.50');
   const [currentBackendRate, setCurrentBackendRate] = useState<number | null>(null);
+  const [displayCurrencySetting, setDisplayCurrencySetting] = useState<'NIO' | 'USD'>('NIO');
+  const [allowCurrencySwitch, setAllowCurrencySwitch] = useState(true);
   const [isSavingCurrency, setIsSavingCurrency] = useState(false);
 
   // New role dialog state
@@ -262,13 +266,21 @@ export function ConfiguracionPage() {
 
   const fetchCurrencySettings = async () => {
     try {
-      const data = await api.get<{ rate: number, auto: boolean }>('/tools/exchange-rate');
+      const data = await api.get<{
+        rate: number;
+        auto: boolean;
+        baseCurrency?: 'NIO' | 'USD';
+        displayCurrency?: 'NIO' | 'USD';
+        allowCurrencySwitch?: boolean;
+      }>('/tools/exchange-rate');
       if (data) {
         setExchangeRateAuto(data.auto);
         setCurrentBackendRate(data.rate);
         if (!data.auto) {
           setManualRate(data.rate.toString());
         }
+        setDisplayCurrencySetting(data.displayCurrency === 'USD' ? 'USD' : (data.baseCurrency === 'USD' ? 'USD' : 'NIO'));
+        setAllowCurrencySwitch(data.allowCurrencySwitch !== false);
       }
     } catch (error) {
       console.error('Error fetching currency settings:', error);
@@ -428,12 +440,22 @@ export function ConfiguracionPage() {
   const handleSaveCurrencySettings = async () => {
     setIsSavingCurrency(true);
     try {
-      const resp = await api.post<{ rate: number, auto: boolean }>('/tools/exchange-rate', {
+      const resp = await api.post<{
+        rate: number;
+        auto: boolean;
+        displayCurrency?: 'NIO' | 'USD';
+        allowCurrencySwitch?: boolean;
+      }>('/tools/exchange-rate', {
         auto: exchangeRateAuto,
-        rate: exchangeRateAuto ? undefined : parseFloat(manualRate)
+        rate: exchangeRateAuto ? undefined : parseFloat(manualRate),
+        displayCurrency: displayCurrencySetting,
+        allowCurrencySwitch,
       });
       if (resp) {
         setCurrentBackendRate(resp.rate);
+        setDisplayCurrencySetting(resp.displayCurrency === 'USD' ? 'USD' : 'NIO');
+        setAllowCurrencySwitch(resp.allowCurrencySwitch !== false);
+        await refreshCurrencyContext();
         toast.success('Configuración de moneda actualizada');
       }
     } catch (error) {
@@ -1173,6 +1195,32 @@ export function ConfiguracionPage() {
                       <p className="text-sm font-bold">Córdoba Nicaragüense (NIO)</p>
                     </div>
                     <Badge variant="outline" className="text-[9px] font-black uppercase">Fijo</Badge>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-border/30 bg-background/70 space-y-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Permitir Cambio de Moneda</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Si se desactiva, nadie podrá cambiar `COR/USD` desde la barra superior.
+                        </p>
+                      </div>
+                      <Switch checked={allowCurrencySwitch} onCheckedChange={setAllowCurrencySwitch} />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                        {allowCurrencySwitch ? 'Moneda Global Inicial' : 'Moneda Bloqueada del Sistema'}
+                      </Label>
+                      <select
+                        value={displayCurrencySetting}
+                        onChange={(e) => setDisplayCurrencySetting(e.target.value === 'USD' ? 'USD' : 'NIO')}
+                        className="h-11 w-full rounded-xl border border-input bg-background px-3 text-xs font-black uppercase tracking-widest"
+                      >
+                        <option value="NIO">NIO (Córdoba)</option>
+                        <option value="USD">USD (Dólar)</option>
+                      </select>
+                    </div>
                   </div>
 
                   <Button onClick={handleSaveCurrencySettings} disabled={isSavingCurrency} className="w-full rounded-xl gap-2 font-black h-11">

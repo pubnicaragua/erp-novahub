@@ -25,7 +25,7 @@ const statusOpts = [
 ];
 
 export function GastosView({ data, loading, onRefresh }: Props) {
-  const { exchangeRate: globalRate } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -81,7 +81,11 @@ export function GastosView({ data, loading, onRefresh }: Props) {
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-primary/5 text-primary border-none">{val||'-'}</Badge> },
     { key: 'description', header: 'Descripción', editable: true },
     { key: 'amount',      header: 'Monto',     width: '130px',
-      render: (val, row) => <span className="font-black tabular-nums text-rose-500">{row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}</span> },
+      render: (val, row) => (
+        <span className="font-black tabular-nums text-rose-500">
+          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
+        </span>
+      ) },
     { key: 'status',      header: 'Estado',    width: '120px', editable: true, type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
@@ -254,9 +258,19 @@ export function GastosView({ data, loading, onRefresh }: Props) {
     );
   }
 
+  const monthlyTotalInDisplayCurrency = data
+    .filter(g => new Date(g.date).getMonth() === new Date().getMonth())
+    .reduce((acc, g) => acc + convertAmount(g.amount || 0, g.currency, g.exchangeRate), 0);
+
   const kpis = [
     { title: 'Gastos Operativos',  value: data.length,                                                                                  icon: Wallet,       color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
-    { title: 'Total del Mes (NIO)',value: `C$ ${data.filter(g => new Date(g.date).getMonth() === new Date().getMonth()).reduce((a,g) => a + (g.baseAmount || (g.currency === 'USD' ? g.amount * globalRate : g.amount)), 0).toLocaleString()}`, icon: TrendingDown, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    {
+      title: `Total del Mes (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${monthlyTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: TrendingDown,
+      color: 'text-rose-500',
+      bg: 'bg-rose-500/10',
+    },
     { title: 'Pendientes',         value: data.filter(g => (g.status||'').toUpperCase() === 'PENDING').length,                          icon: Clock,        color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
     { title: 'Por Categoría',      value: new Set(data.map(g => g.category)).size,                                                      icon: Tag,          color: 'text-purple-500', bg: 'bg-purple-500/10'  },
   ];

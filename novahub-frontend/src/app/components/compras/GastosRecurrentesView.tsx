@@ -29,7 +29,7 @@ const statusOpts = [
 ];
 
 export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
-  const { exchangeRate: globalRate } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -77,7 +77,11 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
   const columns: ColumnDef<RecurringExpense>[] = [
     { key: 'description', header: 'Descripción', editable: true },
     { key: 'amount',      header: 'Monto',       width: '130px',
-      render: (val, row) => <span className="font-black tabular-nums text-rose-500">{row.currency === 'NIO' ? `C$ ${Number(val||0).toLocaleString()}` : `$ ${Number(val||0).toLocaleString()}`}</span> },
+      render: (val, row) => (
+        <span className="font-black tabular-nums text-rose-500">
+          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
+        </span>
+      ) },
     { key: 'frequency',   header: 'Frecuencia',  width: '120px', editable: true, type: 'select', options: freqOpts,
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{freqMap[(val||'').toUpperCase()]||val}</Badge> },
     { key: 'startDate',   header: 'Inicio',      width: '110px',
@@ -252,11 +256,19 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
     );
   }
 
-  const monthly = data.filter(e => (e.frequency||'').toUpperCase() === 'MONTHLY').reduce((a,e) => a + (e.baseAmount || (e.currency === 'USD' ? e.amount * globalRate : e.amount)), 0);
+  const monthly = data
+    .filter(e => (e.frequency || '').toUpperCase() === 'MONTHLY')
+    .reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
   const kpis = [
     { title: 'Total Recurrentes', value: data.length,                                                            icon: CalendarClock, color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Activos',           value: data.filter(e => (e.status||'').toUpperCase() === 'ACTIVE').length,     icon: RotateCcw,     color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Est. Mensual (NIO)',value: `C$ ${monthly.toLocaleString()}`,                                          icon: TrendingDown,  color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
+    {
+      title: `Est. Mensual (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${monthly.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: TrendingDown,
+      color: 'text-rose-500',
+      bg: 'bg-rose-500/10',
+    },
     { title: 'Pendientes',        value: data.filter(e => (e.status||'').toUpperCase() === 'PAUSED').length,     icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
   ];
 

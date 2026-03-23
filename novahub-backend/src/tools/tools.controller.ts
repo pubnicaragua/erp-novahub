@@ -108,7 +108,16 @@ export class ToolsController {
 
   @Post('exchange-rate')
   @ApiOperation({ summary: 'Configurar tasa de cambio' })
-  updateExchangeRate(@Body() data: { rate?: number; auto?: boolean }, @Request() req) {
+  updateExchangeRate(
+    @Body()
+    data: {
+      rate?: number;
+      auto?: boolean;
+      displayCurrency?: 'USD' | 'NIO';
+      allowCurrencySwitch?: boolean;
+    },
+    @Request() req,
+  ) {
     return this.toolsService.updateExchangeRate(req.user.clientTenantId, data);
   }
 }
