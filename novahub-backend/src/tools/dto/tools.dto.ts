@@ -1,5 +1,5 @@
 import { ApiProperty, PartialType } from "@nestjs/swagger";
-import { IsString, IsOptional, IsEnum, IsDateString, IsNotEmpty } from "class-validator";
+import { IsString, IsOptional, IsEnum, IsDateString, IsNotEmpty, IsNumber } from "class-validator";
 
 export class CreateTicketDto {
     @ApiProperty()
@@ -31,10 +31,15 @@ export class CreateTicketDto {
 export class UpdateTicketDto extends PartialType(CreateTicketDto) {}
 
 export class CreateDocumentDto {
-    @ApiProperty()
+    @ApiProperty({ required: false, description: 'Nombre del documento (preferido)' })
+    @IsOptional()
     @IsString()
-    @IsNotEmpty()
-    title: string;
+    name?: string;
+
+    @ApiProperty({ required: false, description: 'Alias legacy para name' })
+    @IsOptional()
+    @IsString()
+    title?: string;
 
     @ApiProperty({ required: false })
     @IsOptional()
@@ -44,13 +49,40 @@ export class CreateDocumentDto {
     @ApiProperty({ required: false })
     @IsOptional()
     @IsString()
-    url?: string;
+    mimeType?: string;
 
     @ApiProperty({ required: false })
     @IsOptional()
     @IsString()
+    url?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    size?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    folder?: string;
+
+    @ApiProperty({ required: false, description: 'Alias legacy para folder' })
+    @IsOptional()
+    @IsString()
     folderId?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    uploadedById?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    projectId?: string;
 }
+
+export class UpdateDocumentDto extends PartialType(CreateDocumentDto) {}
 
 export class CreateActivityDto {
     @ApiProperty()

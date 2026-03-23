@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExchangeRateService } from '../common/exchange-rate.service';
 import { TicketStatus, Priority, ActivityType, TaskStatus } from '@prisma/client';
@@ -146,6 +146,18 @@ export class ToolsService {
     });
   }
 
+  async findTicketById(id: string, clientTenantId: string) {
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id, clientTenantId },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException(`Ticket ${id} no encontrado`);
+    }
+
+    return ticket;
+  }
+
   async updateTicket(id: string, data: any, clientTenantId: string) {
     return this.prisma.ticket.update({
       where: { id, clientTenantId },
@@ -162,9 +174,37 @@ export class ToolsService {
   }
 
   // ─── DOCUMENTOS ───────────────────────────────────────────────────────────
-  async createDocument(data: any, clientTenantId: string) {
+  private toInt(value: unknown, fallback = 0): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(0, Math.round(parsed));
+  }
+
+  private normalizeDocumentPayload(data: any, uploadedById: string) {
+    const name = (data?.name || data?.title || 'Documento sin nombre').toString().trim();
+    const url = (data?.url || '').toString().trim();
+    const mimeType = (data?.mimeType || data?.type || 'application/octet-stream').toString().trim();
+
+    return {
+      name,
+      url,
+      size: this.toInt(data?.size, 0),
+      mimeType,
+      folder: data?.folder ?? data?.folderId ?? null,
+      uploadedById: data?.uploadedById || uploadedById,
+      projectId: data?.projectId ?? null,
+    };
+  }
+
+  async createDocument(data: any, clientTenantId: string, userId: string) {
+    const payload = this.normalizeDocumentPayload(data, userId);
+
+    if (!payload.url) {
+      throw new BadRequestException('El documento requiere una URL');
+    }
+
     return this.prisma.document.create({
-      data: { ...data, clientTenantId },
+      data: { ...payload, clientTenantId },
     });
   }
 
@@ -172,6 +212,34 @@ export class ToolsService {
     return this.prisma.document.findMany({
       where: { clientTenantId },
       orderBy: { id: 'desc' },
+    });
+  }
+
+  async findDocumentById(id: string, clientTenantId: string) {
+    const document = await this.prisma.document.findFirst({
+      where: { id, clientTenantId },
+    });
+
+    if (!document) {
+      throw new NotFoundException(`Documento ${id} no encontrado`);
+    }
+
+    return document;
+  }
+
+  async updateDocument(id: string, data: any, clientTenantId: string, userId: string) {
+    const payload = this.normalizeDocumentPayload(data, userId);
+    return this.prisma.document.update({
+      where: { id, clientTenantId },
+      data: {
+        ...(data?.name !== undefined || data?.title !== undefined ? { name: payload.name } : {}),
+        ...(data?.url !== undefined ? { url: payload.url } : {}),
+        ...(data?.size !== undefined ? { size: payload.size } : {}),
+        ...(data?.mimeType !== undefined || data?.type !== undefined ? { mimeType: payload.mimeType } : {}),
+        ...(data?.folder !== undefined || data?.folderId !== undefined ? { folder: payload.folder } : {}),
+        ...(data?.uploadedById !== undefined ? { uploadedById: payload.uploadedById } : {}),
+        ...(data?.projectId !== undefined ? { projectId: payload.projectId } : {}),
+      },
     });
   }
 
