@@ -7,6 +7,7 @@ import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 const BENEFIT_TYPE_COLORS: Record<string, string> = {
   HEALTH: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
@@ -27,9 +28,10 @@ const BENEFIT_TYPE_LABELS: Record<string, string> = {
   TRANSPORTATION: 'Transporte', FOOD: 'Alimentación', GYM: 'Gimnasio', OTHER: 'Otro',
 };
 
-const EMPTY_FORM = { name: '', description: '', type: 'OTHER', cost: '', currency: 'USD', isActive: true };
+const EMPTY_FORM = { name: '', description: '', type: 'OTHER', cost: '', isActive: true };
 
 export function BeneficiosView({ benefits, employees, onRefresh }: any) {
+  const { displayCurrency, formatConvertedAmount } = useCurrency();
   const [addingNew, setAddingNew] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<any>(EMPTY_FORM);
@@ -38,7 +40,8 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   const handleCreate = async () => {
     if (!form.name) { toast.error('El nombre es requerido'); return; }
     try {
-      await hrService.createBenefit({ ...form, cost: form.cost ? Number(form.cost) : null });
+      const currency = displayCurrency === 'USD' ? 'USD' : 'NIO';
+      await hrService.createBenefit({ ...form, cost: form.cost ? Number(form.cost) : null, currency });
       toast.success('Beneficio creado');
       setAddingNew(false);
       setForm(EMPTY_FORM);
@@ -79,7 +82,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
           <div className="flex gap-4 text-sm text-muted-foreground">
             <span><strong className="text-foreground">{benefits.length}</strong> beneficios</span>
             <span className="text-muted-foreground/40">·</span>
-            <span>Costo total: <strong className="text-foreground">${totalCost.toLocaleString()}/mes</strong></span>
+            <span>Costo total: <strong className="text-foreground">{formatConvertedAmount(totalCost, 'USD')}/mes</strong></span>
           </div>
         </div>
         {!addingNew && (
@@ -108,8 +111,13 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Costo/mes (USD)</label>
-                    <Input type="number" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })} placeholder="0.00" className="rounded-xl h-10" />
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Costo/mes</label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-2.5 text-xs text-muted-foreground font-medium">
+                        {displayCurrency === 'USD' ? '$' : 'C$'}
+                      </span>
+                      <Input type="number" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })} placeholder="0.00" className="rounded-xl h-10 pl-7" />
+                    </div>
                   </div>
                   <div className="md:col-span-2 space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción</label>
@@ -146,7 +154,12 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                         className="h-9 px-2 rounded-xl border border-input bg-background text-sm font-medium">
                         {Object.entries(BENEFIT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                       </select>
-                      <Input type="number" value={editForm.cost} onChange={e => setEditForm({ ...editForm, cost: e.target.value })} placeholder="Costo" className="rounded-xl h-9 text-sm" />
+                      <div className="relative">
+                        <span className="absolute left-2 top-2.5 text-xs text-muted-foreground font-medium">
+                          {displayCurrency === 'USD' ? '$' : 'C$'}
+                        </span>
+                        <Input type="number" value={editForm.cost} onChange={e => setEditForm({ ...editForm, cost: e.target.value })} placeholder="Costo" className="rounded-xl h-9 text-sm pl-6" />
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <Button size="sm" onClick={() => handleUpdate(benefit.id)} className="flex-1 rounded-xl gap-1 font-bold text-xs"><Save className="size-3" /> Guardar</Button>
@@ -173,7 +186,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                           {benefit.cost && (
                             <div className="flex items-center gap-1">
                               <DollarSign className="size-3 text-emerald-500" />
-                              <span className="font-bold text-foreground">${Number(benefit.cost).toLocaleString()}<span className="font-normal text-muted-foreground">/mes</span></span>
+                              <span className="font-bold text-foreground">{formatConvertedAmount(Number(benefit.cost), benefit.currency || 'USD')}<span className="font-normal text-muted-foreground">/mes</span></span>
                             </div>
                           )}
                           <div className="flex items-center gap-1">

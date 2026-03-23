@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
-import { GraduationCap, Plus, Users, Calendar } from 'lucide-react';
+import { useState } from 'react';
+import { GraduationCap, Plus, Calendar } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
+  const { displayCurrency, formatConvertedAmount } = useCurrency();
   const [showNewForm, setShowNewForm] = useState(false);
   const [newTraining, setNewTraining] = useState({
     title: '',
@@ -26,7 +28,8 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     }
 
     try {
-      await hrService.createTraining(newTraining);
+      const currency = displayCurrency === 'USD' ? 'USD' : 'NIO';
+      await hrService.createTraining({ ...newTraining, currency });
       toast.success('Capacitación creada');
       setShowNewForm(false);
       setNewTraining({
@@ -160,12 +163,17 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Costo</label>
-              <Input
-                type="number"
-                value={newTraining.cost}
-                onChange={(e) => setNewTraining({ ...newTraining, cost: parseFloat(e.target.value) })}
-                className="bg-white"
-              />
+              <div className="relative">
+                <span className="absolute left-2.5 top-2 text-xs text-muted-foreground font-medium">
+                  {displayCurrency === 'USD' ? '$' : 'C$'}
+                </span>
+                <Input
+                  type="number"
+                  value={newTraining.cost}
+                  onChange={(e) => setNewTraining({ ...newTraining, cost: parseFloat(e.target.value) })}
+                  className="bg-white pl-7"
+                />
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2 mt-4">
@@ -250,7 +258,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 <div className="pt-3 border-t mt-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Costo</span>
-                    <span className="font-bold text-indigo-600">${training.cost?.toLocaleString()}</span>
+                    <span className="font-bold text-indigo-600">{formatConvertedAmount(training.cost, 'USD')}</span>
                   </div>
                 </div>
               )}

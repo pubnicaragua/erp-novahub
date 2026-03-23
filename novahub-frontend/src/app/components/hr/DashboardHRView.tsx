@@ -3,6 +3,7 @@ import { Users, Briefcase, UserCheck, TrendingUp, TrendingDown, Clock, Award, Do
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { motion } from 'framer-motion';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 const DEPT_COLORS = [
   'from-indigo-500 to-purple-600',
@@ -16,14 +17,21 @@ const DEPT_COLORS = [
 ];
 
 export function DashboardHRView({ stats, employees, departments, leaveRequests, reviews }: any) {
+  const { convertAmount, displayCurrency } = useCurrency();
   const activeEmployees = employees.filter((e: any) => e.employmentStatus === 'ACTIVE').length;
   const inactiveEmployees = employees.filter((e: any) => e.employmentStatus !== 'ACTIVE').length;
   const pendingLeaves = leaveRequests.filter((l: any) => l.status === 'PENDING').length;
-  const totalPayroll = employees.reduce((sum: number, e: any) => sum + (Number(e.salary) || 0), 0);
+  
+  const totalPayroll = employees.reduce((sum: number, e: any) => {
+    return sum + convertAmount(Number(e.salary) || 0, e.currency || 'USD');
+  }, 0);
+
+  const payrollSymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const formattedPayroll = `${payrollSymbol}${(totalPayroll / 1000).toFixed(1)}k`;
 
   const statCards = [
     { label: 'Total Empleados', value: employees.length, sub: `${activeEmployees} activos · ${inactiveEmployees} inactivos`, icon: Users, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' },
-    { label: 'Planilla Mensual', value: `$${(totalPayroll / 1000).toFixed(1)}k`, sub: 'Costo total nómina', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+    { label: 'Planilla Mensual', value: formattedPayroll, sub: 'Costo total nómina', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
     { label: 'Ausencias Pendientes', value: pendingLeaves, sub: 'Por aprobar', icon: Clock, color: pendingLeaves > 0 ? 'text-orange-500' : 'text-emerald-500', bg: pendingLeaves > 0 ? 'bg-orange-500/10' : 'bg-emerald-500/10', border: pendingLeaves > 0 ? 'border-orange-500/20' : 'border-emerald-500/20' },
     { label: 'Departamentos', value: departments.length, sub: 'Áreas activas', icon: Briefcase, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' },
   ];

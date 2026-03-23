@@ -5,8 +5,10 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh }: any) {
+  const { displayCurrency, formatConvertedAmount } = useCurrency();
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('all');
@@ -87,7 +89,8 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
     try {
       // Remove frontend-only fields before sending to API
       const { tempId: _, employmentStatus, ...employeeData } = row;
-      await hrService.createEmployee(employeeData);
+      const currency = displayCurrency === 'USD' ? 'USD' : 'NIO';
+      await hrService.createEmployee({ ...employeeData, currency });
       toast.success('Empleado creado');
       setNewRows(newRows.filter(r => r.tempId !== tempId));
       onRefresh();
@@ -232,12 +235,17 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                       </Select>
                     </td>
                     <td className="px-4 py-2">
-                      <Input
-                        type="number"
-                        value={row.salary}
-                        onChange={(e) => updateNewRow(row.tempId, 'salary', parseFloat(e.target.value))}
-                        className="h-8 text-sm"
-                      />
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1.5 text-xs text-muted-foreground font-medium">
+                          {displayCurrency === 'USD' ? '$' : 'C$'}
+                        </span>
+                        <Input
+                          type="number"
+                          value={row.salary}
+                          onChange={(e) => updateNewRow(row.tempId, 'salary', parseFloat(e.target.value))}
+                          className="h-8 text-sm pl-7"
+                        />
+                      </div>
                     </td>
                     <td className="px-4 py-2">
                       <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Nuevo</span>
@@ -299,7 +307,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                           className="h-8 text-sm w-24"
                         />
                       ) : (
-                        <span className="text-sm font-medium">${emp.salary?.toLocaleString()}</span>
+                        <span className="text-sm font-medium">{formatConvertedAmount(emp.salary, emp.currency)}</span>
                       )}
                     </td>
                     <td className="px-4 py-2">
@@ -378,7 +386,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Salario:</span>
-                  <span className="font-bold text-primary">${emp.salary?.toLocaleString()}</span>
+                  <span className="font-bold text-primary">{formatConvertedAmount(emp.salary, emp.currency)}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-4 pt-3 border-t">

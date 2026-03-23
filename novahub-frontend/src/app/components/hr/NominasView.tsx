@@ -4,8 +4,10 @@ import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
+  const { formatConvertedAmount } = useCurrency();
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
 
@@ -92,11 +94,6 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     toast.success('Archivo CSV descargado');
   };
 
-  const formatCurrency = (amount: number, currency: string = 'USD') => {
-    const symbol = currency === 'NIO' ? 'C$' : '$';
-    return `${symbol}${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-  };
-
   const totalGross = filteredPayrolls.reduce((sum: number, p: any) => sum + Number(p.grossPay || 0), 0);
   const totalNet = filteredPayrolls.reduce((sum: number, p: any) => sum + Number(p.netPay || 0), 0);
   const totalTaxes = filteredPayrolls.reduce((sum: number, p: any) => sum + Number(p.taxes || 0), 0);
@@ -110,7 +107,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Bruto</p>
-              <h3 className="text-2xl font-bold text-green-700">{formatCurrency(totalGross)}</h3>
+              <h3 className="text-2xl font-bold text-green-700">{formatConvertedAmount(totalGross, 'USD')}</h3>
             </div>
             <DollarSign className="size-8 text-green-500" />
           </div>
@@ -119,7 +116,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Neto</p>
-              <h3 className="text-2xl font-bold text-blue-700">{formatCurrency(totalNet)}</h3>
+              <h3 className="text-2xl font-bold text-blue-700">{formatConvertedAmount(totalNet, 'USD')}</h3>
             </div>
             <DollarSign className="size-8 text-blue-500" />
           </div>
@@ -128,7 +125,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Impuestos</p>
-              <h3 className="text-2xl font-bold text-orange-700">{formatCurrency(totalTaxes)}</h3>
+              <h3 className="text-2xl font-bold text-orange-700">{formatConvertedAmount(totalTaxes, 'USD')}</h3>
             </div>
             <DollarSign className="size-8 text-orange-500" />
           </div>
@@ -222,25 +219,25 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                       {new Date(payroll.periodStart).toLocaleDateString()} - {new Date(payroll.periodEnd).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-medium">
-                      {formatCurrency(payroll.baseSalary, currency)}
+                      {formatConvertedAmount(payroll.baseSalary, currency)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-green-600">
-                      +{formatCurrency(payroll.bonuses || 0, currency)}
+                      +{formatConvertedAmount(payroll.bonuses || 0, currency)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-blue-600">
-                      +{formatCurrency(payroll.overtime || 0, currency)}
+                      +{formatConvertedAmount(payroll.overtime || 0, currency)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-red-600">
-                      -{formatCurrency(payroll.deductions || 0, currency)}
+                      -{formatConvertedAmount(payroll.deductions || 0, currency)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-orange-600">
-                      -{formatCurrency(payroll.taxes || 0, currency)}
+                      -{formatConvertedAmount(payroll.taxes || 0, currency)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-semibold">
-                      {formatCurrency(payroll.grossPay, currency)}
+                      {formatConvertedAmount(payroll.grossPay, currency)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-700">
-                      {formatCurrency(payroll.netPay, currency)}
+                      {formatConvertedAmount(payroll.netPay, currency)}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-1 rounded ${
