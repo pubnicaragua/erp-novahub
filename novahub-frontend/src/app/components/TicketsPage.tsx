@@ -1,22 +1,68 @@
 import React, { useState, useEffect } from 'react';
-import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Headphones, TicketIcon, Users, BookOpen } from 'lucide-react';
 import { cn } from './ui/utils';
 import { TicketsView } from './support/TicketsView';
 import { Ticket } from '../types';
-import { supportService } from '../services/support.service';
+import { supportService, knowledgeBaseService, supportAgentsService } from '../services/support.service';
+import { KnowledgeBaseView } from './support/KnowledgeBaseView';
+import { AgentsView } from './support/AgentsView';
+
+interface KnowledgeArticle {
+  id: string;
+  name: string;
+  url: string;
+  size: number;
+  mimeType: string;
+  folder?: string | null;
+}
+
+interface SupportAgent {
+  id: string;
+  name: string;
+  email: string;
+  role?: string;
+  isActive?: boolean;
+  lastLoginAt?: string | null;
+}
 
 export const TicketsPage = () => {
   const [activeTab, setActiveTab] = useState('tickets');
-  const [data, setData] = useState<{ tickets: Ticket[] }>({ tickets: [] });
+  const [data, setData] = useState<{
+    tickets: Ticket[];
+    knowledgeBase: KnowledgeArticle[];
+    agents: SupportAgent[];
+  }>({
+    tickets: [],
+    knowledgeBase: [],
+    agents: [],
+  });
   const [loading, setLoading] = useState(true);
+
+  const normalizeList = <T,>(response: any): T[] => {
+    if (Array.isArray(response)) return response as T[];
+    if (Array.isArray(response?.data)) return response.data as T[];
+    return [];
+  };
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await supportService.getAll().catch(() => ({ data: [] }));
-      setData({ tickets: res.data || [] });
+      const [ticketsRes, kbRes, agentsRes] = await Promise.allSettled([
+        supportService.getAll(),
+        knowledgeBaseService.getAll(),
+        supportAgentsService.getAll(),
+      ]);
+
+      setData({
+        tickets: ticketsRes.status === 'fulfilled' ? normalizeList<Ticket>(ticketsRes.value) : [],
+        knowledgeBase: kbRes.status === 'fulfilled' ? normalizeList<KnowledgeArticle>(kbRes.value) : [],
+        agents: agentsRes.status === 'fulfilled' ? normalizeList<SupportAgent>(agentsRes.value) : [],
+      });
+
+      if (ticketsRes.status === 'rejected') console.error('Error fetching tickets:', ticketsRes.reason);
+      if (kbRes.status === 'rejected') console.error('Error fetching knowledge base:', kbRes.reason);
+      if (agentsRes.status === 'rejected') console.error('Error fetching agents:', agentsRes.reason);
     } catch (error) {
       console.error('Error fetching support data:', error);
     } finally {
@@ -78,16 +124,20 @@ export const TicketsPage = () => {
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="max-w-[1600px] mx-auto">
           {activeTab === 'tickets' && <TicketsView data={data.tickets} loading={loading} onRefresh={fetchData} />}
-          {activeTab !== 'tickets' && (
-            <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in duration-500">
-              <div className="p-4 bg-muted/30 rounded-full mb-4">
-                <Headphones className="size-10 text-muted-foreground/50" />
-              </div>
-              <h3 className="text-lg font-black uppercase tracking-tight mb-2">Próximamente</h3>
-              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground max-w-sm">
-                Esta sección está en desarrollo y estará disponible en la próxima actualización.
-              </p>
-            </div>
+          {activeTab === 'faqs' && (
+            <KnowledgeBaseView
+              data={data.knowledgeBase}
+              loading={loading}
+              onRefresh={fetchData}
+            />
+          )}
+          {activeTab === 'agents' && (
+            <AgentsView
+              data={data.agents}
+              tickets={data.tickets}
+              loading={loading}
+              onRefresh={fetchData}
+            />
           )}
         </div>
       </div>
