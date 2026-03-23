@@ -82,6 +82,7 @@ model ClientTenant {
   purchaseOrders            PurchaseOrder[]
   purchaseReceipts          PurchaseReceipt[]
   recurringExpenses         RecurringExpense[]
+  recurringExpenseExecutions RecurringExpenseExecution[]
   recurringInvoices         RecurringInvoice[]
   recurringSupplierInvoices RecurringSupplierInvoice[]
   reports                   Report[]
@@ -712,6 +713,7 @@ model Expense {
   account        Account       @relation(fields: [accountId], references: [id])
   clientTenant   ClientTenant  @relation(fields: [clientTenantId], references: [id])
   supplier       Supplier?     @relation(fields: [supplierId], references: [id])
+  recurringExecutions RecurringExpenseExecution[]
 }
 
 model RecurringExpense {
@@ -728,11 +730,32 @@ model RecurringExpense {
   category       String?
   description    String
   status         RecurringStatus @default(ACTIVE)
+  nextExecutionDate DateTime     @default(now())
   createdAt      DateTime        @default(now())
   clientTenantId String
   account        Account         @relation(fields: [accountId], references: [id])
   clientTenant   ClientTenant    @relation(fields: [clientTenantId], references: [id])
   supplier       Supplier?       @relation(fields: [supplierId], references: [id])
+  executions     RecurringExpenseExecution[]
+
+  @@index([clientTenantId, status, nextExecutionDate])
+}
+
+model RecurringExpenseExecution {
+  id                 String                   @id @default(uuid())
+  recurringExpenseId String
+  clientTenantId     String
+  dueDate            DateTime
+  executedAt         DateTime                 @default(now())
+  status             RecurringExecutionStatus @default(PENDING)
+  expenseId          String?
+  error              String?
+  recurringExpense   RecurringExpense         @relation(fields: [recurringExpenseId], references: [id])
+  clientTenant       ClientTenant             @relation(fields: [clientTenantId], references: [id])
+  expense            Expense?                 @relation(fields: [expenseId], references: [id])
+
+  @@unique([recurringExpenseId, dueDate])
+  @@index([clientTenantId, executedAt])
 }
 
 model JournalEntry {
@@ -1106,6 +1129,13 @@ enum RecurringStatus {
   PAUSED
   EXPIRED
   CANCELLED
+}
+
+enum RecurringExecutionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  SKIPPED
 }
 
 enum CustomerType {

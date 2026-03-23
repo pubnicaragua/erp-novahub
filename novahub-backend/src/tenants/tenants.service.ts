@@ -2,11 +2,56 @@ import { Injectable, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import * as bcrypt from 'bcrypt';
-import { SystemRole, BillingPlanType, IndustryType } from '@prisma/client';
+import { SystemRole, BillingPlanType, IndustryType, AccountType, Prisma } from '@prisma/client';
 
 @Injectable()
 export class TenantsService {
   constructor(private prisma: PrismaService) {}
+
+  private async bootstrapDefaultAccounts(prisma: Prisma.TransactionClient, clientTenantId: string) {
+    const existingAccounts = await prisma.account.count({ where: { clientTenantId } });
+    if (existingAccounts > 0) return;
+
+    await prisma.account.createMany({
+      data: [
+        {
+          clientTenantId,
+          code: '1000',
+          name: 'Caja y Bancos',
+          type: AccountType.ASSET,
+          currency: 'NIO',
+        },
+        {
+          clientTenantId,
+          code: '1100',
+          name: 'Cuentas por Cobrar',
+          type: AccountType.ASSET,
+          currency: 'NIO',
+        },
+        {
+          clientTenantId,
+          code: '2000',
+          name: 'Cuentas por Pagar',
+          type: AccountType.LIABILITY,
+          currency: 'NIO',
+        },
+        {
+          clientTenantId,
+          code: '4000',
+          name: 'Ingresos Operativos',
+          type: AccountType.INCOME,
+          currency: 'NIO',
+        },
+        {
+          clientTenantId,
+          code: '5000',
+          name: 'Gastos Operativos',
+          type: AccountType.EXPENSE,
+          currency: 'NIO',
+        },
+      ],
+    });
+  }
 
   private toBillingPlanType(plan?: string): BillingPlanType {
     if (!plan) return BillingPlanType.BASIC;
@@ -49,26 +94,31 @@ export class TenantsService {
 
     const passwordHash = await bcrypt.hash('admin123', 10);
 
-    return this.prisma.clientTenant.create({
-      data: {
-        name: dto.name,
-        slug: dto.slug,
-        plan: this.toBillingPlanType(dto.plan),
-        industry: this.toIndustryType(dto.industry),
-        logo: dto.logo,
-        partnerId: partnerId,
-        users: {
-          create: {
-            email: dto.adminEmail,
-            name: dto.adminName,
-            passwordHash: passwordHash,
-            role: SystemRole.ADMIN,
+    return this.prisma.$transaction(async (tx) => {
+      const tenant = await tx.clientTenant.create({
+        data: {
+          name: dto.name,
+          slug: dto.slug,
+          plan: this.toBillingPlanType(dto.plan),
+          industry: this.toIndustryType(dto.industry),
+          logo: dto.logo,
+          partnerId: partnerId,
+          users: {
+            create: {
+              email: dto.adminEmail,
+              name: dto.adminName,
+              passwordHash: passwordHash,
+              role: SystemRole.ADMIN,
+            },
           },
         },
-      },
-      include: {
-        users: true,
-      },
+        include: {
+          users: true,
+        },
+      });
+
+      await this.bootstrapDefaultAccounts(tx, tenant.id);
+      return tenant;
     });
   }
 

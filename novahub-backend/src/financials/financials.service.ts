@@ -5,6 +5,10 @@ function genCode(prefix: string): string {
   return `${prefix}-${Date.now().toString().slice(-6)}`;
 }
 
+function toEnum<T extends string>(val: string): T {
+  return val.toUpperCase() as T;
+}
+
 @Injectable()
 export class FinancialsService {
   constructor(private prisma: PrismaService) {}
@@ -68,19 +72,45 @@ export class FinancialsService {
 
   // ─── GASTOS RECURRENTES ───────────────────────────────────────────────────
   async createRecurringExpense(data: any, clientTenantId: string) {
-    return this.prisma.recurringExpense.create({ data: { ...data, clientTenantId } });
+    const startDate = data.startDate ? new Date(data.startDate) : new Date();
+
+    return this.prisma.recurringExpense.create({
+      data: {
+        ...data,
+        frequency: toEnum(data.frequency || 'MONTHLY') as any,
+        startDate,
+        endDate: data.endDate ? new Date(data.endDate) : null,
+        nextExecutionDate: startDate,
+        status: toEnum(data.status || 'ACTIVE') as any,
+        clientTenantId,
+      },
+    });
   }
 
   async findAllRecurringExpenses(clientTenantId: string) {
     return this.prisma.recurringExpense.findMany({
       where: { clientTenantId },
       include: { account: true, supplier: true } as any,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { nextExecutionDate: 'asc' },
     });
   }
 
   async updateRecurringExpense(id: string, data: any, clientTenantId: string) {
-    return this.prisma.recurringExpense.update({ where: { id, clientTenantId }, data });
+    const updateData: any = {
+      ...data,
+      ...(data.frequency && { frequency: toEnum(data.frequency) as any }),
+      ...(data.status && { status: toEnum(data.status) as any }),
+      ...(data.startDate && { startDate: new Date(data.startDate) }),
+      ...(data.endDate !== undefined && { endDate: data.endDate ? new Date(data.endDate) : null }),
+    };
+
+    if (data.startDate && data.nextExecutionDate === undefined) {
+      updateData.nextExecutionDate = new Date(data.startDate);
+    } else if (data.nextExecutionDate) {
+      updateData.nextExecutionDate = new Date(data.nextExecutionDate);
+    }
+
+    return this.prisma.recurringExpense.update({ where: { id, clientTenantId }, data: updateData });
   }
 
   async removeRecurringExpense(id: string, clientTenantId: string) {
