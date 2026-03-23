@@ -9,15 +9,17 @@ import { Button } from './ui/button';
 import { FinanceDashboardView } from './finanzas/FinanceDashboardView';
 import { FinanceTableView } from './finanzas/FinanceTableView';
 import { FinanceBalanceView } from './finanzas/FinanceBalanceView';
-import { incomeService, expensesService, recurringExpensesService } from '../services/finanzas.service';
+import { accountsService, incomeService, expensesService, recurringExpensesService } from '../services/finanzas.service';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
+import { useCurrency } from '../contexts/CurrencyContext';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
 }
 
 export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
+  const { displayCurrency, exchangeRate: globalRate, convertAmount } = useCurrency();
   const tabMap: Record<string, string> = { 
     'ingresos': 'ingresos', 
     'egresos': 'gastos', 
@@ -29,7 +31,65 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
   const [incomes, setIncomes] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const normalizeListResponse = (response: any) => {
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response?.data)) return response.data;
+    return [];
+  };
+
+  const normalizeItemResponse = (response: any) => {
+    if (response && typeof response === 'object' && 'data' in response && response.data) {
+      return response.data;
+    }
+    return response;
+  };
+
+  const getAccountType = (account: any) => String(account?.type || '').toUpperCase();
+
+  const findAccountByPreferredTypes = (preferredTypes: string[]) => {
+    const activeAccounts = accounts.filter((acc) => acc?.isActive !== false);
+
+    return (
+      activeAccounts.find((acc) => preferredTypes.includes(getAccountType(acc))) ||
+      activeAccounts.find((acc) => getAccountType(acc) === 'ASSET') ||
+      activeAccounts[0] ||
+      accounts.find((acc) => preferredTypes.includes(getAccountType(acc))) ||
+      accounts.find((acc) => getAccountType(acc) === 'ASSET') ||
+      accounts[0]
+    );
+  };
+
+  const ensureDefaultAccount = async (accountKind: 'INCOME' | 'EXPENSE') => {
+    const preferredTypes = accountKind === 'INCOME' ? ['INCOME', 'REVENUE'] : ['EXPENSE'];
+    const existing = findAccountByPreferredTypes(preferredTypes);
+    if (existing) return existing;
+
+    const suffix = Date.now().toString().slice(-6);
+    const payload = {
+      code: accountKind === 'INCOME' ? `ING-${suffix}` : `GAS-${suffix}`,
+      name: accountKind === 'INCOME' ? 'Ingresos Generales' : 'Gastos Generales',
+      type: accountKind,
+    };
+
+    const createdResponse = await accountsService.create(payload);
+    const createdAccount = normalizeItemResponse(createdResponse);
+
+    if (!createdAccount?.id) {
+      throw new Error('No se pudo crear una cuenta contable por defecto');
+    }
+
+    setAccounts((prev) => [createdAccount, ...prev]);
+    toast.success(
+      accountKind === 'INCOME'
+        ? 'Se creó una cuenta de ingresos por defecto'
+        : 'Se creó una cuenta de gastos por defecto',
+    );
+
+    return createdAccount;
+  };
 
   useEffect(() => {
     fetchData();
@@ -44,14 +104,31 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [incRes, expRes, rexpRes] = await Promise.all([
+      const [incRes, expRes, rexpRes, accRes] = await Promise.allSettled([
         incomeService.getAll(),
         expensesService.getAll(),
-        recurringExpensesService.getAll()
+        recurringExpensesService.getAll(),
+        accountsService.getAll(),
       ]);
-      setIncomes(Array.isArray(incRes) ? incRes : (incRes as any)?.data || []);
-      setExpenses(Array.isArray(expRes) ? expRes : (expRes as any)?.data || []);
-      setRecurringExpenses(Array.isArray(rexpRes) ? rexpRes : (rexpRes as any)?.data || []);
+
+      const incomesData = incRes.status === 'fulfilled' ? normalizeListResponse(incRes.value) : [];
+      const expensesData = expRes.status === 'fulfilled' ? normalizeListResponse(expRes.value) : [];
+      const recurringData = rexpRes.status === 'fulfilled' ? normalizeListResponse(rexpRes.value) : [];
+      const accountsData = accRes.status === 'fulfilled' ? normalizeListResponse(accRes.value) : [];
+
+      setIncomes(incomesData);
+      setExpenses(expensesData);
+      setRecurringExpenses(recurringData);
+      setAccounts(accountsData);
+
+      if ([incRes, expRes, rexpRes, accRes].every((res) => res.status === 'rejected')) {
+        toast.error('Error al cargar datos financieros');
+      }
+
+      if (incRes.status === 'rejected') console.error('Error fetching income:', incRes.reason);
+      if (expRes.status === 'rejected') console.error('Error fetching expenses:', expRes.reason);
+      if (rexpRes.status === 'rejected') console.error('Error fetching recurring expenses:', rexpRes.reason);
+      if (accRes.status === 'rejected') console.error('Error fetching accounts:', accRes.reason);
     } catch (error) {
       console.error('Error fetching finance data:', error);
       toast.error('Error al cargar datos financieros');
@@ -62,7 +139,7 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
 
   const INCOME_COLUMNS = [
     { key: 'number', label: 'No. Recibo', type: 'text' as const, editable: false },
-    { key: 'source', label: 'Origen / Cliente', type: 'text' as const, editable: true },
+    { key: 'source', label: 'Origen', type: 'text' as const, editable: true },
     { key: 'amount', label: 'Monto', type: 'currency' as const, editable: true },
     { key: 'date', label: 'Fecha', type: 'date' as const, editable: true },
     { key: 'notes', label: 'Notas', type: 'text' as const, editable: true },
@@ -101,11 +178,16 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
 
   const handleAddIncome = async () => {
     try {
+      const defaultAccount = await ensureDefaultAccount('INCOME');
+
       const newItem = {
-        description: 'Nuevo Ingreso',
+        source: 'Nuevo Ingreso',
         amount: 0,
         date: new Date().toISOString(),
-        accountId: 'acc-inc-001'
+        accountId: defaultAccount.id,
+        currency: 'NIO',
+        exchangeRate: globalRate,
+        notes: '',
       };
       const res = await incomeService.create(newItem);
       setIncomes([res, ...incomes]);
@@ -117,12 +199,17 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
 
   const handleAddExpense = async () => {
     try {
+      const defaultAccount = await ensureDefaultAccount('EXPENSE');
+
       const newItem = {
         description: 'Nuevo Gasto',
-        category: 'Otros',
+        category: 'OTROS',
         amount: 0,
         date: new Date().toISOString(),
-        accountId: 'acc-exp-001'
+        accountId: defaultAccount.id,
+        currency: 'NIO',
+        exchangeRate: globalRate,
+        status: 'PENDING',
       };
       const res = await expensesService.create(newItem);
       setExpenses([res, ...expenses]);
@@ -134,14 +221,18 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
 
   const handleAddRecurring = async () => {
     try {
+      const defaultAccount = await ensureDefaultAccount('EXPENSE');
+
       const newItem = {
         description: 'Nuevo Gasto Recurrente',
         frequency: 'monthly' as const,
         amount: 0,
         startDate: new Date().toISOString(),
-        accountId: 'acc-exp-001',
+        accountId: defaultAccount.id,
         status: 'active' as const,
-        category: 'Otros'
+        category: 'OTROS',
+        currency: 'NIO',
+        exchangeRate: globalRate,
       };
       const res = await recurringExpensesService.create(newItem);
       setRecurringExpenses([res, ...recurringExpenses]);
@@ -151,8 +242,9 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
     }
   };
 
-  const totalIncome = incomes.reduce((acc, i) => acc + Number(i.amount || 0), 0);
-  const totalExpense = expenses.reduce((acc, e) => acc + Number(e.amount || 0), 0);
+  const totalIncome = incomes.reduce((acc, i) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0);
+  const totalExpense = expenses.reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
+  const balanceSymbol = displayCurrency === 'USD' ? '$' : 'C$';
 
   return (
     <div className="space-y-4 p-4 md:p-6 pb-20 max-w-[1800px] mx-auto">
@@ -168,7 +260,7 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
             </h1>
             <div className="flex items-center gap-2 mt-2">
               <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                {incomes.length} ingresos · {expenses.length} gastos · Balance: ${(totalIncome - totalExpense).toLocaleString()}
+                {incomes.length} ingresos · {expenses.length} gastos · Balance: {balanceSymbol}{(totalIncome - totalExpense).toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </Badge>
             </div>
           </div>

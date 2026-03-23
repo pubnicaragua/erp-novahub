@@ -14,19 +14,29 @@ interface FinanceDashboardViewProps {
 }
 
 export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: FinanceDashboardViewProps) {
-  const { formatAmount } = useCurrency();
+  const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
+  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
 
   // Calculations from real data
-  const totalIncomes = incomes.reduce((acc, i) => acc + Number(i.amount || 0), 0);
-  const totalExpenses = expenses.reduce((acc, e) => acc + Number(e.amount || 0), 0);
-  const totalRecurring = recurringExpenses.reduce((acc, r) => acc + Number(r.amount || 0), 0);
+  const totalIncomes = incomes.reduce(
+    (acc, i) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate),
+    0,
+  );
+  const totalExpenses = expenses.reduce(
+    (acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate),
+    0,
+  );
+  const totalRecurring = recurringExpenses.reduce(
+    (acc, r) => acc + convertAmount(r.amount || 0, r.currency, r.exchangeRate),
+    0,
+  );
   const netUtility = totalIncomes - totalExpenses;
   const margin = totalIncomes > 0 ? ((netUtility / totalIncomes) * 100).toFixed(1) : '0';
   
   // Aggregate expenses by category for pie chart
   const expenseByCategory = expenses.reduce((acc: Record<string, number>, curr) => {
     const cat = curr.category || 'Otros';
-    acc[cat] = (acc[cat] || 0) + Number(curr.amount || 0);
+    acc[cat] = (acc[cat] || 0) + convertAmount(curr.amount || 0, curr.currency, curr.exchangeRate);
     return acc;
   }, {});
 
@@ -55,8 +65,8 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: F
     
     monthlyData.push({
       mes: monthNames[monthIdx],
-      ingresos: monthIncomes.reduce((acc, i) => acc + Number(i.amount || 0), 0),
-      gastos: monthExpenses.reduce((acc, e) => acc + Number(e.amount || 0), 0)
+      ingresos: monthIncomes.reduce((acc, i) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0),
+      gastos: monthExpenses.reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0)
     });
   }
 
@@ -107,7 +117,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: F
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-400">{formatAmount(totalIncomes)}</div>
+            <div className="text-2xl font-bold text-green-400">{formatConvertedAmount(totalIncomes, displayCurrency)}</div>
             <div className="flex items-center gap-1 mt-1 font-medium">
               <ArrowUpRight className="size-3 text-green-500" />
               <span className="text-xs text-green-500">{incomes.length} transacciones</span>
@@ -122,7 +132,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: F
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-400">{formatAmount(totalExpenses)}</div>
+            <div className="text-2xl font-bold text-red-400">{formatConvertedAmount(totalExpenses, displayCurrency)}</div>
             <div className="flex items-center gap-1 mt-1 font-medium">
               <ArrowDownRight className="size-3 text-red-500" />
               <span className="text-xs text-red-500">{expenses.length} transacciones</span>
@@ -138,7 +148,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: F
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${netUtility >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
-              {formatAmount(netUtility)}
+              {formatConvertedAmount(netUtility, displayCurrency)}
             </div>
             <p className="text-xs text-muted-foreground mt-1 font-medium">Margen: {margin}%</p>
           </CardContent>
@@ -151,7 +161,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: F
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-400">{formatAmount(totalRecurring)}</div>
+            <div className="text-2xl font-bold text-purple-400">{formatConvertedAmount(totalRecurring, displayCurrency)}</div>
             <p className="text-xs text-muted-foreground mt-1 font-medium italic">{recurringExpenses.length} compromisos activos</p>
           </CardContent>
         </Card>
@@ -170,11 +180,11 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: F
                   <BarChart data={monthlyData} barGap={8}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${currencySymbol}${(v/1000).toFixed(0)}k`} />
                     <Tooltip 
                       cursor={{ fill: 'hsl(var(--muted)/0.3)' }}
                       contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
-                      formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                      formatter={(value: number) => [`${currencySymbol}${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, '']}
                     />
                     <Legend iconType="circle" />
                     <Bar dataKey="ingresos" name="Ingresos" fill="#22c55e" radius={[4, 4, 0, 0]} />
@@ -218,7 +228,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: F
                     </Pie>
                     <Tooltip 
                       contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
-                      formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                      formatter={(value: number) => [`${currencySymbol}${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, '']}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -241,7 +251,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: F
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase">Promedio Ingreso</p>
-              <p className="text-lg font-bold">{formatAmount(incomes.length > 0 ? totalIncomes / incomes.length : 0)}</p>
+              <p className="text-lg font-bold">{formatConvertedAmount(incomes.length > 0 ? totalIncomes / incomes.length : 0, displayCurrency)}</p>
             </div>
             <div className="rounded-full bg-green-500/10 p-2">
               <TrendingUp className="size-4 text-green-500" />
@@ -252,7 +262,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: F
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase">Promedio Gasto</p>
-              <p className="text-lg font-bold">{formatAmount(expenses.length > 0 ? totalExpenses / expenses.length : 0)}</p>
+              <p className="text-lg font-bold">{formatConvertedAmount(expenses.length > 0 ? totalExpenses / expenses.length : 0, displayCurrency)}</p>
             </div>
             <div className="rounded-full bg-red-500/10 p-2">
               <TrendingDown className="size-4 text-red-500" />

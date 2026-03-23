@@ -6,7 +6,7 @@ import { accountsService } from '../../services/finanzas.service';
 import { Badge } from '../ui/badge';
 
 export function FinanceBalanceView() {
-  const { formatAmount } = useCurrency();
+  const { displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,13 +26,13 @@ export function FinanceBalanceView() {
     }
   };
 
-  const assets = accounts.filter(a => a.type === 'ASSET');
-  const liabilities = accounts.filter(a => a.type === 'LIABILITY');
-  const equity = accounts.filter(a => a.type === 'EQUITY');
+  const assets = accounts.filter(a => String(a.type || '').toUpperCase() === 'ASSET');
+  const liabilities = accounts.filter(a => String(a.type || '').toUpperCase() === 'LIABILITY');
+  const equity = accounts.filter(a => String(a.type || '').toUpperCase() === 'EQUITY');
 
-  const totalAssets = assets.reduce((acc, a) => acc + Number(a.balance), 0);
-  const totalLiabilities = liabilities.reduce((acc, a) => acc + Number(a.balance), 0);
-  const totalEquity = equity.reduce((acc, a) => acc + Number(a.balance), 0);
+  const totalAssets = assets.reduce((acc, a) => acc + convertAmount(a.balance || 0, a.currency), 0);
+  const totalLiabilities = liabilities.reduce((acc, a) => acc + convertAmount(a.balance || 0, a.currency), 0);
+  const totalEquity = equity.reduce((acc, a) => acc + convertAmount(a.balance || 0, a.currency), 0);
 
   return (
     <div className="space-y-6">
@@ -53,7 +53,7 @@ export function FinanceBalanceView() {
                   <p className="font-bold text-sm">{acc.name}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-black text-emerald-500">{formatAmount(acc.balance)}</p>
+                  <p className="font-black text-emerald-500">{formatConvertedAmount(acc.balance, acc.currency)}</p>
                   <Badge variant="outline" className="text-[9px] border-emerald-500/20 text-emerald-500 uppercase">Líquido</Badge>
                 </div>
               </CardContent>
@@ -61,7 +61,7 @@ export function FinanceBalanceView() {
           ))}
           <div className="pt-2 border-t border-dashed border-emerald-500/30 flex justify-between items-center px-1">
             <span className="text-xs font-bold text-muted-foreground uppercase">Total Activos</span>
-            <span className="text-lg font-black text-emerald-500">{formatAmount(totalAssets)}</span>
+            <span className="text-lg font-black text-emerald-500">{formatConvertedAmount(totalAssets, displayCurrency)}</span>
           </div>
         </div>
 
@@ -84,14 +84,14 @@ export function FinanceBalanceView() {
                   <p className="font-bold text-sm">{acc.name}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-black text-rose-500">{formatAmount(acc.balance)}</p>
+                  <p className="font-black text-rose-500">{formatConvertedAmount(acc.balance, acc.currency)}</p>
                 </div>
               </CardContent>
             </Card>
           ))}
           <div className="pt-2 border-t border-dashed border-rose-500/30 flex justify-between items-center px-1">
             <span className="text-xs font-bold text-muted-foreground uppercase">Total Pasivos</span>
-            <span className="text-lg font-black text-rose-500">{formatAmount(totalLiabilities)}</span>
+            <span className="text-lg font-black text-rose-500">{formatConvertedAmount(totalLiabilities, displayCurrency)}</span>
           </div>
         </div>
 
@@ -107,15 +107,15 @@ export function FinanceBalanceView() {
              </div>
              <CardContent className="p-6">
                 <p className="text-xs font-bold text-muted-foreground uppercase mb-1">Ecuación Contable</p>
-                <p className="text-2xl font-black text-blue-500 mb-4">{formatAmount(totalAssets - totalLiabilities)}</p>
+                <p className="text-2xl font-black text-blue-500 mb-4">{formatConvertedAmount(totalAssets - totalLiabilities, displayCurrency)}</p>
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Inversión Inicial:</span>
-                    <span className="font-bold">{formatAmount(totalEquity)}</span>
+                    <span className="font-bold">{formatConvertedAmount(totalEquity, displayCurrency)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Reservas:</span>
-                    <span className="font-bold">{formatAmount(0)}</span>
+                    <span className="font-bold">{formatConvertedAmount(0, displayCurrency)}</span>
                   </div>
                 </div>
              </CardContent>

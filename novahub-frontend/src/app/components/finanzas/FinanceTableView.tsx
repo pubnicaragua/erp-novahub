@@ -42,7 +42,7 @@ export function FinanceTableView({
   title,
   loading 
 }: FinanceTableViewProps) {
-  const { formatAmount } = useCurrency();
+  const { formatConvertedAmount } = useCurrency();
   const [localData, setLocalData] = useState<any[]>(data);
   const [editingCell, setEditingCell] = useState<{ id: string; key: string } | null>(null);
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
@@ -97,7 +97,7 @@ export function FinanceTableView({
       const numValue = Number(value || 0);
       return (
         <span className={numValue >= 0 ? "text-emerald-500" : "text-rose-500"}>
-          {formatAmount(numValue)}
+          {formatConvertedAmount(numValue, item.currency, item.exchangeRate)}
         </span>
       );
     }

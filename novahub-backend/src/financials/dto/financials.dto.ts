@@ -12,8 +12,8 @@ export class CreateAccountDto {
     @IsNotEmpty()
     name: string;
 
-    @ApiProperty({ enum: ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'] })
-    @IsEnum(['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'])
+    @ApiProperty({ enum: ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'] })
+    @IsEnum(['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'])
     type: string;
 
     @ApiProperty({ required: false })
@@ -31,9 +31,15 @@ export class CreateIncomeDto {
     @IsDateString()
     date: Date;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
-    description: string;
+    source?: string;
+
+    @ApiProperty({ required: false, description: 'Alias legacy para source' })
+    @IsOptional()
+    @IsString()
+    description?: string;
 
     @ApiProperty()
     @IsString()
@@ -43,7 +49,17 @@ export class CreateIncomeDto {
     @ApiProperty({ required: false })
     @IsOptional()
     @IsString()
-    customerId?: string;
+    notes?: string;
+
+    @ApiProperty({ required: false, enum: ['NIO', 'USD'] })
+    @IsOptional()
+    @IsString()
+    currency?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    exchangeRate?: number;
 }
 
 export class CreateExpenseDto {
@@ -73,6 +89,26 @@ export class CreateExpenseDto {
     @IsOptional()
     @IsString()
     category?: string;
+
+    @ApiProperty({ required: false, enum: ['NIO', 'USD'] })
+    @IsOptional()
+    @IsString()
+    currency?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsNumber()
+    exchangeRate?: number;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    status?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    reference?: string;
 }
 
 export class CreateJournalEntryDto {
