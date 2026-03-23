@@ -2,7 +2,14 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request }
 import { ToolsService } from './tools.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { CreateTicketDto, UpdateTicketDto, CreateDocumentDto, UpdateDocumentDto, CreateActivityDto } from './dto/tools.dto';
+import {
+  CreateTicketDto,
+  UpdateTicketDto,
+  CreateTicketCommentDto,
+  CreateDocumentDto,
+  UpdateDocumentDto,
+  CreateActivityDto,
+} from './dto/tools.dto';
 
 @ApiTags('tools')
 @ApiBearerAuth()
@@ -15,7 +22,7 @@ export class ToolsController {
   @Post('tickets')
   @ApiOperation({ summary: 'Crear nuevo ticket de soporte' })
   createTicket(@Body() data: CreateTicketDto, @Request() req) {
-    return this.toolsService.createTicket(data, req.user.clientTenantId);
+    return this.toolsService.createTicket(data, req.user.clientTenantId, req.user.id);
   }
 
   @Get('tickets')
@@ -33,13 +40,35 @@ export class ToolsController {
   @Patch('tickets/:id')
   @ApiOperation({ summary: 'Actualizar ticket' })
   updateTicket(@Param('id') id: string, @Body() data: UpdateTicketDto, @Request() req) {
-    return this.toolsService.updateTicket(id, data, req.user.clientTenantId);
+    return this.toolsService.updateTicket(id, data, req.user.clientTenantId, req.user.id);
   }
 
   @Delete('tickets/:id')
   @ApiOperation({ summary: 'Eliminar ticket' })
   removeTicket(@Param('id') id: string, @Request() req) {
     return this.toolsService.removeTicket(id, req.user.clientTenantId);
+  }
+
+  @Get('tickets/:id/comments')
+  @ApiOperation({ summary: 'Listar comentarios de ticket' })
+  findTicketComments(@Param('id') id: string, @Request() req) {
+    return this.toolsService.findTicketComments(id, req.user.clientTenantId);
+  }
+
+  @Post('tickets/:id/comments')
+  @ApiOperation({ summary: 'Agregar comentario al ticket' })
+  createTicketComment(
+    @Param('id') id: string,
+    @Body() data: CreateTicketCommentDto,
+    @Request() req,
+  ) {
+    return this.toolsService.createTicketComment(id, data, req.user.clientTenantId, req.user.id);
+  }
+
+  @Get('tickets/:id/audit')
+  @ApiOperation({ summary: 'Historial / auditoría del ticket' })
+  findTicketAudit(@Param('id') id: string, @Request() req) {
+    return this.toolsService.findTicketAudit(id, req.user.clientTenantId);
   }
 
   // ─── DOCUMENTOS ──────────────────────────────────────────────────────────

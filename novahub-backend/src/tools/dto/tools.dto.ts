@@ -26,9 +26,26 @@ export class CreateTicketDto {
     @IsOptional()
     @IsString()
     assignedToId?: string;
+
+    @ApiProperty({ required: false, description: 'Fecha límite SLA (opcional, si no se envía se calcula por prioridad)' })
+    @IsOptional()
+    @IsDateString()
+    slaDueAt?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    customerId?: string;
 }
 
 export class UpdateTicketDto extends PartialType(CreateTicketDto) {}
+
+export class CreateTicketCommentDto {
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    message: string;
+}
 
 export class CreateDocumentDto {
     @ApiProperty({ required: false, description: 'Nombre del documento (preferido)' })

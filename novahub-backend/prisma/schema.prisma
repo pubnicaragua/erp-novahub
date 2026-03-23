@@ -96,6 +96,8 @@ model ClientTenant {
   systemSettings            SystemSetting[]
   tasks                     Task[]
   tickets                   Ticket[]
+  ticketComments            TicketComment[]
+  ticketAudits              TicketAudit[]
   transactions              Transaction[]
   transfers                 Transfer[]
   users                     User[]
@@ -199,6 +201,8 @@ model User {
   updatedAt             DateTime     @updatedAt
   clientTenantId        String
   activities            Activity[]
+  ticketComments        TicketComment[]
+  ticketAudits          TicketAudit[]
   clientTenant          ClientTenant @relation(fields: [clientTenantId], references: [id])
   responsibleWarehouses Warehouse[]
 }
@@ -938,8 +942,43 @@ model Ticket {
   assignedToId   String?
   status         TicketStatus @default(OPEN)
   priority       Priority     @default(MEDIUM)
+  slaDueAt       DateTime?
+  slaBreachedAt  DateTime?
+  slaReminderSentAt DateTime?
+  resolvedAt     DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  clientTenantId String
+  comments       TicketComment[]
+  audits         TicketAudit[]
+  clientTenant   ClientTenant @relation(fields: [clientTenantId], references: [id])
+}
+
+model TicketComment {
+  id             String       @id @default(uuid())
+  ticketId       String
+  authorId       String
+  message        String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  clientTenantId String
+  author         User         @relation(fields: [authorId], references: [id])
+  ticket         Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  clientTenant   ClientTenant @relation(fields: [clientTenantId], references: [id])
+}
+
+model TicketAudit {
+  id             String       @id @default(uuid())
+  ticketId       String
+  actorId        String?
+  action         String
+  message        String?
+  metadata       Json?
   createdAt      DateTime     @default(now())
   clientTenantId String
+  actor          User?        @relation(fields: [actorId], references: [id])
+  ticket         Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   clientTenant   ClientTenant @relation(fields: [clientTenantId], references: [id])
 }
 

@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { Ticket, Document, User, ApiFilters } from '../types';
+import type { Ticket, TicketComment, TicketAudit, Document, User, ApiFilters } from '../types';
 
 const normalizeList = <T>(response: any): T[] => {
   if (Array.isArray(response)) return response as T[];
@@ -13,6 +13,9 @@ export const supportService = {
   create: (data: Partial<Ticket>) => api.post<Ticket>('/tools/tickets', data),
   update: (id: string, data: Partial<Ticket>) => api.patch<Ticket>(`/tools/tickets/${id}`, data),
   delete: (id: string) => api.delete(`/tools/tickets/${id}`),
+  getComments: (id: string) => api.get<TicketComment[]>(`/tools/tickets/${id}/comments`),
+  addComment: (id: string, message: string) => api.post<TicketComment>(`/tools/tickets/${id}/comments`, { message }),
+  getAudit: (id: string) => api.get<TicketAudit[]>(`/tools/tickets/${id}/audit`),
 };
 
 export const knowledgeBaseService = {
