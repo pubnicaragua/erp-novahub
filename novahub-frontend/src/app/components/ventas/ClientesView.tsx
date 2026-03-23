@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import type { Customer } from '../../types';
 import { Badge } from '../ui/badge';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -19,6 +20,7 @@ interface ClientesViewProps {
 }
 
 export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
+  const { formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -86,7 +88,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           "text-[13px] font-black tabular-nums",
           (val || 0) > 0 ? "text-rose-500" : "text-emerald-500"
         )}>
-          ${(val || 0).toLocaleString()}
+          {formatConvertedAmount(val || 0, 'USD')}
         </span>
       )
     },
@@ -113,8 +115,8 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
 
   const kpis = [
     { title: 'Clientes Activos', value: data.filter(c => (c.status || '').toUpperCase() === 'ACTIVE').length, icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Saldo Pendiente', value: `$${data.reduce((acc, c) => acc + Number(c.creditLimit || 0), 0).toLocaleString()}`, icon: CreditCard, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Total Crédito', value: `$${data.reduce((acc, c) => acc + Number(c.creditLimit || 0), 0).toLocaleString()}`, icon: TrendingUp, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    { title: 'Saldo Pendiente', value: formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.creditLimit || 0), 0), 'USD'), icon: CreditCard, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { title: 'Total Crédito', value: formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.creditLimit || 0), 0), 'USD'), icon: TrendingUp, color: 'text-purple-500', bg: 'bg-purple-500/10' },
     { title: 'Empresas', value: data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length, icon: CheckCircle2, color: 'text-amber-500', bg: 'bg-amber-500/10' },
   ];
 

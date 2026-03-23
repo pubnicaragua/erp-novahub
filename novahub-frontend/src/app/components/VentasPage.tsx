@@ -8,6 +8,9 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './ui/button';
 import { cn } from './ui/utils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Badge } from './ui/badge';
+import { ShoppingBag } from 'lucide-react';
 import { 
   customersService, 
   estimatesService, 
@@ -165,32 +168,53 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <main className="flex-1 overflow-y-auto custom-scrollbar relative">
-        <header className="sticky top-0 z-20 w-full h-20 bg-background/80 backdrop-blur-md border-b border-border/50 flex items-center justify-between px-6 md:px-10">
-           <div className="flex flex-col">
-              <div className="flex items-center gap-2 text-muted-foreground/40 text-[10px] font-black uppercase tracking-widest mb-1">
-                 <span>Operaciones</span>
-                 <ChevronRight className="size-3" />
-                 <span className="text-primary/60">{currentSectionInfo.label}</span>
+        <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-primary/10 rounded-xl">
+                <ShoppingBag className="size-9 text-primary" />
               </div>
-              <h2 className="text-xl font-black text-foreground uppercase tracking-tighter">
-                {currentSectionInfo.label}
-              </h2>
-           </div>
-
-           <div className="flex items-center gap-4">
+              <div>
+                <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
+                  Ventas <span className="text-primary">& CRM</span>
+                </h1>
+                <div className="flex items-center gap-2 mt-2">
+                  <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+                    {data.clientes.length} clientes · {data.facturas.length} facturas
+                  </Badge>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
               <Button 
                 onClick={fetchData} 
-                variant="ghost" 
-                size="icon" 
-                className="size-10 rounded-full hover:bg-primary/10 transition-colors"
+                variant="outline" 
+                size="sm"
+                className="rounded-xl font-bold"
                 disabled={loading}
               >
-                <RotateCcw className={cn("size-5 text-muted-foreground", loading && "animate-spin")} />
+                <RotateCcw className={cn("size-4 mr-2", loading && "animate-spin")} />
+                Actualizar
               </Button>
-           </div>
-        </header>
+            </div>
+          </div>
 
-        <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
+          <Tabs value={activeSection} className="w-full" onValueChange={setActiveSection}>
+            <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
+              {SALES_SECTIONS.map((section) => (
+                <TabsTrigger 
+                  key={section.id} 
+                  value={section.id}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+                    data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+                    data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
+                >
+                  <section.icon className="size-4" />
+                  <span className="hidden sm:inline">{section.label}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
           <AnimatePresence mode="wait">
             <motion.div
               key={activeSection}
@@ -225,6 +249,7 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
               )}
             </motion.div>
           </AnimatePresence>
+          </Tabs>
         </div>
       </main>
     </div>

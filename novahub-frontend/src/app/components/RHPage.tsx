@@ -248,7 +248,7 @@ export function RHPage({ activeSubModule }: RHPageProps) {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-muted/30 p-1.5 rounded-lg border border-border/50 overflow-x-auto scrollbar-hide">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-muted/30 p-1.5 pb-2 rounded-lg border border-border/50 overflow-x-auto">
           <TabsList className="bg-transparent border-none flex-nowrap shrink-0 justify-start w-full h-auto px-1 py-1 gap-1">
             <TabsTrigger value="empleados"><UserCircle className="mr-1.5 size-3.5" />Empleados</TabsTrigger>
             <TabsTrigger value="planillas"><FileSpreadsheet className="mr-1.5 size-3.5" />Planillas</TabsTrigger>

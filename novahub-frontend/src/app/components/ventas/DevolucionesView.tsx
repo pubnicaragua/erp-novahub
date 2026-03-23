@@ -31,7 +31,7 @@ const statusOptions = [
 ];
 
 export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [] }: DevolucionesViewProps) {
-  const { exchangeRate: globalRate } = useCurrency();
+  const { displayCurrency, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
@@ -85,8 +85,9 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             unitPrice: Number(item.unitPrice || 0),
             total: Number(item.total || 0),
           })),
-          total: localDoc.total,
+            total: localDoc.total,
           status: 'PENDING',
+          currency: displayCurrency === 'USD' ? 'USD' : 'NIO',
         } as any);
         toast.success('Devolución registrada exitosamente');
       } else {
@@ -116,14 +117,14 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     { key: 'customer', header: 'Cliente', render: (val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
     { key: 'invoice', header: 'Factura Origen', render: (val, row) => <span className="text-xs font-bold text-blue-500">{row.invoice?.number || 'N/A'}</span> },
     { key: 'date', header: 'Fecha', render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span> },
-    { key: 'total', header: 'Total', width: '130px', render: (val) => <span className="text-[13px] font-black tabular-nums text-rose-500">C$ {Number(val||0).toLocaleString()}</span> },
+    { key: 'total', header: 'Total', width: '130px', render: (val) => <span className="text-[13px] font-black tabular-nums text-rose-500">{formatConvertedAmount(Number(val||0), 'USD')}</span> },
     { key: 'status', header: 'Estado', width: '130px', render: (val) => {
       const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
       return <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none", opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>; } },
   ];
 
   const kpis = [
-    { title: 'Total Devuelto',  value: `C$ ${data.reduce((acc, r) => acc + Number(r.total||0), 0).toLocaleString()}`, icon: FileOutput,   color: 'text-rose-500',    bg: 'bg-rose-500/10'    },
+    { title: 'Total Devuelto',  value: formatConvertedAmount(data.reduce((acc, r) => acc + Number(r.total||0), 0), 'USD'), icon: FileOutput,   color: 'text-rose-500',    bg: 'bg-rose-500/10'    },
     { title: 'Pendientes',      value: data.filter(r => (r.status||'').toUpperCase() === 'PENDING').length,           icon: Clock,        color: 'text-amber-500',   bg: 'bg-amber-500/10'   },
     { title: 'Aprobadas',       value: data.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length,          icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Rechazadas',      value: data.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length,          icon: XCircle,      color: 'text-muted-foreground', bg: 'bg-muted/10' },
@@ -162,7 +163,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox options={customers.map(c => ({ label: c.name, value: c.id }))} value={localDoc?.customerId || ''} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} placeholder="Seleccionar Cliente" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Factura Origen</p>
-                  <Combobox options={customerInvoices.map(i => ({ label: `${i.number} — C$ ${Number(i.total||0).toLocaleString()}`, value: i.id }))} value={localDoc?.invoiceId || ''} onChange={(val) => setLocalDoc({ ...localDoc, invoiceId: val })} placeholder="Seleccionar Factura" /></div>
+                  <Combobox options={customerInvoices.map(i => ({ label: `${i.number} — ${formatConvertedAmount(Number(i.total||0), 'USD')}`, value: i.id }))} value={localDoc?.invoiceId || ''} onChange={(val) => setLocalDoc({ ...localDoc, invoiceId: val })} placeholder="Seleccionar Factura" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
                   <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
                 {!isCreating && <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
@@ -178,7 +179,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen</p>
               <div className="flex justify-between items-center text-base border-b pb-3 border-border/50">
                 <span className="font-black">Total Devolución</span>
-                <span className="text-rose-500 font-black text-lg">C$ {Number(localDoc?.total||0).toLocaleString()}</span>
+                <span className="text-rose-500 font-black text-lg">{formatConvertedAmount(Number(localDoc?.total||0), 'USD')}</span>
               </div>
               <p className="text-[10px] text-muted-foreground italic">Al aprobar esta devolución, se generará automáticamente una Nota de Crédito y se ajustará el balance del cliente.</p>
             </CardContent>
@@ -210,7 +211,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                   <div className="col-span-2"><Input type="number" min="0" value={Number(item.unitPrice) || ''} onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
                     setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-8 text-xs text-right" /></div>
-                  <div className="col-span-2 text-right"><span className="text-xs font-black text-rose-500">C$ {Number(item.total || 0).toLocaleString()}</span></div>
+                  <div className="col-span-2 text-right"><span className="text-xs font-black text-rose-500">{formatConvertedAmount(Number(item.total || 0), 'USD')}</span></div>
                   <div className="col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
                     onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }}><Trash2 className="size-3" /></Button></div>
                 </div>
