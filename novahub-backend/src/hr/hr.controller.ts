@@ -195,6 +195,12 @@ export class HrController {
     return this.hrService.calculatePayroll(data, req.user.clientTenantId);
   }
 
+  @Patch('payroll/:id/status')
+  @ApiOperation({ summary: 'Update payroll status (e.g. mark as PAID)' })
+  updatePayrollStatus(@Param('id') id: string, @Body() body: { status: string }, @Request() req) {
+    return this.hrService.updatePayrollStatus(id, body.status, req.user.clientTenantId);
+  }
+
   // ===== ATTENDANCE =====
   @Post('attendance/clock-in')
   @ApiOperation({ summary: 'Clock in' })

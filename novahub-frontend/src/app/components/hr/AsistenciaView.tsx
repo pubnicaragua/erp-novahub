@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Clock, LogIn, LogOut, Calendar } from 'lucide-react';
 import { Button } from '../ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
+import { Combobox } from '../ui/Combobox';
 
 export function AsistenciaView({ attendance, employees, onRefresh }: any) {
   const [selectedEmployee, setSelectedEmployee] = useState('');
@@ -83,18 +83,19 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
       <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50">
         <h3 className="text-lg font-semibold mb-4">Registrar Asistencia</h3>
         <div className="flex items-center gap-3">
-          <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-            <SelectTrigger className="flex-1 bg-white">
-              <SelectValue placeholder="Seleccionar empleado" />
-            </SelectTrigger>
-            <SelectContent>
-              {employees.map((emp: any) => (
-                <SelectItem key={emp.id} value={emp.id}>
-                  {emp.firstName} {emp.lastName} - {emp.employeeNumber}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex-1">
+            <Combobox
+              options={employees.map((emp: any) => ({
+                label: `${emp.firstName} ${emp.lastName}`,
+                value: emp.id,
+                description: emp.employeeNumber,
+              }))}
+              value={selectedEmployee}
+              onChange={setSelectedEmployee}
+              placeholder="Buscar empleado..."
+              emptyMessage="No se encontró el empleado"
+            />
+          </div>
           <Button onClick={handleClockIn} className="bg-green-600 hover:bg-green-700">
             <LogIn className="size-4 mr-2" />
             Entrada

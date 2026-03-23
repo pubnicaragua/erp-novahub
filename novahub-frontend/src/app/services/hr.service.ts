@@ -32,6 +32,7 @@ export const hrService = {
   calculatePayroll: (data: any) => api.post('/hr/payroll/calculate', data),
   getPayrollPeriods: () => api.get('/hr/payroll/periods'),
   getPayrollReports: (period?: string) => api.get('/hr/payroll/reports', { params: { period } }),
+  updatePayrollStatus: (id: string, status: string) => api.patch(`/hr/payroll/${id}/status`, { status }),
 
   // ===== ATTENDANCE =====
   clockIn: (data: any) => api.post('/hr/attendance/clock-in', data),

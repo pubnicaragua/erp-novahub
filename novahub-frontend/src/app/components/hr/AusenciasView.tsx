@@ -5,6 +5,7 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
+import { Combobox } from '../ui/Combobox';
 
 export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const [showNewForm, setShowNewForm] = useState(false);
@@ -116,18 +117,17 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium mb-1 block">Empleado</label>
-              <Select value={newRequest.employeeId} onValueChange={(v) => setNewRequest({ ...newRequest, employeeId: v })}>
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Seleccionar empleado" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((emp: any) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.firstName} {emp.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={employees.map((emp: any) => ({
+                  label: `${emp.firstName} ${emp.lastName}`,
+                  value: emp.id,
+                  description: emp.employeeNumber,
+                }))}
+                value={newRequest.employeeId}
+                onChange={(v) => setNewRequest({ ...newRequest, employeeId: v })}
+                placeholder="Buscar empleado..."
+                emptyMessage="No se encontró el empleado"
+              />
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Tipo de Ausencia</label>

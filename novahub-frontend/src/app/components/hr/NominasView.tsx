@@ -1,13 +1,22 @@
-import React, { useState } from 'react';
-import { DollarSign, Download, Calculator, Filter } from 'lucide-react';
+import { useState } from 'react';
+import { DollarSign, Download, Calculator, CheckCircle } from 'lucide-react';
 import { Button } from '../ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
+import { Combobox } from '../ui/Combobox';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+
+  const employeeOptions = [
+    { label: 'Todos los empleados', value: 'all' },
+    ...employees.map((emp: any) => ({
+      label: `${emp.firstName} ${emp.lastName}`,
+      value: emp.id,
+      description: emp.employeeNumber,
+    })),
+  ];
 
   const filteredPayrolls = payrolls.filter((p: any) => {
     const matchesEmployee = filterEmployee === 'all' || p.employeeId === filterEmployee;
@@ -29,6 +38,33 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       onRefresh();
     } catch (error) {
       toast.error('Error al procesar nómina');
+    }
+  };
+
+  const handleMarkAsPaid = async (id: string) => {
+    try {
+      await hrService.updatePayrollStatus(id, 'PAID');
+      toast.success('Nómina marcada como pagada');
+      onRefresh();
+    } catch (error) {
+      toast.error('Error al actualizar estado');
+    }
+  };
+
+  const handleMarkAllAsPaid = async () => {
+    const pendingPayrolls = filteredPayrolls.filter((p: any) => p.status === 'PENDING');
+    if (pendingPayrolls.length === 0) {
+      toast.info('No hay nóminas pendientes');
+      return;
+    }
+    try {
+      await Promise.all(
+        pendingPayrolls.map((p: any) => hrService.updatePayrollStatus(p.id, 'PAID'))
+      );
+      toast.success(`${pendingPayrolls.length} nóminas marcadas como pagadas`);
+      onRefresh();
+    } catch (error) {
+      toast.error('Error al actualizar estados');
     }
   };
 
@@ -56,19 +92,25 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     toast.success('Archivo CSV descargado');
   };
 
+  const formatCurrency = (amount: number, currency: string = 'USD') => {
+    const symbol = currency === 'NIO' ? 'C$' : '$';
+    return `${symbol}${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  };
+
   const totalGross = filteredPayrolls.reduce((sum: number, p: any) => sum + Number(p.grossPay || 0), 0);
   const totalNet = filteredPayrolls.reduce((sum: number, p: any) => sum + Number(p.netPay || 0), 0);
   const totalTaxes = filteredPayrolls.reduce((sum: number, p: any) => sum + Number(p.taxes || 0), 0);
+  const pendingCount = filteredPayrolls.filter((p: any) => p.status === 'PENDING').length;
 
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Bruto</p>
-              <h3 className="text-2xl font-bold text-green-700">${totalGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}</h3>
+              <h3 className="text-2xl font-bold text-green-700">{formatCurrency(totalGross)}</h3>
             </div>
             <DollarSign className="size-8 text-green-500" />
           </div>
@@ -77,7 +119,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Neto</p>
-              <h3 className="text-2xl font-bold text-blue-700">${totalNet.toLocaleString('en-US', { minimumFractionDigits: 2 })}</h3>
+              <h3 className="text-2xl font-bold text-blue-700">{formatCurrency(totalNet)}</h3>
             </div>
             <DollarSign className="size-8 text-blue-500" />
           </div>
@@ -86,9 +128,18 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Impuestos</p>
-              <h3 className="text-2xl font-bold text-orange-700">${totalTaxes.toLocaleString('en-US', { minimumFractionDigits: 2 })}</h3>
+              <h3 className="text-2xl font-bold text-orange-700">{formatCurrency(totalTaxes)}</h3>
             </div>
             <DollarSign className="size-8 text-orange-500" />
+          </div>
+        </div>
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-yellow-50 to-amber-50">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Pendientes</p>
+              <h3 className="text-3xl font-bold text-amber-700">{pendingCount}</h3>
+            </div>
+            <CheckCircle className="size-8 text-amber-500" />
           </div>
         </div>
       </div>
@@ -96,36 +147,36 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       {/* Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
-          <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-            <SelectTrigger className="w-[200px]">
-              <Filter className="size-4 mr-2" />
-              <SelectValue placeholder="Empleado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los empleados</SelectItem>
-              {employees.map((emp: any) => (
-                <SelectItem key={emp.id} value={emp.id}>
-                  {emp.firstName} {emp.lastName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="PENDING">Pendiente</SelectItem>
-              <SelectItem value="PAID">Pagado</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="w-[250px]">
+            <Combobox
+              options={employeeOptions}
+              value={filterEmployee}
+              onChange={setFilterEmployee}
+              placeholder="Buscar empleado..."
+              emptyMessage="No se encontró el empleado"
+            />
+          </div>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="h-8 px-3 rounded-md border border-input bg-background text-xs font-medium w-[130px]"
+          >
+            <option value="all">Todos</option>
+            <option value="PENDING">Pendiente</option>
+            <option value="PAID">Pagado</option>
+          </select>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="size-4 mr-2" />
             Exportar
           </Button>
+          {pendingCount > 0 && (
+            <Button size="sm" onClick={handleMarkAllAsPaid} className="bg-emerald-600 hover:bg-emerald-700">
+              <CheckCircle className="size-4 mr-2" />
+              Pagar Todas ({pendingCount})
+            </Button>
+          )}
           <Button size="sm" onClick={handleProcessPayroll} className="bg-green-600 hover:bg-green-700">
             <Calculator className="size-4 mr-2" />
             Procesar Nómina
@@ -149,56 +200,78 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                 <th className="px-4 py-3 text-right text-xs font-semibold">Pago Bruto</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold">Pago Neto</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold">Estado</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filteredPayrolls.map((payroll: any) => (
-                <tr key={payroll.id} className="hover:bg-muted/50">
-                  <td className="px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium">
-                        {payroll.employee?.firstName} {payroll.employee?.lastName}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {payroll.employee?.employeeNumber}
-                      </p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {new Date(payroll.periodStart).toLocaleDateString()} - {new Date(payroll.periodEnd).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-medium">
-                    ${Number(payroll.baseSalary).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm text-green-600">
-                    +${Number(payroll.bonuses || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm text-blue-600">
-                    +${Number(payroll.overtime || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm text-red-600">
-                    -${Number(payroll.deductions || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm text-orange-600">
-                    -${Number(payroll.taxes || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-semibold">
-                    ${Number(payroll.grossPay).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-green-700">
-                    ${Number(payroll.netPay).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      payroll.status === 'PAID' ? 'bg-green-100 text-green-700' :
-                      payroll.status === 'PENDING' ? 'bg-orange-100 text-orange-700' :
-                      'bg-gray-100 text-gray-700'
-                    }`}>
-                      {payroll.status === 'PAID' ? 'Pagado' : payroll.status === 'PENDING' ? 'Pendiente' : payroll.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {filteredPayrolls.map((payroll: any) => {
+                const currency = payroll.employee?.currency || 'USD';
+                return (
+                  <tr key={payroll.id} className="hover:bg-muted/50">
+                    <td className="px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium">
+                          {payroll.employee?.firstName} {payroll.employee?.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {payroll.employee?.employeeNumber}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {new Date(payroll.periodStart).toLocaleDateString()} - {new Date(payroll.periodEnd).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-medium">
+                      {formatCurrency(payroll.baseSalary, currency)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-green-600">
+                      +{formatCurrency(payroll.bonuses || 0, currency)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-blue-600">
+                      +{formatCurrency(payroll.overtime || 0, currency)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-red-600">
+                      -{formatCurrency(payroll.deductions || 0, currency)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-orange-600">
+                      -{formatCurrency(payroll.taxes || 0, currency)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold">
+                      {formatCurrency(payroll.grossPay, currency)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-green-700">
+                      {formatCurrency(payroll.netPay, currency)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        payroll.status === 'PAID' ? 'bg-green-100 text-green-700' :
+                        payroll.status === 'PENDING' ? 'bg-orange-100 text-orange-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {payroll.status === 'PAID' ? 'Pagado' : payroll.status === 'PENDING' ? 'Pendiente' : payroll.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {payroll.status === 'PENDING' && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleMarkAsPaid(payroll.id)}
+                          className="h-7 px-3 text-xs text-green-600 hover:text-green-700 hover:bg-green-50 font-semibold"
+                        >
+                          <CheckCircle className="size-3.5 mr-1" />
+                          Pagar
+                        </Button>
+                      )}
+                      {payroll.status === 'PAID' && payroll.paymentDate && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(payroll.paymentDate).toLocaleDateString()}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

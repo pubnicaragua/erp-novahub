@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { Award, Plus, Star } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Textarea } from '../ui/textarea';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
+import { Combobox } from '../ui/Combobox';
 
 export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
   const [showNewForm, setShowNewForm] = useState(false);
@@ -111,33 +111,31 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium mb-1 block">Empleado</label>
-              <Select value={newReview.employeeId} onValueChange={(v) => setNewReview({ ...newReview, employeeId: v })}>
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Seleccionar empleado" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((emp: any) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.firstName} {emp.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={employees.map((emp: any) => ({
+                  label: `${emp.firstName} ${emp.lastName}`,
+                  value: emp.id,
+                  description: emp.employeeNumber,
+                }))}
+                value={newReview.employeeId}
+                onChange={(v) => setNewReview({ ...newReview, employeeId: v })}
+                placeholder="Buscar empleado..."
+                emptyMessage="No se encontró el empleado"
+              />
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Evaluador</label>
-              <Select value={newReview.reviewerId} onValueChange={(v) => setNewReview({ ...newReview, reviewerId: v })}>
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Seleccionar evaluador" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((emp: any) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.firstName} {emp.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={employees.map((emp: any) => ({
+                  label: `${emp.firstName} ${emp.lastName}`,
+                  value: emp.id,
+                  description: emp.employeeNumber,
+                }))}
+                value={newReview.reviewerId}
+                onChange={(v) => setNewReview({ ...newReview, reviewerId: v })}
+                placeholder="Buscar evaluador..."
+                emptyMessage="No se encontró el evaluador"
+              />
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Período Inicio</label>

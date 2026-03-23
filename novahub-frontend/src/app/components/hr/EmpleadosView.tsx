@@ -79,13 +79,21 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
       return;
     }
 
+    if (!row.departmentId || !row.positionId) {
+      toast.error('Selecciona departamento y puesto');
+      return;
+    }
+
     try {
-      await hrService.createEmployee(row);
+      // Remove frontend-only fields before sending to API
+      const { tempId: _, employmentStatus, ...employeeData } = row;
+      await hrService.createEmployee(employeeData);
       toast.success('Empleado creado');
       setNewRows(newRows.filter(r => r.tempId !== tempId));
       onRefresh();
-    } catch (error) {
-      toast.error('Error al crear empleado');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Error al crear empleado';
+      toast.error(Array.isArray(msg) ? msg[0] : msg);
     }
   };
 

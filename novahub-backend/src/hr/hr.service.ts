@@ -110,8 +110,34 @@ export class HrService {
 
   // ===== EMPLOYEES =====
   async createEmployee(data: any, clientTenantId: string) {
+    // Only pick fields that exist in the Prisma Employee model
+    const employeeData: any = {
+      employeeNumber: data.employeeNumber,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      email: data.email,
+      phone: data.phone || null,
+      dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
+      hireDate: new Date(data.hireDate),
+      departmentId: data.departmentId,
+      positionId: data.positionId,
+      managerId: data.managerId || null,
+      contractType: data.contractType || 'FULL_TIME',
+      salary: Number(data.salary) || 0,
+      currency: data.currency || 'USD',
+      address: data.address || null,
+      city: data.city || null,
+      state: data.state || null,
+      country: data.country || null,
+      postalCode: data.postalCode || data.zipCode || null,
+      emergencyContact: data.emergencyContact || null,
+      emergencyPhone: data.emergencyPhone || null,
+      notes: data.notes || null,
+      clientTenantId,
+    };
+
     return this.prisma.employee.create({
-      data: { ...data, clientTenantId },
+      data: employeeData,
       include: {
         department: true,
         position: true,
@@ -210,16 +236,44 @@ export class HrService {
 
   // ===== PAYROLL =====
   async createPayroll(data: any, clientTenantId: string) {
-    const { bonuses = 0, deductions = 0, overtime = 0, taxes = 0 } = data;
-    const grossPay = Number(data.baseSalary) + Number(bonuses) + Number(overtime);
-    const netPay = grossPay - Number(deductions) - Number(taxes);
+    const bonuses = Number(data.bonuses || 0);
+    const deductions = Number(data.deductions || 0);
+    const overtime = Number(data.overtime || 0);
+    const taxes = Number(data.taxes || 0);
+    const baseSalary = Number(data.baseSalary);
+    const grossPay = baseSalary + bonuses + overtime;
+    const netPay = grossPay - deductions - taxes;
 
     return this.prisma.payroll.create({
       data: {
-        ...data,
         clientTenantId,
+        employeeId: data.employeeId,
+        periodStart: new Date(data.periodStart),
+        periodEnd: new Date(data.periodEnd),
+        baseSalary,
+        bonuses,
+        deductions,
+        overtime,
+        taxes,
         grossPay,
         netPay,
+        notes: data.notes,
+      },
+      include: { employee: true },
+    });
+  }
+
+  async updatePayrollStatus(id: string, status: string, clientTenantId: string) {
+    const payroll = await this.prisma.payroll.findFirst({
+      where: { id, clientTenantId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll record not found');
+
+    return this.prisma.payroll.update({
+      where: { id },
+      data: {
+        status,
+        paymentDate: status === 'PAID' ? new Date() : null,
       },
       include: { employee: true },
     });
@@ -361,7 +415,18 @@ export class HrService {
 
   async createAttendance(data: any, clientTenantId: string) {
     return this.prisma.attendance.create({
-      data: { ...data, clientTenantId },
+      data: {
+        clientTenantId,
+        employeeId: data.employeeId,
+        date: new Date(data.date),
+        status: data.status,
+        checkIn: data.checkIn ? new Date(data.checkIn) : null,
+        checkOut: data.checkOut ? new Date(data.checkOut) : null,
+        hoursWorked: data.hoursWorked ? Number(data.hoursWorked) : null,
+        overtimeHours: data.overtimeHours ? Number(data.overtimeHours) : 0,
+        location: data.location,
+        notes: data.notes,
+      },
       include: { employee: true },
     });
   }
@@ -396,7 +461,15 @@ export class HrService {
   // ===== LEAVE REQUESTS =====
   async createLeaveRequest(data: any, clientTenantId: string) {
     return this.prisma.leaveRequest.create({
-      data: { ...data, clientTenantId },
+      data: {
+        clientTenantId,
+        employeeId: data.employeeId,
+        leaveType: data.leaveType,
+        startDate: new Date(data.startDate),
+        endDate: new Date(data.endDate),
+        days: Number(data.days),
+        reason: data.reason,
+      },
       include: { employee: true },
     });
   }
@@ -449,7 +522,18 @@ export class HrService {
   // ===== PERFORMANCE REVIEWS =====
   async createPerformanceReview(data: any, clientTenantId: string) {
     return this.prisma.performanceReview.create({
-      data: { ...data, clientTenantId },
+      data: {
+        clientTenantId,
+        employeeId: data.employeeId,
+        reviewerId: data.reviewerId,
+        reviewPeriodStart: new Date(data.reviewPeriodStart),
+        reviewPeriodEnd: new Date(data.reviewPeriodEnd),
+        overallRating: data.overallRating ? Number(data.overallRating) : null,
+        goals: data.goals,
+        achievements: data.achievements,
+        areasOfImprovement: data.areasOfImprovement,
+        comments: data.comments,
+      },
       include: { employee: true, reviewer: true },
     });
   }
@@ -501,7 +585,18 @@ export class HrService {
   // ===== TRAINING =====
   async createTraining(data: any, clientTenantId: string) {
     return this.prisma.training.create({
-      data: { ...data, clientTenantId },
+      data: {
+        clientTenantId,
+        title: data.title,
+        description: data.description,
+        instructor: data.instructor,
+        location: data.location,
+        startDate: new Date(data.startDate),
+        endDate: new Date(data.endDate),
+        capacity: data.capacity ? Number(data.capacity) : 20,
+        cost: data.cost ? Number(data.cost) : null,
+        currency: data.currency || 'USD',
+      },
     });
   }
 
@@ -571,7 +666,15 @@ export class HrService {
   // ===== BENEFITS =====
   async createBenefit(data: any, clientTenantId: string) {
     return this.prisma.benefit.create({
-      data: { ...data, clientTenantId },
+      data: {
+        clientTenantId,
+        name: data.name,
+        description: data.description,
+        type: data.type,
+        provider: data.provider,
+        cost: data.cost ? Number(data.cost) : null,
+        currency: data.currency || 'USD',
+      },
     });
   }
 
@@ -602,7 +705,12 @@ export class HrService {
 
   async assignBenefit(data: any, clientTenantId: string) {
     return this.prisma.employeeBenefit.create({
-      data,
+      data: {
+        employeeId: data.employeeId,
+        benefitId: data.benefitId,
+        startDate: new Date(data.startDate),
+        endDate: data.endDate ? new Date(data.endDate) : null,
+      },
       include: { employee: true, benefit: true },
     });
   }
