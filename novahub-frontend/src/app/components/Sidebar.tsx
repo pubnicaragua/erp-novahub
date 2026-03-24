@@ -68,6 +68,26 @@ interface MenuItem {
   section?: string;
 }
 
+const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
+  clientes: ['CLIENTS', 'SALES', 'SALES_CLIENTS'],
+  estimaciones: ['SALES', 'SALES_QUOTES'],
+  'ordenes-venta': ['SALES', 'SALES_ORDERS'],
+  facturas: ['SALES', 'SALES_INVOICES'],
+  'facturas-recurrentes': ['SALES', 'SALES_INVOICES'],
+  'pagos-recibidos': ['SALES', 'SALES_PAYMENTS'],
+  'devoluciones-venta': ['SALES', 'SALES_RETURNS'],
+  'notas-credito': ['SALES', 'SALES_CREDIT_NOTES'],
+  proveedores: ['PROVIDERS', 'PURCHASES', 'PURCHASES_PROVIDERS'],
+  gastos: ['PURCHASES', 'FINANCIAL', 'PURCHASES_INVOICES'],
+  'gastos-recurrentes': ['PURCHASES', 'FINANCIAL', 'PURCHASES_INVOICES'],
+  'ordenes-compra': ['PURCHASES', 'PURCHASES_ORDERS'],
+  'recepciones-compra': ['PURCHASES', 'PURCHASES_RECEIPTS'],
+  'facturas-proveedor': ['PURCHASES', 'PURCHASES_INVOICES'],
+  'facturas-proveedor-rec': ['PURCHASES', 'PURCHASES_INVOICES'],
+  'pagos-realizados': ['PURCHASES', 'PURCHASES_PAYMENTS', 'FINANCIAL'],
+  'creditos-proveedor': ['PURCHASES', 'PURCHASES_RETURNS'],
+};
+
 const menuItems: MenuItem[] = [
   {
     id: 'overview',
@@ -177,6 +197,18 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     if (window.innerWidth < 1024) onClose();
   };
 
+  const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
+    if (!user || parentId === 'overview') return false;
+    if (user.role === 'admin' && subId in SUBMENU_MODULE_REQUIREMENTS) {
+      // Admin también respeta módulos habilitados del tenant.
+      return SUBMENU_MODULE_REQUIREMENTS[subId].some(mod => user.enabledModules.includes(mod));
+    }
+
+    const requiredModules = SUBMENU_MODULE_REQUIREMENTS[subId];
+    if (!requiredModules || requiredModules.length === 0) return true;
+    return requiredModules.some(mod => user.enabledModules.includes(mod));
+  };
+
   let lastSection = '';
 
   return (
@@ -236,6 +268,9 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
             <nav className="px-3 space-y-0.5">
               {menuItems.map((item) => {
                 if (item.id !== 'overview' && !hasAccess(item.id as Module)) return null;
+                const visibleSubmenu = item.submenu
+                  ? item.submenu.filter(subItem => hasSubmenuAccess(item.id, subItem.id))
+                  : undefined;
 
                 const isActive = activeModule === item.id;
                 const isExpanded = expandedMenus.has(item.id);
@@ -274,7 +309,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                             <span className={cn("flex-1 text-left truncate", item.label === 'Notificaciones' && "odoo-highlight w-fit flex-none")}>
                               {user?.role === 'partner' && item.id === 'clientes' ? 'Mis Clientes' : item.label}
                             </span>
-                            {item.submenu && (
+                            {visibleSubmenu && visibleSubmenu.length > 0 && (
                               <motion.span
                                 animate={{ rotate: isExpanded ? 180 : 0 }}
                                 transition={{ duration: 0.2 }}
@@ -288,7 +323,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                       </button>
 
                       <AnimatePresence>
-                        {item.submenu && isExpanded && !isCollapsed && (
+                        {visibleSubmenu && visibleSubmenu.length > 0 && isExpanded && !isCollapsed && (
                           <motion.div
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: 'auto', opacity: 1 }}
@@ -297,7 +332,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                             className="overflow-hidden"
                           >
                             <div className="ml-5 mt-0.5 space-y-0.5 border-l border-sidebar-border/40 pl-3 py-1">
-                              {item.submenu.map((subItem) => (
+                              {visibleSubmenu.map((subItem) => (
                                 <button
                                   key={subItem.id}
                                   onClick={() => handleSubmenuClick(item.id as Module, subItem.id)}

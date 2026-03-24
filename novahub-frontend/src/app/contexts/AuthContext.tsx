@@ -123,16 +123,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasAccess = useCallback((module: string): boolean => {
     if (!user) return false;
-    
-    // Si el usuario es 'admin' general de Nova Hub (Super Admin), tiene acceso total
-    if (user.role === 'admin') return true;
 
     // Módulos solo para admin
     const adminOnlyModules = ['suscripciones', 'roles', 'schema'];
-    if (adminOnlyModules.includes(module)) return false;
+    if (adminOnlyModules.includes(module) && user.role !== 'admin') return false;
 
     // 1. Verificar si el módulo está habilitado para el tenant (Suscripción)
-    // Algunos módulos son core y siempre están activos
+    // Algunos módulos de sistema siempre están activos
     const coreModules = ['notificaciones', 'configuracion', 'reportes', 'dashboard'];
     const moduleEnumMap: Record<string, string> = {
       'ventas': 'SALES',
@@ -148,11 +145,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'tickets': 'TOOLS',
       'documentos': 'DOCUMENTS'
     };
+    const moduleGroupMap: Record<string, string[]> = {
+      ventas: [
+        'SALES', 'CLIENTS',
+        'SALES_CLIENTS', 'SALES_QUOTES', 'SALES_ORDERS', 'SALES_INVOICES',
+        'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_PAYMENTS', 'SALES_COMMISSIONS',
+      ],
+      compras: [
+        'PURCHASES', 'PROVIDERS',
+        'PURCHASES_PROVIDERS', 'PURCHASES_REQUESTS', 'PURCHASES_QUOTES', 'PURCHASES_ORDERS',
+        'PURCHASES_RECEIPTS', 'PURCHASES_INVOICES', 'PURCHASES_RETURNS', 'PURCHASES_PAYMENTS',
+      ],
+      inventario: [
+        'INVENTORY',
+        'INVENTORY_PRODUCTS', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS',
+        'INVENTORY_ADJUSTMENTS', 'INVENTORY_COUNT', 'INVENTORY_SERIALS', 'INVENTORY_LOTS',
+      ],
+      finanzas: [
+        'FINANCIAL',
+        'FINANCIAL_ACCOUNTS', 'FINANCIAL_JOURNAL', 'FINANCIAL_LEDGER',
+        'FINANCIAL_BANK', 'FINANCIAL_BUDGET', 'FINANCIAL_REPORTS',
+      ],
+    };
 
     const backendModuleName = moduleEnumMap[module] || module.toUpperCase();
+    const isAdminControlModule = adminOnlyModules.includes(module) && user.role === 'admin';
+    const groupModules = moduleGroupMap[module] || [];
     
     // HR es especial: buscar cualquier submódulo HR_*
-    let isSubscribed = coreModules.includes(module) || user.enabledModules.includes(backendModuleName);
+    let isSubscribed = coreModules.includes(module)
+      || isAdminControlModule
+      || user.enabledModules.includes(backendModuleName)
+      || groupModules.some(m => user.enabledModules.includes(m));
     
     if (module === 'rh' && !isSubscribed) {
       isSubscribed = user.enabledModules.some(m => m.startsWith('HR_'));
