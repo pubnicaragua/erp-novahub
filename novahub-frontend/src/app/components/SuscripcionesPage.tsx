@@ -106,7 +106,7 @@ const LEGACY_ROLE_MAP: Record<string, 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER
 };
 
 export function SuscripcionesPage() {
-  const { user } = useAuth();
+  const { user, refreshEnabledModules } = useAuth();
   const [requests, setRequests] = useState<SubscriptionRequest[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -399,6 +399,7 @@ export function SuscripcionesPage() {
       await subscriptionsService.updateRequestStatus(res.id, { status: 'APPROVED' });
       toast.success(`Módulo activado exitosamente`);
       fetchData();
+      refreshEnabledModules();
     } catch (error: any) {
       console.error('Error activación:', error);
       toast.error(error.response?.data?.message || 'Error al activar módulo');
@@ -421,6 +422,7 @@ export function SuscripcionesPage() {
       });
       toast.success('Módulo desactivado exitosamente');
       fetchData();
+      refreshEnabledModules();
     } catch (error: any) {
       console.error('Error desactivación:', error);
       toast.error(error?.message || 'Error al desactivar módulo');
@@ -450,6 +452,7 @@ export function SuscripcionesPage() {
       await subscriptionsService.updateRequestStatus(id, { status: 'APPROVED' });
       toast.success('Suscripción aprobada y módulo habilitado');
       fetchData();
+      refreshEnabledModules();
     } catch (error) {
       toast.error('Error al aprobar suscripción');
     }

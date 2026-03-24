@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './ui/button';
 import { cn } from './ui/utils';
+import { useAuth } from '../contexts/AuthContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { ShoppingBag } from 'lucide-react';
@@ -39,14 +40,14 @@ import { DevolucionesView } from './ventas/DevolucionesView';
 import { NotasCreditoView } from './ventas/NotasCreditoView';
 
 const SALES_SECTIONS = [
-  { id: 'clientes', label: 'Clientes', icon: Users, description: 'Directorio y saldos' },
-  { id: 'estimaciones', label: 'Estimaciones', icon: FileSpreadsheet, description: 'Cotizaciones comerciales' },
-  { id: 'ordenes', label: 'Órdenes de Venta', icon: ClipboardList, description: 'Pedidos por procesar' },
-  { id: 'facturas', label: 'Facturas', icon: FileText, description: 'Control de cobros' },
-  { id: 'recurrentes', label: 'Facturas Recurrentes', icon: RotateCcw, description: 'Suscripciones y contratos' },
-  { id: 'pagos', label: 'Pagos Recibidos', icon: CreditCard, description: 'Historial de ingresos' },
-  { id: 'devoluciones', label: 'Devoluciones', icon: FileOutput, description: 'Retornos de mercancía' },
-  { id: 'notas-credito', label: 'Notas de Crédito', icon: FileMinus, description: 'Ajustes y créditos emitidos' },
+  { id: 'clientes', label: 'Clientes', icon: Users, description: 'Directorio y saldos', requiredModules: ['SALES_CLIENTS'] },
+  { id: 'estimaciones', label: 'Estimaciones', icon: FileSpreadsheet, description: 'Cotizaciones comerciales', requiredModules: ['SALES_QUOTES'] },
+  { id: 'ordenes', label: 'Órdenes de Venta', icon: ClipboardList, description: 'Pedidos por procesar', requiredModules: ['SALES_ORDERS'] },
+  { id: 'facturas', label: 'Facturas', icon: FileText, description: 'Control de cobros', requiredModules: ['SALES_INVOICES'] },
+  { id: 'recurrentes', label: 'Facturas Recurrentes', icon: RotateCcw, description: 'Suscripciones y contratos', requiredModules: ['SALES_RECURRING'] },
+  { id: 'pagos', label: 'Pagos Recibidos', icon: CreditCard, description: 'Historial de ingresos', requiredModules: ['SALES_PAYMENTS'] },
+  { id: 'devoluciones', label: 'Devoluciones', icon: FileOutput, description: 'Retornos de mercancía', requiredModules: ['SALES_RETURNS'] },
+  { id: 'notas-credito', label: 'Notas de Crédito', icon: FileMinus, description: 'Ajustes y créditos emitidos', requiredModules: ['SALES_CREDIT_NOTES'] },
 ];
 
 interface VentasPageProps {
@@ -54,6 +55,7 @@ interface VentasPageProps {
 }
 
 export function VentasPage({ activeSubModule }: VentasPageProps) {
+  const { user } = useAuth();
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
 
@@ -139,7 +141,7 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
       dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
       currency: order.currency || 'NIO',
       exchangeRate: order.exchangeRate,
-      items: order.items?.map(i => ({
+      items: (order.items?.map(i => ({
         id: Date.now().toString() + Math.random(),
         productId: i.productId,
         description: i.description,
@@ -148,7 +150,7 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
         taxRate: i.taxRate,
         discount: i.discount,
         total: i.total
-      })) || [],
+      })) || []) as any,
       subtotal: order.subtotal,
       taxAmount: order.taxAmount,
       discountAmount: order.discountAmount,
@@ -206,7 +208,11 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
 
           <Tabs value={activeSection} className="w-full" onValueChange={setActiveSection}>
             <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
-              {SALES_SECTIONS.map((section) => (
+              {SALES_SECTIONS.map((section) => {
+                const hasAccess = !section.requiredModules || !user?.enabledModules
+                  || section.requiredModules.some(mod => user.enabledModules.includes(mod));
+                if (!hasAccess) return null;
+                return (
                 <TabsTrigger 
                   key={section.id} 
                   value={section.id}
@@ -217,7 +223,8 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
                   <section.icon className="size-4" />
                   <span className="hidden sm:inline">{section.label}</span>
                 </TabsTrigger>
-              ))}
+                );
+              })}
             </TabsList>
           <AnimatePresence mode="wait">
             <motion.div

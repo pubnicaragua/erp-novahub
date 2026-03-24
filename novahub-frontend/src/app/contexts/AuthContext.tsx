@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { api } from '../services/api';
+import { subscriptionsService } from '../services/subscriptions.service';
 
 export type Role = 'admin' | 'partner' | 'manager' | 'employee' | 'viewer';
 
@@ -52,6 +53,8 @@ interface AuthContextType {
   login: (email: string, password: string) => void;
   logout: () => void;
   switchIdentity: (userId: string) => Promise<void>;
+  refreshEnabledModules: () => Promise<void>;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -118,8 +121,55 @@ const getPermissionsByRole = (role: Role): Permission[] => {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const isAuthenticated = user !== null;
+
+  // Restore session from localStorage on mount
+  React.useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const token = localStorage.getItem('nh-auth-token');
+        if (!token) {
+          setIsLoading(false);
+          return;
+        }
+
+        // Decode JWT payload to get userId
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const userId = payload.sub;
+        if (!userId) {
+          localStorage.removeItem('nh-auth-token');
+          setIsLoading(false);
+          return;
+        }
+
+        // Re-authenticate using switch-context to get fresh user data
+        const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
+        localStorage.setItem('nh-auth-token', response.access_token);
+
+        const { user: apiUser } = response;
+        setUser({
+          id: apiUser.id,
+          name: apiUser.name,
+          email: apiUser.email,
+          avatar: apiUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(apiUser.name)}&background=10b981&color=fff`,
+          role: apiUser.role.toLowerCase() as Role,
+          tenantId: apiUser.clientTenantId,
+          tenantName: apiUser.clientTenant?.name || 'Nova Hub',
+          permissions: getPermissionsByRole(apiUser.role.toLowerCase() as Role),
+          enabledModules: apiUser.enabledModules || [],
+        });
+      } catch (error) {
+        console.error('Error restoring session:', error);
+        localStorage.removeItem('nh-auth-token');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    restoreSession();
+  }, []);
 
   const hasAccess = useCallback((module: string): boolean => {
     if (!user) return false;
@@ -149,12 +199,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ventas: [
         'SALES', 'CLIENTS',
         'SALES_CLIENTS', 'SALES_QUOTES', 'SALES_ORDERS', 'SALES_INVOICES',
-        'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_PAYMENTS', 'SALES_COMMISSIONS',
+        'SALES_RECURRING', 'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_PAYMENTS',
       ],
       compras: [
         'PURCHASES', 'PROVIDERS',
-        'PURCHASES_PROVIDERS', 'PURCHASES_REQUESTS', 'PURCHASES_QUOTES', 'PURCHASES_ORDERS',
-        'PURCHASES_RECEIPTS', 'PURCHASES_INVOICES', 'PURCHASES_RETURNS', 'PURCHASES_PAYMENTS',
+        'PURCHASES_PROVIDERS', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC',
+        'PURCHASES_ORDERS', 'PURCHASES_RECEIPTS', 'PURCHASES_INVOICES',
+        'PURCHASES_INVOICES_REC', 'PURCHASES_RETURNS', 'PURCHASES_PAYMENTS',
       ],
       inventario: [
         'INVENTORY',
@@ -255,8 +306,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const refreshEnabledModules = useCallback(async () => {
+    if (!user) return;
+    try {
+      const modules = await subscriptionsService.getEnabledModules(user.tenantId);
+      const moduleList = Array.isArray(modules) ? modules : (modules as any)?.data || [];
+      setUser(prev => prev ? { ...prev, enabledModules: moduleList } : prev);
+    } catch (error) {
+      console.error('Error refreshing enabledModules:', error);
+    }
+  }, [user?.tenantId]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="size-12 border-4 border-muted border-t-primary rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground font-medium">Cargando sesión...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, logout, switchIdentity }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, logout, switchIdentity, refreshEnabledModules, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

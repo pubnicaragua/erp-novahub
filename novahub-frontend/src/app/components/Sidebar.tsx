@@ -69,23 +69,33 @@ interface MenuItem {
 }
 
 const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
-  clientes: ['CLIENTS', 'SALES', 'SALES_CLIENTS'],
-  estimaciones: ['SALES', 'SALES_QUOTES'],
-  'ordenes-venta': ['SALES', 'SALES_ORDERS'],
-  facturas: ['SALES', 'SALES_INVOICES'],
-  'facturas-recurrentes': ['SALES', 'SALES_INVOICES'],
-  'pagos-recibidos': ['SALES', 'SALES_PAYMENTS'],
-  'devoluciones-venta': ['SALES', 'SALES_RETURNS'],
-  'notas-credito': ['SALES', 'SALES_CREDIT_NOTES'],
-  proveedores: ['PROVIDERS', 'PURCHASES', 'PURCHASES_PROVIDERS'],
-  gastos: ['PURCHASES', 'FINANCIAL', 'PURCHASES_INVOICES'],
-  'gastos-recurrentes': ['PURCHASES', 'FINANCIAL', 'PURCHASES_INVOICES'],
-  'ordenes-compra': ['PURCHASES', 'PURCHASES_ORDERS'],
-  'recepciones-compra': ['PURCHASES', 'PURCHASES_RECEIPTS'],
-  'facturas-proveedor': ['PURCHASES', 'PURCHASES_INVOICES'],
-  'facturas-proveedor-rec': ['PURCHASES', 'PURCHASES_INVOICES'],
-  'pagos-realizados': ['PURCHASES', 'PURCHASES_PAYMENTS', 'FINANCIAL'],
-  'creditos-proveedor': ['PURCHASES', 'PURCHASES_RETURNS'],
+  // Ventas — cada sub-item solo se controla por su sub-módulo específico
+  clientes: ['SALES_CLIENTS'],
+  estimaciones: ['SALES_QUOTES'],
+  'ordenes-venta': ['SALES_ORDERS'],
+  facturas: ['SALES_INVOICES'],
+  'facturas-recurrentes': ['SALES_RECURRING'],
+  'pagos-recibidos': ['SALES_PAYMENTS'],
+  'devoluciones-venta': ['SALES_RETURNS'],
+  'notas-credito': ['SALES_CREDIT_NOTES'],
+  // Compras
+  proveedores: ['PURCHASES_PROVIDERS'],
+  gastos: ['PURCHASES_EXPENSES'],
+  'gastos-recurrentes': ['PURCHASES_EXPENSES_REC'],
+  'ordenes-compra': ['PURCHASES_ORDERS'],
+  'recepciones-compra': ['PURCHASES_RECEIPTS'],
+  'facturas-proveedor': ['PURCHASES_INVOICES'],
+  'facturas-proveedor-rec': ['PURCHASES_INVOICES_REC'],
+  'pagos-realizados': ['PURCHASES_PAYMENTS'],
+  'creditos-proveedor': ['PURCHASES_RETURNS'],
+  // Recursos Humanos
+  empleados: ['HR_EMPLOYEES'],
+  nominas: ['HR_PAYROLL'],
+  asistencia: ['HR_ATTENDANCE'],
+  ausencias: ['HR_LEAVES'],
+  evaluaciones: ['HR_PERFORMANCE'],
+  capacitaciones: ['HR_TRAINING'],
+  beneficios: ['HR_BENEFITS'],
 };
 
 const menuItems: MenuItem[] = [

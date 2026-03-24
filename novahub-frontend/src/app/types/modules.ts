@@ -14,28 +14,29 @@ export interface Module {
   submodules?: Submodule[];
 }
 
-// Submódulos de Ventas
+// Submódulos de Ventas (alineados con sidebar)
 export const SALES_SUBMODULES: Submodule[] = [
   { id: 'SALES_CLIENTS', label: 'Clientes', description: 'Gestión de clientes y CRM' },
-  { id: 'SALES_QUOTES', label: 'Cotizaciones', description: 'Crear y enviar cotizaciones' },
-  { id: 'SALES_ORDERS', label: 'Órdenes de Venta', description: 'Gestión de órdenes' },
+  { id: 'SALES_QUOTES', label: 'Estimaciones', description: 'Cotizaciones comerciales' },
+  { id: 'SALES_ORDERS', label: 'Órdenes de Venta', description: 'Pedidos por procesar' },
   { id: 'SALES_INVOICES', label: 'Facturas', description: 'Facturación y cobros' },
-  { id: 'SALES_RETURNS', label: 'Devoluciones', description: 'Devoluciones de ventas' },
-  { id: 'SALES_CREDIT_NOTES', label: 'Notas de Crédito', description: 'Notas de crédito' },
-  { id: 'SALES_PAYMENTS', label: 'Pagos', description: 'Registro de pagos recibidos' },
-  { id: 'SALES_COMMISSIONS', label: 'Comisiones', description: 'Comisiones de vendedores' },
+  { id: 'SALES_RECURRING', label: 'Facturas Recurrentes', description: 'Suscripciones y contratos' },
+  { id: 'SALES_PAYMENTS', label: 'Pagos Recibidos', description: 'Historial de ingresos' },
+  { id: 'SALES_RETURNS', label: 'Devoluciones', description: 'Retornos de mercancía' },
+  { id: 'SALES_CREDIT_NOTES', label: 'Notas de Crédito', description: 'Ajustes y créditos emitidos' },
 ];
 
-// Submódulos de Compras
+// Submódulos de Compras (alineados con sidebar)
 export const PURCHASES_SUBMODULES: Submodule[] = [
   { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', description: 'Gestión de proveedores' },
-  { id: 'PURCHASES_REQUESTS', label: 'Solicitudes', description: 'Solicitudes de compra' },
-  { id: 'PURCHASES_QUOTES', label: 'Cotizaciones', description: 'Cotizaciones de proveedores' },
+  { id: 'PURCHASES_EXPENSES', label: 'Gastos', description: 'Registro de gastos' },
+  { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos Recurrentes', description: 'Gastos periódicos' },
   { id: 'PURCHASES_ORDERS', label: 'Órdenes de Compra', description: 'Órdenes de compra' },
   { id: 'PURCHASES_RECEIPTS', label: 'Recepciones', description: 'Recepción de mercancía' },
-  { id: 'PURCHASES_INVOICES', label: 'Facturas', description: 'Facturas de proveedores' },
-  { id: 'PURCHASES_RETURNS', label: 'Devoluciones', description: 'Devoluciones a proveedores' },
-  { id: 'PURCHASES_PAYMENTS', label: 'Pagos', description: 'Pagos a proveedores' },
+  { id: 'PURCHASES_INVOICES', label: 'Facturas de Proveedor', description: 'Facturas de proveedores' },
+  { id: 'PURCHASES_INVOICES_REC', label: 'Facturas Proveedor Rec.', description: 'Facturas recurrentes de proveedores' },
+  { id: 'PURCHASES_PAYMENTS', label: 'Pagos Realizados', description: 'Pagos a proveedores' },
+  { id: 'PURCHASES_RETURNS', label: 'Créditos del Proveedor', description: 'Devoluciones y créditos' },
 ];
 
 // Submódulos de Inventario
