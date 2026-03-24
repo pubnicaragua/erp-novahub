@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 import { employeesService, payrollService, timeOffService } from '../services/rh.service';
 import type { Employee, Payroll, TimeOff, PaginatedResponse } from '../types';
 
@@ -99,6 +100,10 @@ export function RHPage({ activeSubModule }: RHPageProps) {
     status: 'pending' 
   });
 
+  const [pendingDeleteEmpId, setPendingDeleteEmpId] = useState<string | null>(null);
+  const [pendingDeleteVacId, setPendingDeleteVacId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   const handleOpenEmpleado = (emp?: Employee) => {
     if (emp) {
       setEditingEmpleado(emp);
@@ -133,13 +138,15 @@ export function RHPage({ activeSubModule }: RHPageProps) {
   };
 
   const handleDeleteEmpleado = async (id: string) => {
-    if (window.confirm('¿Eliminar este empleado?')) {
-      try {
-        await employeesService.terminate(id, new Date().toISOString());
-        fetchRHData();
-      } catch (error) {
-        console.error('Error terminating employee:', error);
-      }
+    try {
+      setDeleteLoading(true);
+      await employeesService.terminate(id, new Date().toISOString());
+      fetchRHData();
+    } catch (error) {
+      console.error('Error terminating employee:', error);
+    } finally {
+      setDeleteLoading(false);
+      setPendingDeleteEmpId(null);
     }
   };
 
@@ -205,9 +212,15 @@ export function RHPage({ activeSubModule }: RHPageProps) {
   };
 
   const handleDeleteVacaciones = async (id: string) => {
-    if (window.confirm('¿Eliminar esta solicitud vacacional?')) {
+    try {
+      setDeleteLoading(true);
       // await timeOffService.delete(id);
       fetchRHData();
+    } catch (error) {
+      console.error('Error deleting vacation:', error);
+    } finally {
+      setDeleteLoading(false);
+      setPendingDeleteVacId(null);
     }
   };
 
@@ -279,7 +292,7 @@ export function RHPage({ activeSubModule }: RHPageProps) {
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button onClick={() => handleOpenEmpleado(e)} variant="ghost" size="icon" className="size-8"><Edit className="size-4" /></Button>
-                      <Button onClick={() => handleDeleteEmpleado(e.id)} variant="ghost" size="icon" className="size-8 text-red-500 hover:text-red-600"><Trash2 className="size-4" /></Button>
+                      <Button onClick={() => setPendingDeleteEmpId(e.id)} variant="ghost" size="icon" className="size-8 text-red-500 hover:text-red-600"><Trash2 className="size-4" /></Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -324,7 +337,7 @@ export function RHPage({ activeSubModule }: RHPageProps) {
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button onClick={() => handleOpenVacaciones(v)} variant="ghost" size="icon" className="size-8"><Edit className="size-4" /></Button>
-                      <Button onClick={() => handleDeleteVacaciones(v.id)} variant="ghost" size="icon" className="size-8 text-red-500 hover:text-red-600"><Trash2 className="size-4" /></Button>
+                      <Button onClick={() => setPendingDeleteVacId(v.id)} variant="ghost" size="icon" className="size-8 text-red-500 hover:text-red-600"><Trash2 className="size-4" /></Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -481,6 +494,30 @@ export function RHPage({ activeSubModule }: RHPageProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmación para eliminar empleado */}
+      <ConfirmDialog
+        open={pendingDeleteEmpId !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteEmpId(null); }}
+        title="¿Eliminar empleado?"
+        description="¿Estás seguro de que deseas eliminar este empleado? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={() => pendingDeleteEmpId ? handleDeleteEmpleado(pendingDeleteEmpId) : Promise.resolve()}
+      />
+
+      {/* Confirmación para eliminar solicitud vacacional */}
+      <ConfirmDialog
+        open={pendingDeleteVacId !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteVacId(null); }}
+        title="¿Eliminar solicitud?"
+        description="¿Estás seguro de que deseas eliminar esta solicitud de vacaciones? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={() => pendingDeleteVacId ? handleDeleteVacaciones(pendingDeleteVacId) : Promise.resolve()}
+      />
     </div>
   );
 }

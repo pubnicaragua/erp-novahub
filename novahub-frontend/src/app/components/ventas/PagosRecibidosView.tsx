@@ -8,6 +8,7 @@ import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { paymentsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import type { PaymentReceived, Customer, Invoice } from '../../types';
 import { Badge } from '../ui/badge';
@@ -32,6 +33,8 @@ const methodOptions = [
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [] }: PagosRecibidosViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [localDoc, setLocalDoc] = useState<any>(null);
 
@@ -202,9 +205,11 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             </CardContent>
           </Card>
         </div>
-      </div>
-    );
-  }
+  
+      
+    </div>
+  );
+}
 
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
@@ -234,11 +239,41 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           actions={(row) => (
             <div className="flex items-center gap-1">
                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
-               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={async () => { await paymentsService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
+               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />
       </div>
+      <ConfirmDialog
+              open={pendingDeleteId !== null}
+              onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+              title={"¿Eliminar pago recibido?"}
+              description="¿Estás seguro de que deseas eliminar este pago? Esta acción no se puede deshacer."
+              confirmLabel="Eliminar"
+              variant="destructive"
+              loading={deleteLoading}
+              onConfirm={async () => {
+                if (!pendingDeleteId) return;
+                try {
+                  setDeleteLoading(true);
+                  await paymentsService.delete(pendingDeleteId);
+                  toast.success('Pago eliminado');
+                  setEditingId?.(null);
+                  onRefresh();
+                } catch (error: any) {
+                   const msg = error?.response?.data?.message || error?.message || '';
+                  if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
+                    toast.error('No se puede eliminar: tiene dependencias en el sistema.');
+                  } else {
+                    toast.error(`Error al eliminar: ${msg || 'Error desconocido'}`);
+                  }
+                } finally {
+                  setDeleteLoading(false);
+                  setPendingDeleteId(null);
+                }
+              }}
+            />
+
     </div>
   );
 }

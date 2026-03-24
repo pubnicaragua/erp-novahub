@@ -9,11 +9,14 @@ import type { Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; }
 
 export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const filtered = data.filter(s =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -106,11 +109,40 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
           actions={(row) => (
             <div className="flex gap-1">
               <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => toast.info(`${row.name} | Contacto: ${row.contactName||'N/A'} | ${row.email||'N/A'} | Saldo: $${Number(row.balance||0).toLocaleString()}`)}><Eye className="size-4" /></Button>
-              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { await suppliersService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
+              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />
       </div>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+        title="¿Eliminar proveedor?"
+        description="Si el proveedor tiene transacciones activas (facturas, órdenes de compra, pagos), no se podrá eliminar."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={async () => {
+          if (!pendingDeleteId) return;
+          try {
+            setDeleteLoading(true);
+            await suppliersService.delete(pendingDeleteId);
+            toast.success('Proveedor eliminado correctamente');
+            onRefresh();
+          } catch (error: any) {
+            const msg = error?.response?.data?.message || error?.message || '';
+            if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
+              toast.error('No se puede eliminar: este proveedor tiene transacciones activas (órdenes, facturas, pagos, etc.)');
+            } else {
+              toast.error(`Error al eliminar proveedor: ${msg}`);
+            }
+          } finally {
+            setDeleteLoading(false);
+            setPendingDeleteId(null);
+          }
+        }}
+      />
     </div>
   );
 }

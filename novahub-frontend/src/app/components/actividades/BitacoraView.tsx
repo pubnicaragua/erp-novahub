@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { EditableDataTable } from '../ui/EditableDataTable';
 import { ActivityLog } from '../../types';
 import { Card, CardContent } from '../ui/card';
+import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Search, Activity, MousePointerClick, RefreshCcw, Database } from 'lucide-react';
+import { Search, Activity, MousePointerClick, RefreshCcw, Database, Plus } from 'lucide-react';
 import { activityLogsService } from '../../services/actividades.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
@@ -20,18 +21,45 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
   const [searchTerm, setSearchTerm] = useState('');
 
   const columns = [
-    { key: 'action', header: 'Acción', width: '150px',
+    { key: 'action', header: 'Acción', width: '150px', editable: true, type: 'select' as const,
+      options: [
+        { value: 'CREATE', label: 'Crear', color: 'bg-emerald-500/10 text-emerald-500' },
+        { value: 'UPDATE', label: 'Actualizar', color: 'bg-blue-500/10 text-blue-500' },
+        { value: 'DELETE', label: 'Eliminar', color: 'bg-rose-500/10 text-rose-500' },
+      ],
       render: (val: any) => { 
         const colors: Record<string, string> = { CREATE: 'bg-emerald-500/10 text-emerald-500', UPDATE: 'bg-blue-500/10 text-blue-500', DELETE: 'bg-rose-500/10 text-rose-500' };
         return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', colors[(val||'').toUpperCase()] || 'bg-muted/20 text-muted-foreground')}>{val}</Badge>; 
       } 
     },
-    { key: 'entity', header: 'Entidad', width: '20%' },
-    { key: 'details', header: 'Detalles', width: '40%' },
+    { key: 'entity', header: 'Entidad', width: '20%', editable: true },
+    { key: 'details', header: 'Detalles', width: '40%', editable: true },
     { key: 'timestamp', header: 'Fecha', width: '150px', render: (val: any) => val ? format(new Date(val), 'MMM dd, yyyy HH:mm:ss') : '-' },
   ];
 
-  const handleUpdate = async () => { /* Log is usually read-only */ };
+  const handleUpdate = async (id: string | number, updates: Partial<ActivityLog>) => {
+    try {
+      await activityLogsService.update(String(id), updates);
+      toast.success('Registro actualizado');
+      onRefresh();
+    } catch {
+      toast.error('Error al actualizar');
+    }
+  };
+
+  const handleAdd = async () => {
+    try {
+      await activityLogsService.create({
+        action: 'CREATE',
+        entity: 'Manual',
+        details: 'Nuevo registro de bitácora',
+      } as any);
+      toast.success('Registro de bitácora creado');
+      onRefresh();
+    } catch {
+      toast.error('Error al crear registro');
+    }
+  };
 
   const kpis = [
     { title: 'Total Registros', value: data.length,                                                               icon: Activity,           color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
@@ -60,9 +88,30 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
           <div><h2 className="text-xl font-black uppercase tracking-tight">Bitácora de Auditoría</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Registro de actividades del sistema</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar evento..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <Button
+              onClick={handleAdd}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
+            >
+              <Plus className="size-4" />
+              Nuevo Registro
+            </Button>
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} />
+        <EditableDataTable
+          data={filtered}
+          columns={columns}
+          onRowUpdate={handleUpdate}
+          isLoading={loading}
+          onRowDelete={async (id) => {
+            try {
+              await activityLogsService.delete(String(id));
+              toast.success('Registro eliminado');
+              onRefresh();
+            } catch {
+              toast.error('Error al eliminar registro');
+            }
+          }}
+        />
       </Card>
     </div>
   );

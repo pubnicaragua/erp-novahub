@@ -948,7 +948,7 @@ model Ticket {
   resolvedAt     DateTime?
   closedAt       DateTime?
   createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  updatedAt      DateTime     @default(now()) @updatedAt
   clientTenantId String
   comments       TicketComment[]
   audits         TicketAudit[]

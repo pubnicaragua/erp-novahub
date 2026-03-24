@@ -8,6 +8,7 @@ import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { estimatesService } from '../../services/ventas.service';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import type { Estimate, Customer, Product } from '../../types';
 import { Badge } from '../ui/badge';
@@ -33,6 +34,8 @@ const statusOptions = [
 export function EstimacionesView({ data, loading: _loading, onRefresh, customers = [], products = [] }: EstimacionesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Estimate | null>(null);
 
@@ -53,10 +56,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
   const handleUpdate = async (id: string | number, updates: Partial<Estimate>) => {
     try {
       await estimatesService.update(id.toString(), updates);
-      if (updates.status === 'SENT') {
+      if (updates.status === 'APPROVED') {
         toast.info('Generando Orden de Venta automáticamente...');
         await estimatesService.convertToOrder(id.toString());
-        toast.success('Cotización enviada y convertida a Orden de Venta');
+        toast.success('Cotización aprobada y convertida a Orden de Venta');
       } else {
         toast.success('Cotización actualizada');
       }
@@ -92,17 +95,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
     }
   };
 
-  const handleDeleteEstimate = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm('¿Estás seguro de que deseas eliminar esta cotización permanentemente?')) {
-      try {
-        await estimatesService.delete(id);
-        toast.success('Cotización eliminada con éxito');
-        await onRefresh();
-      } catch (err) {
-        toast.error('Error al aliminar la cotización');
-      }
-    }
+  const handleDeleteEstimate = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setPendingDeleteId(id);
   };
 
   const calculateRates = (doc: any) => {
@@ -230,7 +225,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
           </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-              onClick={(e) => { handleDeleteEstimate(localDoc!.id, e as any); setEditingId(null); }}>
+              onClick={() => setPendingDeleteId(localDoc!.id)}>
               <Trash2 className="size-3 mr-2" /> Eliminar
             </Button>
             <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
@@ -238,8 +233,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
               Guardar Borrador
             </Button>
             <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-              onClick={() => { handleUpdate(localDoc!.id, { status: 'SENT' as any }); setEditingId(null); }}>
-              Enviar Y Crear Orden
+              onClick={() => { handleUpdate(localDoc!.id, { status: 'APPROVED' as any }); setEditingId(null); }}>
+              Aprobar Y Crear Orden
             </Button>
           </div>
         </div>
@@ -295,7 +290,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <div className="flex items-center gap-2">$ <Input type="number" min="0" value={Number(localDoc?.subtotal||0)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div>
+                  <div className="flex items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="number" min="0" value={Number(localDoc?.subtotal||0)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Descuento</span>
@@ -316,7 +311,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                       const newTotal = base + tAmount;
                       handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                     }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> <span className="ml-1 text-xs font-black">%</span></div>
-                    -$ {Number(localDoc?.discountAmount||0).toLocaleString()}
+                    -{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.discountAmount||0).toLocaleString()}
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-sm">
@@ -338,7 +333,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                       const newTotal = base + tAmount;
                       handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                     }} className="w-16 h-8 text-right font-bold bg-transparent" /> <span className="ml-1 text-xs font-black">%</span></div>
-                    $ {Number(localDoc?.taxAmount||0).toLocaleString()}
+                    {localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.taxAmount||0).toLocaleString()}
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
@@ -462,7 +457,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                     />
                   </div>
                   <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black w-16 text-right">${Number(item.total || 0).toLocaleString()}</span>
+                    <span className="text-xs font-black w-16 text-right">{localDoc?.currency === 'USD' ? '$' : 'C$'}{Number(item.total || 0).toLocaleString()}</span>
                     <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => {
                         const newItems = [...(localDoc.items || [])] as any[];
                         newItems.splice(idx, 1);
@@ -560,13 +555,43 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
               <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setEditingId(row.id); }}>
                 <Eye className="size-4 text-muted-foreground hover:text-primary" />
               </Button>
-              <Button variant="ghost" size="icon" className="hover:bg-rose-500/10 hover:text-rose-500" onClick={(e) => handleDeleteEstimate(row.id, e)}>
+              <Button variant="ghost" size="icon" className="hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}>
                 <Trash2 className="size-4" />
               </Button>
             </>
           )}
         />
       </div>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+        title={"¿Eliminar cotización?"}
+        description="¿Estás seguro de que deseas eliminar esta cotización? Si tiene órdenes o facturas vinculadas, no se podrá eliminar."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={async () => {
+          if (!pendingDeleteId) return;
+          try {
+            setDeleteLoading(true);
+            await estimatesService.delete(pendingDeleteId);
+            toast.success('Cotización eliminada');
+            setEditingId(null);
+            onRefresh();
+          } catch (error: any) {
+            const msg = error?.response?.data?.message || error?.message || '';
+            if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
+              toast.error('No se puede eliminar: esta cotización tiene órdenes de venta o facturas vinculadas.');
+            } else {
+              toast.error(`Error al eliminar: ${msg || 'Error desconocido'}`);
+            }
+          } finally {
+            setDeleteLoading(false);
+            setPendingDeleteId(null);
+          }
+        }}
+      />
     </div>
   );
 }

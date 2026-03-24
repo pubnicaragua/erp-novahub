@@ -76,6 +76,8 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0.01 155);
   --sidebar-ring: oklch(0.55 0.18 155);
+  --input-background: oklch(0.2 0.01 155);
+  --switch-background: oklch(0.35 0.01 155);
 }
 
 @theme inline {
@@ -139,6 +141,17 @@
     background: radial-gradient(circle at 100% 0%, #04883333 0%, #f8fafc 40%, #ffffff 100%);
     background-color: #ffffff;
     background-attachment: fixed;
+  }
+
+  /* Dark mode: fix native select/option elements */
+  .dark select,
+  .dark option {
+    background-color: oklch(0.2 0.01 155);
+    color: oklch(0.985 0 0);
+  }
+
+  .dark select {
+    border-color: oklch(0.35 0.01 155);
   }
 
   /* Custom Scrollbar */

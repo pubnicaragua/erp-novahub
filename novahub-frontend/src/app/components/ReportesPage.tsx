@@ -258,16 +258,16 @@ export function ReportesPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-border/40">
           {[
-            { id: 'ejecutivo', label: 'Ejecutivo', icon: Zap, color: 'from-primary to-primary/80' },
-            { id: 'financiero', label: 'Financiero', icon: DollarSign, color: 'from-emerald-600 to-emerald-700' },
-            { id: 'ventas', label: 'Ventas', icon: ShoppingCart, color: 'from-blue-600 to-blue-700' },
-            { id: 'inventario', label: 'Inventario', icon: Package, color: 'from-orange-600 to-orange-700' },
-            { id: 'clientes', label: 'Clientes', icon: Users, color: 'from-purple-600 to-purple-700' },
+            { id: 'ejecutivo', label: 'Ejecutivo', icon: Zap },
+            { id: 'financiero', label: 'Financiero', icon: DollarSign },
+            { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
+            { id: 'inventario', label: 'Inventario', icon: Package },
+            { id: 'clientes', label: 'Clientes', icon: Users },
           ].map(t => (
             <TabsTrigger key={t.id} value={t.id}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-                data-[state=active]:bg-gradient-to-br data-[state=active]:${t.color}
-                data-[state=active]:text-white data-[state=active]:shadow-lg transition-all`}>
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+                data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+                data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
               <t.icon className="size-4" />
               <span className="hidden sm:inline">{t.label}</span>
             </TabsTrigger>

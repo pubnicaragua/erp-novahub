@@ -12,6 +12,7 @@ import { cn } from '../ui/utils';
 import type { Customer } from '../../types';
 import { Badge } from '../ui/badge';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -23,6 +24,8 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
   const { formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const filtered = data.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -188,11 +191,40 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           actions={(row) => (
             <div className="flex items-center gap-1">
                <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => customersService.delete(row.id).then(() => onRefresh())}><Trash2 className="size-4" /></Button>
+               <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />
       </div>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+        title="¿Eliminar cliente?"
+        description="Si el cliente tiene transacciones activas (facturas, pedidos, pagos), no se podrá eliminar."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={async () => {
+          if (!pendingDeleteId) return;
+          try {
+            setDeleteLoading(true);
+            await customersService.delete(pendingDeleteId);
+            toast.success('Cliente eliminado correctamente');
+            onRefresh();
+          } catch (error: any) {
+            const msg = error?.response?.data?.message || error?.message || '';
+            if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
+              toast.error('No se puede eliminar: este cliente tiene transacciones activas (facturas, pedidos, pagos, etc.)');
+            } else {
+              toast.error(`Error al eliminar cliente: ${msg}`);
+            }
+          } finally {
+            setDeleteLoading(false);
+            setPendingDeleteId(null);
+          }
+        }}
+      />
     </div>
   );
 }

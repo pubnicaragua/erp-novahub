@@ -22,6 +22,7 @@ import { supportService } from '../../services/support.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface TicketsViewProps {
   data: Ticket[];
@@ -66,6 +67,8 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
   const [newComment, setNewComment] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
   const [commentLoading, setCommentLoading] = useState(false);
+  const [pendingDeleteTicket, setPendingDeleteTicket] = useState<Ticket | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const statusOpts = [
     { value: 'OPEN', label: 'Abierto', color: 'bg-amber-500/10 text-amber-500' },
@@ -278,6 +281,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
   );
 
   return (
+    <>
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {kpis.map((kpi) => (
@@ -341,7 +345,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
                   variant="ghost"
                   size="icon"
                   className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg"
-                  onClick={() => handleDelete(row)}
+                  onClick={() => setPendingDeleteTicket(row)}
                 >
                   <Trash2 className="size-4" />
                 </Button>
@@ -427,5 +431,26 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
         </Card>
       </div>
     </div>
+
+      <ConfirmDialog
+        open={pendingDeleteTicket !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteTicket(null); }}
+        title="¿Eliminar ticket?"
+        description={`¿Estás seguro de que deseas eliminar el ticket ${pendingDeleteTicket?.number || ''}? Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={async () => {
+          if (!pendingDeleteTicket) return;
+          try {
+            setDeleteLoading(true);
+            await handleDelete(pendingDeleteTicket);
+          } finally {
+            setDeleteLoading(false);
+            setPendingDeleteTicket(null);
+          }
+        }}
+      />
+    </>
   );
 };

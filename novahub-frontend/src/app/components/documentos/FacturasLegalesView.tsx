@@ -10,6 +10,7 @@ import { legalInvoicesService } from '../../services/documentos.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface FacturasLegalesViewProps {
   data: LegalInvoice[];
@@ -18,6 +19,7 @@ interface FacturasLegalesViewProps {
 }
 
 export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, loading, onRefresh }) => {
+  const { formatConvertedAmount, displayCurrency, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
 
   const statusOpts = [
@@ -30,7 +32,7 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
   const columns: ColumnDef<LegalInvoice>[] = [
     { key: 'number', header: 'Factura', width: '120px', editable: true },
     { key: 'type', header: 'Tipo', width: '20%', editable: true },
-    { key: 'amount', header: 'Monto', width: '120px', editable: true, type: 'number', render: (val: any) => val ? `$${Number(val).toLocaleString()}` : '-' },
+    { key: 'amount', header: 'Monto', width: '120px', editable: true, type: 'number', render: (val: any) => val ? formatConvertedAmount(Number(val), 'USD') : '-' },
     { key: 'issueDate', header: 'Emisión', width: '140px', editable: true, type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, yyyy') : '-' },
     { key: 'status', header: 'Estado', width: '120px', editable: true, type: 'select', options: statusOpts,
       render: (val: any) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
@@ -48,8 +50,9 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
     } catch { toast.error('Error al crear'); }
   };
 
+  const totalConverted = data.reduce((a, f) => a + convertAmount(Number(f.amount || 0), 'USD'), 0);
   const kpis = [
-    { title: 'Total Emitido',   value: `$${data.reduce((a,f) => a + Number(f.amount||0), 0).toLocaleString()}`,       icon: TrendingUp,    color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
+    { title: `Total Emitido (${displayCurrency})`, value: `${displayCurrency === 'USD' ? '$' : 'C$'}${totalConverted.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-500/10' },
     { title: 'Facturas',        value: data.length,                                                                    icon: FileText,      color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
     { title: 'Pagadas',         value: data.filter(f => (f.status||'').toUpperCase() === 'PAID').length,               icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Vencidas',        value: data.filter(f => (f.status||'').toUpperCase() === 'OVERDUE').length,            icon: AlertTriangle, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },

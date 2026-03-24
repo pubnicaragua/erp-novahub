@@ -55,6 +55,7 @@ interface VentasPageProps {
 
 export function VentasPage({ activeSubModule }: VentasPageProps) {
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
+  const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
 
   // Sync section with Sidebar prop
   useEffect(() => {
@@ -129,29 +130,32 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
   const currentSectionInfo = SALES_SECTIONS.find(s => s.id === activeSection) || SALES_SECTIONS[0];
 
   const handleGenerateInvoice = async (order: SalesOrder) => {
-    try {
-      toast.info(`Generando factura para orden ${order.number}...`);
-      await invoicesService.create({
-        number: `FAC-${Date.now().toString().slice(-6)}`,
-        customerId: order.customerId,
-        date: new Date().toISOString(),
-        dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-        subtotal: order.subtotal,
-        taxAmount: order.taxAmount,
-        discountAmount: order.discountAmount,
-        total: order.total,
-        currency: order.currency || 'USD',
-        status: 'PENDING' as any,
-        amountPaid: 0,
-        balance: order.total,
-      });
-      await salesOrdersService.update(order.id, { status: 'DELIVERED' as any });
-      toast.success(`Factura generada para orden ${order.number}`);
-      setActiveSection('facturas');
-      fetchData();
-    } catch {
-      toast.error('Error al generar factura');
-    }
+    toast.info('Preparando borrador de factura...');
+    setInvoiceDraft({
+      customerId: order.customerId,
+      number: `FAC-${Date.now().toString().slice(-6)}`,
+      salesOrderId: order.id,
+      date: new Date().toISOString().split('T')[0],
+      dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+      currency: order.currency || 'NIO',
+      exchangeRate: order.exchangeRate,
+      items: order.items?.map(i => ({
+        id: Date.now().toString() + Math.random(),
+        productId: i.productId,
+        description: i.description,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        taxRate: i.taxRate,
+        discount: i.discount,
+        total: i.total
+      })) || [],
+      subtotal: order.subtotal,
+      taxAmount: order.taxAmount,
+      discountAmount: order.discountAmount,
+      total: order.total,
+      notes: order.notes ? `[Desde Orden ${order.number}] ${order.notes}` : `Generado desde Orden ${order.number}`,
+    });
+    setActiveSection('facturas');
   };
 
   const handleMarkAsPaid = async (invoice: Invoice) => {
@@ -233,7 +237,16 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
                 <OrdenesVentaView data={data.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} customers={data.clientes} products={data.productos} />
               )}
               {activeSection === 'facturas' && (
-                <FacturasView data={data.facturas} loading={loading} onRefresh={fetchData} onMarkAsPaid={handleMarkAsPaid} customers={data.clientes} products={data.productos} />
+                <FacturasView 
+                  data={data.facturas} 
+                  loading={loading} 
+                  onRefresh={fetchData} 
+                  onMarkAsPaid={handleMarkAsPaid} 
+                  customers={data.clientes} 
+                  products={data.productos} 
+                  invoiceDraft={invoiceDraft}
+                  onClearInvoiceDraft={() => setInvoiceDraft(null)}
+                />
               )}
               {(activeSection === 'recurrentes' || activeSection === 'facturas-recurrentes') && (
                 <FacturasRecurrentesView data={data.recurrentes} loading={loading} onRefresh={fetchData} customers={data.clientes} products={data.productos} />

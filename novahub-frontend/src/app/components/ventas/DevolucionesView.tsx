@@ -8,6 +8,7 @@ import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { salesReturnsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import type { SalesReturn, Customer, Invoice, Product } from '../../types';
 import { Badge } from '../ui/badge';
@@ -33,6 +34,8 @@ const statusOptions = [
 export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [] }: DevolucionesViewProps) {
   const { displayCurrency, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -255,11 +258,35 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                  <Button title="Aprobar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
                )}
                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={async () => { await salesReturnsService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
+               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />
       </div>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+        title={"¿Eliminar devolución?"}
+        description="¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={async () => {
+          if (!pendingDeleteId) return;
+          try {
+            setDeleteLoading(true);
+            await salesReturnsService.delete(pendingDeleteId);
+            toast.success('Registro eliminado');
+            onRefresh();
+          } catch (error: any) {
+            toast.error(error?.message || 'Error al eliminar');
+          } finally {
+            setDeleteLoading(false);
+            setPendingDeleteId(null);
+          }
+        }}
+      />
     </div>
   );
 }

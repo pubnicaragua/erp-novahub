@@ -8,6 +8,7 @@ import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { recurringInvoicesService } from '../../services/ventas.service';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import type { RecurringInvoice, Customer, Product } from '../../types';
 import { Badge } from '../ui/badge';
@@ -38,6 +39,8 @@ const frequencyOptions = [
 export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [] }: FacturasRecurrentesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -270,9 +273,11 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             </div>
           </CardContent>
         </Card>
-      </div>
-    );
-  }
+  
+      
+    </div>
+  );
+}
 
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
@@ -307,11 +312,41 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                  <Button title="Reanudar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"><Play className="size-4" /></Button>
                )}
                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={async () => { await recurringInvoicesService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
+               <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />
       </div>
+      <ConfirmDialog
+              open={pendingDeleteId !== null}
+              onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+              title={"¿Eliminar factura recurrente?"}
+              description="¿Estás seguro de que deseas eliminar esta factura recurrente? Esta acción no se puede deshacer."
+              confirmLabel="Eliminar"
+              variant="destructive"
+              loading={deleteLoading}
+              onConfirm={async () => {
+                if (!pendingDeleteId) return;
+                try {
+                  setDeleteLoading(true);
+                  await recurringInvoicesService.delete(pendingDeleteId);
+                  toast.success('Factura recurrente eliminada');
+                  setEditingId(null);
+                  onRefresh();
+                } catch (error: any) {
+                   const msg = error?.response?.data?.message || error?.message || '';
+                  if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
+                    toast.error('No se puede eliminar: tiene dependencias en el sistema.');
+                  } else {
+                    toast.error(`Error al eliminar: ${msg || 'Error desconocido'}`);
+                  }
+                } finally {
+                  setDeleteLoading(false);
+                  setPendingDeleteId(null);
+                }
+              }}
+            />
+
     </div>
   );
 }

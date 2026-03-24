@@ -32,6 +32,7 @@ export const salesOrdersService = {
   update: (id: string, data: Partial<SalesOrder>) => api.patch<SalesOrder>(`/sales/orders/${id}`, data),
   delete: (id: string) => api.delete<void>(`/sales/orders/${id}`),
   confirm: (id: string) => api.patch<SalesOrder>(`/sales/orders/${id}/confirm`, {}),
+  convertToInvoice: (id: string) => api.post<Invoice>(`/sales/orders/${id}/convert-to-invoice`, {}),
 };
 
 // ---- Invoices ----

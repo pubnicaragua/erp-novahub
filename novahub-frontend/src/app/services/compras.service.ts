@@ -22,6 +22,7 @@ export const purchaseOrdersService = {
   approve: (id: string) => api.patch<PurchaseOrder>(`/purchases/orders/${id}/approve`, {}),
   cancel: (id: string) => api.patch<PurchaseOrder>(`/purchases/orders/${id}/cancel`, {}),
   delete: (id: string) => api.delete<void>(`/purchases/orders/${id}`),
+  convertToReceipt: (id: string) => api.post<PurchaseReceipt>(`/purchases/orders/${id}/convert-to-receipt`, {}),
 };
 
 // ✅ CORRECTED: was /purchase-receipts (404) → now /purchases/receipts
@@ -30,6 +31,7 @@ export const purchaseReceiptsService = {
   getById: (id: string) => api.get<PurchaseReceipt>(`/purchases/receipts/${id}`),
   create: (data: Partial<PurchaseReceipt>) => api.post<PurchaseReceipt>('/purchases/receipts', data),
   delete: (id: string) => api.delete<void>(`/purchases/receipts/${id}`),
+  convertToInvoice: (id: string) => api.post<SupplierInvoice>(`/purchases/receipts/${id}/convert-to-invoice`, {}),
 };
 
 export const supplierInvoicesService = {

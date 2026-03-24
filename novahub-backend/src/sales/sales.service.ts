@@ -323,6 +323,67 @@ export class SalesService {
     return this.prisma.salesOrder.delete({ where: { id, clientTenantId } });
   }
 
+  async convertOrderToInvoice(id: string, clientTenantId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.salesOrder.findFirst({ where: { id, clientTenantId }, include: { items: true } });
+      if (!order) throw new NotFoundException('Sales order not found');
+
+      const itemsCreate = (order.items || []).map(item => ({
+        productId: item.productId || null,
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        taxRate: item.taxRate,
+        discount: item.discount,
+        total: item.total,
+      }));
+
+      const { currency, exchangeRate, baseTotal } = await this.getDocumentCurrencyData(order, clientTenantId);
+
+      const invoiceData: any = {
+        number: genCode('FAC'),
+        customerId: order.customerId,
+        salesOrderId: order.id,
+        date: new Date(),
+        dueDate: new Date(Date.now() + 30 * 86400000), // +30 days
+        subtotal: order.subtotal,
+        taxAmount: order.taxAmount,
+        discountAmount: order.discountAmount,
+        total: order.total,
+        amountPaid: 0,
+        balance: order.total,
+        currency,
+        exchangeRate,
+        baseTotal,
+        notes: order.notes ? `[Desde Orden ${order.number}] ${order.notes}` : `Generado desde Orden ${order.number}`,
+        status: 'PENDING',
+        clientTenantId,
+      };
+
+      if (itemsCreate.length > 0) {
+        invoiceData.items = { create: itemsCreate };
+      }
+
+      const invoice = await tx.invoice.create({
+        data: invoiceData,
+        include: { items: true, customer: true },
+      });
+
+      // Update customer balance (increase what they owe)
+      if (invoice.balance > 0) {
+        await tx.customer.update({
+          where: { id: order.customerId },
+          data: { balance: { increment: invoice.balance } },
+        });
+      }
+
+      // Update order status
+      await tx.salesOrder.update({ where: { id }, data: { status: 'SHIPPED' } });
+      
+      return invoice;
+    });
+  }
+
   // ─── FACTURAS ─────────────────────────────────────────────────────────────
   async createInvoice(data: any, clientTenantId: string) {
     const { items, ...rest } = data;

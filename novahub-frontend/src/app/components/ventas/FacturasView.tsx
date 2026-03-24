@@ -8,6 +8,7 @@ import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { invoicesService } from '../../services/ventas.service';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import type { Invoice, Customer, Product } from '../../types';
 import { Badge } from '../ui/badge';
@@ -21,6 +22,8 @@ interface FacturasViewProps {
   onMarkAsPaid: (invoice: Invoice) => void;
   customers?: Customer[];
   products?: Product[];
+  invoiceDraft?: any;
+  onClearInvoiceDraft?: () => void;
 }
 
 const statusOptions = [
@@ -32,16 +35,36 @@ const statusOptions = [
   { label: 'Reembolso', value: 'REFUNDED', color: 'bg-blue-500/10 text-blue-500' },
 ];
 
-export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers = [], products = [] }: FacturasViewProps) {
+export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers = [], products = [], invoiceDraft, onClearInvoiceDraft }: FacturasViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    if (editingId) {
+    if (invoiceDraft) {
+      setIsCreating(true);
+      setEditingId(null);
+      setLocalDoc(JSON.parse(JSON.stringify(invoiceDraft)));
+      
+      const sub = Number(invoiceDraft.subtotal || 0);
+      if (sub > 0) {
+        const dRate = (Number(invoiceDraft.discountAmount || 0) / sub) * 100;
+        const base = sub - Number(invoiceDraft.discountAmount || 0);
+        const tRate = base > 0 ? (Number(invoiceDraft.taxAmount || 0) / base) * 100 : 0;
+        setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
+      } else {
+        setLocalRates({ dRate: 0, tRate: 15 });
+      }
+      
+      if (onClearInvoiceDraft) {
+        setTimeout(() => onClearInvoiceDraft(), 0);
+      }
+    } else if (editingId) {
       const inv = data.find(x => x.id === editingId);
       if (inv) {
         setLocalDoc(JSON.parse(JSON.stringify(inv)));
@@ -56,7 +79,7 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers
     } else if (!isCreating) {
       setLocalDoc(null);
     }
-  }, [editingId]);
+  }, [editingId, invoiceDraft]);
 
   const filtered = data.filter(f => 
     f.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -112,7 +135,7 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers
           date: new Date(localDoc.date).toISOString(),
           dueDate: new Date(localDoc.dueDate).toISOString(),
           currency: localDoc.currency,
-          exchangeRate: localDoc.exchangeRate || globalRate,
+          exchangeRate: Number(localDoc.exchangeRate || globalRate),
           items: localDoc.items.map((item: any) => ({
             productId: item.productId || undefined,
             description: item.description || '',
@@ -122,12 +145,13 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers
             discount: Number(item.discount || 0),
             total: Number(item.total || 0),
           })),
-          subtotal: localDoc.subtotal,
-          taxAmount: localDoc.taxAmount,
-          discountAmount: localDoc.discountAmount,
-          total: localDoc.total,
+          subtotal: Number(localDoc.subtotal || 0),
+          taxAmount: Number(localDoc.taxAmount || 0),
+          discountAmount: Number(localDoc.discountAmount || 0),
+          total: Number(localDoc.total || 0),
           status: emitir ? 'PENDING' : 'DRAFT',
           notes: localDoc.notes,
+          salesOrderId: localDoc.salesOrderId || undefined,
         } as any);
         toast.success(emitir ? 'Factura emitida exitosamente' : 'Factura guardada como borrador');
       } else {
@@ -141,8 +165,9 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers
       setEditingId(null);
       setLocalDoc(null);
       onRefresh();
-    } catch (e) {
-      toast.error('Error al guardar la factura');
+    } catch (e: any) {
+      const msg = e.response?.data?.message;
+      toast.error(`Error al guardar: ${Array.isArray(msg) ? msg.join(', ') : (msg || e.message)}`);
     }
   };
 
@@ -280,7 +305,7 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers
           <div className="flex items-center gap-3">
             {!isCreating && (
               <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                onClick={async () => { await invoicesService.delete(localDoc.id); setEditingId(null); onRefresh(); }}>
+                onClick={() => setPendingDeleteId(localDoc.id)}>
                 <Trash2 className="size-3 mr-2" /> Eliminar
               </Button>
             )}
@@ -550,11 +575,42 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers
                  </Button>
                )}
                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={async () => { await invoicesService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
+               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />
       </div>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+        title={"¿Eliminar factura?"}
+        description="¿Estás seguro de que deseas eliminar esta factura? Si tiene pagos registrados o notas de crédito, no se podrá eliminar."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={async () => {
+          if (!pendingDeleteId) return;
+          try {
+            setDeleteLoading(true);
+            await invoicesService.delete(pendingDeleteId);
+            toast.success('Factura eliminada');
+            setEditingId(null);
+            setIsCreating(false);
+            onRefresh();
+          } catch (error: any) {
+            const msg = error?.response?.data?.message || error?.message || '';
+            if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
+              toast.error('No se puede eliminar: esta factura tiene pagos o notas de crédito vinculadas.');
+            } else {
+              toast.error(`Error al eliminar: ${msg || 'Error desconocido'}`);
+            }
+          } finally {
+            setDeleteLoading(false);
+            setPendingDeleteId(null);
+          }
+        }}
+      />
     </div>
   );
 }

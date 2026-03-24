@@ -11,6 +11,7 @@ import { purchaseReceiptsService, suppliersService, purchaseOrdersService } from
 import type { PurchaseReceipt, Supplier, PurchaseOrder } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; }
@@ -24,6 +25,8 @@ const statusOpts = [
 
 export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   
@@ -138,7 +141,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
              {!isNew && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={async () => {
-                     if(confirm('¿Seguro que deseas eliminar?')){
+                     {
                          try { await purchaseReceiptsService.delete(editingId); toast.success('Eliminado'); setEditingId(null); onRefresh(); } catch { toast.error('Error'); }
                      }
                   }}>
@@ -292,11 +295,35 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
           actions={(row) => (
             <div className="flex gap-1">
               <Button title="Editar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { try { await purchaseReceiptsService.delete(row.id); onRefresh(); } catch { toast.error('Error'); } }}><Trash2 className="size-4" /></Button>
+              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />
       </div>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+        title={"¿Eliminar recepción?"}
+        description="¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={async () => {
+          if (!pendingDeleteId) return;
+          try {
+            setDeleteLoading(true);
+            await purchaseReceiptsService.delete(pendingDeleteId);
+            toast.success('Registro eliminado');
+            onRefresh();
+          } catch (error: any) {
+            toast.error(error?.message || 'Error al eliminar');
+          } finally {
+            setDeleteLoading(false);
+            setPendingDeleteId(null);
+          }
+        }}
+      />
     </div>
   );
 }

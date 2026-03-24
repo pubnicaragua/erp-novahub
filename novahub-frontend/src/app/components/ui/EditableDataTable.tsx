@@ -14,6 +14,7 @@ import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { ConfirmDialog } from './ConfirmDialog';
 
 export interface ColumnDef<T> {
   key: keyof T | string;
@@ -44,6 +45,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   data: initialData,
   columns,
   onRowUpdate,
+  onRowDelete,
   onBulkDelete,
   idField = 'id' as keyof T,
   isLoading,
@@ -58,6 +60,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const [editValue, setEditValue] = useState<any>(null);
   const [draftRows, setDraftRows] = useState<Set<string | number>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | number | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     setData(initialData);
@@ -337,9 +341,16 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   <TableCell className="text-right pr-6 h-14">
                     <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                       {actions ? actions(row) : (
-                        <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg">
-                          <Trash2 className="size-4" />
-                        </Button>
+                        onRowDelete && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg"
+                            onClick={() => setConfirmDeleteId(rowId)}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        )
                       )}
                     </div>
                   </TableCell>
@@ -373,6 +384,27 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             <Plus className="size-3 mr-2" /> Agregar Nueva Fila
          </Button>
       </div>
+
+      {/* Confirm Delete Dialog */}
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setConfirmDeleteId(null); }}
+        title="¿Eliminar registro?"
+        description="¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={async () => {
+          if (confirmDeleteId === null || !onRowDelete) return;
+          try {
+            setDeleteLoading(true);
+            await onRowDelete(confirmDeleteId);
+          } finally {
+            setDeleteLoading(false);
+            setConfirmDeleteId(null);
+          }
+        }}
+      />
     </div>
   );
 }

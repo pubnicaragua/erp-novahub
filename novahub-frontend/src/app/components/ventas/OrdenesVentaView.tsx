@@ -55,12 +55,24 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   const handleUpdate = async (id: string | number, updates: Partial<SalesOrder>) => {
     try {
+      if (updates.status && String(updates.status).toUpperCase() === 'SHIPPED') {
+        const orderToConvert = data.find(o => o.id === id) || localDoc;
+        if (orderToConvert) {
+          await salesOrdersService.update(id.toString(), { status: 'SHIPPED' as any });
+          toast.success('Orden enviada. Redirigiendo a factura...');
+          onRefresh(); // trigger background refresh
+          onGenerateInvoice({ ...orderToConvert, status: 'SHIPPED' as any });
+          return;
+        }
+      }
+
       await salesOrdersService.update(id.toString(), updates);
       toast.success('Orden actualizada');
       onRefresh();
-    } catch (error) {
-      toast.error('Error al actualizar');
-      throw error;
+    } catch (error: any) {
+       const msg = error.response?.data?.message;
+       toast.error(`Error al actualizar status: ${Array.isArray(msg) ? msg.join(', ') : (msg || error.message)}`);
+       throw error;
     }
   };
 
@@ -102,10 +114,14 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   }, [editingId]); // Intentionally removed 'data' to prevent server-refreshes from destroying mid-edit local states
 
   const handleAddOrder = async () => {
+    if (!customers || customers.length === 0) {
+      toast.error('Debe registrar al menos un cliente primero');
+      return;
+    }
     try {
       toast.info('Creando orden de venta...');
       const newOrd = await salesOrdersService.create({
-        customerId: customers[0]?.id || 'temp',
+        customerId: customers[0].id,
         date: new Date().toISOString(),
         expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
         discountAmount: 0,
@@ -113,6 +129,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         currency: 'NIO',
         exchangeRate: globalRate,
         status: 'DRAFT' as any,
+        items: [],
         number: `ORD-${Date.now().toString().slice(-6)}`
       });
       await onRefresh();

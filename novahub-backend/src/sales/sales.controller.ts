@@ -97,6 +97,12 @@ export class SalesController {
     return this.salesService.removeSalesOrder(id, req.user.clientTenantId);
   }
 
+  @Post('orders/:id/convert-to-invoice')
+  @ApiOperation({ summary: 'Convertir orden de venta a factura' })
+  convertOrderToInvoice(@Param('id') id: string, @Request() req) {
+    return this.salesService.convertOrderToInvoice(id, req.user.clientTenantId);
+  }
+
   // ─── FACTURAS ────────────────────────────────────────────────────────────
   @Post('invoices')
   @ApiOperation({ summary: 'Crear nueva factura' })
