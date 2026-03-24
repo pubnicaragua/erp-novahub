@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   BarChart3, Download, TrendingUp, TrendingDown, Calendar,
-  Package, Printer, ArrowUpRight, ArrowDownRight,
+  Package, Printer,
   DollarSign, Users, ShoppingCart, Target,
   AlertTriangle, CheckCircle2, Activity, PieChart as PieIcon,
   FileText, BarChart2, Layers, Zap
@@ -16,12 +16,14 @@ import {
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   AreaChart, Area, RadarChart, Radar, PolarGrid, PolarAngleAxis,
-  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
+  XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { invoicesService, customersService, salesOrdersService, paymentsService } from '../services/ventas.service';
 import { inventoryService } from '../services/inventario.service';
 import { incomeService, expensesService } from '../services/finanzas.service';
+import { subscriptionsService } from '../services/subscriptions.service';
+import { tenantsService } from '../services/tenants.service';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
@@ -30,6 +32,43 @@ const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Se
 
 function fmt(n: number) { return `$${n.toLocaleString('es-NI', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`; }
 function pct(v: number, t: number) { return t > 0 ? ((v / t) * 100).toFixed(1) + '%' : '0%'; }
+function toDate(value: unknown): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isDateInRange(value: unknown, range: string): boolean {
+  const date = toDate(value);
+  if (!date) return false;
+
+  const now = new Date();
+  const startToday = new Date(now);
+  startToday.setHours(0, 0, 0, 0);
+
+  const start = new Date(now);
+  switch (range) {
+    case 'hoy':
+      return date >= startToday;
+    case 'ultima-semana':
+      start.setDate(now.getDate() - 7);
+      break;
+    case 'ultimo-mes':
+      start.setMonth(now.getMonth() - 1);
+      break;
+    case 'ultimo-trimestre':
+      start.setMonth(now.getMonth() - 3);
+      break;
+    case 'ultimo-año':
+      start.setFullYear(now.getFullYear() - 1);
+      break;
+    default:
+      return true;
+  }
+
+  start.setHours(0, 0, 0, 0);
+  return date >= start;
+}
 
 export function ReportesPage() {
   const [dateRange, setDateRange] = useState('ultimo-mes');
@@ -44,17 +83,34 @@ export function ReportesPage() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
+  const [tenantReports, setTenantReports] = useState<any[]>([]);
+  const [subscriptionRequests, setSubscriptionRequests] = useState<any[]>([]);
+  const [hasSubscriptionsAccess, setHasSubscriptionsAccess] = useState(false);
+
+  const filteredIncomes = useMemo(() => incomes.filter(i => isDateInRange(i.date, dateRange)), [incomes, dateRange]);
+  const filteredExpenses = useMemo(() => expenses.filter(e => isDateInRange(e.date, dateRange)), [expenses, dateRange]);
+  const filteredInvoices = useMemo(() => invoices.filter(i => isDateInRange(i.date, dateRange)), [invoices, dateRange]);
+  const filteredPayments = useMemo(() => payments.filter(p => isDateInRange(p.date, dateRange)), [payments, dateRange]);
+  const filteredOrders = useMemo(() => orders.filter(o => isDateInRange(o.date, dateRange)), [orders, dateRange]);
 
   // ── Core KPIs ──────────────────────────────────────────────────────────────
-  const totalIncome   = useMemo(() => incomes.reduce((a, i) => a + Number(i.amount || 0), 0), [incomes]);
-  const totalExpenses = useMemo(() => expenses.reduce((a, e) => a + Number(e.amount || 0), 0), [expenses]);
+  const totalIncome   = useMemo(() => filteredIncomes.reduce((a, i) => a + Number(i.amount || 0), 0), [filteredIncomes]);
+  const totalExpenses = useMemo(() => filteredExpenses.reduce((a, e) => a + Number(e.amount || 0), 0), [filteredExpenses]);
   const netProfit     = totalIncome - totalExpenses;
   const grossMargin   = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
   const inventoryVal  = useMemo(() => products.reduce((a, p) => a + Number(p.stock || 0) * Number(p.costPrice || 0), 0), [products]);
-  const totalSales    = useMemo(() => invoices.reduce((a, i) => a + Number(i.total || 0), 0), [invoices]);
-  const totalPaid     = useMemo(() => payments.reduce((a, p) => a + Number(p.amount || 0), 0), [payments]);
-  const pendingOrders = useMemo(() => orders.filter(o => o.status === 'CONFIRMED' || o.status === 'IN_PROGRESS').length, [orders]);
+  const totalSales    = useMemo(() => filteredInvoices.reduce((a, i) => a + Number(i.total || 0), 0), [filteredInvoices]);
+  const totalPaid     = useMemo(() => filteredPayments.reduce((a, p) => a + Number(p.amount || 0), 0), [filteredPayments]);
+  const pendingOrders = useMemo(() => filteredOrders.filter(o => o.status === 'CONFIRMED' || o.status === 'IN_PROGRESS').length, [filteredOrders]);
   const activeClients = useMemo(() => customers.filter(c => c.status === 'ACTIVE').length, [customers]);
+  const activeModulesCount = useMemo(
+    () => tenantReports.reduce((acc, tenant) => acc + (tenant.subscriptions?.length || 0), 0),
+    [tenantReports],
+  );
+  const pendingRequestCount = useMemo(
+    () => subscriptionRequests.filter(req => req.status === 'PENDING').length,
+    [subscriptionRequests],
+  );
 
   // ROI: (income - expenses) / expenses * 100
   const roi = totalExpenses > 0 ? ((netProfit / totalExpenses) * 100).toFixed(1) : '0';
@@ -70,19 +126,19 @@ export function ReportesPage() {
     const now = new Date().getMonth();
     return Array.from({ length: 6 }, (_, i) => {
       const idx = (now - (5 - i) + 12) % 12;
-      const mInc = incomes.filter(x => new Date(x.date).getMonth() === idx).reduce((a, x) => a + Number(x.amount || 0), 0);
-      const mExp = expenses.filter(x => new Date(x.date).getMonth() === idx).reduce((a, x) => a + Number(x.amount || 0), 0);
-      const mInv = invoices.filter(x => new Date(x.date).getMonth() === idx).reduce((a, x) => a + Number(x.total || 0), 0);
+      const mInc = filteredIncomes.filter(x => new Date(x.date).getMonth() === idx).reduce((a, x) => a + Number(x.amount || 0), 0);
+      const mExp = filteredExpenses.filter(x => new Date(x.date).getMonth() === idx).reduce((a, x) => a + Number(x.amount || 0), 0);
+      const mInv = filteredInvoices.filter(x => new Date(x.date).getMonth() === idx).reduce((a, x) => a + Number(x.total || 0), 0);
       return { mes: MONTH_NAMES[idx], ingresos: mInc, gastos: mExp, facturas: mInv, utilidad: mInc - mExp };
     });
-  }, [incomes, expenses, invoices]);
+  }, [filteredIncomes, filteredExpenses, filteredInvoices]);
 
   // ── Expense by category ────────────────────────────────────────────────────
   const expByCat = useMemo(() => {
     const map: Record<string, number> = {};
-    expenses.forEach(e => { const k = e.category || 'Otros'; map[k] = (map[k] || 0) + Number(e.amount || 0); });
+    filteredExpenses.forEach(e => { const k = e.category || 'Otros'; map[k] = (map[k] || 0) + Number(e.amount || 0); });
     return Object.entries(map).map(([name, value], i) => ({ name, value, color: COLORS[i % COLORS.length] }));
-  }, [expenses]);
+  }, [filteredExpenses]);
 
   // ── Top products by revenue value ─────────────────────────────────────────
   const topProducts = useMemo(() =>
@@ -109,21 +165,93 @@ export function ReportesPage() {
   // ── Customer segments by invoice value ────────────────────────────────────
   const customerSegments = useMemo(() => {
     const map: Record<string, number> = {};
-    invoices.forEach(inv => {
+    filteredInvoices.forEach(inv => {
       if (inv.customer?.name) map[inv.customer.name] = (map[inv.customer.name] || 0) + Number(inv.total || 0);
     });
     return Object.entries(map)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 6);
-  }, [invoices]);
+  }, [filteredInvoices]);
 
   // ── Invoice status breakdown ───────────────────────────────────────────────
   const invoiceStatus = useMemo(() => {
     const map: Record<string, number> = {};
-    invoices.forEach(i => { const k = i.status || 'UNKNOWN'; map[k] = (map[k] || 0) + 1; });
+    filteredInvoices.forEach(i => { const k = i.status || 'UNKNOWN'; map[k] = (map[k] || 0) + 1; });
     return Object.entries(map).map(([status, count], i) => ({ status, count, color: COLORS[i % COLORS.length] }));
-  }, [invoices]);
+  }, [filteredInvoices]);
+
+  const requestsByStatus = useMemo(() => {
+    const map: Record<string, number> = {};
+    subscriptionRequests.forEach(req => {
+      const status = req.status || 'UNKNOWN';
+      map[status] = (map[status] || 0) + 1;
+    });
+
+    return Object.entries(map).map(([status, count], i) => ({
+      status,
+      count,
+      color: COLORS[i % COLORS.length],
+    }));
+  }, [subscriptionRequests]);
+  const approvedRequestCount = useMemo(
+    () => subscriptionRequests.filter(req => req.status === 'APPROVED').length,
+    [subscriptionRequests],
+  );
+  const rejectedRequestCount = useMemo(
+    () => subscriptionRequests.filter(req => req.status === 'REJECTED').length,
+    [subscriptionRequests],
+  );
+
+  const planDistribution = useMemo(() => {
+    const map: Record<string, number> = {};
+    tenantReports.forEach(tenant => {
+      const plan = tenant.plan || 'N/A';
+      map[plan] = (map[plan] || 0) + 1;
+    });
+    return Object.entries(map).map(([name, value], i) => ({ name, value, color: COLORS[i % COLORS.length] }));
+  }, [tenantReports]);
+
+  const requestedModules = useMemo(() => {
+    const map: Record<string, number> = {};
+    subscriptionRequests.forEach(req => {
+      const moduleName = req.requestedModule || 'N/A';
+      map[moduleName] = (map[moduleName] || 0) + 1;
+    });
+    return Object.entries(map)
+      .map(([module, count]) => ({ module, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  }, [subscriptionRequests]);
+
+  const topTenantsByModules = useMemo(() =>
+    [...tenantReports]
+      .map(tenant => ({
+        name: tenant.name || 'Sin nombre',
+        modules: tenant.subscriptions?.length || 0,
+        users: tenant._count?.users || 0,
+      }))
+      .sort((a, b) => b.modules - a.modules)
+      .slice(0, 8),
+  [tenantReports]);
+
+  const approvalsMonthlyTrend = useMemo(() => {
+    const now = new Date().getMonth();
+    return Array.from({ length: 6 }, (_, i) => {
+      const idx = (now - (5 - i) + 12) % 12;
+      const monthRequests = subscriptionRequests.filter(req => {
+        const reqDate = toDate(req.createdAt);
+        return reqDate ? reqDate.getMonth() === idx : false;
+      });
+
+      return {
+        mes: MONTH_NAMES[idx],
+        pendientes: monthRequests.filter(req => req.status === 'PENDING').length,
+        aprobadas: monthRequests.filter(req => req.status === 'APPROVED').length,
+        rechazadas: monthRequests.filter(req => req.status === 'REJECTED').length,
+      };
+    });
+  }, [subscriptionRequests]);
 
   // ── Radar for financial health ─────────────────────────────────────────────
   const radarData = [
@@ -152,6 +280,36 @@ export function ReportesPage() {
       setInvoices(a(invR)); setIncomes(a(incR)); setExpenses(a(expR));
       setProducts(a(prodR)); setCategories(a(catR)); setCustomers(a(custR));
       setOrders(a(ordR)); setPayments(a(payR));
+
+      let tenantsData: any[] = [];
+      let requestsData: any[] = [];
+      let accessGranted = false;
+
+      try {
+        const tenantsResponse = await tenantsService.getAll();
+        tenantsData = a(tenantsResponse);
+        accessGranted = true;
+      } catch {
+        tenantsData = [];
+      }
+
+      try {
+        const requestsResponse = await subscriptionsService.getAllRequests();
+        requestsData = a(requestsResponse);
+        accessGranted = true;
+      } catch {
+        try {
+          const partnerRequestsResponse = await subscriptionsService.getPartnerRequests();
+          requestsData = a(partnerRequestsResponse);
+          accessGranted = true;
+        } catch {
+          requestsData = [];
+        }
+      }
+
+      setTenantReports(tenantsData);
+      setSubscriptionRequests(requestsData);
+      setHasSubscriptionsAccess(accessGranted);
     } catch (e) {
       toast.error('Error al cargar datos del reporte');
     } finally {
@@ -159,7 +317,7 @@ export function ReportesPage() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [dateRange]);
+  useEffect(() => { fetchData(); }, []);
 
   const handleExport = () => {
     const rows = [
@@ -221,7 +379,10 @@ export function ReportesPage() {
             </h1>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                {invoices.length} facturas · {customers.length} clientes · {products.length} productos
+                {filteredInvoices.length} facturas (período) · {customers.length} clientes · {products.length} productos
+              </Badge>
+              <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20 px-2 py-1 text-[10px] font-black uppercase tracking-widest">
+                {activeModulesCount} módulos activos · {pendingRequestCount} pendientes
               </Badge>
               {netProfit >= 0
                 ? <Badge className="bg-green-500/10 text-green-500 border-green-500/20 px-2 py-1 text-[10px] font-black uppercase tracking-widest"><CheckCircle2 className="size-3 mr-1 inline" />Rentable</Badge>
@@ -263,6 +424,8 @@ export function ReportesPage() {
             { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
             { id: 'inventario', label: 'Inventario', icon: Package },
             { id: 'clientes', label: 'Clientes', icon: Users },
+            { id: 'suscripciones', label: 'Suscripciones', icon: Layers },
+            { id: 'aprobaciones', label: 'Aprobaciones', icon: CheckCircle2 },
           ].map(t => (
             <TabsTrigger key={t.id} value={t.id}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
@@ -279,21 +442,55 @@ export function ReportesPage() {
           {/* Strategic KPI Row */}
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
             {[
-              { label: 'Ingresos Totales', value: fmt(totalIncome), sub: `${incomes.length} transacciones`, icon: TrendingUp, color: 'green', trend: '+' },
-              { label: 'Gastos Totales',   value: fmt(totalExpenses), sub: `${expenses.length} registros`, icon: TrendingDown, color: 'red', trend: '-' },
-              { label: 'Utilidad Neta',    value: fmt(netProfit), sub: `Margen: ${grossMargin.toFixed(1)}%`, icon: DollarSign, color: netProfit >= 0 ? 'primary' : 'orange', trend: netProfit >= 0 ? '+' : '-' },
-              { label: 'Facturas Emitidas', value: fmt(totalSales), sub: `${invoices.length} facturas`, icon: FileText, color: 'blue', trend: '+' },
+              {
+                label: 'Ingresos Totales',
+                value: fmt(totalIncome),
+                sub: `${filteredIncomes.length} transacciones`,
+                icon: TrendingUp,
+                cardClass: 'border-green-500/20 bg-gradient-to-br from-green-500/5 to-transparent',
+                iconClass: 'text-green-500',
+                valueClass: 'text-green-400',
+              },
+              {
+                label: 'Gastos Totales',
+                value: fmt(totalExpenses),
+                sub: `${filteredExpenses.length} registros`,
+                icon: TrendingDown,
+                cardClass: 'border-red-500/20 bg-gradient-to-br from-red-500/5 to-transparent',
+                iconClass: 'text-red-500',
+                valueClass: 'text-red-400',
+              },
+              {
+                label: 'Utilidad Neta',
+                value: fmt(netProfit),
+                sub: `Margen: ${grossMargin.toFixed(1)}%`,
+                icon: DollarSign,
+                cardClass: netProfit >= 0
+                  ? 'border-primary/20 bg-gradient-to-br from-primary/5 to-transparent'
+                  : 'border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent',
+                iconClass: netProfit >= 0 ? 'text-primary' : 'text-orange-500',
+                valueClass: netProfit >= 0 ? 'text-primary' : 'text-orange-400',
+              },
+              {
+                label: 'Facturas Emitidas',
+                value: fmt(totalSales),
+                sub: `${filteredInvoices.length} facturas`,
+                icon: FileText,
+                cardClass: 'border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent',
+                iconClass: 'text-blue-500',
+                valueClass: 'text-blue-400',
+              },
             ].map((kpi, i) => (
               <motion.div key={i} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                <Card className={`border-${kpi.color === 'primary' ? 'primary' : kpi.color}-500/20 bg-gradient-to-br from-${kpi.color === 'primary' ? 'primary' : kpi.color}-500/5 to-transparent`}>
+                <Card className={kpi.cardClass}>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-                      <kpi.icon className={`size-4 text-${kpi.color === 'primary' ? 'primary' : kpi.color}-500`} />
+                      <kpi.icon className={`size-4 ${kpi.iconClass}`} />
                       {kpi.label}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className={`text-2xl font-bold text-${kpi.color === 'primary' ? 'primary' : kpi.color}-400`}>{kpi.value}</div>
+                    <div className={`text-2xl font-bold ${kpi.valueClass}`}>{kpi.value}</div>
                     <p className="text-xs text-muted-foreground mt-1">{kpi.sub}</p>
                   </CardContent>
                 </Card>
@@ -408,14 +605,34 @@ export function ReportesPage() {
         <TabsContent value="financiero" className="m-0 mt-4 space-y-5">
           <div className="grid gap-4 md:grid-cols-3">
             {[
-              { title: 'Ingresos Brutos', value: fmt(totalIncome), sub: `${incomes.length} registros`, c: 'green' },
-              { title: 'Gastos Operativos', value: fmt(totalExpenses), sub: `${expenses.length} egresos`, c: 'red' },
-              { title: 'Resultado Neto', value: fmt(netProfit), sub: `Margen: ${grossMargin.toFixed(1)}%`, c: netProfit >= 0 ? 'primary' : 'orange' },
+              {
+                title: 'Ingresos Brutos',
+                value: fmt(totalIncome),
+                sub: `${filteredIncomes.length} registros`,
+                cardClass: 'border-green-500/20 bg-gradient-to-br from-green-500/5 to-transparent',
+                valueClass: 'text-green-400',
+              },
+              {
+                title: 'Gastos Operativos',
+                value: fmt(totalExpenses),
+                sub: `${filteredExpenses.length} egresos`,
+                cardClass: 'border-red-500/20 bg-gradient-to-br from-red-500/5 to-transparent',
+                valueClass: 'text-red-400',
+              },
+              {
+                title: 'Resultado Neto',
+                value: fmt(netProfit),
+                sub: `Margen: ${grossMargin.toFixed(1)}%`,
+                cardClass: netProfit >= 0
+                  ? 'border-primary/20 bg-gradient-to-br from-primary/5 to-transparent'
+                  : 'border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent',
+                valueClass: netProfit >= 0 ? 'text-primary' : 'text-orange-400',
+              },
             ].map((k, i) => (
-              <Card key={i} className={`border-${k.c === 'primary' ? 'primary' : k.c}-500/20 bg-gradient-to-br from-${k.c === 'primary' ? 'primary' : k.c}-500/5 to-transparent`}>
+              <Card key={i} className={k.cardClass}>
                 <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{k.title}</CardTitle></CardHeader>
                 <CardContent>
-                  <p className={`text-2xl font-bold text-${k.c === 'primary' ? 'primary' : k.c}-400`}>{k.value}</p>
+                  <p className={`text-2xl font-bold ${k.valueClass}`}>{k.value}</p>
                   <p className="text-xs text-muted-foreground mt-1">{k.sub}</p>
                 </CardContent>
               </Card>
@@ -491,7 +708,7 @@ export function ReportesPage() {
               { label: 'Total Facturado', value: fmt(totalSales), c: 'text-green-400', bg: 'bg-green-500/10', icon: DollarSign },
               { label: 'Total Cobrado',   value: fmt(totalPaid), c: 'text-blue-400', bg: 'bg-blue-500/10', icon: CheckCircle2 },
               { label: 'Órds. Activas',  value: pendingOrders, c: 'text-amber-400', bg: 'bg-amber-500/10', icon: ShoppingCart },
-              { label: 'Facturas',        value: invoices.length, c: 'text-purple-400', bg: 'bg-purple-500/10', icon: FileText },
+              { label: 'Facturas',        value: filteredInvoices.length, c: 'text-purple-400', bg: 'bg-purple-500/10', icon: FileText },
             ].map((k, i) => (
               <Card key={i} className="p-4">
                 <div className="flex items-center gap-3">
@@ -663,7 +880,7 @@ export function ReportesPage() {
               { label: 'Total Clientes',   value: customers.length, c: 'text-blue-400',   bg: 'bg-blue-500/10',   icon: Users },
               { label: 'Activos',          value: activeClients,    c: 'text-green-400',  bg: 'bg-green-500/10',  icon: CheckCircle2 },
               { label: 'Con Facturas',     value: customerSegments.length, c: 'text-purple-400', bg: 'bg-purple-500/10', icon: FileText },
-              { label: 'Ticket Promedio',  value: fmt(customers.length > 0 ? totalSales / Math.max(invoices.length, 1) : 0), c: 'text-amber-400', bg: 'bg-amber-500/10', icon: Target },
+              { label: 'Ticket Promedio',  value: fmt(customers.length > 0 ? totalSales / Math.max(filteredInvoices.length, 1) : 0), c: 'text-amber-400', bg: 'bg-amber-500/10', icon: Target },
             ].map((k, i) => (
               <Card key={i} className="p-4">
                 <div className="flex items-center gap-3">
@@ -725,6 +942,204 @@ export function ReportesPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* ═══ TAB: SUSCRIPCIONES ═════════════════════════════════════════════ */}
+        <TabsContent value="suscripciones" className="m-0 mt-4 space-y-5">
+          {!hasSubscriptionsAccess ? (
+            <Card className="p-8 text-center">
+              <p className="text-sm text-muted-foreground">No tienes permisos para consultar datos de suscripciones.</p>
+            </Card>
+          ) : (
+            <>
+              <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+                {[
+                  { label: 'Empresas Activas', value: tenantReports.length, c: 'text-blue-400', bg: 'bg-blue-500/10', icon: Users },
+                  { label: 'Módulos Activos', value: activeModulesCount, c: 'text-emerald-400', bg: 'bg-emerald-500/10', icon: Layers },
+                  { label: 'Solicitudes', value: subscriptionRequests.length, c: 'text-purple-400', bg: 'bg-purple-500/10', icon: FileText },
+                  { label: 'Pendientes', value: pendingRequestCount, c: 'text-amber-400', bg: 'bg-amber-500/10', icon: AlertTriangle },
+                ].map((k, i) => (
+                  <Card key={i} className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`rounded-xl p-2.5 ${k.bg}`}><k.icon className={`size-4 ${k.c}`} /></div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{k.label}</p>
+                        <p className={`text-lg font-black ${k.c}`}>{k.value}</p>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card>
+                  <CardHeader><CardTitle className="text-sm">Módulos Más Solicitados</CardTitle></CardHeader>
+                  <CardContent>
+                    {requestedModules.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={280}>
+                        <BarChart data={requestedModules}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="module" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={v => String(v).slice(0, 12)} />
+                          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                          <Tooltip contentStyle={tooltipStyle} />
+                          <Bar dataKey="count" name="Solicitudes" radius={[4, 4, 0, 0]}>
+                            {requestedModules.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                        <p className="text-sm">Sin solicitudes registradas</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader><CardTitle className="text-sm">Distribución de Planes por Empresa</CardTitle></CardHeader>
+                  <CardContent>
+                    {planDistribution.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={280}>
+                        <PieChart>
+                          <Pie data={planDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100}
+                            label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                            {planDistribution.map((entry, i) => <Cell key={i} fill={entry.color} stroke="transparent" />)}
+                          </Pie>
+                          <Tooltip contentStyle={tooltipStyle} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                        <p className="text-sm">Sin empresas registradas</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader><CardTitle className="text-sm">Empresas con Mayor Cobertura de Módulos</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {topTenantsByModules.length > 0 ? topTenantsByModules.map((tenant, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-muted/20">
+                        <div>
+                          <p className="text-sm font-bold">{tenant.name}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-widest">{tenant.users} usuarios</p>
+                        </div>
+                        <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[10px] font-black uppercase">
+                          {tenant.modules} módulos
+                        </Badge>
+                      </div>
+                    )) : (
+                      <p className="text-sm text-center text-muted-foreground py-8">Sin datos para mostrar</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+
+        {/* ═══ TAB: APROBACIONES ═══════════════════════════════════════════════ */}
+        <TabsContent value="aprobaciones" className="m-0 mt-4 space-y-5">
+          {!hasSubscriptionsAccess ? (
+            <Card className="p-8 text-center">
+              <p className="text-sm text-muted-foreground">No tienes permisos para consultar aprobaciones.</p>
+            </Card>
+          ) : (
+            <>
+              <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+                {[
+                  { label: 'Pendientes', value: pendingRequestCount, c: 'text-amber-400', bg: 'bg-amber-500/10', icon: AlertTriangle },
+                  { label: 'Aprobadas', value: approvedRequestCount, c: 'text-emerald-400', bg: 'bg-emerald-500/10', icon: CheckCircle2 },
+                  { label: 'Rechazadas', value: rejectedRequestCount, c: 'text-rose-400', bg: 'bg-rose-500/10', icon: TrendingDown },
+                  { label: 'Total', value: subscriptionRequests.length, c: 'text-blue-400', bg: 'bg-blue-500/10', icon: FileText },
+                ].map((k, i) => (
+                  <Card key={i} className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`rounded-xl p-2.5 ${k.bg}`}><k.icon className={`size-4 ${k.c}`} /></div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{k.label}</p>
+                        <p className={`text-lg font-black ${k.c}`}>{k.value}</p>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card>
+                  <CardHeader><CardTitle className="text-sm">Evolución de Aprobaciones (6 meses)</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={280}>
+                      <LineChart data={approvalsMonthlyTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Legend />
+                        <Line type="monotone" dataKey="pendientes" stroke="#f59e0b" strokeWidth={2} name="Pendientes" />
+                        <Line type="monotone" dataKey="aprobadas" stroke="#10b981" strokeWidth={2} name="Aprobadas" />
+                        <Line type="monotone" dataKey="rechazadas" stroke="#ef4444" strokeWidth={2} name="Rechazadas" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader><CardTitle className="text-sm">Distribución por Estado</CardTitle></CardHeader>
+                  <CardContent>
+                    {requestsByStatus.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={280}>
+                        <PieChart>
+                          <Pie data={requestsByStatus} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={100}
+                            label={({ status, count }) => `${status}: ${count}`} labelLine={false}>
+                            {requestsByStatus.map((entry, i) => <Cell key={i} fill={entry.color} stroke="transparent" />)}
+                          </Pie>
+                          <Tooltip contentStyle={tooltipStyle} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                        <p className="text-sm">Sin solicitudes registradas</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader><CardTitle className="text-sm">Últimas Solicitudes</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {subscriptionRequests.slice(0, 10).map((req, i) => (
+                      <div key={req.id || i} className="flex items-center justify-between p-3 rounded-lg bg-muted/20">
+                        <div>
+                          <p className="text-sm font-bold">{req.requestedModule}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                            {req.clientTenant?.name || 'Empresa no identificada'}
+                          </p>
+                        </div>
+                        <Badge className={
+                          req.status === 'PENDING'
+                            ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                            : req.status === 'APPROVED'
+                              ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                              : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                        }>
+                          {req.status}
+                        </Badge>
+                      </div>
+                    ))}
+                    {subscriptionRequests.length === 0 && (
+                      <p className="text-sm text-center text-muted-foreground py-8">Sin solicitudes para mostrar</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </div>

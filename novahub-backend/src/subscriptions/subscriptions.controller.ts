@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
 import { CreateSubscriptionRequestDto } from './dto/create-subscription-request.dto';
 import { UpdateSubscriptionStatusDto } from './dto/update-subscription-status.dto';
+import { ToggleModuleSubscriptionDto } from './dto/toggle-module-subscription.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantsService } from '../tenants/tenants.service';
 
@@ -56,5 +57,21 @@ export class SubscriptionsController {
   @ApiOperation({ summary: 'Obtener módulos habilitados para un tenant' })
   getEnabledModules(@Param('clientTenantId') clientTenantId: string) {
     return this.subscriptionsService.getEnabledModules(clientTenantId);
+  }
+
+  @Patch('module-status')
+  @ApiOperation({ summary: 'Activar o desactivar módulo de forma directa (Solo Super Admin)' })
+  async toggleModuleStatus(@Request() req, @Body() dto: ToggleModuleSubscriptionDto) {
+    if (req.user.role.toUpperCase() !== 'ADMIN') {
+      throw new ForbiddenException('Solo Super Admin puede cambiar estado de módulos directamente');
+    }
+
+    let partnerId = await this.tenantsService.getPartnerIdByUser(req.user.userId);
+    if (!partnerId) {
+      const firstPartner = await this.tenantsService.getFirstPartner();
+      partnerId = firstPartner?.id || null;
+    }
+
+    return this.subscriptionsService.toggleModuleStatus(partnerId, dto);
   }
 }

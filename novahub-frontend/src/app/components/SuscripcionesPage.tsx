@@ -291,7 +291,12 @@ export function SuscripcionesPage() {
 
   const handleToggleModule = (tenantId: string, moduleName: string, currentlyActive: boolean) => {
     if (currentlyActive) {
-      return; // Ya está activo, no hacer nada
+      if (user?.role?.toLowerCase() !== 'admin') {
+        toast.info('Solo Super Admin puede desactivar módulos directamente');
+        return;
+      }
+      handleDirectDisable(tenantId, moduleName);
+      return;
     }
 
     if (user?.role?.toLowerCase() !== 'admin') {
@@ -326,6 +331,28 @@ export function SuscripcionesPage() {
     } catch (error: any) {
       console.error('Error activación:', error);
       toast.error(error.response?.data?.message || 'Error al activar módulo');
+      fetchData();
+    }
+  };
+
+  const handleDirectDisable = async (tenantId: string, moduleName: string) => {
+    if (!tenantId) {
+      toast.error('ID de empresa inválido. Por favor recarga la página.');
+      return;
+    }
+
+    try {
+      await subscriptionsService.toggleModuleStatus({
+        clientTenantId: tenantId,
+        module: moduleName,
+        isActive: false,
+        notes: 'Desactivación directa por Super Admin'
+      });
+      toast.success('Módulo desactivado exitosamente');
+      fetchData();
+    } catch (error: any) {
+      console.error('Error desactivación:', error);
+      toast.error(error?.message || 'Error al desactivar módulo');
       fetchData();
     }
   };
@@ -387,7 +414,7 @@ export function SuscripcionesPage() {
       case 'BASIC': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
       case 'PROFESSIONAL': return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
       case 'ENTERPRISE': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-      default: return 'bg-white/10 text-white/40 border-white/10';
+      default: return 'bg-muted/30 text-muted-foreground border-border/50';
     }
   };
 
@@ -400,7 +427,7 @@ export function SuscripcionesPage() {
         className="flex flex-col md:flex-row md:items-center justify-between gap-4"
       >
         <div>
-          <h1 className="text-4xl font-black tracking-tighter text-white flex items-center gap-3 uppercase italic">
+          <h1 className="text-4xl font-black tracking-tighter text-foreground flex items-center gap-3 uppercase italic">
             <Zap className="size-10 text-emerald-500 fill-emerald-500/20" />
             Control <span className="text-emerald-500">Nova</span>Hub
           </h1>
@@ -408,7 +435,7 @@ export function SuscripcionesPage() {
             <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
               Tenancy Master Console
             </Badge>
-            <span className="text-white/30 text-xs font-medium">
+            <span className="text-muted-foreground text-xs font-medium">
               V 2.4.0 — Aprovisionamiento Real
             </span>
           </div>
@@ -421,7 +448,7 @@ export function SuscripcionesPage() {
                 <Plus className="size-5" /> Registrar Empresa
               </Button>
             </DialogTrigger>
-            <DialogContent className="border-white/5 sm:max-w-[500px] shadow-2xl">
+            <DialogContent className="border-border/50 sm:max-w-[500px] shadow-2xl">
               <DialogHeader>
                 <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter">{selectedTenant ? 'Editar Entidad' : 'Nueva Entidad Tenant'}</DialogTitle>
                 <DialogDescription> Configura el entorno aislado para el cliente. </DialogDescription>
@@ -429,10 +456,10 @@ export function SuscripcionesPage() {
               <div className="grid gap-6 py-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-white/40 ml-1">Nombre Comercial</Label>
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Nombre Comercial</Label>
                     <Input 
                       placeholder="Empresa S.A." 
-                      className="bg-white/5 border-white/10 h-11 rounded-xl" 
+                      className="bg-muted/10 border-border/50 h-11 rounded-xl" 
                       value={tenantForm.name}
                       onChange={e => {
                         const newName = e.target.value;
@@ -446,29 +473,29 @@ export function SuscripcionesPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-white/40 ml-1">URL Personalizada (slug)</Label>
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">URL Personalizada (slug)</Label>
                     <Input 
                       placeholder="mi-empresa (auto-generado del nombre)" 
-                      className="bg-white/5 border-white/10 h-11 rounded-xl" 
+                      className="bg-muted/10 border-border/50 h-11 rounded-xl" 
                       disabled={!!selectedTenant}
                       value={tenantForm.slug}
                       onChange={e => setTenantForm({...tenantForm, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-')})}
                     />
-                    <p className="text-[9px] text-white/30 ml-1">{tenantForm.slug || 'auto'}.novahub.io</p>
+                    <p className="text-[9px] text-muted-foreground ml-1">{tenantForm.slug || 'auto'}.novahub.io</p>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-black tracking-widest text-white/40 ml-1">Administrador de Cuenta</Label>
+                  <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Administrador de Cuenta</Label>
                   <div className="grid grid-cols-2 gap-4">
                     <Input 
                       placeholder="Nombre Completo" 
-                      className="bg-white/5 border-white/10 h-11 rounded-xl"
+                      className="bg-muted/10 border-border/50 h-11 rounded-xl"
                       value={tenantForm.adminName}
                       onChange={e => setTenantForm({...tenantForm, adminName: e.target.value})}
                     />
                     <Input 
                       placeholder="correo@empresa.com" 
-                      className="bg-white/5 border-white/10 h-11 rounded-xl"
+                      className="bg-muted/10 border-border/50 h-11 rounded-xl"
                       value={tenantForm.adminEmail}
                       onChange={e => setTenantForm({...tenantForm, adminEmail: e.target.value})}
                     />
@@ -476,19 +503,19 @@ export function SuscripcionesPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-white/40 ml-1">Vertical de Industria</Label>
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Vertical de Industria</Label>
                     <Input 
                       placeholder="Ej: Retail, Manufactura, Tecnología, Salud..." 
-                      className="bg-white/5 border-white/10 h-11 rounded-xl"
+                      className="bg-muted/10 border-border/50 h-11 rounded-xl"
                       value={tenantForm.industry}
                       onChange={e => setTenantForm({...tenantForm, industry: e.target.value})}
                     />
-                    <p className="text-[9px] text-white/30 ml-1">Cualquiera de las 50+ industrias disponibles</p>
+                    <p className="text-[9px] text-muted-foreground ml-1">Cualquiera de las 50+ industrias disponibles</p>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-white/40 ml-1">Plan de Facturación</Label>
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Plan de Facturación</Label>
                     <Select value={tenantForm.plan} onValueChange={v => setTenantForm({...tenantForm, plan: v})}>
-                      <SelectTrigger className="bg-white/5 border-white/10 h-11 rounded-xl">
+                      <SelectTrigger className="bg-muted/10 border-border/50 h-11 rounded-xl">
                         <SelectValue placeholder="Seleccionar plan..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -498,21 +525,21 @@ export function SuscripcionesPage() {
                         <SelectItem value="CUSTOM">Custom - Personalizado a medida</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-[9px] text-white/30 ml-1">Selecciona el plan de facturación</p>
+                    <p className="text-[9px] text-muted-foreground ml-1">Selecciona el plan de facturación</p>
                   </div>
                 </div>
                 
                 {/* Upload Logo */}
                 <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-black tracking-widest text-white/40 ml-1">Logo de Empresa (Opcional)</Label>
+                  <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Logo de Empresa (Opcional)</Label>
                   <div className="flex items-center gap-4">
                     {(logoPreview || tenantForm.logo) && (
-                      <img src={logoPreview || tenantForm.logo} alt="Logo preview" className="size-16 rounded-xl object-cover border-2 border-white/10" />
+                      <img src={logoPreview || tenantForm.logo} alt="Logo preview" className="size-16 rounded-xl object-cover border-2 border-border/50" />
                     )}
                     <Input 
                       type="file" 
                       accept="image/*"
-                      className="bg-white/5 border-white/10 h-11 rounded-xl file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-emerald-500 file:text-white hover:file:bg-emerald-600"
+                      className="bg-muted/10 border-border/50 h-11 rounded-xl file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-emerald-500 file:text-white hover:file:bg-emerald-600"
                       onChange={e => {
                         const file = e.target.files?.[0];
                         if (file) {
@@ -524,11 +551,11 @@ export function SuscripcionesPage() {
                       }}
                     />
                   </div>
-                  <p className="text-[9px] text-white/30 ml-1">PNG, JPG o WEBP - Máx. 2MB</p>
+                  <p className="text-[9px] text-muted-foreground ml-1">PNG, JPG o WEBP - Máx. 2MB</p>
                 </div>
               </div>
               <DialogFooter className="gap-3">
-                <Button variant="outline" className="border-white/5 rounded-xl h-11" onClick={() => { setIsTenantDialogOpen(false); setSelectedTenant(null); resetTenantForm(); }}>Cancelar</Button>
+                <Button variant="outline" className="border-border/50 rounded-xl h-11" onClick={() => { setIsTenantDialogOpen(false); setSelectedTenant(null); resetTenantForm(); }}>Cancelar</Button>
                 <Button className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl h-11 px-8 font-bold" onClick={selectedTenant ? handleUpdateTenant : handleCreateTenant}>
                   {selectedTenant ? 'Guardar Cambios' : 'Crear Entidad'}
                 </Button>
@@ -621,11 +648,11 @@ export function SuscripcionesPage() {
       </Dialog>
 
       <Tabs defaultValue="active" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 lg:w-[400px] bg-[#111] border border-white/5 p-1 h-12">
-          <TabsTrigger value="active" className="text-white/70 hover:text-white hover:bg-white/10 data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-black tracking-widest gap-2">
+        <TabsList className="grid w-full grid-cols-2 lg:w-[400px] bg-muted/20 border border-border/50 p-1 h-12">
+          <TabsTrigger value="active" className="text-muted-foreground hover:text-foreground hover:bg-muted/40 data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-black tracking-widest gap-2">
             <Building2 className="size-4" /> Gestión Empresas
           </TabsTrigger>
-          <TabsTrigger value="requests" className="text-white/70 hover:text-white hover:bg-white/10 data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-black tracking-widest gap-2">
+          <TabsTrigger value="requests" className="text-muted-foreground hover:text-foreground hover:bg-muted/40 data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-black tracking-widest gap-2">
             <Clock className="size-4" /> {user?.role === 'admin' ? 'Aprobaciones' : 'Solicitudes'}
             {requests.filter(r => r.status === 'PENDING').length > 0 && (
               <Badge className="bg-rose-500 text-[10px] size-5 p-0 flex items-center justify-center rounded-full ml-1 animate-pulse border-none">
@@ -679,7 +706,7 @@ export function SuscripcionesPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="text-white/20 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-xl"
+                          className="text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 rounded-xl"
                           onClick={() => openEditTenant(tenant)}
                         >
                           <Edit2 className="size-5" />
@@ -687,7 +714,7 @@ export function SuscripcionesPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="text-white/20 hover:text-blue-500 hover:bg-blue-500/10 rounded-xl"
+                          className="text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10 rounded-xl"
                           onClick={() => { setSelectedTenant(tenant); setIsUserDialogOpen(true); }}
                         >
                           <Users className="size-5" />
@@ -695,7 +722,7 @@ export function SuscripcionesPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="text-white/20 hover:text-purple-500 hover:bg-purple-500/10 rounded-xl"
+                          className="text-muted-foreground hover:text-purple-500 hover:bg-purple-500/10 rounded-xl"
                           onClick={() => handleViewDetails(tenant)}
                           title="Ver detalles"
                         >
@@ -704,7 +731,7 @@ export function SuscripcionesPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="text-white/20 hover:text-rose-500 hover:bg-rose-500/10 rounded-xl"
+                          className="text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded-xl"
                           onClick={() => handleDeleteTenant(tenant.id, tenant.name)}
                           title="Eliminar permanentemente"
                         >
@@ -804,10 +831,10 @@ export function SuscripcionesPage() {
         <TabsContent value="requests" className="mt-6">
           <div className="grid grid-cols-1 gap-4">
             {requests.length === 0 ? (
-              <Card className="bg-[#0a0a0a] border-dashed border-white/10 py-20">
+              <Card className="bg-card border-dashed border-border/50 py-20">
                 <div className="flex flex-col items-center justify-center text-center">
-                  <Clock className="size-12 text-white/10 mb-4" />
-                  <p className="text-white/60 font-bold uppercase tracking-widest text-xs">No hay solicitudes pendientes en este momento.</p>
+                  <Clock className="size-12 text-muted-foreground/30 mb-4" />
+                  <p className="text-muted-foreground font-bold uppercase tracking-widest text-xs">No hay solicitudes pendientes en este momento.</p>
                 </div>
               </Card>
             ) : (
@@ -863,7 +890,7 @@ export function SuscripcionesPage() {
                           </Button>
                         </>
                        ) : (
-                         <Button variant="ghost" disabled className="text-white/20 uppercase text-[10px] font-black tracking-widest italic">
+                         <Button variant="ghost" disabled className="text-muted-foreground uppercase text-[10px] font-black tracking-widest italic">
                            {req.status === 'PENDING' ? 'En espera de revisión' : 'Solicitud Finalizada'}
                          </Button>
                        )}
@@ -986,7 +1013,7 @@ export function SuscripcionesPage() {
 
       {/* Dialog de Detalles de Empresa */}
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto border-white/5">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto border-border/50">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
               <Building2 className="size-6 text-emerald-500" />

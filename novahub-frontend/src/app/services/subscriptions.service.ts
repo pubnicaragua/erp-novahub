@@ -31,6 +31,13 @@ export interface UpdateSubscriptionStatusDto {
   status: 'APPROVED' | 'REJECTED';
 }
 
+export interface ToggleModuleStatusDto {
+  clientTenantId: string;
+  module: string;
+  isActive: boolean;
+  notes?: string;
+}
+
 export const subscriptionsService = {
   createRequest: (data: CreateSubscriptionRequestDto) => 
     api.post<SubscriptionRequest>('/subscriptions/request', data),
@@ -43,6 +50,9 @@ export const subscriptionsService = {
     
   updateRequestStatus: (id: string, data: UpdateSubscriptionStatusDto) => 
     api.patch<SubscriptionRequest>(`/subscriptions/requests/${id}/status`, data),
+
+  toggleModuleStatus: (data: ToggleModuleStatusDto) =>
+    api.patch('/subscriptions/module-status', data),
     
   getEnabledModules: (clientTenantId: string) => 
     api.get<string[]>(`/subscriptions/enabled/${clientTenantId}`),
