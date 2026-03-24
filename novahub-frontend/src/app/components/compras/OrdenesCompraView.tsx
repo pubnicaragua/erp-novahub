@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, Package, FilePlus
+  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -83,6 +83,7 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
       render: (val, row) => (
         <span className="font-black tabular-nums text-foreground">
           {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
+
         </span>
       ) },
     { key: 'status',   header: 'Estado',    width: '120px', editable: true, type: 'select', options: statusOpts,
@@ -92,6 +93,22 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
   const handleUpdate = async (id: string | number, updates: Partial<PurchaseOrder>) => {
     try { await purchaseOrdersService.update(id as string, updates); toast.success('Orden actualizada'); onRefresh(); }
     catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!pendingDeleteId) return;
+    setDeleteLoading(true);
+    try {
+      await purchaseOrdersService.delete(pendingDeleteId);
+      toast.success('Orden de compra eliminada correctamente');
+      setPendingDeleteId(null);
+      if (editingId === pendingDeleteId) setEditingId(null);
+      onRefresh();
+    } catch {
+      toast.error('Error al eliminar');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const handleSaveDoc = async () => {
@@ -161,11 +178,7 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
           <div className="flex items-center gap-3">
              {!isNew && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => {
-                     {
-                         try { await purchaseOrdersService.delete(editingId); toast.success('Eliminado'); setEditingId(null); onRefresh(); } catch { toast.error('Error'); }
-                     }
-                  }}>
+                  onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
@@ -362,6 +375,15 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
+        />
+        <ConfirmDialog
+          open={!!pendingDeleteId}
+          onOpenChange={(open) => !open && setPendingDeleteId(null)}
+          title="Eliminar Orden de Compra"
+          description="¿Estás seguro de que deseas eliminar esta orden? Esta acción no se puede deshacer."
+          confirmLabel="Eliminar Orden"
+          onConfirm={handleDeleteConfirm}
+          loading={deleteLoading}
         />
       </div>
     </div>

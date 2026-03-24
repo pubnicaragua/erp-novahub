@@ -370,7 +370,7 @@ export class SalesService {
       });
 
       // Update customer balance (increase what they owe)
-      if (invoice.balance > 0) {
+      if (Number(invoice.balance) > 0) {
         await tx.customer.update({
           where: { id: order.customerId },
           data: { balance: { increment: invoice.balance } },

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, TrendingDown, ChevronLeft
+  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -52,7 +52,6 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
            currency: 'NIO',
            exchangeRate: globalRate,
            status: 'PENDING',
-           paymentStatus: 'UNPAID',
            items: [],
            subtotal: 0,
            taxAmount: 0,
@@ -85,6 +84,7 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
       render: (val, row) => (
         <span className="font-black tabular-nums text-rose-500">
           {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
+
         </span>
       ) },
     { key: 'status',   header: 'Estado',      width: '110px', editable: true, type: 'select', options: statusOpts,
@@ -94,6 +94,22 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
   const handleUpdate = async (id: string | number, updates: Partial<SupplierInvoice>) => {
     try { await billsService.update(id as string, updates); toast.success('Factura actualizada'); onRefresh(); }
     catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!pendingDeleteId) return;
+    setDeleteLoading(true);
+    try {
+      await billsService.delete(pendingDeleteId);
+      toast.success('Factura eliminada correctamente');
+      setPendingDeleteId(null);
+      if (editingId === pendingDeleteId) setEditingId(null);
+      onRefresh();
+    } catch {
+      toast.error('Error al eliminar factura');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const handleSaveDoc = async () => {
@@ -167,11 +183,7 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
           <div className="flex items-center gap-3">
              {!isNew && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => {
-                     {
-                         try { await billsService.delete(editingId); toast.success('Eliminado'); setEditingId(null); onRefresh(); } catch { toast.error('Error'); }
-                     }
-                  }}>
+                  onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
@@ -221,7 +233,7 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
                   <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
                   <select 
                     value={localDoc.currency || 'NIO'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value })}
+                    onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any })}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
                   >
                     <option value="NIO">NIO (Cordobas)</option>
@@ -366,6 +378,15 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
+        />
+        <ConfirmDialog
+          open={!!pendingDeleteId}
+          onOpenChange={(open) => !open && setPendingDeleteId(null)}
+          title="Eliminar Factura"
+          description="¿Estás seguro de que deseas eliminar esta factura? Esta acción no se puede deshacer."
+          confirmLabel="Eliminar Factura"
+          onConfirm={handleDeleteConfirm}
+          loading={deleteLoading}
         />
       </div>
     </div>

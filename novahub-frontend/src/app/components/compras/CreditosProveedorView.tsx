@@ -11,14 +11,15 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; }
 
 const statusOpts = [
-  { label: 'Borrador',  value: 'DRAFT',   color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Emitido',   value: 'ISSUED',  color: 'bg-blue-500/10 text-blue-500' },
-  { label: 'Aplicado',  value: 'APPLIED', color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Anulado',   value: 'VOIDED',  color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Borrador',  value: 'draft',   color: 'bg-muted/20 text-muted-foreground' },
+  { label: 'Emitido',   value: 'issued',  color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Aplicado',  value: 'applied', color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Anulado',   value: 'voided',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
 export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
@@ -29,6 +30,8 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<SupplierCredit> | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     suppliersService.getAll().then(res => {
@@ -44,7 +47,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
            supplierId: '',
            date: new Date().toISOString(),
            reason: '',
-           status: 'ISSUED',
+           status: 'issued',
            items: [],
            total: 0
          });
@@ -72,7 +75,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     { key: 'total',    header: 'Total',      width: '120px',
       render: (val) => <span className="font-black tabular-nums">{formatConvertedAmount(Number(val||0), 'USD')}</span> },
     { key: 'status',   header: 'Estado',     width: '110px', editable: true, type: 'select', options: statusOpts,
-      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
+      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toLowerCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<SupplierCredit>) => {
@@ -80,7 +83,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
   };
 
-  const recalculatedTotal = (localDoc?.items || []).reduce((acc, it) => acc + (Number(it.quantity || 0) * Number(it.unitPrice || 0)) * (1 + Number(it.taxRate||0)/100), 0);
+  const recalculatedTotal = (localDoc?.items || []).reduce((acc, it) => acc + (Number(it.quantity || 0) * Number(it.unitPrice || 0)), 0);
   
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
@@ -105,6 +108,22 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     }
   };
 
+  const handleDeleteConfirm = async () => {
+    if (!pendingDeleteId) return;
+    setDeleteLoading(true);
+    try {
+      await vendorCreditsService.delete(pendingDeleteId);
+      toast.success('Crédito eliminado exitosamente');
+      setPendingDeleteId(null);
+      setEditingId(null);
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Error al eliminar');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const handleDeleteItem = (idx: number) => {
     if (!localDoc) return;
     const newItems = [...(localDoc.items || [])];
@@ -117,20 +136,17 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     const newItems = [...(localDoc.items || [])];
     newItems[idx] = { ...newItems[idx], [field]: value };
     
-    if (['quantity', 'unitPrice', 'taxRate'].includes(field)) {
+    if (['quantity', 'unitPrice'].includes(field)) {
        const q = Number(newItems[idx].quantity || 0);
        const p = Number(newItems[idx].unitPrice || 0);
-       const t = Number(newItems[idx].taxRate || 0);
-       const sub = q * p;
-       const tax = sub * (t / 100);
-       newItems[idx].total = sub + tax;
+       newItems[idx].total = q * p;
     }
     setLocalDoc({ ...localDoc, items: newItems as any });
   };
 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
-    const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
+    const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toLowerCase());
 
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
@@ -147,11 +163,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
           <div className="flex items-center gap-3">
              {!isNew && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => {
-                     if(confirm('¿Seguro que deseas eliminar?')){
-                         toast.info('Eliminado (Simulación)'); setEditingId(null);
-                     }
-                  }}>
+                  onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
@@ -182,7 +194,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <select 
-                    value={localDoc.status || 'ISSUED'} 
+                    value={localDoc.status || 'issued'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                     className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
                   >
@@ -202,7 +214,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
               <div className="flex items-center justify-between mb-4">
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalles</p>
                 <Button variant="outline" size="sm" onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, taxRate: 0, total: 0 }];
+                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, total: 0 }];
                   setLocalDoc({ ...localDoc, items: newItems as any });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                   <Plus className="size-3 mr-2" /> Agregar Item
@@ -211,25 +223,21 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
               
               <div className="space-y-2">
                 <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                  <div className="col-span-4">Descripción</div>
+                  <div className="col-span-5">Descripción</div>
                   <div className="col-span-2 text-right">Cant.</div>
-                  <div className="col-span-2 text-right">Precio Unitario</div>
-                  <div className="col-span-2 text-right">Imp. %</div>
+                  <div className="col-span-3 text-right">Precio Unitario</div>
                   <div className="col-span-2 text-right">Total</div>
                 </div>
                 {(localDoc.items || []).map((item: any, idx: number) => (
                   <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
-                    <div className="col-span-4">
+                    <div className="col-span-5">
                       <Input value={item.description || ''} onChange={(e) => handleItemChange(idx, 'description', e.target.value)} className="h-8 text-xs" placeholder="Concepto" />
                     </div>
                     <div className="col-span-2">
                       <Input type="number" min="0" value={item.quantity === 0 ? '' : item.quantity} onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
                     </div>
-                    <div className="col-span-2">
+                    <div className="col-span-3">
                       <Input type="number" min="0" value={item.unitPrice === 0 ? '' : item.unitPrice} onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
-                    </div>
-                    <div className="col-span-2">
-                      <Input type="number" min="0" value={item.taxRate === 0 ? '' : item.taxRate} onChange={(e) => handleItemChange(idx, 'taxRate', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
                     </div>
                     <div className="col-span-2 flex items-center justify-end gap-2">
                       <span className="text-xs font-black w-20 text-right tabular-nums">{formatConvertedAmount(Number(item.total || 0), 'USD')}</span>
@@ -249,15 +257,24 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
             </CardContent>
           </Card>
         </div>
+
+        <ConfirmDialog
+          open={!!pendingDeleteId}
+          onOpenChange={(open) => !open && setPendingDeleteId(null)}
+          loading={deleteLoading}
+          title="Eliminar Crédito"
+          description="¿Estás seguro de eliminar esta nota de crédito? Esta acción no se puede deshacer y los montos a favor del proveedor serán revertidos."
+          onConfirm={handleDeleteConfirm}
+        />
       </div>
     );
   }
 
-  const disponible = data.filter(c => (c.status||'').toUpperCase() === 'ISSUED').reduce((a,c) => a+Number(c.total||0), 0);
+  const disponible = data.filter(c => (c.status||'').toLowerCase() === 'issued').reduce((a,c) => a+Number(c.total||0), 0);
   const kpis = [
     { title: 'Crédito Disponible', value: formatConvertedAmount(disponible, 'USD'),                                                icon: TrendingUp,      color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Total Notas',        value: data.length,                                                                         icon: Hash,            color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Emitidas',           value: data.filter(c => (c.status||'').toUpperCase() === 'ISSUED').length,                                icon: BadgeDollarSign, color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
+    { title: 'Emitidas',           value: data.filter(c => (c.status||'').toLowerCase() === 'issued').length,                                icon: BadgeDollarSign, color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
   ];
 
   return (
@@ -284,11 +301,20 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
           actions={(row) => (
              <div className="flex gap-1">
               <Button title="Editar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { toast.info('Eliminado (Simulacro)'); onRefresh(); }}><Trash2 className="size-4" /></Button>
+              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />
       </div>
+
+      <ConfirmDialog
+        open={!!pendingDeleteId}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        loading={deleteLoading}
+        title="Eliminar Crédito"
+        description="¿Estás seguro de eliminar esta nota de crédito? Esta acción no se puede deshacer y los montos a favor del proveedor serán revertidos."
+        onConfirm={handleDeleteConfirm}
+      />
     </div>
   );
 }

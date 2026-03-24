@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExchangeRateService } from '../common/exchange-rate.service';
 
@@ -172,7 +172,17 @@ export class PurchasesService {
   }
 
   async removeOrder(id: string, clientTenantId: string) {
-    return this.prisma.purchaseOrder.delete({ where: { id, clientTenantId } });
+    const receipts = await this.prisma.purchaseReceipt.findFirst({ where: { purchaseOrderId: id } });
+    if (receipts) throw new BadRequestException('No se puede eliminar la orden porque tiene recepciones generadas. Elimine las recepciones primero.');
+
+    const invoices = await this.prisma.supplierInvoice.findFirst({ where: { purchaseOrderId: id } });
+    if (invoices) throw new BadRequestException('No se puede eliminar la orden porque tiene facturas generadas. Elimine las facturas primero.');
+
+    return this.prisma.$transaction(async (prisma) => {
+      // Fix: Delete child items manually due to missing onDelete: Cascade
+      await prisma.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: id } });
+      return prisma.purchaseOrder.delete({ where: { id, clientTenantId } });
+    });
   }
 
   async updateOrder(id: string, data: any, clientTenantId: string) {
@@ -228,7 +238,10 @@ export class PurchasesService {
   }
 
   async removeReceipt(id: string, clientTenantId: string) {
-    return this.prisma.purchaseReceipt.delete({ where: { id, clientTenantId } });
+    return this.prisma.$transaction(async (prisma) => {
+      await prisma.purchaseReceiptItem.deleteMany({ where: { purchaseReceiptId: id } });
+      return prisma.purchaseReceipt.delete({ where: { id, clientTenantId } });
+    });
   }
 
   // ─── FACTURAS DE PROVEEDOR ────────────────────────────────────────────────
@@ -300,6 +313,12 @@ export class PurchasesService {
   }
 
   async removeInvoice(id: string, clientTenantId: string) {
+    const payments = await this.prisma.paymentMade.findFirst({ where: { supplierInvoiceId: id } });
+    if (payments) throw new BadRequestException('No se puede eliminar la factura porque tiene pagos registrados. Elimine los pagos primero.');
+
+    const credits = await this.prisma.supplierCredit.findFirst({ where: { supplierInvoiceId: id } });
+    if (credits) throw new BadRequestException('No se puede eliminar la factura porque de ella se desprenden notas de crédito.');
+
     return this.prisma.$transaction(async (prisma) => {
       const invoice = await prisma.supplierInvoice.findUnique({ where: { id, clientTenantId } });
       if (!invoice) return null;
@@ -310,6 +329,8 @@ export class PurchasesService {
         data: { balance: { decrement: invoice.total } }
       });
 
+      // Delete child items manually
+      await prisma.supplierInvoiceItem.deleteMany({ where: { supplierInvoiceId: id } });
       return prisma.supplierInvoice.delete({ where: { id } });
     });
   }
@@ -361,7 +382,10 @@ export class PurchasesService {
   }
 
   async removeRecurringInvoice(id: string, clientTenantId: string) {
-    return this.prisma.recurringSupplierInvoice.delete({ where: { id, clientTenantId } });
+    return this.prisma.$transaction(async (prisma) => {
+      await prisma.recurringSupplierInvoiceItem.deleteMany({ where: { recurringSupplierInvoiceId: id } });
+      return prisma.recurringSupplierInvoice.delete({ where: { id, clientTenantId } });
+    });
   }
 
   // ─── PAGOS REALIZADOS ─────────────────────────────────────────────────────
@@ -509,6 +533,8 @@ export class PurchasesService {
         data: { balance: { increment: credit.total } }
       });
 
+      // Delete items
+      await prisma.supplierCreditItem.deleteMany({ where: { supplierCreditId: id } });
       return prisma.supplierCredit.delete({ where: { id } });
     });
   }
@@ -564,7 +590,10 @@ export class PurchasesService {
   }
 
   async removeExpense(id: string, clientTenantId: string) {
-    return this.prisma.expense.delete({ where: { id, clientTenantId } });
+    return this.prisma.$transaction(async (prisma) => {
+      await prisma.recurringExpenseExecution.deleteMany({ where: { expenseId: id } });
+      return prisma.expense.delete({ where: { id, clientTenantId } });
+    });
   }
 
   // ─── GASTOS RECURRENTES ───────────────────────────────────────────────────
@@ -620,6 +649,9 @@ export class PurchasesService {
   }
 
   async removeRecurringExpense(id: string, clientTenantId: string) {
-    return this.prisma.recurringExpense.delete({ where: { id, clientTenantId } });
+    return this.prisma.$transaction(async (prisma) => {
+      await prisma.recurringExpenseExecution.deleteMany({ where: { recurringExpenseId: id } });
+      return prisma.recurringExpense.delete({ where: { id, clientTenantId } });
+    });
   }
 }

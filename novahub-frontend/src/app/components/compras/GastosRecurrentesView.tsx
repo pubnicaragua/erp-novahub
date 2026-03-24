@@ -87,6 +87,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
       ) },
     { key: 'frequency',   header: 'Frecuencia',  width: '120px', editable: true, type: 'select', options: freqOpts,
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{freqMap[(val||'').toUpperCase()]||val}</Badge> },
+
     { key: 'startDate',   header: 'Inicio',      width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'status',      header: 'Estado',      width: '110px', editable: true, type: 'select', options: statusOpts,
@@ -96,6 +97,22 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
   const handleUpdate = async (id: string | number, updates: Partial<RecurringExpense>) => {
     try { await recurringExpensesService.update(id as string, updates); toast.success('Actualizado'); onRefresh(); } 
     catch { toast.error('Error al actualizar'); throw new Error(); }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!pendingDeleteId) return;
+    setDeleteLoading(true);
+    try {
+      await recurringExpensesService.delete(pendingDeleteId);
+      toast.success('Gasto recurrente eliminado correctamente');
+      setPendingDeleteId(null);
+      if (editingId === pendingDeleteId) setEditingId(null);
+      onRefresh();
+    } catch {
+      toast.error('Error al eliminar');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const handleSaveDoc = async () => {
@@ -147,11 +164,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
           <div className="flex items-center gap-3">
              {!isNew && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => {
-                     {
-                         try { await recurringExpensesService.delete(editingId); toast.success('Eliminado'); setEditingId(null); onRefresh(); } catch { toast.error('Error al eliminar'); }
-                     }
-                  }}>
+                  onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
@@ -314,6 +327,15 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
+        />
+        <ConfirmDialog
+          open={!!pendingDeleteId}
+          onOpenChange={(open) => !open && setPendingDeleteId(null)}
+          title="Eliminar Gasto Recurrente"
+          description="¿Estás seguro de que deseas eliminar este gasto recurrente? Esta acción no se puede deshacer."
+          confirmLabel="Eliminar Gasto"
+          onConfirm={handleDeleteConfirm}
+          loading={deleteLoading}
         />
       </div>
     </div>

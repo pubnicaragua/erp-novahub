@@ -87,6 +87,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
       render: (val, row) => (
         <span className="font-black tabular-nums text-rose-500">
           {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
+
         </span>
       ) },
     { key: 'status',      header: 'Estado',    width: '120px', editable: true, type: 'select', options: statusOpts,
@@ -97,11 +98,27 @@ export function GastosView({ data, loading, onRefresh }: Props) {
     try { await expensesService.update(id as string, updates); toast.success('Gasto actualizado'); onRefresh(); }
     catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
   };
+
+  const handleDeleteConfirm = async () => {
+    if (!pendingDeleteId) return;
+    setDeleteLoading(true);
+    try {
+      await expensesService.delete(pendingDeleteId);
+      toast.success('Gasto eliminado correctamente');
+      setPendingDeleteId(null);
+      if (editingId === pendingDeleteId) setEditingId(null);
+      onRefresh();
+    } catch {
+      toast.error('Error al eliminar');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
   const handleSaveDoc = async () => {
     if (!localDoc?.description) return toast.error('La descripción es obligatoria');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
     if (!localDoc?.accountId) return toast.error('Debe seleccionar una cuenta contable');
-    
+
     // Clean data (ensure numbers and remove nested objects)
     const cleanedDoc = {
       ...localDoc,
@@ -130,7 +147,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
-    
+
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -146,11 +163,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
           <div className="flex items-center gap-3">
              {!isNew && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => {
-                     {
-                         try { await expensesService.delete(editingId); toast.success('Eliminado'); setEditingId(null); onRefresh(); } catch { toast.error('Error al eliminar'); }
-                     }
-                  }}>
+                  onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
@@ -172,8 +185,8 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Categoría</p>
-                    <select 
-                      value={localDoc.category || 'OPERATIVO'} 
+                    <select
+                      value={localDoc.category || 'OPERATIVO'}
                       onChange={(e) => setLocalDoc({ ...localDoc, category: e.target.value })}
                       className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs uppercase"
                     >
@@ -190,7 +203,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   </div>
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1 font-black uppercase text-primary">Cuenta Contable (Egreso)</p>
-                    <Combobox 
+                    <Combobox
                       options={accounts.filter(a => a.type?.toLowerCase() === 'expense' || a.type?.toLowerCase() === 'asset').map(a => ({ label: `${a.code} - ${a.name}`, value: a.id, description: a.type }))}
                       value={localDoc.accountId || ''}
                       onChange={(val) => setLocalDoc({ ...localDoc, accountId: val })}
@@ -199,7 +212,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   </div>
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Proveedor (Opcional)</p>
-                    <Combobox 
+                    <Combobox
                       options={suppliers.map(c => ({ label: c.name, value: c.id, description: c.phone || 'Sin teléfono' }))}
                       value={localDoc.supplierId || ''}
                       onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
@@ -208,8 +221,8 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                    <select 
-                      value={localDoc.status || 'PENDING'} 
+                    <select
+                      value={localDoc.status || 'PENDING'}
                       onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                       className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
                     >
@@ -232,8 +245,8 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                 <div className="flex justify-between items-center text-sm border-b border-border/50 pb-4">
                    <div className="w-1/2">
                       <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                      <select 
-                        value={localDoc.currency || 'NIO'} 
+                      <select
+                        value={localDoc.currency || 'NIO'}
                         onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
                         className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
                       >
@@ -246,7 +259,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                       <Input type="number" min="0" value={localDoc.amount || ''} onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })} className="h-10 text-xl font-black text-rose-500 text-right w-full max-w-[150px]" placeholder="0.00" />
                    </div>
                 </div>
-                
+
                 <div className="flex justify-between items-center text-base pt-2">
                   <span className="font-black uppercase text-xs tracking-widest">Equivalente Estimado</span>
                   <span className="font-black text-muted-foreground tabular-nums text-right">
@@ -317,6 +330,15 @@ export function GastosView({ data, loading, onRefresh }: Props) {
               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
+        />
+        <ConfirmDialog
+          open={!!pendingDeleteId}
+          onOpenChange={(open) => !open && setPendingDeleteId(null)}
+          title="Eliminar Gasto"
+          description="¿Estás seguro de que deseas eliminar este gasto? Esta acción no se puede deshacer."
+          confirmLabel="Eliminar Gasto"
+          onConfirm={handleDeleteConfirm}
+          loading={deleteLoading}
         />
       </div>
     </div>
