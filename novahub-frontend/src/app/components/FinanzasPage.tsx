@@ -55,10 +55,9 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
     return (
       activeAccounts.find((acc) => preferredTypes.includes(getAccountType(acc))) ||
       activeAccounts.find((acc) => getAccountType(acc) === 'ASSET') ||
-      activeAccounts[0] ||
       accounts.find((acc) => preferredTypes.includes(getAccountType(acc))) ||
       accounts.find((acc) => getAccountType(acc) === 'ASSET') ||
-      accounts[0]
+      undefined
     );
   };
 
@@ -71,7 +70,7 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
     const payload = {
       code: accountKind === 'INCOME' ? `ING-${suffix}` : `GAS-${suffix}`,
       name: accountKind === 'INCOME' ? 'Ingresos Generales' : 'Gastos Generales',
-      type: accountKind,
+      type: accountKind.toLowerCase() as any,
     };
 
     const createdResponse = await accountsService.create(payload);
@@ -185,7 +184,7 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
         amount: 0,
         date: new Date().toISOString(),
         accountId: defaultAccount.id,
-        currency: 'NIO',
+        currency: 'NIO' as any,
         exchangeRate: globalRate,
         notes: '',
       };
@@ -207,9 +206,9 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
         amount: 0,
         date: new Date().toISOString(),
         accountId: defaultAccount.id,
-        currency: 'NIO',
+        currency: 'NIO' as any,
         exchangeRate: globalRate,
-        status: 'PENDING',
+        status: 'PENDING' as any,
       };
       const res = await expensesService.create(newItem);
       setExpenses([res, ...expenses]);
@@ -231,7 +230,7 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
         accountId: defaultAccount.id,
         status: 'active' as const,
         category: 'OTROS',
-        currency: 'NIO',
+        currency: 'NIO' as any,
         exchangeRate: globalRate,
       };
       const res = await recurringExpensesService.create(newItem);

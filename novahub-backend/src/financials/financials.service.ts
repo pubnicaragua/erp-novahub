@@ -81,20 +81,30 @@ export class FinancialsService {
     const baseAmount = this.resolveBaseAmount(amount, currency, exchangeRate, data.baseAmount);
     const source = (data.source || data.description || 'Ingreso').toString().trim();
 
-    return this.prisma.income.create({
-      data: {
-        number: data.number || genCode('INC'),
-        accountId: data.accountId,
-        date: data.date ? new Date(data.date) : new Date(),
-        amount,
-        currency,
-        exchangeRate,
-        baseAmount,
-        source,
-        notes: data.notes ?? null,
-        clientTenantId,
-      },
-      include: { account: true },
+    return this.prisma.$transaction(async (tx) => {
+      const income = await tx.income.create({
+        data: {
+          number: data.number || genCode('INC'),
+          accountId: data.accountId,
+          date: data.date ? new Date(data.date) : new Date(),
+          amount,
+          currency,
+          exchangeRate,
+          baseAmount,
+          source,
+          notes: data.notes ?? null,
+          clientTenantId,
+        },
+        include: { account: true },
+      });
+
+      if (data.accountId && baseAmount) {
+        await tx.account.update({
+          where: { id: data.accountId },
+          data: { balance: { increment: baseAmount } },
+        });
+      }
+      return income;
     });
   }
 
@@ -109,7 +119,7 @@ export class FinancialsService {
   async updateIncome(id: string, data: any, clientTenantId: string) {
     const current = await this.prisma.income.findFirst({
       where: { id, clientTenantId },
-      select: { amount: true, currency: true, exchangeRate: true, source: true },
+      select: { amount: true, currency: true, exchangeRate: true, source: true, baseAmount: true, accountId: true },
     });
 
     const nextAmount = data.amount !== undefined ? this.toNumber(data.amount, 0) : this.toNumber(current?.amount, 0);
@@ -119,26 +129,52 @@ export class FinancialsService {
       : this.resolveExchangeRate(current?.exchangeRate);
     const nextBaseAmount = this.resolveBaseAmount(nextAmount, nextCurrency, nextExchangeRate, data.baseAmount);
 
-    return this.prisma.income.update({
-      where: { id, clientTenantId },
-      data: {
-        ...(data.accountId !== undefined && { accountId: data.accountId }),
-        ...(data.date !== undefined && { date: data.date ? new Date(data.date) : undefined }),
-        amount: nextAmount,
-        currency: nextCurrency,
-        exchangeRate: nextExchangeRate,
-        baseAmount: nextBaseAmount,
-        ...(data.source !== undefined || data.description !== undefined
-          ? { source: (data.source || data.description || current?.source || 'Ingreso').toString().trim() }
-          : {}),
-        ...(data.notes !== undefined && { notes: data.notes }),
-      },
-      include: { account: true },
+    return this.prisma.$transaction(async (tx) => {
+      if (current?.accountId && current?.baseAmount) {
+        await tx.account.update({
+          where: { id: current.accountId },
+          data: { balance: { decrement: current.baseAmount } },
+        });
+      }
+
+      const nextAccountId = data.accountId !== undefined ? data.accountId : current?.accountId;
+      if (nextAccountId && nextBaseAmount) {
+        await tx.account.update({
+          where: { id: nextAccountId },
+          data: { balance: { increment: nextBaseAmount } },
+        });
+      }
+
+      return tx.income.update({
+        where: { id, clientTenantId },
+        data: {
+          ...(data.accountId !== undefined && { accountId: data.accountId }),
+          ...(data.date !== undefined && { date: data.date ? new Date(data.date) : undefined }),
+          amount: nextAmount,
+          currency: nextCurrency,
+          exchangeRate: nextExchangeRate,
+          baseAmount: nextBaseAmount,
+          ...(data.source !== undefined || data.description !== undefined
+            ? { source: (data.source || data.description || current?.source || 'Ingreso').toString().trim() }
+            : {}),
+          ...(data.notes !== undefined && { notes: data.notes }),
+        },
+        include: { account: true },
+      });
     });
   }
 
   async removeIncome(id: string, clientTenantId: string) {
-    return this.prisma.income.delete({ where: { id, clientTenantId } });
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.income.findUnique({ where: { id } });
+      if (current?.accountId && current?.baseAmount) {
+        await tx.account.update({
+          where: { id: current.accountId },
+          data: { balance: { decrement: current.baseAmount } },
+        });
+      }
+      return tx.income.delete({ where: { id, clientTenantId } });
+    });
   }
 
   // ─── GASTOS ───────────────────────────────────────────────────────────────
@@ -148,23 +184,33 @@ export class FinancialsService {
     const exchangeRate = this.resolveExchangeRate(data.exchangeRate);
     const baseAmount = this.resolveBaseAmount(amount, currency, exchangeRate, data.baseAmount);
 
-    return this.prisma.expense.create({
-      data: {
-        number: data.number || genCode('EXP'),
-        accountId: data.accountId,
-        supplierId: data.supplierId ?? null,
-        date: data.date ? new Date(data.date) : new Date(),
-        amount,
-        currency,
-        exchangeRate,
-        baseAmount,
-        category: data.category || 'OTROS',
-        description: data.description || 'Gasto',
-        reference: data.reference ?? null,
-        status: toEnum(data.status || 'PENDING') as any,
-        clientTenantId,
-      },
-      include: { account: true, supplier: true } as any,
+    return this.prisma.$transaction(async (tx) => {
+      const expense = await tx.expense.create({
+        data: {
+          number: data.number || genCode('EXP'),
+          accountId: data.accountId,
+          supplierId: data.supplierId ?? null,
+          date: data.date ? new Date(data.date) : new Date(),
+          amount,
+          currency,
+          exchangeRate,
+          baseAmount,
+          category: data.category || 'OTROS',
+          description: data.description || 'Gasto',
+          reference: data.reference ?? null,
+          status: toEnum(data.status || 'PENDING') as any,
+          clientTenantId,
+        },
+        include: { account: true, supplier: true } as any,
+      });
+
+      if (data.accountId && baseAmount) {
+        await tx.account.update({
+          where: { id: data.accountId },
+          data: { balance: { decrement: baseAmount } },
+        });
+      }
+      return expense;
     });
   }
 
@@ -179,7 +225,7 @@ export class FinancialsService {
   async updateExpense(id: string, data: any, clientTenantId: string) {
     const current = await this.prisma.expense.findFirst({
       where: { id, clientTenantId },
-      select: { amount: true, currency: true, exchangeRate: true },
+      select: { amount: true, currency: true, exchangeRate: true, baseAmount: true, accountId: true },
     });
 
     const nextAmount = data.amount !== undefined ? this.toNumber(data.amount, 0) : this.toNumber(current?.amount, 0);
@@ -189,27 +235,53 @@ export class FinancialsService {
       : this.resolveExchangeRate(current?.exchangeRate);
     const nextBaseAmount = this.resolveBaseAmount(nextAmount, nextCurrency, nextExchangeRate, data.baseAmount);
 
-    return this.prisma.expense.update({
-      where: { id, clientTenantId },
-      data: {
-        ...(data.accountId !== undefined && { accountId: data.accountId }),
-        ...(data.supplierId !== undefined && { supplierId: data.supplierId || null }),
-        ...(data.date !== undefined && { date: data.date ? new Date(data.date) : undefined }),
-        amount: nextAmount,
-        currency: nextCurrency,
-        exchangeRate: nextExchangeRate,
-        baseAmount: nextBaseAmount,
-        ...(data.category !== undefined && { category: data.category || 'OTROS' }),
-        ...(data.description !== undefined && { description: data.description || 'Gasto' }),
-        ...(data.reference !== undefined && { reference: data.reference || null }),
-        ...(data.status && { status: toEnum(data.status) as any }),
-      },
-      include: { account: true, supplier: true } as any,
+    return this.prisma.$transaction(async (tx) => {
+      if (current?.accountId && current?.baseAmount) {
+        await tx.account.update({
+          where: { id: current.accountId },
+          data: { balance: { increment: current.baseAmount } },
+        });
+      }
+
+      const nextAccountId = data.accountId !== undefined ? data.accountId : current?.accountId;
+      if (nextAccountId && nextBaseAmount) {
+        await tx.account.update({
+          where: { id: nextAccountId },
+          data: { balance: { decrement: nextBaseAmount } },
+        });
+      }
+
+      return tx.expense.update({
+        where: { id, clientTenantId },
+        data: {
+          ...(data.accountId !== undefined && { accountId: data.accountId }),
+          ...(data.supplierId !== undefined && { supplierId: data.supplierId || null }),
+          ...(data.date !== undefined && { date: data.date ? new Date(data.date) : undefined }),
+          amount: nextAmount,
+          currency: nextCurrency,
+          exchangeRate: nextExchangeRate,
+          baseAmount: nextBaseAmount,
+          ...(data.category !== undefined && { category: data.category || 'OTROS' }),
+          ...(data.description !== undefined && { description: data.description || 'Gasto' }),
+          ...(data.reference !== undefined && { reference: data.reference || null }),
+          ...(data.status && { status: toEnum(data.status) as any }),
+        },
+        include: { account: true, supplier: true } as any,
+      });
     });
   }
 
   async removeExpense(id: string, clientTenantId: string) {
-    return this.prisma.expense.delete({ where: { id, clientTenantId } });
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.expense.findUnique({ where: { id } });
+      if (current?.accountId && current?.baseAmount) {
+        await tx.account.update({
+          where: { id: current.accountId },
+          data: { balance: { increment: current.baseAmount } },
+        });
+      }
+      return tx.expense.delete({ where: { id, clientTenantId } });
+    });
   }
 
   // ─── GASTOS RECURRENTES ───────────────────────────────────────────────────

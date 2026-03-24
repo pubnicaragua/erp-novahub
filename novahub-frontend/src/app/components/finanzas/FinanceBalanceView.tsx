@@ -26,8 +26,14 @@ export function FinanceBalanceView() {
     }
   };
 
-  const assets = accounts.filter(a => String(a.type || '').toUpperCase() === 'ASSET');
-  const liabilities = accounts.filter(a => String(a.type || '').toUpperCase() === 'LIABILITY');
+  const assets = accounts.filter(a => {
+    const t = String(a.type || '').toUpperCase();
+    return t === 'ASSET' || t === 'INCOME' || t === 'REVENUE';
+  });
+  const liabilities = accounts.filter(a => {
+    const t = String(a.type || '').toUpperCase();
+    return t === 'LIABILITY' || t === 'EXPENSE';
+  });
   const equity = accounts.filter(a => String(a.type || '').toUpperCase() === 'EQUITY');
 
   const totalAssets = assets.reduce((acc, a) => acc + convertAmount(a.balance || 0, a.currency), 0);
