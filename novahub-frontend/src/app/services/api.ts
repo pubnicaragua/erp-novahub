@@ -29,22 +29,68 @@ function getAuthHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function normalizeErrorMessage(message?: string, status?: number): string {
+  const raw = (message || '').trim();
+  const lower = raw.toLowerCase();
+
+  if (!raw) {
+    if (status === 400) return 'Solicitud inválida.';
+    if (status === 401) return 'No autorizado. Inicia sesión nuevamente.';
+    if (status === 403) return 'No tienes permisos para realizar esta acción.';
+    if (status === 404) return 'No se encontró el recurso solicitado.';
+    if ((status || 0) >= 500) return 'Ocurrió un error interno del servidor.';
+    return 'Ocurrió un error inesperado.';
+  }
+
+  if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network request failed')) {
+    return 'No se pudo conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.';
+  }
+  if (lower.includes('forbidden')) return 'No tienes permisos para realizar esta acción.';
+  if (lower.includes('unauthorized')) return 'No autorizado. Inicia sesión nuevamente.';
+  if (lower.includes('not found')) return 'No se encontró el recurso solicitado.';
+  if (lower.includes('internal server error')) return 'Ocurrió un error interno del servidor.';
+  if (lower.includes('bad request')) return 'Solicitud inválida. Verifica la información enviada.';
+  if (lower.includes('unique constraint failed') || lower.includes('already exists')) {
+    return 'Ya existe un registro con esos datos.';
+  }
+  if (lower.startsWith('http error') && status) {
+    return normalizeErrorMessage('', status);
+  }
+
+  return raw;
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, params, headers = {} } = options;
 
-  const response = await fetch(buildUrl(path, params), {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-      ...headers,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path, params), {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (error: any) {
+    throw new Error(normalizeErrorMessage(error?.message));
+  }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Error de red' }));
-    throw new Error(error.message || `HTTP Error ${response.status}`);
+    let serverMessage = '';
+    try {
+      const error = await response.json();
+      if (Array.isArray(error?.message)) {
+        serverMessage = error.message.join(', ');
+      } else {
+        serverMessage = error?.message || error?.error || '';
+      }
+    } catch {
+      serverMessage = '';
+    }
+    throw new Error(normalizeErrorMessage(serverMessage, response.status));
   }
 
   return response.json();

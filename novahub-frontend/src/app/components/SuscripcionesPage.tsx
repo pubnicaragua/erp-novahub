@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionsService, type SubscriptionRequest } from '../services/subscriptions.service';
 import { tenantsService } from '../services/tenants.service';
+import { rolesService } from '../services/roles.service';
 import { toast } from 'sonner';
 import { api } from '../services/api';
 import { 
@@ -47,7 +48,6 @@ import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import { PREDEFINED_ROLES, type CustomRole } from '../types/roles';
 import { 
   SALES_SUBMODULES, 
   PURCHASES_SUBMODULES, 
@@ -74,17 +74,49 @@ const AVAILABLE_MODULES = [
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
 ];
 
+const SYSTEM_ROLE_OPTIONS = [
+  { value: 'ADMIN', label: 'Administrador', description: 'Acceso total del tenant' },
+  { value: 'MANAGER', label: 'Gerente', description: 'Gestión operativa y supervisión' },
+  { value: 'EMPLOYEE', label: 'Empleado', description: 'Acceso operativo limitado' },
+  { value: 'VIEWER', label: 'Visualizador', description: 'Solo lectura' },
+];
+
+const LEGACY_ROLE_OPTIONS = [
+  { value: 'super-admin', label: 'Super Administrador', description: 'Rol histórico (mapea a ADMIN)' },
+  { value: 'admin', label: 'Administrador clásico', description: 'Rol histórico (mapea a ADMIN)' },
+  { value: 'gerente', label: 'Gerente', description: 'Rol histórico (mapea a MANAGER)' },
+  { value: 'contador', label: 'Contador', description: 'Rol histórico (mapea a MANAGER)' },
+  { value: 'vendedor', label: 'Vendedor', description: 'Rol histórico (mapea a EMPLOYEE)' },
+  { value: 'almacenero', label: 'Almacenero', description: 'Rol histórico (mapea a EMPLOYEE)' },
+  { value: 'comprador', label: 'Comprador', description: 'Rol histórico (mapea a EMPLOYEE)' },
+  { value: 'empleado', label: 'Empleado clásico', description: 'Rol histórico (mapea a EMPLOYEE)' },
+  { value: 'rh-manager', label: 'RH Manager', description: 'Rol histórico (mapea a MANAGER)' },
+];
+
+const LEGACY_ROLE_MAP: Record<string, 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER'> = {
+  'super-admin': 'ADMIN',
+  admin: 'ADMIN',
+  gerente: 'MANAGER',
+  contador: 'MANAGER',
+  vendedor: 'EMPLOYEE',
+  almacenero: 'EMPLOYEE',
+  comprador: 'EMPLOYEE',
+  empleado: 'EMPLOYEE',
+  'rh-manager': 'MANAGER',
+};
+
 export function SuscripcionesPage() {
   const { user } = useAuth();
   const [requests, setRequests] = useState<SubscriptionRequest[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [customRoles, setCustomRoles] = useState<any[]>([]);
   const [isTenantDialogOpen, setIsTenantDialogOpen] = useState(false);
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'user' });
+  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'EMPLOYEE' });
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [tenantDetails, setTenantDetails] = useState<any>(null);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
@@ -128,13 +160,15 @@ export function SuscripcionesPage() {
     setLoading(true);
     try {
       if (user?.role?.toLowerCase() === 'admin') {
-        const [reqs, allTenants] = await Promise.all([
+        const [reqs, allTenants, rolesRes] = await Promise.all([
           subscriptionsService.getAllRequests(),
-          tenantsService.getAll()
+          tenantsService.getAll(),
+          rolesService.getAll()
         ]);
         console.log('Tenants structure:', allTenants[0]); // Debug
         setRequests(reqs);
         setTenants(allTenants);
+        setCustomRoles(Array.isArray((rolesRes as any)?.data) ? (rolesRes as any).data : []);
       } else if (user?.role?.toLowerCase() === 'partner') {
         const [reqs, myTenants] = await Promise.all([
           subscriptionsService.getPartnerRequests(),
@@ -149,6 +183,39 @@ export function SuscripcionesPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const inferSystemRoleFromCustomRole = (role: any): 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER' => {
+    const perms = Array.isArray(role?.permissions) ? role.permissions : [];
+    if (perms.length === 0) return 'EMPLOYEE';
+
+    const readCount = perms.filter((p: any) => p?.read).length;
+    const writeCount = perms.filter((p: any) => p?.write).length;
+    const deleteCount = perms.filter((p: any) => p?.delete).length;
+
+    if (readCount > 0 && writeCount === 0 && deleteCount === 0) return 'VIEWER';
+    if (deleteCount > Math.ceil(perms.length * 0.35) || writeCount > Math.ceil(perms.length * 0.5)) return 'MANAGER';
+    if (writeCount > 0) return 'EMPLOYEE';
+    return 'EMPLOYEE';
+  };
+
+  const resolveSelectedRoleToSystemRole = (selectedRole: string): 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER' => {
+    if (SYSTEM_ROLE_OPTIONS.some(r => r.value === selectedRole)) {
+      return selectedRole as 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER';
+    }
+
+    if (selectedRole.startsWith('legacy:')) {
+      const legacyId = selectedRole.replace('legacy:', '');
+      return LEGACY_ROLE_MAP[legacyId] || 'EMPLOYEE';
+    }
+
+    if (selectedRole.startsWith('custom:')) {
+      const customId = selectedRole.replace('custom:', '');
+      const customRole = customRoles.find((r: any) => r.id === customId);
+      return inferSystemRoleFromCustomRole(customRole);
+    }
+
+    return 'EMPLOYEE';
   };
 
   const handleCreateTenant = async () => {
@@ -233,6 +300,7 @@ export function SuscripcionesPage() {
     try {
       setUploading(true);
       let avatarUrl = null;
+      const systemRole = resolveSelectedRoleToSystemRole(userForm.role);
       
       if (avatarFile) {
         const tempUserId = `${selectedTenant.id}-${Date.now()}`;
@@ -244,11 +312,14 @@ export function SuscripcionesPage() {
         name: userForm.name,
         email: userForm.email,
         password: userForm.password || 'DefaultPass123!',
-        role: userForm.role,
+        role: systemRole,
         avatar: avatarUrl
       });
+      if (userForm.role !== systemRole) {
+        toast.info(`Rol aplicado como ${systemRole}. Los roles personalizados se mapean al sistema actual.`);
+      }
       toast.success('Usuario agregado exitosamente');
-      setUserForm({ name: '', email: '', password: '', role: 'user' });
+      setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' });
       setAvatarFile(null);
       setAvatarPreview('');
       setIsUserDialogOpen(false);
@@ -961,11 +1032,29 @@ export function SuscripcionesPage() {
                     <SelectValue placeholder="Seleccionar rol..." />
                   </SelectTrigger>
                   <SelectContent className="max-h-[400px]">
-                    {PREDEFINED_ROLES.map(role => (
-                      <SelectItem key={role.id} value={role.id}>
+                    {SYSTEM_ROLE_OPTIONS.map(role => (
+                      <SelectItem key={role.value} value={role.value}>
+                        <div className="flex flex-col">
+                          <span className="font-bold">{role.label}</span>
+                          <span className="text-xs text-muted-foreground">{role.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                    {LEGACY_ROLE_OPTIONS.map(role => (
+                      <SelectItem key={`legacy-${role.value}`} value={`legacy:${role.value}`}>
+                        <div className="flex flex-col">
+                          <span className="font-bold">{role.label}</span>
+                          <span className="text-xs text-muted-foreground">{role.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                    {customRoles.map((role: any) => (
+                      <SelectItem key={`custom-${role.id}`} value={`custom:${role.id}`}>
                         <div className="flex flex-col">
                           <span className="font-bold">{role.name}</span>
-                          <span className="text-xs text-muted-foreground">{role.description}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {role.description || 'Rol personalizado'}
+                          </span>
                         </div>
                       </SelectItem>
                     ))}

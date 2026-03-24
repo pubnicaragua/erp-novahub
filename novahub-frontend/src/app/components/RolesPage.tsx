@@ -34,6 +34,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { rolesService } from '../services/roles.service';
 import { usersService } from '../services/users.service';
 import type { RoleManagement, User, Permission } from '../types';
+import { toast } from 'sonner';
+
+const SYSTEM_ROLE_OPTIONS = [
+  { value: 'admin', label: 'Administrador' },
+  { value: 'manager', label: 'Gerente' },
+  { value: 'employee', label: 'Empleado' },
+  { value: 'viewer', label: 'Visualizador' },
+];
 
 export function RolesPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,11 +74,28 @@ export function RolesPage() {
         usersService.getAll()
       ]);
       setRolesData(rolesRes.data || []);
-      setUsers(usersRes as any || []); // Handle different response formats
+      const usersList = Array.isArray(usersRes) ? usersRes : ((usersRes as any)?.data || []);
+      setUsers((usersList || []).map((u: any) => ({
+        ...u,
+        role: String(u.role || 'employee').toLowerCase(),
+      })));
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUserRoleChange = async (userId: string, role: string) => {
+    const previousUsers = [...users];
+    setUsers(users.map(user => user.id === userId ? { ...user, role: role as any } : user));
+    try {
+      await usersService.update(userId, { role: role.toUpperCase() as any });
+      toast.success('Rol actualizado correctamente');
+    } catch (error) {
+      setUsers(previousUsers);
+      toast.error('No se pudo actualizar el rol');
+      console.error('Error updating user role:', error);
     }
   };
 
@@ -341,16 +366,14 @@ export function RolesPage() {
                         <TableCell>
                           <Select
                             value={u.role}
-                            onValueChange={(val) => {
-                              setUsers(users.map(user => user.id === u.id ? { ...user, role: val } : user));
-                            }}
+                            onValueChange={(val) => handleUserRoleChange(u.id, val)}
                           >
                             <SelectTrigger className="w-[180px]">
                               <SelectValue placeholder="Selecciona un rol" />
                             </SelectTrigger>
                              <SelectContent>
-                              {rolesData.map(r => (
-                                <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                              {SYSTEM_ROLE_OPTIONS.map(r => (
+                                <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>

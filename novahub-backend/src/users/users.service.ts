@@ -1,12 +1,25 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service'; // Asegúrate de la ruta
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
   // Inyectamos Prisma para hablar con Supabase
   constructor(private prisma: PrismaService) { }
+
+  private throwFriendlyPrismaError(error: any): never {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        throw new ConflictException('El correo ya está registrado en Nova Hub');
+      }
+      if (error.code === 'P2003') {
+        throw new BadRequestException('No se puede completar la operación por una relación de datos inválida');
+      }
+    }
+    throw error;
+  }
 
   async create(createUserDto: CreateUserDto) {
     try {
@@ -14,11 +27,7 @@ export class UsersService {
         data: createUserDto,
       });
     } catch (error) {
-      // P2002 es el código de Prisma para "Unique constraint failed" (email duplicado)
-      if (error.code === 'P2002') {
-        throw new ConflictException('El correo ya está registrado en Nova Hub');
-      }
-      throw error;
+      this.throwFriendlyPrismaError(error);
     }
   }
 
@@ -51,15 +60,33 @@ export class UsersService {
   }
 
   async update(id: string, clientTenantId: string, updateUserDto: UpdateUserDto) {
-    return this.prisma.user.update({
-      where: { id, clientTenantId },
-      data: updateUserDto,
+    const user = await this.prisma.user.findFirst({
+      where: { id, clientTenantId }
     });
+    if (!user) throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+
+    try {
+      return await this.prisma.user.update({
+        where: { id },
+        data: updateUserDto,
+      });
+    } catch (error) {
+      this.throwFriendlyPrismaError(error);
+    }
   }
 
   async remove(id: string, clientTenantId: string) {
-    return this.prisma.user.delete({
+    const user = await this.prisma.user.findFirst({
       where: { id, clientTenantId }
     });
+    if (!user) throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+
+    try {
+      return await this.prisma.user.delete({
+        where: { id }
+      });
+    } catch (error) {
+      this.throwFriendlyPrismaError(error);
+    }
   }
 }
