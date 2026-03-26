@@ -29,10 +29,10 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
 
   const columns: ColumnDef<Alert>[] = [
     { key: 'title', header: 'Título', width: '30%', editable: true },
-    { key: 'message', header: 'Mensaje', width: '40%', editable: true },
+    { key: 'content', header: 'Mensaje', width: '40%', editable: true },
     { key: 'severity', header: 'Severidad', width: '120px', editable: true, type: 'select', options: severityOpts,
       render: (val: any) => { const o = severityOpts.find(x => x.value === (val||'').toUpperCase()); return <span className={cn('text-[10px] font-bold uppercase', o?.color||'text-muted-foreground')}>{o?.label||val}</span>; } },
-    { key: 'read', header: 'Leída', width: '100px', render: (val: any) => <Badge variant="outline" className={cn('text-[9px] uppercase border-none', val ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500')}>{val ? 'Sí' : 'No'}</Badge> },
+    { key: 'isRead', header: 'Leída', width: '100px', render: (val: any) => <Badge variant="outline" className={cn('text-[9px] uppercase border-none', val ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500')}>{val ? 'Sí' : 'No'}</Badge> },
     { key: 'createdAt', header: 'Fecha', width: '150px', type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, HH:mm') : '-' },
   ];
 
@@ -43,7 +43,7 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
 
   const handleAdd = async () => {
     try {
-      await alertsService.create({ title: 'Nueva Alerta', message: 'Detalles de la alerta', severity: 'MEDIUM', read: false });
+      await alertsService.create({ title: 'Nueva Alerta', content: 'Detalles de la alerta', isRead: false });
       toast.success('Alerta creada'); onRefresh();
     } catch { toast.error('Error al crear'); }
   };
@@ -51,11 +51,11 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
   const kpis = [
     { title: 'Total Alertas',   value: data.length,                                                              icon: AlertCircle,   color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Críticas',        value: data.filter(a => (a.severity||'').toUpperCase() === 'CRITICAL').length,    icon: AlertTriangle, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
-    { title: 'No Leídas',       value: data.filter(a => !a.read).length,                                         icon: Info,          color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
-    { title: 'Leídas',          value: data.filter(a => a.read).length,                                          icon: Eye,           color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'No Leídas',       value: data.filter(a => !a.isRead).length,                                         icon: Info,          color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
+    { title: 'Leídas',          value: data.filter(a => a.isRead).length,                                          icon: Eye,           color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   ];
 
-  const filtered = data.filter(a => a.title?.toLowerCase().includes(searchTerm.toLowerCase()) || a.message?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filtered = data.filter(a => a.title?.toLowerCase().includes(searchTerm.toLowerCase()) || a.content?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">

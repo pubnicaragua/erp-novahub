@@ -23,9 +23,9 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
   const columns: ColumnDef<Message>[] = [
     { key: 'from', header: 'De', width: '20%', editable: true },
     { key: 'to', header: 'Para', width: '20%', editable: true },
-    { key: 'subject', header: 'Asunto', width: '30%', editable: true },
-    { key: 'read', header: 'Estado', width: '100px', render: (val: any) => <Badge variant="outline" className={cn('text-[9px] uppercase border-none', val ? 'bg-muted/20 text-muted-foreground' : 'bg-blue-500/10 text-blue-500')}>{val ? 'Leído' : 'Nuevo'}</Badge> },
-    { key: 'sentAt', header: 'Enviado', width: '150px', type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, HH:mm') : '-' },
+    { key: 'title', header: 'Asunto', width: '30%', editable: true },
+    { key: 'isRead', header: 'Estado', width: '100px', render: (val: any) => <Badge variant="outline" className={cn('text-[9px] uppercase border-none', val ? 'bg-muted/20 text-muted-foreground' : 'bg-blue-500/10 text-blue-500')}>{val ? 'Leído' : 'Nuevo'}</Badge> },
+    { key: 'createdAt', header: 'Enviado', width: '150px', type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, HH:mm') : '-' },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Message>) => {
@@ -35,19 +35,19 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
 
   const handleAdd = async () => {
     try {
-      await messagesService.create({ subject: 'Nuevo Mensaje', body: '', from: 'Sistema', to: 'Todos', read: false });
+      await messagesService.create({ title: 'Nuevo Mensaje', content: '', from: 'Sistema', to: 'Todos', isRead: false });
       toast.success('Mensaje enviado'); onRefresh();
     } catch { toast.error('Error al enviar'); }
   };
 
   const kpis = [
     { title: 'Bandeja Entrada', value: data.length,                                         icon: Inbox,         color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'No Leídos',       value: data.filter(m => !m.read).length,                    icon: Mail,          color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
-    { title: 'Enviados Hoy',    value: data.filter(m => { const d=new Date(m.sentAt||Date.now()); return d.toDateString()===new Date().toDateString()}).length, icon: MessageSquare, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Remitentes',      value: new Set(data.map(m => m.from)).size,                 icon: UserCheck,     color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
+    { title: 'No Leídos',       value: data.filter(m => !m.isRead).length,                    icon: Mail,          color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
+    { title: 'Enviados Hoy',    value: data.filter(m => { const d=new Date(m.createdAt||Date.now()); return d.toDateString()===new Date().toDateString()}).length, icon: MessageSquare, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Remitentes',      value: new Set(data.filter(m => m.from).map(m => m.from)).size,                 icon: UserCheck,     color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
   ];
 
-  const filtered = data.filter(m => m.subject?.toLowerCase().includes(searchTerm.toLowerCase()) || m.from?.toLowerCase().includes(searchTerm.toLowerCase()) || m.to?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filtered = data.filter(m => m.title?.toLowerCase().includes(searchTerm.toLowerCase()) || m.from?.toLowerCase().includes(searchTerm.toLowerCase()) || m.to?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">

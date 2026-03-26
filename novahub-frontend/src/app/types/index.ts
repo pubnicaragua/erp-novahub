@@ -896,6 +896,6 @@ export interface LegalInvoice { id: string; number: string; type: string; amount
 export interface Report { id: string; title: string; type: string; generatedDate: string; format: string; size: number; createdBy: string; }
 export interface File { id: string; name: string; type: string; size: number; uploadDate: string; uploadedBy: string; category: string; url: string; }
 
-export interface Alert { id: string; title: string; message: string; type: string; severity: string; read: boolean; createdAt: string; }
-export interface Message { id: string; subject: string; body: string; from: string; to: string; read: boolean; sentAt: string; }
-export interface PushNotification { id: string; title: string; body: string; type: string; sent: boolean; sentAt: string; deviceId?: string; }
+export interface Alert { id: string; title: string; content: string; type: string; severity?: string; isRead: boolean; createdAt: string; }
+export interface Message { id: string; title: string; content: string; type: string; from?: string; to?: string; isRead: boolean; createdAt: string; }
+export interface PushNotification { id: string; title: string; content: string; type: string; sent?: boolean; isRead: boolean; createdAt: string; deviceId?: string; }
