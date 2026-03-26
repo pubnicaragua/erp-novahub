@@ -42,7 +42,6 @@ export const invoicesService = {
   create: (data: Partial<Invoice>) => api.post<Invoice>('/sales/invoices', data),
   update: (id: string, data: Partial<Invoice>) => api.patch<Invoice>(`/sales/invoices/${id}`, data),
   delete: (id: string) => api.delete<void>(`/sales/invoices/${id}`),
-  markAsPaid: (id: string) => api.patch<Invoice>(`/sales/invoices/${id}/mark-paid`, {}),
 };
 
 // ---- Recurring Invoices ----

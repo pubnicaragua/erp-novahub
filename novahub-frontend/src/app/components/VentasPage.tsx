@@ -160,16 +160,7 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
     setActiveSection('facturas');
   };
 
-  const handleMarkAsPaid = async (invoice: Invoice) => {
-    try {
-      toast.info(`Marcando factura ${invoice.number} como pagada...`);
-      await invoicesService.markAsPaid(invoice.id);
-      toast.success(`Factura ${invoice.number} marcada como pagada`);
-      fetchData();
-    } catch {
-      toast.error('Error al registrar pago');
-    }
-  };
+
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -248,7 +239,6 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
                   data={data.facturas} 
                   loading={loading} 
                   onRefresh={fetchData} 
-                  onMarkAsPaid={handleMarkAsPaid} 
                   customers={data.clientes} 
                   products={data.productos} 
                   invoiceDraft={invoiceDraft}

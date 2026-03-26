@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  FileText, Plus, Search, TrendingUp, Clock, CheckCircle2, CreditCard, AlertCircle, Eye, Trash2, Banknote, ChevronLeft
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, Info
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -19,7 +19,6 @@ interface FacturasViewProps {
   data: Invoice[];
   loading: boolean;
   onRefresh: () => void;
-  onMarkAsPaid: (invoice: Invoice) => void;
   customers?: Customer[];
   products?: Product[];
   invoiceDraft?: any;
@@ -35,7 +34,7 @@ const statusOptions = [
   { label: 'Reembolso', value: 'REFUNDED', color: 'bg-blue-500/10 text-blue-500' },
 ];
 
-export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers = [], products = [], invoiceDraft, onClearInvoiceDraft }: FacturasViewProps) {
+export function FacturasView({ data, loading, onRefresh, customers = [], products = [], invoiceDraft, onClearInvoiceDraft }: FacturasViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -180,16 +179,7 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers
     return { subtotal, discountAmount, taxAmount, total };
   };
 
-  const handleBatchPay = async (ids: (string | number)[]) => {
-    try {
-       const promises = ids.map(id => invoicesService.markAsPaid(id.toString()));
-       await Promise.all(promises);
-       toast.success(`${ids.length} Facturas marcadas como pagadas`);
-       onRefresh();
-    } catch (error) {
-       toast.error('Error al procesar pagos masivos');
-    }
-  };
+
 
   const columns: ColumnDef<Invoice>[] = [
     { 
@@ -234,9 +224,6 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers
       key: 'status', 
       header: 'Estado', 
       width: '130px',
-      editable: true,
-      type: 'select',
-      options: statusOptions,
       render: (val) => {
         const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
         return (
@@ -551,28 +538,13 @@ export function FacturasView({ data, loading, onRefresh, onMarkAsPaid, customers
             onRefresh();
           }}
           isLoading={loading}
-          bulkActions={(ids) => (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-8 text-[10px] font-black uppercase tracking-wider text-emerald-500 hover:bg-emerald-500/10 border-emerald-500/20"
-              onClick={() => handleBatchPay(ids)}
-            >
-              <Banknote className="size-3 mr-2" /> Registrar Pago ({ids.length})
-            </Button>
-          )}
+          bulkActions={() => null}
           actions={(row) => (
             <div className="flex items-center gap-1">
                {(row.status||'').toUpperCase() !== 'PAID' && (
-                 <Button 
-                   title="Marcar como Pagada" 
-                   onClick={() => onMarkAsPaid(row)}
-                   variant="ghost" 
-                   size="icon" 
-                   className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
-                 >
-                   <CreditCard className="size-4" />
-                 </Button>
+                 <span title="El estado se actualiza desde Pagos Recibidos" className="size-8 flex items-center justify-center rounded-lg text-muted-foreground/40 cursor-default">
+                   <Info className="size-4" />
+                 </span>
                )}
                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
