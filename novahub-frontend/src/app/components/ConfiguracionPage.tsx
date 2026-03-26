@@ -6,7 +6,7 @@ import {
   ShoppingCart, UserCheck, Users, Plus, Settings2, KeyRound, Layers,
   Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
-  BarChart3, X, Info, Coins, Headphones, BellRing, FileText, CalendarDays
+  BarChart3, X, Info, Coins
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -36,12 +36,7 @@ const AVAILABLE_MODULES = [
   { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General' },
   { id: 'PURCHASES', label: 'Compras', icon: ShoppingCart, description: 'Proveedores y Órdenes de Compra' },
   { id: 'HR', label: 'Recursos Humanos', icon: Users, description: 'Nómina y Gestión de Empleados' },
-  { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
-  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
-  { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
-  { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
-  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
-  { id: 'CONFIGURATION', label: 'Configuración', icon: Settings2, description: 'Ajustes del Sistema' },
+  { id: 'PROJECTS', label: 'Proyectos', icon: Briefcase, description: 'Tareas y Cronogramas de Obra' },
 ];
 
 // ---- Hex / OKLCH conversion helpers ----
@@ -205,14 +200,14 @@ function getScenario(role?: string): 'superadmin' | 'partner' | 'client' {
 // ---- TAB CONFIG per scenario ----
 interface TabDef { id: string; label: string; icon: React.ElementType; scenario: ('superadmin' | 'partner' | 'client')[] }
 const ALL_TABS: TabDef[] = [
-  { id: 'branding',      label: 'Marca & Tema',       icon: Palette,      scenario: ['superadmin', 'partner', 'client'] },
-  { id: 'empresa',       label: 'Mi Empresa',          icon: Building2,    scenario: ['superadmin', 'partner', 'client'] },
-  { id: 'roles',         label: 'Roles & Permisos',    icon: ShieldCheck,  scenario: ['superadmin', 'partner', 'client'] },
-  { id: 'seguridad',     label: 'Seguridad',           icon: KeyRound,     scenario: ['superadmin', 'partner', 'client'] },
-  { id: 'tenancy',       label: 'Multi-Tenancy',       icon: Layers,       scenario: ['superadmin', 'partner'] },
-  { id: 'currency',      label: 'Moneda & Cambio',     icon: Coins,        scenario: ['superadmin', 'partner', 'client'] },
-  { id: 'plataforma',    label: 'Plataforma',          icon: Server,       scenario: ['superadmin'] },
-  { id: 'dominios',      label: 'Dominios',            icon: Globe,        scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'branding', label: 'Marca & Tema', icon: Palette, scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'empresa', label: 'Mi Empresa', icon: Building2, scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'roles', label: 'Roles & Permisos', icon: ShieldCheck, scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'seguridad', label: 'Seguridad', icon: KeyRound, scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'tenancy', label: 'Multi-Tenancy', icon: Layers, scenario: ['superadmin', 'partner'] },
+  { id: 'currency', label: 'Moneda & Cambio', icon: Coins, scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'plataforma', label: 'Plataforma', icon: Server, scenario: ['superadmin'] },
+  { id: 'dominios', label: 'Dominios', icon: Globe, scenario: ['superadmin', 'partner', 'client'] },
 ];
 
 // ---- Main Component ----
@@ -328,9 +323,9 @@ export function ConfiguracionPage() {
       const colors = generateThemeFromColor(primaryHex, sidebarHex, accentHex);
       colors.primaryForeground = hexToOklch(primaryFgHex);
       colors.sidebarForeground = hexToOklch(sidebarFgHex);
-      
+
       updateTheme(colors);
-      
+
       await brandingService.update({
         primaryColor: primaryHex,
         sidebarColor: sidebarHex,
@@ -385,7 +380,7 @@ export function ConfiguracionPage() {
       // Fallback to base64 if storage fails
       if (logoPreview) {
         updateConfig({ logo: logoPreview });
-        await brandingService.update({ logo: logoPreview }).catch(() => {});
+        await brandingService.update({ logo: logoPreview }).catch(() => { });
         toast.success('Logo aplicado localmente');
       } else {
         toast.error('Error al subir el logo');
@@ -1012,8 +1007,8 @@ export function ConfiguracionPage() {
               <CardContent className="pt-6 space-y-4">
                 {[
                   { label: 'Autenticación de Dos Factores (2FA)', desc: 'Protege el acceso con un segundo factor de verificación', value: twoFaEnabled, setter: setTwoFaEnabled, tag: 'Recomendado' },
-                  { label: 'Forzar 2FA para Administradores', desc: 'Todos los usuarios admin deben activar 2FA obligatoriamente', value: false, setter: () => {}, tag: 'Enterprise' },
-                  { label: 'Inicio de Sesión con Google SSO', desc: 'Permite autenticación con cuentas corporativas de Google', value: false, setter: () => {}, tag: 'Próximo' },
+                  { label: 'Forzar 2FA para Administradores', desc: 'Todos los usuarios admin deben activar 2FA obligatoriamente', value: false, setter: () => { }, tag: 'Enterprise' },
+                  { label: 'Inicio de Sesión con Google SSO', desc: 'Permite autenticación con cuentas corporativas de Google', value: false, setter: () => { }, tag: 'Próximo' },
                 ].map(({ label, desc, value, setter, tag }) => (
                   <div key={label} className="flex items-center justify-between p-4 rounded-xl border border-border/40 hover:border-border/70 transition-all bg-card">
                     <div className="space-y-0.5 flex-1 mr-4">
@@ -1167,7 +1162,7 @@ export function ConfiguracionPage() {
                     </div>
                     <Switch checked={exchangeRateAuto} onCheckedChange={setExchangeRateAuto} />
                   </div>
-                  
+
                   <div className="flex items-center justify-between p-3 rounded-lg bg-background border border-border/40">
                     <span className="text-xs font-bold text-muted-foreground">Tasa Actual del Sistema</span>
                     <span className="text-lg font-black text-primary">

@@ -11,8 +11,12 @@ import { ReportesView } from './documentos/ReportesView';
 import { ArchivosView } from './documentos/ArchivosView';
 import { contractsService, legalInvoicesService, reportsService, filesService } from '../services/documentos.service';
 
-export const DocumentosPage = () => {
-  const [activeTab, setActiveTab] = useState('archivos');
+interface DocumentosPageProps {
+  activeSubModule?: string;
+}
+
+export const DocumentosPage = ({ activeSubModule }: DocumentosPageProps) => {
+  const [activeTab, setActiveTab] = useState(() => activeSubModule || 'archivos');
   const [data, setData] = useState({
     contratos: [],
     facturas: [],
@@ -41,6 +45,12 @@ export const DocumentosPage = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (activeSubModule) {
+      setActiveTab(activeSubModule);
+    }
+  }, [activeSubModule]);
 
   const tabs = [
     { id: 'archivos', label: 'Archivos', icon: HardDrive, color: 'text-blue-500' },

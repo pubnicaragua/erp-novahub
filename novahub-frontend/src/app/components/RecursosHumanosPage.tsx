@@ -14,7 +14,7 @@ import {
   UserCheck,
   Download,
   BarChart3,
-  Sparkles,
+  HandHeart,
   Building2,
 } from 'lucide-react';
 import { hrService } from '../services/hr.service';
@@ -190,49 +190,49 @@ export function RecursosHumanosPage({ activeSubModule }: RecursosHumanosPageProp
       {/* Main Navigation Tabs - Estilo Suscripciones */}
       <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
         <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 grid grid-cols-4 lg:grid-cols-8 gap-2 rounded-2xl border border-border/40">
-          <TabsTrigger value="dashboard" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
+          <TabsTrigger value="dashboard" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <BarChart3 className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Dashboard</span>
           </TabsTrigger>
           {(!user?.enabledModules || user.enabledModules.includes('HR_EMPLOYEES')) && (
-          <TabsTrigger value="empleados" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
+          <TabsTrigger value="empleados" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <Users className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Empleados</span>
           </TabsTrigger>
           )}
           {(!user?.enabledModules || user.enabledModules.includes('HR_PAYROLL')) && (
-          <TabsTrigger value="nominas" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
+          <TabsTrigger value="nominas" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <DollarSign className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Nóminas</span>
           </TabsTrigger>
           )}
           {(!user?.enabledModules || user.enabledModules.includes('HR_ATTENDANCE')) && (
-          <TabsTrigger value="asistencia" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
+          <TabsTrigger value="asistencia" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <UserCheck className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Asistencia</span>
           </TabsTrigger>
           )}
           {(!user?.enabledModules || user.enabledModules.includes('HR_LEAVES')) && (
-          <TabsTrigger value="ausencias" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
+          <TabsTrigger value="ausencias" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <Calendar className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Vacaciones</span>
           </TabsTrigger>
           )}
           {(!user?.enabledModules || user.enabledModules.includes('HR_PERFORMANCE')) && (
-          <TabsTrigger value="evaluaciones" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
+          <TabsTrigger value="evaluaciones" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <Award className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Desempeño</span>
           </TabsTrigger>
           )}
           {(!user?.enabledModules || user.enabledModules.includes('HR_TRAINING')) && (
-          <TabsTrigger value="capacitaciones" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
+          <TabsTrigger value="capacitaciones" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
             <GraduationCap className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Formación</span>
           </TabsTrigger>
           )}
           {(!user?.enabledModules || user.enabledModules.includes('HR_BENEFITS')) && (
-          <TabsTrigger value="beneficios" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
-            <Sparkles className="size-5" />
+          <TabsTrigger value="beneficios" className="flex-col gap-2 h-20 rounded-xl data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/30 transition-all">
+            <HandHeart className="size-5" />
             <span className="text-[10px] font-black uppercase tracking-widest">Beneficios</span>
           </TabsTrigger>
           )}

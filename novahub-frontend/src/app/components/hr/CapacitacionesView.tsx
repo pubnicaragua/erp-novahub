@@ -56,29 +56,29 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     <div className="space-y-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Programadas</p>
-              <h3 className="text-3xl font-bold text-blue-700">{scheduledTrainings}</h3>
+              <h3 className="text-3xl font-bold text-blue-700 dark:text-blue-400">{scheduledTrainings}</h3>
             </div>
             <Calendar className="size-8 text-blue-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-orange-50 to-amber-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">En Progreso</p>
-              <h3 className="text-3xl font-bold text-orange-700">{inProgressTrainings}</h3>
+              <h3 className="text-3xl font-bold text-orange-700 dark:text-orange-400">{inProgressTrainings}</h3>
             </div>
             <GraduationCap className="size-8 text-orange-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Completadas</p>
-              <h3 className="text-3xl font-bold text-green-700">{completedTrainings}</h3>
+              <h3 className="text-3xl font-bold text-green-700 dark:text-green-400">{completedTrainings}</h3>
             </div>
             <GraduationCap className="size-8 text-green-500" />
           </div>
@@ -87,7 +87,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
 
       {/* New Training Button */}
       <div className="flex justify-end">
-        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-indigo-600 hover:bg-indigo-700">
+        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
           <Plus className="size-4 mr-2" />
           Nueva Capacitación
         </Button>
@@ -95,7 +95,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
 
       {/* New Training Form */}
       {showNewForm && (
-        <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50">
+        <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
           <h3 className="text-lg font-semibold mb-4">Nueva Capacitación</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
@@ -104,7 +104,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 value={newTraining.title}
                 onChange={(e) => setNewTraining({ ...newTraining, title: e.target.value })}
                 placeholder="Nombre de la capacitación"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div className="md:col-span-2">
@@ -113,7 +113,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 value={newTraining.description}
                 onChange={(e) => setNewTraining({ ...newTraining, description: e.target.value })}
                 placeholder="Descripción del curso"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div>
@@ -122,7 +122,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 value={newTraining.instructor}
                 onChange={(e) => setNewTraining({ ...newTraining, instructor: e.target.value })}
                 placeholder="Nombre del instructor"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div>
@@ -131,7 +131,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 value={newTraining.location}
                 onChange={(e) => setNewTraining({ ...newTraining, location: e.target.value })}
                 placeholder="Lugar o modalidad"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div>
@@ -140,7 +140,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 type="date"
                 value={newTraining.startDate}
                 onChange={(e) => setNewTraining({ ...newTraining, startDate: e.target.value })}
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div>
@@ -149,7 +149,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 type="date"
                 value={newTraining.endDate}
                 onChange={(e) => setNewTraining({ ...newTraining, endDate: e.target.value })}
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div>
@@ -158,7 +158,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 type="number"
                 value={newTraining.capacity}
                 onChange={(e) => setNewTraining({ ...newTraining, capacity: parseInt(e.target.value) })}
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div>
@@ -171,13 +171,13 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                   type="number"
                   value={newTraining.cost}
                   onChange={(e) => setNewTraining({ ...newTraining, cost: parseFloat(e.target.value) })}
-                  className="bg-white pl-7"
+                  className="bg-background pl-7"
                 />
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2 mt-4">
-            <Button onClick={handleCreateTraining} className="bg-green-600 hover:bg-green-700">
+            <Button onClick={handleCreateTraining} className="bg-green-600 hover:bg-green-700 text-white">
               Crear Capacitación
             </Button>
             <Button variant="outline" onClick={() => setShowNewForm(false)}>
@@ -195,7 +195,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
           const progress = training.capacity > 0 ? (enrolledCount / training.capacity) * 100 : 0;
 
           return (
-            <div key={training.id} className="border rounded-lg p-6 hover:shadow-lg transition-shadow bg-white">
+            <div key={training.id} className="border rounded-lg p-6 hover:shadow-lg transition-shadow bg-card text-card-foreground">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
                   <h3 className="font-semibold text-lg mb-1">{training.title}</h3>

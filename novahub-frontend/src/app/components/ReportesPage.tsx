@@ -70,9 +70,13 @@ function isDateInRange(value: unknown, range: string): boolean {
   return date >= start;
 }
 
-export function ReportesPage() {
+interface ReportesPageProps {
+  activeSubModule?: string;
+}
+
+export function ReportesPage({ activeSubModule }: ReportesPageProps) {
   const [dateRange, setDateRange] = useState('ultimo-mes');
-  const [activeTab, setActiveTab] = useState('ejecutivo');
+  const [activeTab, setActiveTab] = useState(() => activeSubModule || 'ejecutivo');
   const [loading, setLoading] = useState(true);
 
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -318,6 +322,12 @@ export function ReportesPage() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    if (activeSubModule) {
+      setActiveTab(activeSubModule);
+    }
+  }, [activeSubModule]);
 
   const handleExport = () => {
     const rows = [

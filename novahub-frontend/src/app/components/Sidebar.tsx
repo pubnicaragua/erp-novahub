@@ -37,6 +37,16 @@ import {
   Plus,
   Database,
   Zap,
+  ListTodo,
+  CalendarDays,
+  Bell,
+  HardDrive,
+  Scale,
+  AlertTriangle,
+  MessageSquare,
+  Send,
+  CheckCircle2,
+  Layers,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -169,11 +179,55 @@ const menuItems: MenuItem[] = [
       { id: 'beneficios', label: 'Beneficios', icon: <Plus className="size-4" /> },
     ]
   },
-  { id: 'actividades', label: 'Actividades', icon: <Activity className="size-5" />, section: 'Herramientas' },
+  { 
+    id: 'actividades', 
+    label: 'Actividades', 
+    icon: <Activity className="size-5" />, 
+    section: 'Herramientas',
+    submenu: [
+      { id: 'tareas', label: 'Tareas', icon: <ListTodo className="size-4" /> },
+      { id: 'eventos', label: 'Eventos', icon: <CalendarDays className="size-4" /> },
+      { id: 'recordatorios', label: 'Recordatorios', icon: <Bell className="size-4" /> },
+      { id: 'bitacora', label: 'Bitácora', icon: <Database className="size-4" /> }
+    ]
+  },
   { id: 'tickets', label: 'Tickets y Soporte', icon: <Headphones className="size-5" /> },
-  { id: 'documentos', label: 'Documentos', icon: <FolderOpen className="size-4" /> },
-  { id: 'notificaciones', label: 'Notificaciones', icon: <BellRing className="size-5" /> },
-  { id: 'reportes', label: 'Reportes', icon: <BarChart3 className="size-5" />, section: 'Sistema' },
+  { 
+    id: 'documentos', 
+    label: 'Documentos', 
+    icon: <FolderOpen className="size-4" />,
+    submenu: [
+      { id: 'archivos', label: 'Archivos', icon: <HardDrive className="size-4" /> },
+      { id: 'contratos', label: 'Contratos', icon: <Scale className="size-4" /> },
+      { id: 'facturas', label: 'Facturas Legales', icon: <FileText className="size-4" /> },
+      { id: 'reportes', label: 'Reportes', icon: <BarChart3 className="size-4" /> }
+    ]
+  },
+  { 
+    id: 'notificaciones', 
+    label: 'Notificaciones', 
+    icon: <BellRing className="size-5" />,
+    submenu: [
+      { id: 'alertas', label: 'Alertas', icon: <AlertTriangle className="size-4" /> },
+      { id: 'mensajes', label: 'Mensajes', icon: <MessageSquare className="size-4" /> },
+      { id: 'push', label: 'Push', icon: <Send className="size-4" /> }
+    ]
+  },
+  { 
+    id: 'reportes', 
+    label: 'Reportes', 
+    icon: <BarChart3 className="size-5" />, 
+    section: 'Sistema',
+    submenu: [
+      { id: 'ejecutivo', label: 'Ejecutivo', icon: <Zap className="size-4" /> },
+      { id: 'financiero', label: 'Financiero', icon: <DollarSign className="size-4" /> },
+      { id: 'ventas', label: 'Ventas', icon: <ShoppingCart className="size-4" /> },
+      { id: 'inventario', label: 'Inventario', icon: <Package className="size-4" /> },
+      { id: 'clientes', label: 'Clientes', icon: <Users className="size-4" /> },
+      { id: 'suscripciones', label: 'Suscripciones', icon: <Layers className="size-4" /> },
+      { id: 'aprobaciones', label: 'Aprobaciones', icon: <CheckCircle2 className="size-4" /> }
+    ]
+  },
   { id: 'suscripciones', label: 'Suscripciones', icon: <Zap className="size-5" /> },
   { id: 'configuracion', label: 'Configuracion', icon: <Settings className="size-5" /> },
 ];

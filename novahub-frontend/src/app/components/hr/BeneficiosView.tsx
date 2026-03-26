@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Gift, Plus, Save, X, Edit2, Trash2, Users, DollarSign, CheckCircle } from 'lucide-react';
+import { HandHeart, Plus, Save, X, Edit2, Trash2, Users, DollarSign, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -86,7 +86,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
           </div>
         </div>
         {!addingNew && (
-          <Button onClick={() => { setAddingNew(true); setForm(EMPTY_FORM); }} className="rounded-xl gap-2 font-bold bg-indigo-600 hover:bg-indigo-500">
+          <Button onClick={() => { setAddingNew(true); setForm(EMPTY_FORM); }} className="rounded-xl gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-white">
             <Plus className="size-4" /> Nuevo Beneficio
           </Button>
         )}
@@ -213,7 +213,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
 
         {benefits.length === 0 && !addingNew && (
           <div className="md:col-span-2 xl:col-span-3 flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <Gift className="size-12 opacity-20 mb-3" />
+            <HandHeart className="size-12 opacity-20 mb-3" />
             <p className="text-sm font-bold">Sin beneficios configurados</p>
             <p className="text-xs mt-1">Haz clic en "Nuevo Beneficio" para agregar el primero</p>
           </div>

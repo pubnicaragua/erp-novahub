@@ -103,38 +103,38 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     <div className="space-y-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Bruto</p>
-              <h3 className="text-2xl font-bold text-green-700">{formatConvertedAmount(totalGross, 'USD')}</h3>
+              <h3 className="text-2xl font-bold text-green-700 dark:text-green-400">{formatConvertedAmount(totalGross, 'USD')}</h3>
             </div>
             <DollarSign className="size-8 text-green-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Neto</p>
-              <h3 className="text-2xl font-bold text-blue-700">{formatConvertedAmount(totalNet, 'USD')}</h3>
+              <h3 className="text-2xl font-bold text-blue-700 dark:text-blue-400">{formatConvertedAmount(totalNet, 'USD')}</h3>
             </div>
             <DollarSign className="size-8 text-blue-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-orange-50 to-red-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Impuestos</p>
-              <h3 className="text-2xl font-bold text-orange-700">{formatConvertedAmount(totalTaxes, 'USD')}</h3>
+              <h3 className="text-2xl font-bold text-orange-700 dark:text-orange-400">{formatConvertedAmount(totalTaxes, 'USD')}</h3>
             </div>
             <DollarSign className="size-8 text-orange-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-yellow-50 to-amber-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Pendientes</p>
-              <h3 className="text-3xl font-bold text-amber-700">{pendingCount}</h3>
+              <h3 className="text-3xl font-bold text-amber-700 dark:text-amber-400">{pendingCount}</h3>
             </div>
             <CheckCircle className="size-8 text-amber-500" />
           </div>
@@ -169,12 +169,12 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             Exportar
           </Button>
           {pendingCount > 0 && (
-            <Button size="sm" onClick={handleMarkAllAsPaid} className="bg-emerald-600 hover:bg-emerald-700">
+            <Button size="sm" onClick={handleMarkAllAsPaid} className="bg-emerald-600 hover:bg-emerald-700 text-white">
               <CheckCircle className="size-4 mr-2" />
               Pagar Todas ({pendingCount})
             </Button>
           )}
-          <Button size="sm" onClick={handleProcessPayroll} className="bg-green-600 hover:bg-green-700">
+          <Button size="sm" onClick={handleProcessPayroll} className="bg-green-600 hover:bg-green-700 text-white">
             <Calculator className="size-4 mr-2" />
             Procesar Nómina
           </Button>

@@ -150,7 +150,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
           <Button variant="outline" size="sm" onClick={() => setViewMode(viewMode === 'table' ? 'cards' : 'table')}>
             {viewMode === 'table' ? <Grid className="size-4" /> : <List className="size-4" />}
           </Button>
-          <Button size="sm" onClick={handleAddRow} className="bg-indigo-600 hover:bg-indigo-700">
+          <Button size="sm" onClick={handleAddRow} className="bg-indigo-600 hover:bg-indigo-700 text-white">
             <Plus className="size-4 mr-2" />
             Agregar Empleado
           </Button>

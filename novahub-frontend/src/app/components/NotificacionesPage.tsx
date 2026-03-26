@@ -10,8 +10,12 @@ import { MensajesView } from './notificaciones/MensajesView';
 import { PushView } from './notificaciones/PushView';
 import { alertsService, messagesService, pushNotificationsService } from '../services/notificaciones.service';
 
-export const NotificacionesPage = () => {
-  const [activeTab, setActiveTab] = useState('alertas');
+interface NotificacionesPageProps {
+  activeSubModule?: string;
+}
+
+export const NotificacionesPage = ({ activeSubModule }: NotificacionesPageProps) => {
+  const [activeTab, setActiveTab] = useState(() => activeSubModule || 'alertas');
   const [data, setData] = useState<{ alertas: any[], mensajes: any[], push: any[] }>({
     alertas: [],
     mensajes: [],
@@ -38,6 +42,12 @@ export const NotificacionesPage = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (activeSubModule) {
+      setActiveTab(activeSubModule);
+    }
+  }, [activeSubModule]);
 
   const tabs = [
     { id: 'alertas', label: 'Alertas', icon: AlertTriangle, color: 'text-rose-500' },

@@ -87,12 +87,12 @@ function DashboardLayout() {
       case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} />;
       case 'clientes': return <ClientesPage />;
       case 'proveedores': return <ProveedoresPage />;
-      case 'actividades': return <ActividadesPage />;
+      case 'actividades': return <ActividadesPage activeSubModule={activeSubModule} />;
       case 'tickets': return <TicketsPage />;
-      case 'documentos': return <DocumentosPage />;
-      case 'notificaciones': return <NotificacionesPage />;
+      case 'documentos': return <DocumentosPage activeSubModule={activeSubModule} />;
+      case 'notificaciones': return <NotificacionesPage activeSubModule={activeSubModule} />;
       case 'transferencias': return <TransferenciasPage />;
-      case 'reportes': return <ReportesPage />;
+      case 'reportes': return <ReportesPage activeSubModule={activeSubModule} />;
       case 'roles': return <RolesPage />;
       case 'configuracion': return <ConfiguracionPage />;
       case 'suscripciones': return <SuscripcionesPage />;

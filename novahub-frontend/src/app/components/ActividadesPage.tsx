@@ -11,8 +11,12 @@ import { RecordatoriosView } from './actividades/RecordatoriosView';
 import { BitacoraView } from './actividades/BitacoraView';
 import { tasksService, eventsService, remindersService, activityLogsService } from '../services/actividades.service';
 
-export const ActividadesPage = () => {
-  const [activeTab, setActiveTab] = useState('tareas');
+interface ActividadesPageProps {
+  activeSubModule?: string;
+}
+
+export const ActividadesPage = ({ activeSubModule }: ActividadesPageProps) => {
+  const [activeTab, setActiveTab] = useState(() => activeSubModule || 'tareas');
   const [data, setData] = useState({
     tareas: [],
     eventos: [],
@@ -41,6 +45,12 @@ export const ActividadesPage = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (activeSubModule) {
+      setActiveTab(activeSubModule);
+    }
+  }, [activeSubModule]);
 
   const tabs = [
     { id: 'tareas', label: 'Tareas', icon: ListTodo, color: 'text-blue-500' },

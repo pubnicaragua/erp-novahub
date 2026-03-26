@@ -73,7 +73,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     <div className="space-y-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-orange-50 to-amber-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Pendientes</p>
@@ -82,7 +82,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
             <FileText className="size-8 text-orange-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Aprobadas</p>
@@ -91,7 +91,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
             <Check className="size-8 text-green-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-red-50 to-pink-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Rechazadas</p>
@@ -104,7 +104,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
 
       {/* New Request Button */}
       <div className="flex justify-end">
-        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-indigo-600 hover:bg-indigo-700">
+        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
           <Plus className="size-4 mr-2" />
           Nueva Solicitud
         </Button>
@@ -112,7 +112,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
 
       {/* New Request Form */}
       {showNewForm && (
-        <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50">
+        <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
           <h3 className="text-lg font-semibold mb-4">Nueva Solicitud de Ausencia</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -132,7 +132,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
             <div>
               <label className="text-sm font-medium mb-1 block">Tipo de Ausencia</label>
               <Select value={newRequest.leaveType} onValueChange={(v) => setNewRequest({ ...newRequest, leaveType: v })}>
-                <SelectTrigger className="bg-white">
+                <SelectTrigger className="bg-background">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -153,7 +153,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                 type="date"
                 value={newRequest.startDate}
                 onChange={(e) => setNewRequest({ ...newRequest, startDate: e.target.value })}
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div>
@@ -162,7 +162,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                 type="date"
                 value={newRequest.endDate}
                 onChange={(e) => setNewRequest({ ...newRequest, endDate: e.target.value })}
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div>
@@ -171,7 +171,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                 type="number"
                 value={newRequest.days}
                 onChange={(e) => setNewRequest({ ...newRequest, days: parseInt(e.target.value) })}
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div>
@@ -180,12 +180,12 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                 value={newRequest.reason}
                 onChange={(e) => setNewRequest({ ...newRequest, reason: e.target.value })}
                 placeholder="Motivo de la ausencia"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
           </div>
           <div className="flex items-center gap-2 mt-4">
-            <Button onClick={handleCreateRequest} className="bg-green-600 hover:bg-green-700">
+            <Button onClick={handleCreateRequest} className="bg-green-600 hover:bg-green-700 text-white">
               Crear Solicitud
             </Button>
             <Button variant="outline" onClick={() => setShowNewForm(false)}>

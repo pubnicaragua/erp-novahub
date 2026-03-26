@@ -50,29 +50,29 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
     <div className="space-y-4">
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-sm text-muted-foreground">Presentes Hoy</p>
-              <h3 className="text-3xl font-bold text-blue-700">{presentToday}</h3>
+              <h3 className="text-3xl font-bold text-blue-700 dark:text-blue-400">{presentToday}</h3>
             </div>
             <Clock className="size-8 text-blue-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-sm text-muted-foreground">Horas Totales Hoy</p>
-              <h3 className="text-3xl font-bold text-green-700">{totalHoursToday.toFixed(1)}</h3>
+              <h3 className="text-3xl font-bold text-green-700 dark:text-green-400">{totalHoursToday.toFixed(1)}</h3>
             </div>
             <Calendar className="size-8 text-green-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-red-50 to-orange-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20">
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-sm text-muted-foreground">Ausentes Hoy</p>
-              <h3 className="text-3xl font-bold text-red-700">{absentToday}</h3>
+              <h3 className="text-3xl font-bold text-red-700 dark:text-red-400">{absentToday}</h3>
             </div>
             <Clock className="size-8 text-red-500" />
           </div>
@@ -80,7 +80,7 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
       </div>
 
       {/* Clock In/Out Panel */}
-      <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50">
+      <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
         <h3 className="text-lg font-semibold mb-4">Registrar Asistencia</h3>
         <div className="flex items-center gap-3">
           <div className="flex-1">
@@ -96,11 +96,11 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
               emptyMessage="No se encontró el empleado"
             />
           </div>
-          <Button onClick={handleClockIn} className="bg-green-600 hover:bg-green-700">
+          <Button onClick={handleClockIn} className="bg-green-600 hover:bg-green-700 text-white">
             <LogIn className="size-4 mr-2" />
             Entrada
           </Button>
-          <Button onClick={handleClockOut} className="bg-red-600 hover:bg-red-700">
+          <Button onClick={handleClockOut} className="bg-red-600 hover:bg-red-700 text-white">
             <LogOut className="size-4 mr-2" />
             Salida
           </Button>

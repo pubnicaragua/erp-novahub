@@ -59,11 +59,11 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
     <div className="space-y-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-yellow-50 to-amber-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Calificación Promedio</p>
-              <h3 className="text-3xl font-bold text-yellow-700">{avgRating.toFixed(1)}</h3>
+              <h3 className="text-3xl font-bold text-yellow-700 dark:text-yellow-400">{avgRating.toFixed(1)}</h3>
               <div className="flex items-center gap-1 mt-1">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <Star
@@ -76,20 +76,20 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
             <Award className="size-8 text-yellow-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Completadas</p>
-              <h3 className="text-3xl font-bold text-green-700">{completedReviews}</h3>
+              <h3 className="text-3xl font-bold text-green-700 dark:text-green-400">{completedReviews}</h3>
             </div>
             <Award className="size-8 text-green-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50">
+        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">En Progreso</p>
-              <h3 className="text-3xl font-bold text-blue-700">{inProgressReviews}</h3>
+              <h3 className="text-3xl font-bold text-blue-700 dark:text-blue-400">{inProgressReviews}</h3>
             </div>
             <Award className="size-8 text-blue-500" />
           </div>
@@ -98,7 +98,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
 
       {/* New Review Button */}
       <div className="flex justify-end">
-        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-indigo-600 hover:bg-indigo-700">
+        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
           <Plus className="size-4 mr-2" />
           Nueva Evaluación
         </Button>
@@ -106,7 +106,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
 
       {/* New Review Form */}
       {showNewForm && (
-        <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50">
+        <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
           <h3 className="text-lg font-semibold mb-4">Nueva Evaluación de Desempeño</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -143,7 +143,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                 type="date"
                 value={newReview.reviewPeriodStart}
                 onChange={(e) => setNewReview({ ...newReview, reviewPeriodStart: e.target.value })}
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div>
@@ -152,7 +152,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                 type="date"
                 value={newReview.reviewPeriodEnd}
                 onChange={(e) => setNewReview({ ...newReview, reviewPeriodEnd: e.target.value })}
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div>
@@ -164,7 +164,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                 step="0.1"
                 value={newReview.overallRating}
                 onChange={(e) => setNewReview({ ...newReview, overallRating: parseFloat(e.target.value) })}
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div className="md:col-span-2">
@@ -173,7 +173,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                 value={newReview.goals}
                 onChange={(e) => setNewReview({ ...newReview, goals: e.target.value })}
                 placeholder="Objetivos del período"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div className="md:col-span-2">
@@ -182,7 +182,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                 value={newReview.achievements}
                 onChange={(e) => setNewReview({ ...newReview, achievements: e.target.value })}
                 placeholder="Logros alcanzados"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div className="md:col-span-2">
@@ -191,7 +191,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                 value={newReview.areasOfImprovement}
                 onChange={(e) => setNewReview({ ...newReview, areasOfImprovement: e.target.value })}
                 placeholder="Áreas a mejorar"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div className="md:col-span-2">
@@ -200,12 +200,12 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                 value={newReview.comments}
                 onChange={(e) => setNewReview({ ...newReview, comments: e.target.value })}
                 placeholder="Comentarios adicionales"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
           </div>
           <div className="flex items-center gap-2 mt-4">
-            <Button onClick={handleCreateReview} className="bg-green-600 hover:bg-green-700">
+            <Button onClick={handleCreateReview} className="bg-green-600 hover:bg-green-700 text-white">
               Crear Evaluación
             </Button>
             <Button variant="outline" onClick={() => setShowNewForm(false)}>
