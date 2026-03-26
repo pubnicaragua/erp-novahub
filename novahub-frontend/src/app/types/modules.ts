@@ -39,25 +39,15 @@ export const PURCHASES_SUBMODULES: Submodule[] = [
   { id: 'PURCHASES_RETURNS', label: 'Créditos del Proveedor', description: 'Devoluciones y créditos' },
 ];
 
-// Submódulos de Inventario
-export const INVENTORY_SUBMODULES: Submodule[] = [
-  { id: 'INVENTORY_PRODUCTS', label: 'Productos', description: 'Catálogo de productos' },
-  { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', description: 'Gestión de almacenes' },
-  { id: 'INVENTORY_TRANSFERS', label: 'Transferencias', description: 'Transferencias entre almacenes' },
-  { id: 'INVENTORY_ADJUSTMENTS', label: 'Ajustes', description: 'Ajustes de inventario' },
-  { id: 'INVENTORY_COUNT', label: 'Conteos', description: 'Conteos físicos' },
-  { id: 'INVENTORY_SERIALS', label: 'Seriales', description: 'Números de serie' },
-  { id: 'INVENTORY_LOTS', label: 'Lotes', description: 'Gestión de lotes' },
-];
+// Submódulos de Inventario (sin vistas subordinadas en sidebar por ahora)
+export const INVENTORY_SUBMODULES: Submodule[] = [];
 
 // Submódulos de Finanzas
 export const FINANCIAL_SUBMODULES: Submodule[] = [
-  { id: 'FINANCIAL_ACCOUNTS', label: 'Plan de Cuentas', description: 'Catálogo de cuentas contables' },
-  { id: 'FINANCIAL_JOURNAL', label: 'Libro Diario', description: 'Asientos contables' },
-  { id: 'FINANCIAL_LEDGER', label: 'Libro Mayor', description: 'Mayor general' },
-  { id: 'FINANCIAL_BANK', label: 'Bancos', description: 'Conciliación bancaria' },
-  { id: 'FINANCIAL_BUDGET', label: 'Presupuestos', description: 'Gestión de presupuestos' },
-  { id: 'FINANCIAL_REPORTS', label: 'Reportes', description: 'Estados financieros' },
+  { id: 'FINANCIAL_INCOMES', label: 'Ingresos', description: 'Registro de ingresos' },
+  { id: 'FINANCIAL_EXPENSES', label: 'Gastos', description: 'Registro de egresos' },
+  { id: 'FINANCIAL_EXPENSES_REC', label: 'Gastos Recurrentes', description: 'Programación de gastos' },
+  { id: 'FINANCIAL_BALANCE', label: 'Balance General', description: 'Reportes y balance' },
 ];
 
 // Submódulos de Recursos Humanos
@@ -72,11 +62,4 @@ export const HR_SUBMODULES: Submodule[] = [
 ];
 
 // Submódulos de Proyectos
-export const PROJECTS_SUBMODULES: Submodule[] = [
-  { id: 'PROJECTS_LIST', label: 'Proyectos', description: 'Lista de proyectos' },
-  { id: 'PROJECTS_TASKS', label: 'Tareas', description: 'Gestión de tareas' },
-  { id: 'PROJECTS_MILESTONES', label: 'Hitos', description: 'Hitos del proyecto' },
-  { id: 'PROJECTS_TIME', label: 'Tiempo', description: 'Registro de tiempo' },
-  { id: 'PROJECTS_EXPENSES', label: 'Gastos', description: 'Gastos del proyecto' },
-  { id: 'PROJECTS_DOCUMENTS', label: 'Documentos', description: 'Documentos del proyecto' },
-];
+export const PROJECTS_SUBMODULES: Submodule[] = [];

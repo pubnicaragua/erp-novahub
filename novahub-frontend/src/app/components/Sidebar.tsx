@@ -96,6 +96,11 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   evaluaciones: ['HR_PERFORMANCE'],
   capacitaciones: ['HR_TRAINING'],
   beneficios: ['HR_BENEFITS'],
+  // Finanzas
+  ingresos: ['FINANCIAL_INCOMES'],
+  egresos: ['FINANCIAL_EXPENSES'],
+  'gastos-recurrentes-fin': ['FINANCIAL_EXPENSES_REC'],
+  balance: ['FINANCIAL_BALANCE'],
 };
 
 const menuItems: MenuItem[] = [
@@ -146,7 +151,7 @@ const menuItems: MenuItem[] = [
     submenu: [
       { id: 'ingresos', label: 'Ingresos', icon: <Receipt className="size-4" /> },
       { id: 'egresos', label: 'Gastos', icon: <Wallet className="size-4" /> },
-      { id: 'gastos-recurrentes', label: 'Gastos recurrentes', icon: <CalendarClock className="size-4" /> },
+      { id: 'gastos-recurrentes-fin', label: 'Gastos recurrentes', icon: <CalendarClock className="size-4" /> },
       { id: 'balance', label: 'Balance General', icon: <BarChart3 className="size-4" /> },
     ]
   },

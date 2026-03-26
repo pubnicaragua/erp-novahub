@@ -24,6 +24,7 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
     'ingresos': 'ingresos', 
     'egresos': 'gastos', 
     'gastos-recurrentes': 'gastos-rec', 
+    'gastos-recurrentes-fin': 'gastos-rec', 
     'balance': 'balance' 
   };
   

@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import { cn } from './ui/utils';
 import {
   Building2, Users, CheckCircle2, XCircle, Clock, Plus, Search, Edit2, Trash2,
-  UserPlus, TrendingUp, Activity, DollarSign, Zap, ShieldCheck, LayoutGrid, HandCoins, Globe
+  UserPlus, TrendingUp, Activity, DollarSign, Zap, ShieldCheck, LayoutGrid, HandCoins, Globe, Headphones, BellRing, Settings, FileText, CalendarDays, Package, Users as UserIcon, Briefcase, BarChart3
 } from 'lucide-react';
 import { subscriptionsService } from '../services/subscriptions.service';
 import { tenantsService } from '../services/tenants.service';
@@ -20,12 +20,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 
 const AVAILABLE_MODULES = [
-  { id: 'SALES', label: 'Ventas', icon: LayoutGrid, description: 'Cotizaciones y Facturación' },
-  { id: 'INVENTORY', label: 'Inventario', icon: Zap, description: 'Gestión de Stock' },
-  { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Contabilidad' },
-  { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Órdenes de Compra' },
-  { id: 'HR', label: 'Recursos Humanos', icon: Users, description: 'Nómina y Personal' },
-  { id: 'PROJECTS', label: 'Proyectos', icon: Globe, description: 'Gestión de Proyectos' },
+  { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes' },
+  { id: 'INVENTORY', label: 'Inventario', icon: Package, description: 'Stock, Almacenes y SKU' },
+  { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General' },
+  { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra' },
+  { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados' },
+  { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
+  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
+  { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
+  { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
+  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
+  { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
 ];
 
 export function SuscripcionesPageFinal() {

@@ -39,7 +39,9 @@ import {
   BarChart3,
   CalendarDays,
   Briefcase,
-  Package
+  Package,
+  Headphones,
+  BellRing
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from './ui/utils';
@@ -54,7 +56,6 @@ import {
   INVENTORY_SUBMODULES, 
   FINANCIAL_SUBMODULES, 
   HR_SUBMODULES, 
-  PROJECTS_SUBMODULES,
   type Submodule 
 } from '../types/modules';
 import { storageService } from '../services/storage.service';
@@ -65,11 +66,10 @@ const AVAILABLE_MODULES = [
   { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General', submodules: FINANCIAL_SUBMODULES },
   { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra', submodules: PURCHASES_SUBMODULES },
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados', submodules: HR_SUBMODULES },
-  { id: 'PROJECTS', label: 'Proyectos', icon: Briefcase, description: 'Tareas y Cronogramas de Obra', submodules: PROJECTS_SUBMODULES },
-  { id: 'CLIENTS', label: 'Clientes', icon: Users, description: 'CRM y Gestión de Clientes' },
-  { id: 'PROVIDERS', label: 'Proveedores', icon: Building2, description: 'Gestión de Proveedores' },
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
   { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
+  { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
+  { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
   { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
 ];

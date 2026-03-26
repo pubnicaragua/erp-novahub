@@ -6,7 +6,7 @@ import {
   ShoppingCart, UserCheck, Users, Plus, Settings2, KeyRound, Layers,
   Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
-  BarChart3, X, Info, Coins
+  BarChart3, X, Info, Coins, Headphones, BellRing, FileText, CalendarDays
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -36,7 +36,12 @@ const AVAILABLE_MODULES = [
   { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General' },
   { id: 'PURCHASES', label: 'Compras', icon: ShoppingCart, description: 'Proveedores y Órdenes de Compra' },
   { id: 'HR', label: 'Recursos Humanos', icon: Users, description: 'Nómina y Gestión de Empleados' },
-  { id: 'PROJECTS', label: 'Proyectos', icon: Briefcase, description: 'Tareas y Cronogramas de Obra' },
+  { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
+  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
+  { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
+  { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
+  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
+  { id: 'CONFIGURATION', label: 'Configuración', icon: Settings2, description: 'Ajustes del Sistema' },
 ];
 
 // ---- Hex / OKLCH conversion helpers ----
