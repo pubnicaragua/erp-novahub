@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, Info
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -26,11 +26,11 @@ interface FacturasViewProps {
 }
 
 const statusOptions = [
-  { label: 'Borrador',  value: 'DRAFT',    color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Pendiente', value: 'PENDING',  color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Parcial',   value: 'PARTIAL',  color: 'bg-blue-500/10 text-blue-500' },
-  { label: 'Pagada',    value: 'PAID',     color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Vencida',   value: 'OVERDUE',  color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Borrador', value: 'DRAFT', color: 'bg-muted/20 text-muted-foreground' },
+  { label: 'Pendiente', value: 'PENDING', color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Parcial', value: 'PARTIAL', color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Pagada', value: 'PAID', color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Vencida', value: 'OVERDUE', color: 'bg-rose-500/10 text-rose-500' },
   { label: 'Reembolso', value: 'REFUNDED', color: 'bg-blue-500/10 text-blue-500' },
 ];
 
@@ -49,7 +49,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       setIsCreating(true);
       setEditingId(null);
       setLocalDoc(JSON.parse(JSON.stringify(invoiceDraft)));
-      
+
       const sub = Number(invoiceDraft.subtotal || 0);
       if (sub > 0) {
         const dRate = (Number(invoiceDraft.discountAmount || 0) / sub) * 100;
@@ -59,7 +59,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       } else {
         setLocalRates({ dRate: 0, tRate: 15 });
       }
-      
+
       if (onClearInvoiceDraft) {
         setTimeout(() => onClearInvoiceDraft(), 0);
       }
@@ -80,8 +80,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
   }, [editingId, invoiceDraft]);
 
-  const filtered = data.filter(f => 
-    f.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filtered = data.filter(f =>
+    f.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (f.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -182,37 +182,37 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
 
   const columns: ColumnDef<Invoice>[] = [
-    { 
-      key: 'number', 
-      header: 'Nº Factura', 
+    {
+      key: 'number',
+      header: 'Nº Factura',
       width: '140px',
       render: (val, row) => <span className="text-xs font-black font-mono text-primary cursor-pointer hover:underline" onClick={() => setEditingId(row.id)}>{val}</span>
     },
-    { 
-      key: 'customer', 
-      header: 'Cliente', 
+    {
+      key: 'customer',
+      header: 'Cliente',
       render: (val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Varios'}</span>
     },
-    { 
-      key: 'date', 
-      header: 'Fecha Emisión', 
+    {
+      key: 'date',
+      header: 'Fecha Emisión',
       render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span>
     },
-    { 
-      key: 'dueDate', 
-      header: 'Vencimiento', 
+    {
+      key: 'dueDate',
+      header: 'Vencimiento',
       render: (val, row) => (
         <span className={cn(
           "text-xs font-bold",
-          (row.status||'').toUpperCase() === 'OVERDUE' ? 'text-rose-500' : 'text-muted-foreground'
+          (row.status || '').toUpperCase() === 'OVERDUE' ? 'text-rose-500' : 'text-muted-foreground'
         )}>
           {new Date(val).toLocaleDateString()}
         </span>
       )
     },
-    { 
-      key: 'total', 
-      header: 'Total Neto', 
+    {
+      key: 'total',
+      header: 'Total Neto',
       width: '150px',
       render: (val, row) => (
         <span className="text-[13px] font-black tabular-nums text-foreground">
@@ -220,12 +220,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         </span>
       )
     },
-    { 
-      key: 'status', 
-      header: 'Estado', 
+    {
+      key: 'status',
+      header: 'Estado',
       width: '130px',
       render: (val) => {
-        const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
+        const opt = statusOptions.find(o => o.value === (val || '').toUpperCase());
         return (
           <Badge variant="outline" className={cn(
             "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
@@ -264,7 +264,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       color: 'text-orange-500',
       bg: 'bg-orange-500/10',
     },
-    { title: 'Vencidas',               value: data.filter(f => (f.status||'').toUpperCase() === 'OVERDUE').length,                                                                                                                                           icon: AlertCircle,  color: 'text-rose-500',     bg: 'bg-rose-500/10'     },
+    { title: 'Vencidas', value: data.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length, icon: AlertCircle, color: 'text-rose-500', bg: 'bg-rose-500/10' },
     {
       title: `Cobrado (${displayCurrency})`,
       value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${paidInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
@@ -326,7 +326,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
-                  <Combobox 
+                  <Combobox
                     options={customers.map(c => ({ label: c.name, value: c.id }))}
                     value={localDoc?.customerId || ''}
                     onChange={(val) => setLocalDoc({ ...localDoc, customerId: val })}
@@ -335,12 +335,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
-                  <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''} 
+                  <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''}
                     onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Vencimiento</p>
-                  <Input type="date" value={localDoc?.dueDate ? (typeof localDoc.dueDate === 'string' && localDoc.dueDate.includes('T') ? localDoc.dueDate.split('T')[0] : localDoc.dueDate) : ''} 
+                  <Input type="date" value={localDoc?.dueDate ? (typeof localDoc.dueDate === 'string' && localDoc.dueDate.includes('T') ? localDoc.dueDate.split('T')[0] : localDoc.dueDate) : ''}
                     onChange={(e) => setLocalDoc({ ...localDoc, dueDate: e.target.value })} className="h-8 text-xs" />
                 </div>
                 <div>
@@ -360,7 +360,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Subtotal</span>
-                  <div className="flex items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="number" min="0" value={Number(localDoc?.subtotal||0)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div></div>
+                  <div className="flex items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="number" min="0" value={Number(localDoc?.subtotal || 0)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div></div>
                 <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Descuento</span>
                   <div className="flex items-center gap-2 text-rose-500">
                     <div className="flex items-center mr-2"><Input type="number" min="0" max="100" value={localRates.dRate || ''} placeholder="0" onChange={(e) => {
@@ -368,7 +368,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       const calc = recalcTotals(localDoc?.items || [], newRate, localRates.tRate);
                       setLocalDoc({ ...localDoc, ...calc });
                     }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> <span className="ml-1 text-xs font-black">%</span></div>
-                    -{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.discountAmount||0).toLocaleString()}
+                    -{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.discountAmount || 0).toLocaleString()}
                   </div></div>
                 <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">IVA</span>
                   <div className="flex items-center gap-2">
@@ -377,12 +377,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       const calc = recalcTotals(localDoc?.items || [], localRates.dRate, newRate);
                       setLocalDoc({ ...localDoc, ...calc });
                     }} className="w-16 h-8 text-right font-bold bg-transparent" /> <span className="ml-1 text-xs font-black">%</span></div>
-                    {localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.taxAmount||0).toLocaleString()}
+                    {localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.taxAmount || 0).toLocaleString()}
                   </div></div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black">Total</span>
                   <div className="flex flex-col items-end">
-                    <span className="text-primary font-black text-lg">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.total||0).toLocaleString()}</span>
+                    <span className="text-primary font-black text-lg">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.total || 0).toLocaleString()}</span>
                     {localDoc?.currency === 'USD' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ C$ {(Number(localDoc?.total || 0) * (localDoc?.exchangeRate || globalRate)).toLocaleString()}</p>}
                     {localDoc?.currency === 'NIO' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ $ {(Number(localDoc?.total || 0) / (localDoc?.exchangeRate || globalRate)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>}
                   </div>
@@ -417,7 +417,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-5">
-                    <Combobox 
+                    <Combobox
                       options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))}
                       value={item.productId || ''}
                       onChange={(val) => {
@@ -458,9 +458,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   </div>
                   <div className="col-span-1 flex justify-end">
                     <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => {
-                        const newItems = [...(localDoc.items || [])]; newItems.splice(idx, 1);
-                        const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
-                        setLocalDoc({ ...localDoc, items: newItems, ...calc });
+                      const newItems = [...(localDoc.items || [])]; newItems.splice(idx, 1);
+                      const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
+                      setLocalDoc({ ...localDoc, items: newItems, ...calc });
                     }}><Trash2 className="size-3" /></Button>
                   </div>
                 </div>
@@ -515,8 +515,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input 
-                placeholder="Buscar factura..." 
+              <Input
+                placeholder="Buscar factura..."
                 className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -528,7 +528,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           </div>
         </div>
 
-        <EditableDataTable 
+        <EditableDataTable
           data={filtered}
           columns={columns}
           onRowUpdate={handleUpdate}
@@ -541,13 +541,13 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           bulkActions={() => null}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               {(row.status||'').toUpperCase() !== 'PAID' && (
-                 <span title="El estado se actualiza desde Pagos Recibidos" className="size-8 flex items-center justify-center rounded-lg text-muted-foreground/40 cursor-default">
-                   <Info className="size-4" />
-                 </span>
-               )}
-               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+              {(row.status || '').toUpperCase() !== 'PAID' && (
+                <span title="El estado se actualiza desde Pagos Recibidos" className="size-8 flex items-center justify-center rounded-lg text-muted-foreground/40 cursor-default">
+                  <Info className="size-4" />
+                </span>
+              )}
+              <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />

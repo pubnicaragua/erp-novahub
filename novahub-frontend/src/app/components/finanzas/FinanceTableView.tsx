@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '../ui/table';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { 
-  Plus, Trash2, Search, Filter, Download, 
+import {
+  Plus, Trash2, Search, Filter, Download,
   MoreHorizontal, CheckCircle2, Edit3
 } from 'lucide-react';
-import { 
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger 
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from '../ui/dropdown-menu';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { cn } from '../ui/utils';
@@ -33,14 +33,14 @@ interface FinanceTableViewProps {
   loading?: boolean;
 }
 
-export function FinanceTableView({ 
-  data, 
-  columns, 
-  onUpdate, 
-  onAdd, 
-  onDelete, 
+export function FinanceTableView({
+  data,
+  columns,
+  onUpdate,
+  onAdd,
+  onDelete,
   title,
-  loading 
+  loading
 }: FinanceTableViewProps) {
   const { formatConvertedAmount } = useCurrency();
   const [localData, setLocalData] = useState<any[]>(data);
@@ -84,15 +84,15 @@ export function FinanceTableView({
     }
   };
 
-  const filteredData = (localData || []).filter(item => 
-    item && Object.values(item).some(val => 
+  const filteredData = (localData || []).filter(item =>
+    item && Object.values(item).some(val =>
       String(val).toLowerCase().includes(searchTerm.toLowerCase())
     )
   );
 
   const renderCellContent = (item: any, col: Column) => {
     const value = item[col.key];
-    
+
     if (col.type === 'currency') {
       const numValue = Number(value || 0);
       return (
@@ -101,13 +101,13 @@ export function FinanceTableView({
         </span>
       );
     }
-    
+
     if (col.type === 'date') {
       if (!value) return '-';
       const date = new Date(value);
       return isNaN(date.getTime()) ? String(value) : date.toLocaleDateString();
     }
-    
+
     if (col.type === 'select') {
       return (
         <Badge variant="secondary" className="font-semibold uppercase text-[10px]">
@@ -115,7 +115,7 @@ export function FinanceTableView({
         </Badge>
       );
     }
-    
+
     return value || '-';
   };
 
@@ -132,11 +132,11 @@ export function FinanceTableView({
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative max-w-xs">
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar..." 
+            <Input
+              placeholder="Buscar..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 h-9 w-[200px] lg:w-[300px]" 
+              className="pl-9 h-9 w-[200px] lg:w-[300px]"
             />
           </div>
           <button className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted">
@@ -145,7 +145,7 @@ export function FinanceTableView({
           <button className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted">
             <Download className="size-4" /> Exportar
           </button>
-          <button 
+          <button
             onClick={onAdd}
             className="flex items-center gap-2 rounded-lg bg-[#05602b] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#044d22] transition-colors"
           >
@@ -187,8 +187,8 @@ export function FinanceTableView({
                     )}
                   </TableCell>
                   {columns.map(col => (
-                    <TableCell 
-                      key={col.key} 
+                    <TableCell
+                      key={col.key}
                       className={cn(
                         "p-1.5 transition-all",
                         editingCell?.id === item.id && editingCell?.key === col.key ? "bg-primary/5 ring-1 ring-inset ring-primary" : ""
@@ -209,7 +209,7 @@ export function FinanceTableView({
                           }}
                         />
                       ) : (
-                        <div 
+                        <div
                           className={cn(
                             "px-1 py-1 text-sm cursor-pointer hover:bg-muted/50 rounded transition-colors",
                             col.type === 'currency' ? "font-bold" : "font-medium"
@@ -229,7 +229,7 @@ export function FinanceTableView({
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-40">
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="gap-2 text-destructive focus:text-destructive"
                           onClick={() => onDelete(item.id)}
                         >

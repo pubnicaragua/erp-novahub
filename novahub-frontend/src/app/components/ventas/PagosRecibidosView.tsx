@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { 
+import {
   CreditCard, Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, Trash2, ChevronLeft
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -25,9 +25,9 @@ interface PagosRecibidosViewProps {
 
 const methodOptions = [
   { label: 'Transferencia', value: 'TRANSFER', color: 'bg-blue-500/10 text-blue-500' },
-  { label: 'Efectivo',      value: 'CASH',     color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Tarjeta',       value: 'CARD',     color: 'bg-purple-500/10 text-purple-500' },
-  { label: 'Cheque',        value: 'CHECK',    color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Efectivo', value: 'CASH', color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Tarjeta', value: 'CARD', color: 'bg-purple-500/10 text-purple-500' },
+  { label: 'Cheque', value: 'CHECK', color: 'bg-amber-500/10 text-amber-500' },
 ];
 
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [] }: PagosRecibidosViewProps) {
@@ -38,8 +38,8 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const [isCreating, setIsCreating] = useState(false);
   const [localDoc, setLocalDoc] = useState<any>(null);
 
-  const filtered = data.filter(p => 
-    p.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filtered = data.filter(p =>
+    p.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.invoice?.number || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -101,18 +101,24 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     { key: 'customer', header: 'Cliente', render: (val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
     { key: 'reference', header: 'Referencia / Factura', render: (val, row) => <span className="text-xs font-bold text-primary">{row.invoice?.number || val || 'Anticipo'}</span> },
     { key: 'date', header: 'Fecha', render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span> },
-    { key: 'amount', header: 'Monto', width: '150px', render: (val, row) => (
-      <span className="text-[13px] font-black tabular-nums text-emerald-500">
-        {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-      </span>) },
-    { key: 'method', header: 'Método', width: '120px', editable: true, type: 'select', options: methodOptions,
-      render: (val) => { const methodMap: Record<string,string> = { TRANSFER:'Transferencia', CASH:'Efectivo', CARD:'Tarjeta', CHECK:'Cheque' };
-        return <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none bg-blue-500/10 text-blue-500">{methodMap[(val||'').toUpperCase()] || val}</Badge>; } },
+    {
+      key: 'amount', header: 'Monto', width: '150px', render: (val, row) => (
+        <span className="text-[13px] font-black tabular-nums text-emerald-500">
+          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
+        </span>)
+    },
+    {
+      key: 'method', header: 'Método', width: '120px', editable: true, type: 'select', options: methodOptions,
+      render: (val) => {
+        const methodMap: Record<string, string> = { TRANSFER: 'Transferencia', CASH: 'Efectivo', CARD: 'Tarjeta', CHECK: 'Cheque' };
+        return <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none bg-blue-500/10 text-blue-500">{methodMap[(val || '').toUpperCase()] || val}</Badge>;
+      }
+    },
   ];
 
   const mainMethod = data.length > 0
-    ? Object.entries(data.reduce((acc, p) => { const m = (p.method||'TRANSFER').toUpperCase(); acc[m] = (acc[m]||0)+1; return acc; }, {} as Record<string,number>))
-        .sort(([,a],[,b]) => b-a)[0]?.[0] || 'N/A'
+    ? Object.entries(data.reduce((acc, p) => { const m = (p.method || 'TRANSFER').toUpperCase(); acc[m] = (acc[m] || 0) + 1; return acc; }, {} as Record<string, number>))
+      .sort(([, a], [, b]) => b - a)[0]?.[0] || 'N/A'
     : 'N/A';
 
   const totalCollectedInDisplayCurrency = data.reduce(
@@ -128,9 +134,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       color: 'text-emerald-500',
       bg: 'bg-emerald-500/10',
     },
-    { title: 'Pagos',           value: data.length,                                                                   icon: CheckCircle2, color: 'text-blue-500',    bg: 'bg-blue-500/10'   },
-    { title: 'Con Factura',     value: data.filter(p => p.invoice?.number).length,                                    icon: Clock,        color: 'text-amber-500',  bg: 'bg-amber-500/10'  },
-    { title: 'Método Principal', value: mainMethod,                                                                  icon: Wallet,       color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    { title: 'Pagos', value: data.length, icon: CheckCircle2, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { title: 'Con Factura', value: data.filter(p => p.invoice?.number).length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { title: 'Método Principal', value: mainMethod, icon: Wallet, color: 'text-purple-500', bg: 'bg-purple-500/10' },
   ];
 
   // ─── INLINE FORM ────────────────────────────────────────────────────
@@ -161,7 +167,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   <Combobox options={customerInvoices.map(i => ({
                     label: `${i.number} — ${formatConvertedAmount(Number(i.balance || 0), i.currency, i.exchangeRate)} pend.`,
                     value: i.id,
-                  }))} 
+                  }))}
                     value={localDoc.invoiceId} onChange={(val) => {
                       const inv = invoices.find(i => i.id === val);
                       setLocalDoc({ ...localDoc, invoiceId: val, amount: inv ? Number(inv.balance || 0) : localDoc.amount });
@@ -205,11 +211,11 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             </CardContent>
           </Card>
         </div>
-  
-      
-    </div>
-  );
-}
+
+
+      </div>
+    );
+  }
 
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
@@ -238,41 +244,41 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
-               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+              <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
+              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />
       </div>
       <ConfirmDialog
-              open={pendingDeleteId !== null}
-              onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-              title={"¿Eliminar pago recibido?"}
-              description="¿Estás seguro de que deseas eliminar este pago? Esta acción no se puede deshacer."
-              confirmLabel="Eliminar"
-              variant="destructive"
-              loading={deleteLoading}
-              onConfirm={async () => {
-                if (!pendingDeleteId) return;
-                try {
-                  setDeleteLoading(true);
-                  await paymentsService.delete(pendingDeleteId);
-                  toast.success('Pago eliminado');
-                  setEditingId?.(null);
-                  onRefresh();
-                } catch (error: any) {
-                   const msg = error?.response?.data?.message || error?.message || '';
-                  if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
-                    toast.error('No se puede eliminar: tiene dependencias en el sistema.');
-                  } else {
-                    toast.error(`Error al eliminar: ${msg || 'Error desconocido'}`);
-                  }
-                } finally {
-                  setDeleteLoading(false);
-                  setPendingDeleteId(null);
-                }
-              }}
-            />
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+        title={"¿Eliminar pago recibido?"}
+        description="¿Estás seguro de que deseas eliminar este pago? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={async () => {
+          if (!pendingDeleteId) return;
+          try {
+            setDeleteLoading(true);
+            await paymentsService.delete(pendingDeleteId);
+            toast.success('Pago eliminado');
+            setEditingId?.(null);
+            onRefresh();
+          } catch (error: any) {
+            const msg = error?.response?.data?.message || error?.message || '';
+            if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
+              toast.error('No se puede eliminar: tiene dependencias en el sistema.');
+            } else {
+              toast.error(`Error al eliminar: ${msg || 'Error desconocido'}`);
+            }
+          } finally {
+            setDeleteLoading(false);
+            setPendingDeleteId(null);
+          }
+        }}
+      />
 
     </div>
   );

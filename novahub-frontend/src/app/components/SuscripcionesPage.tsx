@@ -142,7 +142,8 @@ export function SuscripcionesPage() {
     adminEmail: '',
     industry: 'TECHNOLOGY',
     plan: 'BASIC',
-    logo: ''
+    logo: '',
+    customPrice: ''
   });
 
   useEffect(() => {
@@ -339,7 +340,8 @@ export function SuscripcionesPage() {
       adminEmail: '',
       industry: 'TECHNOLOGY',
       plan: 'BASIC',
-      logo: ''
+      logo: '',
+      customPrice: ''
     });
     setLogoFile(null);
     setLogoPreview('');
@@ -354,7 +356,8 @@ export function SuscripcionesPage() {
       adminEmail: tenant.users?.[0]?.email || '',
       industry: tenant.industry,
       plan: tenant.plan,
-      logo: tenant.logo || ''
+      logo: tenant.logo || '',
+      customPrice: tenant.customPrice || ''
     });
     setLogoPreview(tenant.logo || '');
     setIsTenantDialogOpen(true);
@@ -593,13 +596,28 @@ export function SuscripcionesPage() {
                         <SelectValue placeholder="Seleccionar plan..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="BASIC">Básico - Funcionalidades esenciales</SelectItem>
-                        <SelectItem value="PROFESSIONAL">Profesional - Para empresas en crecimiento</SelectItem>
-                        <SelectItem value="ENTERPRISE">Enterprise - Solución completa</SelectItem>
-                        <SelectItem value="CUSTOM">Custom - Personalizado a medida</SelectItem>
+                        <SelectItem value="BASIC">Básico ($29/mes) - Funcionalidades esenciales</SelectItem>
+                        <SelectItem value="PROFESSIONAL">Profesional ($79/mes) - Para empresas en crecimiento</SelectItem>
+                        <SelectItem value="ENTERPRISE">Enterprise ($199/mes) - Solución completa</SelectItem>
+                        <SelectItem value="CUSTOM">Custom (A medida) - Personalizado según necesidades</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-[9px] text-muted-foreground ml-1">Selecciona el plan de facturación</p>
+                    
+                    {tenantForm.plan === 'CUSTOM' && (
+                      <div className="mt-3">
+                        <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Precio Custom (USD)</Label>
+                        <Input 
+                          type="number" 
+                          min="0"
+                          placeholder="Ej. 299"
+                          className="bg-muted/10 border-border/50 h-11 rounded-xl mt-1"
+                          value={tenantForm.customPrice || ''}
+                          onChange={e => setTenantForm({...tenantForm, customPrice: e.target.value})}
+                        />
+                      </div>
+                    )}
+                    
+                    <p className="text-[9px] text-muted-foreground ml-1 mt-1">Selecciona el plan de facturación mensual</p>
                   </div>
                 </div>
                 

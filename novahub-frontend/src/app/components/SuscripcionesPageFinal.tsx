@@ -433,9 +433,10 @@ export function SuscripcionesPageFinal() {
                 <Select value={tenantForm.plan} onValueChange={v => setTenantForm({...tenantForm, plan: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="BASIC">Básico</SelectItem>
-                    <SelectItem value="PROFESSIONAL">Profesional</SelectItem>
-                    <SelectItem value="ENTERPRISE">Enterprise</SelectItem>
+                    <SelectItem value="BASIC">Básico ($29/mes) - Funcionalidades esenciales</SelectItem>
+                    <SelectItem value="PROFESSIONAL">Profesional ($79/mes) - Para empresas en crecimiento</SelectItem>
+                    <SelectItem value="ENTERPRISE">Enterprise ($199/mes) - Solución completa</SelectItem>
+                    <SelectItem value="CUSTOM">Custom (A medida) - Personalizado según necesidades</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
