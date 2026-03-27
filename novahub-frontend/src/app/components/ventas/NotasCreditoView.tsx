@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  FileMinus, Plus, Search, TrendingUp, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, Send
+  FileMinus, Plus, Search, TrendingUp, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, Send, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -14,6 +14,8 @@ import type { CreditNote, Customer } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { generateEstimatePDF } from '../../utils/pdfGenerator';
 
 interface NotasCreditoViewProps {
   data: CreditNote[];
@@ -31,6 +33,7 @@ const statusOptions = [
 
 export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: NotasCreditoViewProps) {
   const { displayCurrency, formatConvertedAmount } = useCurrency();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -105,6 +108,19 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
     } catch { toast.error('Error al emitir nota de crédito'); }
   };
 
+  const handleExportPDF = async (row: CreditNote) => {
+    try {
+      const tenantName = user?.tenantName || 'Mi Empresa';
+      await generateEstimatePDF({
+        estimate: { ...row, number: row.number, customer: row.customer || customers.find(c => c.id === row.customerId) },
+        tenantName,
+        formatAmount: formatConvertedAmount,
+        documentType: 'credit-note',
+      });
+      toast.success('PDF generado exitosamente');
+    } catch { toast.error('Error al generar PDF'); }
+  };
+
   const getCustomerName = (cn: CreditNote) => cn.customer?.name || customers.find(c => c.id === cn.customerId)?.name || 'Cliente';
 
   const columns: ColumnDef<CreditNote>[] = [
@@ -157,7 +173,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información de la Nota</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
-                  <Combobox options={customers.map(c => ({ label: c.name, value: c.id }))} value={localDoc?.customerId || ''} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val })} placeholder="Seleccionar Cliente" /></div>
+                  <Combobox options={customers.map(c => ({ label: c.phone ? `${c.name} — ${c.phone}` : c.name, value: c.id }))} value={localDoc?.customerId || ''} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val })} placeholder="Seleccionar Cliente" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
                   <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
                 {!isCreating && <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
@@ -249,10 +265,11 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           actions={(row) => (
             <div className="flex items-center gap-1">
                {(row.status||'').toUpperCase() === 'DRAFT' && (
-                 <Button title="Emitir" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" onClick={() => handleIssue(row.id)}><Send className="size-4" /></Button>
+                 <Button title="Emitir" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleIssue(row.id)}><Send className="size-4" /></Button>
                )}
-               <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
+               <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />

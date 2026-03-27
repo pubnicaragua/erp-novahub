@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Building2, 
@@ -8,9 +8,7 @@ import {
   TrendingUp, 
   Clock, 
   Activity, 
-  Database,
-  ArrowUpRight,
-  Plus
+  ArrowUpRight
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Badge } from './ui/badge';
@@ -18,9 +16,8 @@ import { Button } from './ui/button';
 import { tenantsService } from '../services/tenants.service';
 import { subscriptionsService, type SubscriptionRequest } from '../services/subscriptions.service';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line 
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line 
 } from 'recharts';
-import { cn } from './ui/utils';
 
 export function AdminOverview() {
   const [tenants, setTenants] = useState<any[]>([]);
@@ -65,9 +62,6 @@ export function AdminOverview() {
             <div className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Sistema en Línea
           </Badge>
-          <Button variant="outline" className="rounded-xl border-border/50 gap-2 font-bold uppercase text-[10px] tracking-widest shadow-sm">
-            <Database className="size-4" /> Respaldo DB
-          </Button>
         </div>
       </div>
 

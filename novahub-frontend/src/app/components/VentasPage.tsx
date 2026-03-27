@@ -42,19 +42,20 @@ import { NotasCreditoView } from './ventas/NotasCreditoView';
 const SALES_SECTIONS = [
   { id: 'clientes', label: 'Clientes', icon: Users, description: 'Directorio y saldos', requiredModules: ['SALES_CLIENTS'] },
   { id: 'estimaciones', label: 'Estimaciones', icon: FileSpreadsheet, description: 'Cotizaciones comerciales', requiredModules: ['SALES_QUOTES'] },
-  { id: 'ordenes', label: 'Órdenes de Venta', icon: ClipboardList, description: 'Pedidos por procesar', requiredModules: ['SALES_ORDERS'] },
+  { id: 'ordenes-venta', label: 'Órdenes de Venta', icon: ClipboardList, description: 'Pedidos por procesar', requiredModules: ['SALES_ORDERS'] },
   { id: 'facturas', label: 'Facturas', icon: FileText, description: 'Control de cobros', requiredModules: ['SALES_INVOICES'] },
-  { id: 'recurrentes', label: 'Facturas Recurrentes', icon: RotateCcw, description: 'Suscripciones y contratos', requiredModules: ['SALES_RECURRING'] },
-  { id: 'pagos', label: 'Pagos Recibidos', icon: CreditCard, description: 'Historial de ingresos', requiredModules: ['SALES_PAYMENTS'] },
-  { id: 'devoluciones', label: 'Devoluciones', icon: FileOutput, description: 'Retornos de mercancía', requiredModules: ['SALES_RETURNS'] },
+  { id: 'facturas-recurrentes', label: 'Facturas Recurrentes', icon: RotateCcw, description: 'Suscripciones y contratos', requiredModules: ['SALES_RECURRING'] },
+  { id: 'pagos-recibidos', label: 'Pagos Recibidos', icon: CreditCard, description: 'Historial de ingresos', requiredModules: ['SALES_PAYMENTS'] },
+  { id: 'devoluciones-venta', label: 'Devoluciones', icon: FileOutput, description: 'Retornos de mercancía', requiredModules: ['SALES_RETURNS'] },
   { id: 'notas-credito', label: 'Notas de Crédito', icon: FileMinus, description: 'Ajustes y créditos emitidos', requiredModules: ['SALES_CREDIT_NOTES'] },
 ];
 
 interface VentasPageProps {
   activeSubModule?: string;
+  onSubModuleChange?: (sub: string) => void;
 }
 
-export function VentasPage({ activeSubModule }: VentasPageProps) {
+export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPageProps) {
   const { user } = useAuth();
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
@@ -62,16 +63,9 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
   // Sync section with Sidebar prop
   useEffect(() => {
     if (activeSubModule) {
-      const normalized = activeSubModule
-        .replace('-venta', '')
-        .replace('-recibidos', '')
-        .replace('facturas-recurrentes', 'recurrentes')
-        .replace('pagos-recibidos', 'pagos')
-        .replace('devoluciones-venta', 'devoluciones');
-      
-      const exists = SALES_SECTIONS.some(s => s.id === normalized);
+      const exists = SALES_SECTIONS.some(s => s.id === activeSubModule);
       if (exists) {
-        setActiveSection(normalized);
+        setActiveSection(activeSubModule);
       }
     }
   }, [activeSubModule]);
@@ -197,7 +191,7 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
             </div>
           </div>
 
-          <Tabs value={activeSection} className="w-full" onValueChange={setActiveSection}>
+          <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
             <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
               {SALES_SECTIONS.map((section) => {
                 const hasAccess = !section.requiredModules || !user?.enabledModules
@@ -231,7 +225,7 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
               {activeSection === 'estimaciones' && (
                 <EstimacionesView data={data.estimaciones} loading={loading} onRefresh={fetchData} customers={data.clientes} products={data.productos} />
               )}
-              {(activeSection === 'ordenes' || activeSection === 'ordenes-venta') && (
+              {activeSection === 'ordenes-venta' && (
                 <OrdenesVentaView data={data.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} customers={data.clientes} products={data.productos} />
               )}
               {activeSection === 'facturas' && (
@@ -245,13 +239,13 @@ export function VentasPage({ activeSubModule }: VentasPageProps) {
                   onClearInvoiceDraft={() => setInvoiceDraft(null)}
                 />
               )}
-              {(activeSection === 'recurrentes' || activeSection === 'facturas-recurrentes') && (
+              {activeSection === 'facturas-recurrentes' && (
                 <FacturasRecurrentesView data={data.recurrentes} loading={loading} onRefresh={fetchData} customers={data.clientes} products={data.productos} />
               )}
-              {(activeSection === 'pagos' || activeSection === 'pagos-recibidos') && (
+              {activeSection === 'pagos-recibidos' && (
                 <PagosRecibidosView data={data.pagos} loading={loading} onRefresh={fetchData} customers={data.clientes} invoices={data.facturas} />
               )}
-              {(activeSection === 'devoluciones' || activeSection === 'devoluciones-venta') && (
+              {activeSection === 'devoluciones-venta' && (
                 <DevolucionesView data={data.devoluciones} loading={loading} onRefresh={fetchData} customers={data.clientes} invoices={data.facturas} products={data.productos} />
               )}
               {activeSection === 'notas-credito' && (

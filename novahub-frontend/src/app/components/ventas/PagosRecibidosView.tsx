@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  CreditCard, Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, Trash2, ChevronLeft
+  CreditCard, Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, Trash2, ChevronLeft, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -14,6 +14,8 @@ import type { PaymentReceived, Customer, Invoice } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { generateEstimatePDF } from '../../utils/pdfGenerator';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -32,6 +34,7 @@ const methodOptions = [
 
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [] }: PagosRecibidosViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -62,13 +65,20 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       invoiceId: '',
       date: new Date().toISOString().split('T')[0],
       amount: 0,
-      currency: 'NIO',
+      currency: displayCurrency === 'USD' ? 'USD' : 'NIO',
       exchangeRate: globalRate,
       method: 'TRANSFER',
       reference: '',
       notes: '',
     });
   };
+
+  // Sync currency from topbar
+  useEffect(() => {
+    if (localDoc && isCreating) {
+      setLocalDoc((prev: any) => prev ? ({ ...prev, currency: displayCurrency === 'USD' ? 'USD' : 'NIO' }) : prev);
+    }
+  }, [displayCurrency]);
 
   const handleSave = async () => {
     if (!localDoc) return;
@@ -91,6 +101,19 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     } catch { toast.error('Error al registrar pago'); }
   };
 
+  const handleExportPDF = async (row: PaymentReceived) => {
+    try {
+      const tenantName = user?.tenantName || 'Mi Empresa';
+      await generateEstimatePDF({
+        estimate: { ...row, number: row.number, customer: row.customer, items: [{ description: `Pago ${row.method}`, quantity: 1, unitPrice: Number(row.amount), total: Number(row.amount) }] },
+        tenantName,
+        formatAmount: formatConvertedAmount,
+        documentType: 'payment',
+      });
+      toast.success('PDF generado exitosamente');
+    } catch { toast.error('Error al generar PDF'); }
+  };
+
   // Invoices filtered by selected customer
   const customerInvoices = localDoc?.customerId
     ? invoices.filter(i => i.customerId === localDoc.customerId && ['PENDING', 'PARTIAL', 'OVERDUE'].includes((i.status || '').toUpperCase()))
@@ -100,7 +123,12 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     { key: 'number', header: 'ID Pago', width: '120px', render: (val) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val}</span> },
     { key: 'customer', header: 'Cliente', render: (val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
     { key: 'reference', header: 'Referencia / Factura', render: (val, row) => <span className="text-xs font-bold text-primary">{row.invoice?.number || val || 'Anticipo'}</span> },
-    { key: 'date', header: 'Fecha', render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span> },
+    { key: 'date', header: 'Fecha', render: (val) => {
+      if (!val) return <span className="text-xs text-muted-foreground">N/A</span>;
+      const clean = String(val).includes('T') ? String(val).split('T')[0] : String(val);
+      const [y, m, d] = clean.split('-').map(Number);
+      return <span className="text-xs font-medium text-muted-foreground">{(!y||!m||!d) ? val : new Date(y, m-1, d).toLocaleDateString()}</span>;
+    } },
     {
       key: 'amount', header: 'Monto', width: '150px', render: (val, row) => (
         <span className="text-[13px] font-black tabular-nums text-emerald-500">
@@ -151,7 +179,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Completar datos del pago recibido</p>
             </div>
           </div>
-          <Button className="rounded-xl bg-emerald-500 shadow-xl shadow-emerald-500/20 text-white font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
+          <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
             Confirmar Pago
           </Button>
         </div>
@@ -162,7 +190,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Pago</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
-                  <Combobox options={customers.map(c => ({ label: c.name, value: c.id }))} value={localDoc.customerId} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} placeholder="Seleccionar Cliente" /></div>
+                  <Combobox options={customers.map(c => ({ label: c.phone ? `${c.name} — ${c.phone}` : c.name, value: c.id }))} value={localDoc.customerId} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} placeholder="Seleccionar Cliente" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Factura (Opcional)</p>
                   <Combobox options={customerInvoices.map(i => ({
                     label: `${i.number} — ${formatConvertedAmount(Number(i.balance || 0), i.currency, i.exchangeRate)} pend.`,
@@ -178,10 +206,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   <select value={localDoc.method} onChange={(e) => setLocalDoc({ ...localDoc, method: e.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                     {methodOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select></div>
-                <div><p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                  <select value={localDoc.currency} onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
-                    <option value="NIO">NIO</option><option value="USD">USD</option>
-                  </select></div>
+
                 <div><p className="text-[10px] text-muted-foreground mb-1">Referencia Bancaria</p>
                   <Input value={localDoc.reference} onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} className="h-8 text-xs" placeholder="Nº transferencia, cheque..." /></div>
               </div>
@@ -195,12 +220,12 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-2">Monto del Pago</p>
                   <div className="flex items-center gap-2">
-                    <span className="text-lg font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
+                    <span className="text-lg font-black text-muted-foreground">{displayCurrency === 'USD' ? '$' : 'C$'}</span>
                     <Input type="number" min="0" step="0.01" value={localDoc.amount || ''} onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })}
                       className="h-12 text-2xl font-black text-emerald-500 text-right" placeholder="0.00" />
                   </div>
-                  {localDoc.currency === 'USD' && <p className="text-[10px] font-bold text-muted-foreground mt-2 italic">≈ C$ {(Number(localDoc.amount || 0) * globalRate).toLocaleString()}</p>}
-                  {localDoc.currency === 'NIO' && Number(localDoc.amount) > 0 && <p className="text-[10px] font-bold text-muted-foreground mt-2 italic">≈ $ {(Number(localDoc.amount || 0) / globalRate).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>}
+                  {displayCurrency === 'USD' && <p className="text-[10px] font-bold text-muted-foreground mt-2 italic">≈ C$ {(Number(localDoc.amount || 0) * globalRate).toLocaleString()}</p>}
+                  {displayCurrency !== 'USD' && Number(localDoc.amount) > 0 && <p className="text-[10px] font-bold text-muted-foreground mt-2 italic">≈ $ {(Number(localDoc.amount || 0) / globalRate).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>}
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Notas</p>
@@ -235,7 +260,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar pago..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={startNew} className="bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-emerald-500/20 border border-emerald-500/20">
+            <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
               <Plus className="size-4" /> Registrar Pago</Button>
           </div>
         </div>
@@ -244,8 +269,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-              <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
-              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+              <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
+              <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
+              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />
@@ -264,7 +290,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             setDeleteLoading(true);
             await paymentsService.delete(pendingDeleteId);
             toast.success('Pago eliminado');
-            setEditingId?.(null);
+
             onRefresh();
           } catch (error: any) {
             const msg = error?.response?.data?.message || error?.message || '';

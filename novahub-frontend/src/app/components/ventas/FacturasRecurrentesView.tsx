@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Eye, Trash2, ChevronLeft
+  RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Eye, Trash2, ChevronLeft, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -14,6 +14,8 @@ import type { RecurringInvoice, Customer, Product } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { generateEstimatePDF } from '../../utils/pdfGenerator';
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
@@ -38,6 +40,7 @@ const frequencyOptions = [
 
 export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [] }: FacturasRecurrentesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -93,13 +96,33 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       frequency: 'MONTHLY',
       startDate: new Date().toISOString().split('T')[0],
       endDate: '',
-      currency: 'NIO',
+      currency: displayCurrency === 'USD' ? 'USD' : 'NIO',
       exchangeRate: globalRate,
       items: [],
       subtotal: 0,
       taxAmount: 0,
       total: 0,
     });
+  };
+
+  // Sync currency from topbar
+  useEffect(() => {
+    if (localDoc && isCreating) {
+      setLocalDoc((prev: any) => ({ ...prev, currency: displayCurrency === 'USD' ? 'USD' : 'NIO' }));
+    }
+  }, [displayCurrency]);
+
+  const handleExportPDF = async (row: RecurringInvoice) => {
+    try {
+      const tenantName = user?.tenantName || 'Mi Empresa';
+      await generateEstimatePDF({
+        estimate: { ...row, number: `REC-${row.id.slice(0, 8)}`, customer: row.customer },
+        tenantName,
+        formatAmount: formatConvertedAmount,
+        documentType: 'recurring',
+      });
+      toast.success('PDF generado exitosamente');
+    } catch { toast.error('Error al generar PDF'); }
   };
 
   const recalcTotals = (items: any[]) => {
@@ -140,6 +163,14 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     } catch { toast.error('Error al guardar'); }
   };
 
+  const formatDateSafe = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    const clean = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+    const [y, m, d] = clean.split('-').map(Number);
+    if (!y || !m || !d) return dateStr;
+    return new Date(y, m - 1, d).toLocaleDateString();
+  };
+
   const columns: ColumnDef<RecurringInvoice>[] = [
     { key: 'id', header: 'Referencia', width: '180px',
       render: (val, row) => <span className="text-xs font-black font-mono text-primary group-hover:underline cursor-pointer" onClick={() => setEditingId(row.id)}>Suscripción #{row.id.slice(0, 8)}</span> },
@@ -155,7 +186,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       ) },
     { key: 'status', header: 'Estado', width: '130px', render: (val) => { const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
       return <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none", opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>; } },
-    { key: 'nextInvoiceDate', header: 'Próxima Fecha', render: (val) => <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground"><Calendar className="size-3" />{new Date(val).toLocaleDateString()}</div> },
+    { key: 'nextInvoiceDate', header: 'Próxima Fecha', render: (val) => <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground"><Calendar className="size-3" />{formatDateSafe(val)}</div> },
   ];
 
   const activeRecurringInDisplayCurrency = data
@@ -211,7 +242,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Configuración</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
-                  <Combobox options={customers.map(c => ({ label: c.name, value: c.id }))} value={localDoc?.customerId || ''} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val })} placeholder="Seleccionar Cliente" /></div>
+                  <Combobox options={customers.map(c => ({ label: c.phone ? `${c.name} — ${c.phone}` : c.name, value: c.id }))} value={localDoc?.customerId || ''} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val })} placeholder="Seleccionar Cliente" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
                   <select value={localDoc?.frequency || 'MONTHLY'} onChange={(e) => setLocalDoc({ ...localDoc, frequency: e.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                     {frequencyOptions.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
@@ -220,10 +251,6 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                   <Input type="date" value={localDoc?.startDate ? (typeof localDoc.startDate === 'string' && localDoc.startDate.includes('T') ? localDoc.startDate.split('T')[0] : localDoc.startDate) : ''} onChange={(e) => setLocalDoc({ ...localDoc, startDate: e.target.value })} className="h-8 text-xs" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha Fin (Opcional)</p>
                   <Input type="date" value={localDoc?.endDate ? (typeof localDoc.endDate === 'string' && localDoc.endDate.includes('T') ? localDoc.endDate.split('T')[0] : localDoc.endDate) : ''} onChange={(e) => setLocalDoc({ ...localDoc, endDate: e.target.value })} className="h-8 text-xs" /></div>
-                <div><p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                  <select value={localDoc?.currency || 'NIO'} onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
-                    <option value="NIO">NIO (Córdobas)</option><option value="USD">USD (Dólares)</option>
-                  </select></div>
               </div>
             </CardContent>
           </Card>
@@ -231,9 +258,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen por Ciclo</p>
               <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Subtotal</span><span className="font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.subtotal||0).toLocaleString()}</span></div>
+                <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Subtotal</span><span className="font-black">{displayCurrency === 'USD' ? '$' : 'C$'} {Number(localDoc?.subtotal||0).toLocaleString()}</span></div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50"><span className="font-black">Total por Ciclo</span>
-                  <span className="text-primary font-black text-lg">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.total||0).toLocaleString()}</span></div>
+                  <span className="text-primary font-black text-lg">{displayCurrency === 'USD' ? '$' : 'C$'} {Number(localDoc?.total||0).toLocaleString()}</span></div>
               </div>
             </CardContent>
           </Card>
@@ -264,7 +291,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                   <div className="col-span-2"><Input type="number" min="0" value={Number(item.unitPrice) || ''} onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
                     const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }} className="h-8 text-xs text-right" /></div>
-                  <div className="col-span-2 text-right"><span className="text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString()}</span></div>
+                  <div className="col-span-2 text-right"><span className="text-xs font-black">{displayCurrency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString()}</span></div>
                   <div className="col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
                     onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }}><Trash2 className="size-3" /></Button></div>
                 </div>
@@ -307,12 +334,13 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           actions={(row) => (
             <div className="flex items-center gap-1">
                {(row.status||'').toUpperCase() === 'ACTIVE' ? (
-                 <Button title="Pausar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors"><Pause className="size-4" /></Button>
+                 <Button title="Pausar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 transition-colors"><Pause className="size-4" /></Button>
                ) : (
-                 <Button title="Reanudar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"><Play className="size-4" /></Button>
+                 <Button title="Reanudar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors"><Play className="size-4" /></Button>
                )}
-               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
+               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+               <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />

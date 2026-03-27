@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  FileOutput, Plus, Search, TrendingUp, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, ShieldCheck
+  FileOutput, Plus, Search, TrendingUp, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, ShieldCheck, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -14,6 +14,8 @@ import type { SalesReturn, Customer, Invoice, Product } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { generateEstimatePDF } from '../../utils/pdfGenerator';
 
 interface DevolucionesViewProps {
   data: SalesReturn[];
@@ -33,6 +35,7 @@ const statusOptions = [
 
 export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [] }: DevolucionesViewProps) {
   const { displayCurrency, formatConvertedAmount } = useCurrency();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -101,10 +104,23 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     } catch { toast.error('Error al guardar'); }
   };
 
+  const handleExportPDF = async (row: SalesReturn) => {
+    try {
+      const tenantName = user?.tenantName || 'Mi Empresa';
+      await generateEstimatePDF({
+        estimate: { ...row, number: row.number, customer: row.customer },
+        tenantName,
+        formatAmount: formatConvertedAmount,
+        documentType: 'return',
+      });
+      toast.success('PDF generado exitosamente');
+    } catch { toast.error('Error al generar PDF'); }
+  };
+
   const handleApprove = async (id: string) => {
     try {
       await salesReturnsService.approve(id);
-      toast.success('Devolución aprobada — Nota de crédito generada automáticamente');
+      toast.success('Devolución aprobada');
       onRefresh();
     } catch { toast.error('Error al aprobar'); }
   };
@@ -151,7 +167,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
               onClick={async () => { await salesReturnsService.delete(localDoc.id); setEditingId(null); onRefresh(); }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
             {canApprove && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-              onClick={() => { handleApprove(localDoc.id); setEditingId(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar y Generar NC</Button>}
+              onClick={() => { handleApprove(localDoc.id); setEditingId(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar Devolución</Button>}
             <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
               {isCreating ? 'Registrar Devolución' : 'Guardar Cambios'}
             </Button>
@@ -164,7 +180,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
-                  <Combobox options={customers.map(c => ({ label: c.name, value: c.id }))} value={localDoc?.customerId || ''} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} placeholder="Seleccionar Cliente" /></div>
+                  <Combobox options={customers.map(c => ({ label: c.phone ? `${c.name} — ${c.phone}` : c.name, value: c.id }))} value={localDoc?.customerId || ''} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} placeholder="Seleccionar Cliente" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Factura Origen</p>
                   <Combobox options={customerInvoices.map(i => ({ label: `${i.number} — ${formatConvertedAmount(Number(i.total||0), 'USD')}`, value: i.id }))} value={localDoc?.invoiceId || ''} onChange={(val) => setLocalDoc({ ...localDoc, invoiceId: val })} placeholder="Seleccionar Factura" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
@@ -184,7 +200,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                 <span className="font-black">Total Devolución</span>
                 <span className="text-rose-500 font-black text-lg">{formatConvertedAmount(Number(localDoc?.total||0), 'USD')}</span>
               </div>
-              <p className="text-[10px] text-muted-foreground italic">Al aprobar esta devolución, se generará automáticamente una Nota de Crédito y se ajustará el balance del cliente.</p>
+              <p className="text-[10px] text-muted-foreground italic">Al aprobar esta devolución, el estado cambiará a aprobado. Los ajustes contables deben realizarse mediante una Nota de Crédito manual.</p>
             </CardContent>
           </Card>
         </div>
@@ -245,7 +261,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar devolución..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={startNew} className="bg-rose-500 hover:bg-rose-600 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-rose-500/20 border border-rose-500/20">
+            <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
               <Plus className="size-4" /> Nueva Devolución</Button>
           </div>
         </div>
@@ -255,10 +271,11 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           actions={(row) => (
             <div className="flex items-center gap-1">
                {(row.status||'').toUpperCase() === 'PENDING' && (
-                 <Button title="Aprobar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
+                 <Button title="Aprobar Devolución" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
                )}
-               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
+               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
             </div>
           )}
         />

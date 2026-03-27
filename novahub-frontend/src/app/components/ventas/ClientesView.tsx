@@ -49,7 +49,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
       await customersService.create({
         code,
         name: 'Nuevo Cliente',
-        type: 'COMPANY' as any
+        type: 'INDIVIDUAL'
       });
       toast.success('Nuevo cliente creado');
       onRefresh();
@@ -80,6 +80,25 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
       )
     },
     { key: 'contactName', header: 'Contacto', editable: true },
+    { 
+      key: 'type', 
+      header: 'Tipo', 
+      width: '120px',
+      editable: true,
+      type: 'select',
+      options: [
+        { label: 'Particular', value: 'INDIVIDUAL', color: 'bg-blue-500/10 text-blue-500' },
+        { label: 'Empresa', value: 'COMPANY', color: 'bg-purple-500/10 text-purple-500' }
+      ],
+      render: (val) => (
+        <Badge variant="outline" className={cn(
+          "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
+          (val || '').toUpperCase() === 'COMPANY' ? 'bg-purple-500/10 text-purple-500' : 'bg-blue-500/10 text-blue-500'
+        )}>
+          {(val || '').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Particular'}
+        </Badge>
+      )
+    },
     { key: 'email', header: 'Email / Envío', editable: true },
     { key: 'phone', header: 'Teléfono', width: '130px', editable: true },
     { 
@@ -117,10 +136,10 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
   ];
 
   const kpis = [
-    { title: 'Clientes Activos', value: data.filter(c => (c.status || '').toUpperCase() === 'ACTIVE').length, icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Saldo Pendiente', value: formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.creditLimit || 0), 0), 'USD'), icon: CreditCard, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Total Crédito', value: formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.creditLimit || 0), 0), 'USD'), icon: TrendingUp, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    { title: 'Total Clientes', value: data.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
+    { title: 'Particulares', value: data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
     { title: 'Empresas', value: data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length, icon: CheckCircle2, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { title: 'Saldo Pendiente', value: formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.balance || 0), 0), 'USD'), icon: CreditCard, color: 'text-rose-500', bg: 'bg-rose-500/10' },
   ];
 
   return (

@@ -649,6 +649,8 @@ export interface Product {
   unit?: string;
   price: number;
   cost: number;
+  salePrice: number;
+  costPrice: number;
   taxRate: number;
   stock: number;
   minStock: number;

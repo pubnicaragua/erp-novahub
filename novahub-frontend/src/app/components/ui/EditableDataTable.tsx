@@ -339,7 +339,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                     );
                   })}
                   <TableCell className="text-right pr-6 h-14">
-                    <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <div className="flex justify-end items-center gap-1 transition-all">
                       {actions ? actions(row) : (
                         onRowDelete && (
                           <Button

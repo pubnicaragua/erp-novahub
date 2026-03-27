@@ -81,7 +81,7 @@ function DashboardLayout() {
 
     switch (activeModule) {
       case 'inventario': return <InventarioPage />;
-      case 'ventas': return <VentasPage activeSubModule={activeSubModule} />;
+      case 'ventas': return <VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'compras': return <ComprasPage activeSubModule={activeSubModule} />;
       case 'finanzas': return <FinanzasPage activeSubModule={activeSubModule} />;
       case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} />;

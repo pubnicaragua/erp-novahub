@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, Info
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
-import { invoicesService } from '../../services/ventas.service';
+import { invoicesService, paymentsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
@@ -14,6 +14,9 @@ import type { Invoice, Customer, Product } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { generateEstimatePDF } from '../../utils/pdfGenerator';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -25,17 +28,29 @@ interface FacturasViewProps {
   onClearInvoiceDraft?: () => void;
 }
 
+// Todos los estados posibles (para visualización en badges)
 const statusOptions = [
-  { label: 'Borrador', value: 'DRAFT', color: 'bg-muted/20 text-muted-foreground' },
+  { label: 'Borrador', value: 'DRAFT', color: 'bg-slate-500/10 text-slate-500' },
   { label: 'Pendiente', value: 'PENDING', color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Parcial', value: 'PARTIAL', color: 'bg-blue-500/10 text-blue-500' },
   { label: 'Pagada', value: 'PAID', color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Vencida', value: 'OVERDUE', color: 'bg-rose-500/10 text-rose-500' },
-  { label: 'Reembolso', value: 'REFUNDED', color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Cancelada', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Vencida', value: 'OVERDUE', color: 'bg-orange-500/10 text-orange-500' },
+  { label: 'Parcial', value: 'PARTIAL', color: 'bg-blue-500/10 text-blue-500' },
+];
+
+// Solo los estados que el usuario puede asignar manualmente (PARTIAL es auto-gestionado por pagos)
+const editableStatusOptions = [
+  { label: 'Borrador', value: 'DRAFT', color: 'bg-slate-500/10 text-slate-500' },
+  { label: 'Pendiente', value: 'PENDING', color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Pagada', value: 'PAID', color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Vencida', value: 'OVERDUE', color: 'bg-orange-500/10 text-orange-500' },
+  { label: 'Cancelada', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
 export function FacturasView({ data, loading, onRefresh, customers = [], products = [], invoiceDraft, onClearInvoiceDraft }: FacturasViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { user } = useAuth();
+  const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -43,6 +58,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
   const [isCreating, setIsCreating] = useState(false);
+
+  // Helper para mostrar la fecha sin desfase de zona horaria (UTC-local)
+  const formatDateSafe = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    const clean = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+    const [y, m, d] = clean.split('-').map(Number);
+    if (!y || !m || !d) return dateStr;
+    return new Date(y, m - 1, d).toLocaleDateString();
+  };
 
   useEffect(() => {
     if (invoiceDraft) {
@@ -80,6 +104,13 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
   }, [editingId, invoiceDraft]);
 
+  // Si se cambia la moneda global mientras se edita/crea, se aplica al documento (al igual que en NC)
+  useEffect(() => {
+    if ((editingId || isCreating) && localDoc && localDoc.currency !== displayCurrency) {
+      setLocalDoc((prev: any) => prev ? { ...prev, currency: displayCurrency, exchangeRate: globalRate } : null);
+    }
+  }, [displayCurrency, globalRate, editingId, isCreating]);
+
   const filtered = data.filter(f =>
     f.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (f.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -96,6 +127,46 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
   };
 
+  const handleStatusChange = async (newStatus: string, invoiceId?: string, currentInvoiceData?: Invoice) => {
+    const targetId = invoiceId || localDoc?.id;
+    const targetDoc = currentInvoiceData || localDoc;
+    if (!targetId || !targetDoc) return;
+
+    const upperStatus = newStatus.toUpperCase();
+    const statusLabel = statusOptions.find(o => o.value === upperStatus)?.label || newStatus;
+
+    try {
+      if (upperStatus === 'PAID') {
+        // PAID: crear pago → el servidor cambia el estado automáticamente
+        await paymentsService.create({ 
+          customerId: targetDoc.customerId, 
+          invoiceId: targetId, 
+          date: new Date().toISOString(), 
+          amount: Number(targetDoc.total), 
+          currency: targetDoc.currency, 
+          exchangeRate: targetDoc.exchangeRate || globalRate, 
+          method: 'TRANSFER', 
+          notes: `Cobro automático (Factura ${targetDoc.number})` 
+        } as any);
+      } else {
+        // DRAFT, PENDING, CANCELLED, OVERDUE, REFUNDED: enviar SOLO el campo status
+        await invoicesService.update(targetId.toString(), { status: upperStatus } as any);
+      }
+      
+      // Sincronizar UI local
+      if (localDoc && localDoc.id === targetId) {
+        setLocalDoc({ ...localDoc, status: upperStatus });
+      }
+
+      toast.success(`Estado actualizado: ${statusLabel}`);
+      onRefresh();
+    } catch (e: any) {
+      console.error('Error in status transition:', e);
+      const msg = e.response?.data?.message || e.message || '';
+      toast.error(`Error al cambiar a ${statusLabel}: ${Array.isArray(msg) ? msg[0] : msg}`);
+    }
+  };
+
   const startNewInvoice = () => {
     setIsCreating(true);
     setEditingId(null);
@@ -104,7 +175,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       number: `FAC-${Date.now().toString().slice(-6)}`,
       date: new Date().toISOString().split('T')[0],
       dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-      currency: 'NIO',
+      currency: displayCurrency as any,
       exchangeRate: globalRate,
       items: [],
       subtotal: 0,
@@ -196,7 +267,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     {
       key: 'date',
       header: 'Fecha Emisión',
-      render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span>
+      render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateSafe(val)}</span>
     },
     {
       key: 'dueDate',
@@ -224,6 +295,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       key: 'status',
       header: 'Estado',
       width: '130px',
+      editable: true,
+      type: 'select',
+      options: editableStatusOptions,
       render: (val) => {
         const opt = statusOptions.find(o => o.value === (val || '').toUpperCase());
         return (
@@ -290,12 +364,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {!isCreating && (
-              <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                onClick={() => setPendingDeleteId(localDoc.id)}>
-                <Trash2 className="size-3 mr-2" /> Eliminar
-              </Button>
-            )}
+
             <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
               onClick={() => handleSaveInvoice(false)}>
               Guardar Borrador
@@ -321,15 +390,17 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   {isCreating ? (
                     <span className="text-xs font-black px-2 py-0.5 rounded-lg bg-muted/20 text-muted-foreground">Nuevo</span>
                   ) : (
-                    <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span>
+                    <select value={(localDoc?.status || '').toUpperCase()} onChange={(e) => handleStatusChange(e.target.value)} className={`h-8 rounded-md border border-input px-2 text-xs font-bold uppercase ${statusOpt?.color || 'bg-background'}`}>
+                      {editableStatusOptions.map(o => ( <option key={o.value} value={o.value}>{o.label}</option> ))}
+                    </select>
                   )}
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox
-                    options={customers.map(c => ({ label: c.name, value: c.id }))}
+                    options={customers.map(c => ({ label: c.phone ? c.name + ' - ' + c.phone : c.name, value: c.id }))}
                     value={localDoc?.customerId || ''}
-                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val })}
+                    onChange={(val) => { setLocalDoc({ ...localDoc, customerId: val }); if (!isCreating) handleUpdate(localDoc!.id, { customerId: val }); }}
                     placeholder="Seleccionar Cliente"
                   />
                 </div>
@@ -343,14 +414,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   <Input type="date" value={localDoc?.dueDate ? (typeof localDoc.dueDate === 'string' && localDoc.dueDate.includes('T') ? localDoc.dueDate.split('T')[0] : localDoc.dueDate) : ''}
                     onChange={(e) => setLocalDoc({ ...localDoc, dueDate: e.target.value })} className="h-8 text-xs" />
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                  <select value={localDoc?.currency || 'NIO'} onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value, exchangeRate: globalRate })}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
-                    <option value="NIO">NIO (Córdobas)</option>
-                    <option value="USD">USD (Dólares)</option>
-                  </select>
-                </div>
+                  {/* Moneda se ajusta dinámicamente según la preferencia del topbar */}
               </div>
             </CardContent>
           </Card>
@@ -431,17 +495,53 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         }
                         const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
                         setLocalDoc({ ...localDoc, items: newItems, ...calc });
+                        if (!isCreating) {
+                          handleUpdate(localDoc!.id, { items: newItems, ...calc });
+                        }
                       }}
                       placeholder="Seleccionar Producto..."
                     />
+                    {item.productId && (
+                      <div className="mt-1 flex items-center gap-2 px-1">
+                        {(() => {
+                          const p = products.find(x => x.id === item.productId);
+                          if (!p) return null;
+                          const stock = Number(p.stock || 0);
+                          return (
+                            <>
+                              <Badge variant="outline" className={cn(
+                                "text-[9px] font-black border-none px-1.5 py-0 h-4 bg-muted/20",
+                                stock <= 0 ? "text-rose-500 bg-rose-500/10" : "text-emerald-500 bg-emerald-500/10"
+                              )}>
+                                STOCK: {stock}
+                              </Badge>
+                              <span className="text-[9px] font-bold text-muted-foreground/60 uppercase">
+                                Costo: {formatConvertedAmount(Number(p.costPrice || 0), 'USD')} | Venta: {formatConvertedAmount(Number(p.salePrice || 0), 'USD')}
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                   <div className="col-span-2">
-                    <Input type="number" min="0" value={Number(item.quantity) || ''} placeholder="0"
+                    <Input type="number" min="0" max={Number(products.find(x => x.id === item.productId)?.stock || 1000000)} value={Number(item.quantity) || ''} placeholder="0"
                       onChange={(e) => {
+                        let newQty = Number(e.target.value);
+                        const p = products.find(x => x.id === item.productId);
+                        if (p && newQty > Number(p.stock || 0)) {
+                          toast.warning(`Stock insuficiente. Disponible: ${p.stock}`, { id: `stock-warn-${idx}` });
+                          newQty = Number(p.stock || 0);
+                        }
                         const newItems = [...(localDoc.items || [])];
-                        newItems[idx] = { ...newItems[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(newItems[idx].unitPrice || 0) };
+                        newItems[idx] = { ...newItems[idx], quantity: newQty, total: newQty * Number(newItems[idx].unitPrice || 0) };
                         const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
                         setLocalDoc({ ...localDoc, items: newItems, ...calc });
+                      }} onBlur={() => {
+                        if (!isCreating) {
+                          const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
+                          handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
+                        }
                       }} className="h-8 text-xs text-right" />
                   </div>
                   <div className="col-span-2">
@@ -451,6 +551,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         newItems[idx] = { ...newItems[idx], unitPrice: Number(e.target.value), total: Number(newItems[idx].quantity || 1) * Number(e.target.value) };
                         const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
                         setLocalDoc({ ...localDoc, items: newItems, ...calc });
+                      }} onBlur={() => {
+                        if (!isCreating) {
+                          const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
+                          handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
+                        }
                       }} className="h-8 text-xs text-right" />
                   </div>
                   <div className="col-span-2 text-right">
@@ -530,9 +635,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
         <EditableDataTable
           data={filtered}
-          columns={columns}
-          onRowUpdate={handleUpdate}
-          onBulkDelete={async (ids) => {
+        columns={columns}
+        onRowUpdate={async (id, updates) => {
+          if (updates.status) {
+            const row = data.find(r => r.id === id);
+            await handleStatusChange(updates.status, id.toString(), row);
+          } else {
+            await handleUpdate(id, updates);
+          }
+        }}
+        onBulkDelete={async (ids) => {
             await Promise.all(ids.map(id => invoicesService.delete(id.toString())));
             toast.success(`${ids.length} Facturas eliminadas`);
             onRefresh();
@@ -540,15 +652,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           isLoading={loading}
           bulkActions={() => null}
           actions={(row) => (
-            <div className="flex items-center gap-1">
-              {(row.status || '').toUpperCase() !== 'PAID' && (
-                <span title="El estado se actualiza desde Pagos Recibidos" className="size-8 flex items-center justify-center rounded-lg text-muted-foreground/40 cursor-default">
-                  <Info className="size-4" />
-                </span>
-              )}
-              <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
-            </div>
+             <div className="flex items-center gap-1">
+               <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'invoice' as any }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
+               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+             </div>
           )}
         />
       </div>

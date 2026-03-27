@@ -13,6 +13,11 @@ import type { SalesOrder, Customer, Product } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { FileDown } from 'lucide-react';
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -34,8 +39,12 @@ const statusOptions = [
 ];
 
 export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, customers = [], products = [] }: OrdenesVentaViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount, formatAmount } = useCurrency();
+  const { user } = useAuth();
+  const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<SalesOrder | null>(null);
 
@@ -76,19 +85,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     }
   };
 
-  const handleDeleteOrder = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm('¿Estás seguro de que deseas eliminar esta orden permanentemente?')) {
-      try {
-        await salesOrdersService.delete(id);
-        toast.success('Orden eliminada con éxito');
-        await onRefresh();
-      } catch (err) {
-        toast.error('Error al aliminar la orden');
-      }
-    }
-  };
-
   const calculateRates = (doc: any) => {
     const sub = Number(doc?.subtotal || 0);
     if (sub === 0) return { dRate: 0, tRate: 0 };
@@ -113,6 +109,14 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     }
   }, [editingId]); // Intentionally removed 'data' to prevent server-refreshes from destroying mid-edit local states
 
+  // Sincronizar moneda con layout global
+  useEffect(() => {
+    if (editingId && localDoc && localDoc.currency !== displayCurrency) {
+      setLocalDoc((prev: any) => prev ? { ...prev, currency: displayCurrency, exchangeRate: globalRate } : null);
+      handleUpdate(editingId, { currency: displayCurrency, exchangeRate: globalRate });
+    }
+  }, [displayCurrency, globalRate, editingId]);
+
   const handleAddOrder = async () => {
     if (!customers || customers.length === 0) {
       toast.error('Debe registrar al menos un cliente primero');
@@ -126,7 +130,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
         discountAmount: 0,
         total: 0,
-        currency: 'NIO',
+        currency: displayCurrency as any,
         exchangeRate: globalRate,
         status: 'DRAFT' as any,
         items: [],
@@ -240,10 +244,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-              onClick={(e) => { handleDeleteOrder(localDoc!.id, e as any); setEditingId(null); }}>
-              <Trash2 className="size-3 mr-2" /> Eliminar
-            </Button>
             <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
               onClick={() => { handleUpdate(localDoc!.id, { status: 'DRAFT' as any }); setEditingId(null); }}>
               Guardar Borrador
@@ -269,7 +269,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
-                    options={customers.map(c => ({ label: c.name, value: c.id }))}
+                    options={customers.map(c => ({ label: c.phone ? `${c.name} - ${c.phone}` : c.name, value: c.id }))}
                     value={localDoc?.customerId || ''}
                     onChange={(val) => handleUpdate(localDoc!.id, { customerId: val })}
                     placeholder="Seleccionar Cliente"
@@ -283,20 +283,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   <p className="text-[10px] text-muted-foreground mb-1">Entrega Esperada</p>
                   <Input type="date" defaultValue={localDoc?.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString().split('T')[0] : ''} onBlur={(e) => handleUpdate(localDoc!.id, { expectedDelivery: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                  <select 
-                    value={localDoc?.currency || 'NIO'} 
-                    onChange={(e) => {
-                      const newCurrency = e.target.value as any;
-                      handleUpdate(localDoc!.id, { currency: newCurrency, exchangeRate: globalRate });
-                    }}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
-                  >
-                    <option value="NIO">NIO (Cordobas)</option>
-                    <option value="USD">USD (Dolares)</option>
-                  </select>
-                </div>
+                {/* Moneda se sincroniza dinamicamente con Topbar */}
               </div>
             </CardContent>
           </Card>
@@ -306,7 +293,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <div className="flex items-center gap-2">$ <Input type="number" min="0" value={Number(localDoc?.subtotal||0)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div>
+                  <div className="flex items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="number" min="0" value={Number(localDoc?.subtotal||0)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Descuento</span>
@@ -327,7 +314,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       const newTotal = base + tAmount;
                       handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                     }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> <span className="ml-1 text-xs font-black">%</span></div>
-                    -$ {Number(localDoc?.discountAmount||0).toLocaleString()}
+                    -{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.discountAmount||0).toLocaleString()}
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-sm">
@@ -349,7 +336,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       const newTotal = base + tAmount;
                       handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                     }} className="w-16 h-8 text-right font-bold bg-transparent" /> <span className="ml-1 text-xs font-black">%</span></div>
-                    $ {Number(localDoc?.taxAmount||0).toLocaleString()}
+                    {localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.taxAmount||0).toLocaleString()}
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
@@ -385,14 +372,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 <Button variant="outline" size="sm" onClick={() => {
                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   setLocalDoc({ ...localDoc, items: newItems } as any);
+                  handleUpdate(localDoc!.id, { items: newItems });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                   <Plus className="size-3 mr-2" /> Agregar Item
-                </Button>
-                <Button size="sm" onClick={() => {
-                  handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, total: localDoc.total });
-                  toast.success('Productos guardados en la base de datos');
-                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl bg-purple-600 hover:bg-purple-700 text-white">
-                  Guardar Productos
                 </Button>
               </div>
             </div>
@@ -428,26 +410,59 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const tAmount = base * (localRates.tRate / 100);
                         const newTotal = base + tAmount;
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
+                        handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                       }}
                       placeholder="Seleccionar Producto..."
                     />
+                    {item.productId && (
+                      <div className="mt-1 flex items-center gap-2 px-1">
+                        {(() => {
+                          const p = products.find(x => x.id === item.productId);
+                          if (!p) return null;
+                          const stock = Number(p.stock || 0);
+                          return (
+                            <>
+                              <Badge variant="outline" className={cn(
+                                "text-[9px] font-black border-none px-1.5 py-0 h-4 bg-muted/20",
+                                stock <= 0 ? "text-rose-500 bg-rose-500/10" : "text-emerald-500 bg-emerald-500/10"
+                              )}>
+                                STOCK: {stock}
+                              </Badge>
+                              <span className="text-[9px] font-bold text-muted-foreground/60 uppercase">
+                                Costo: {formatConvertedAmount(Number(p.costPrice || 0), 'USD')} | Venta: {formatConvertedAmount(Number(p.salePrice || 0), 'USD')}
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                   <div className="col-span-2">
                     <Input 
                       type="number" 
                       min="0"
+                      max={Number(products.find(x => x.id === item.productId)?.stock || 1000000)}
                       value={Number(item.quantity) || ''} 
                       placeholder="0"
                       onChange={(e) => {
+                        let newQty = Number(e.target.value);
+                        const p = products.find(x => x.id === item.productId);
+                        if (p && newQty > Number(p.stock || 0)) {
+                          toast.warning(`Stock insuficiente. Disponible: ${p.stock}`, { id: `stock-warn-${idx}` });
+                          newQty = Number(p.stock || 0);
+                        }
                         const newItems = [...(localDoc.items || [])] as any[];
-                        newItems[idx].quantity = Number(e.target.value);
-                        newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice || 0);
+                        newItems[idx].quantity = newQty;
+                        newItems[idx].total = newQty * Number(newItems[idx].unitPrice || 0);
                         const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
                         const tAmount = base * (localRates.tRate / 100);
                         const newTotal = base + tAmount;
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
+                      }}
+                      onBlur={() => {
+                        handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total });
                       }}
                       className="h-8 text-xs text-right" 
                     />
@@ -469,11 +484,14 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const newTotal = base + tAmount;
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                       }}
+                      onBlur={() => {
+                        handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total });
+                      }}
                       className="h-8 text-xs text-right" 
                     />
                   </div>
                   <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black w-16 text-right">${Number(item.total || 0).toLocaleString()}</span>
+                    <span className="text-xs font-black w-16 text-right">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString()}</span>
                     <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => {
                         const newItems = [...(localDoc.items || [])] as any[];
                         newItems.splice(idx, 1);
@@ -483,6 +501,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const tAmount = base * (localRates.tRate / 100);
                         const newTotal = base + tAmount;
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
+                        handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                     }}>
                       <Trash2 className="size-3" />
                     </Button>
@@ -580,11 +599,37 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                  </Button>
                )}
                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={async () => { await salesOrdersService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
-            </div>
-          )}
-        />
-      </div>
+               <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
+               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+             </div>
+           )}
+         />
+       </div>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+        title="¿Eliminar orden de venta?"
+        description="¿Estás seguro de que deseas eliminar este registro permanentemente? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={async () => {
+          if (!pendingDeleteId) return;
+          try {
+            setDeleteLoading(true);
+            await salesOrdersService.delete(pendingDeleteId);
+            toast.success('Registro eliminado');
+            if (editingId === pendingDeleteId) setEditingId(null);
+            onRefresh();
+          } catch (error: any) {
+            toast.error(error?.message || 'Error al eliminar');
+          } finally {
+            setDeleteLoading(false);
+            setPendingDeleteId(null);
+          }
+        }}
+      />
     </div>
   );
 }

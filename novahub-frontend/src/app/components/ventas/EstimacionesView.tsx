@@ -14,6 +14,9 @@ import type { Estimate, Customer, Product } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { generateEstimatePDF } from '../../utils/pdfGenerator';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -32,6 +35,8 @@ const statusOptions = [
 ];
 
 export function EstimacionesView({ data, loading: _loading, onRefresh, customers = [], products = [] }: EstimacionesViewProps) {
+  const { user } = useAuth();
+  const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -47,6 +52,15 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
       setLocalDoc(null);
     }
   }, [editingId, data]);
+
+  // Si se cambia la moneda global mientras se edita, se aplica al documento
+  useEffect(() => {
+    if (editingId && localDoc && localDoc.currency !== displayCurrency) {
+      setLocalDoc((prev: any) => prev ? { ...prev, currency: displayCurrency, exchangeRate: globalRate } : null);
+      // Autoguardamos este cambio referencial solo en estimaciones activas
+      handleUpdate(editingId, { currency: displayCurrency, exchangeRate: globalRate });
+    }
+  }, [displayCurrency, globalRate, editingId]);
 
   const filtered = data.filter(e => 
     e.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -82,7 +96,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
         taxAmount: 0,
         discountAmount: 0,
         total: 0,
-        currency: 'NIO',
+        currency: displayCurrency,
         exchangeRate: globalRate,
         status: 'DRAFT' as any,
         number: `COT-${Date.now().toString().slice(-6)}`
@@ -224,10 +238,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-              onClick={() => setPendingDeleteId(localDoc!.id)}>
-              <Trash2 className="size-3 mr-2" /> Eliminar
-            </Button>
             <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
               onClick={() => { handleUpdate(localDoc!.id, { status: 'DRAFT' as any }); setEditingId(null); }}>
               Guardar Borrador
@@ -253,7 +263,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
-                    options={customers.map(c => ({ label: c.name, value: c.id }))}
+                    options={customers.map(c => ({ label: c.phone ? `${c.name} - ${c.phone}` : c.name, value: c.id }))}
                     value={localDoc?.customerId || ''}
                     onChange={(val) => handleUpdate(localDoc!.id, { customerId: val })}
                     placeholder="Seleccionar Cliente"
@@ -261,26 +271,13 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
-                  <Input type="date" defaultValue={localDoc?.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onBlur={(e) => handleUpdate(localDoc!.id, { date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                  <Input type="date" defaultValue={typeof localDoc?.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc?.date || ''} onBlur={(e) => handleUpdate(localDoc!.id, { date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Válida hasta</p>
-                  <Input type="date" defaultValue={localDoc?.expiryDate ? new Date(localDoc.expiryDate).toISOString().split('T')[0] : ''} onBlur={(e) => handleUpdate(localDoc!.id, { expiryDate: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                  <Input type="date" defaultValue={typeof localDoc?.expiryDate === 'string' && localDoc.expiryDate.includes('T') ? localDoc.expiryDate.split('T')[0] : localDoc?.expiryDate || ''} onBlur={(e) => handleUpdate(localDoc!.id, { expiryDate: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                  <select 
-                    value={localDoc?.currency || 'NIO'} 
-                    onChange={(e) => {
-                      const newCurrency = e.target.value as any;
-                      handleUpdate(localDoc!.id, { currency: newCurrency, exchangeRate: globalRate });
-                    }}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
-                  >
-                    <option value="NIO">NIO (Cordobas)</option>
-                    <option value="USD">USD (Dolares)</option>
-                  </select>
-                </div>
+                  {/* Moneda se ajusta automáticamente según la vista topbar */}
               </div>
             </CardContent>
           </Card>
@@ -369,14 +366,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                 <Button variant="outline" size="sm" onClick={() => {
                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   setLocalDoc({ ...localDoc, items: newItems } as any);
+                  handleUpdate(localDoc!.id, { items: newItems });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                   <Plus className="size-3 mr-2" /> Agregar Item
-                </Button>
-                <Button size="sm" onClick={() => {
-                  handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, total: localDoc.total });
-                  toast.success('Productos guardados en la base de datos');
-                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl bg-purple-600 hover:bg-purple-700 text-white">
-                  Guardar Productos
                 </Button>
               </div>
             </div>
@@ -412,6 +404,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                         const tAmount = base * (localRates.tRate / 100);
                         const newTotal = base + tAmount;
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
+                        handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                       }}
                       placeholder="Seleccionar Producto..."
                     />
@@ -433,6 +426,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                         const newTotal = base + tAmount;
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                       }}
+                      onBlur={() => handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total })}
                       className="h-8 text-xs text-right" 
                     />
                   </div>
@@ -453,6 +447,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                         const newTotal = base + tAmount;
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                       }}
+                      onBlur={() => handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total })}
                       className="h-8 text-xs text-right" 
                     />
                   </div>
@@ -464,6 +459,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                         const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
                         const newTotal = newSubtotal + Number(localDoc.taxAmount || 0) - Number(localDoc.discountAmount || 0);
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, total: newTotal } as any);
+                        handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, total: newTotal });
                     }}>
                       <Trash2 className="size-3" />
                     </Button>
@@ -524,7 +520,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button onClick={handleAddEstimate} className="bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-emerald-500/20 border border-emerald-500/20">
+            <Button onClick={handleAddEstimate} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
               <Plus className="size-4" /> Nueva Cotización
             </Button>
           </div>
@@ -549,7 +545,16 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
           onRowDelete={async (id) => handleDeleteEstimate(id as string, { stopPropagation: () => {} } as any)} 
           actions={(row) => (
             <>
-              <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); toast.info('Generar Cotización PDF en desarrollo'); }}>
+              <Button variant="ghost" title="Descargar PDF" size="icon" onClick={(e) => { 
+                e.stopPropagation(); 
+                generateEstimatePDF({
+                  estimate: {...row, customer: customers.find(c => c.id === row.customerId) || row.customer},
+                  tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
+                  tenantLogo: themeConfig?.logo,
+                  formatAmount: formatConvertedAmount
+                });
+                toast.success('Generando PDF...');
+              }}>
                 <FilePlus className="size-4 text-muted-foreground hover:text-primary" />
               </Button>
               <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setEditingId(row.id); }}>
