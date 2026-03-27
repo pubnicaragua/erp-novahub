@@ -39,8 +39,14 @@ export const PURCHASES_SUBMODULES: Submodule[] = [
   { id: 'PURCHASES_RETURNS', label: 'Créditos del Proveedor', description: 'Devoluciones y créditos' },
 ];
 
-// Submódulos de Inventario (sin vistas subordinadas en sidebar por ahora)
-export const INVENTORY_SUBMODULES: Submodule[] = [];
+// Submódulos de Inventario
+export const INVENTORY_SUBMODULES: Submodule[] = [
+  { id: 'INVENTORY_PRODUCTS', label: 'Productos', description: 'Catálogo de productos' },
+  { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', description: 'Gestión de almacenes' },
+  { id: 'INVENTORY_TRANSFERS', label: 'Transferencias', description: 'Movimientos entre almacenes' },
+  { id: 'INVENTORY_ADJUSTMENTS', label: 'Ajustes', description: 'Control de stock' },
+  { id: 'INVENTORY_MOVEMENTS', label: 'Movimientos', description: 'Historial de movimientos' },
+];
 
 // Submódulos de Finanzas
 export const FINANCIAL_SUBMODULES: Submodule[] = [
@@ -63,3 +69,31 @@ export const HR_SUBMODULES: Submodule[] = [
 
 // Submódulos de Proyectos
 export const PROJECTS_SUBMODULES: Submodule[] = [];
+
+// Submódulos de Notificaciones
+export const NOTIFICATIONS_SUBMODULES: Submodule[] = [
+  { id: 'NOTIFICATIONS_ALERTS', label: 'Alertas', description: 'Alertas del sistema' },
+  { id: 'NOTIFICATIONS_MESSAGES', label: 'Mensajes', description: 'Mensajes y comunicaciones' },
+  { id: 'NOTIFICATIONS_PUSH', label: 'Push', description: 'Notificaciones Push' },
+];
+
+// Submódulos de Actividades
+export const ACTIVITIES_SUBMODULES: Submodule[] = [
+  { id: 'ACTIVITIES_TASKS', label: 'Tareas', description: 'Gestión de tareas' },
+  { id: 'ACTIVITIES_CALENDAR', label: 'Calendario', description: 'Calendario de eventos' },
+  { id: 'ACTIVITIES_MEETINGS', label: 'Reuniones', description: 'Registro de reuniones' },
+];
+
+// Submódulos de Documentos
+export const DOCUMENTS_SUBMODULES: Submodule[] = [
+  { id: 'DOCUMENTS_FILES', label: 'Archivos', description: 'Almacenamiento de archivos' },
+  { id: 'DOCUMENTS_FOLDERS', label: 'Carpetas', description: 'Organización de documentos' },
+  { id: 'DOCUMENTS_CONTRACTS', label: 'Contratos', description: 'Gestión de contratos' },
+];
+
+// Submódulos de Reportes
+export const REPORTS_SUBMODULES: Submodule[] = [
+  { id: 'REPORTS_SALES', label: 'Ventas', description: 'Reportes de ventas' },
+  { id: 'REPORTS_FINANCIAL', label: 'Financieros', description: 'Reportes financieros' },
+  { id: 'REPORTS_INVENTORY', label: 'Inventario', description: 'Reportes de inventario' },
+];

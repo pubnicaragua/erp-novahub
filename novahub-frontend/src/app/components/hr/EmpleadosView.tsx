@@ -150,7 +150,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
           <Button variant="outline" size="sm" onClick={() => setViewMode(viewMode === 'table' ? 'cards' : 'table')}>
             {viewMode === 'table' ? <Grid className="size-4" /> : <List className="size-4" />}
           </Button>
-          <Button size="sm" onClick={handleAddRow} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+          <Button size="sm" onClick={handleAddRow} className="bg-indigo-600 hover:bg-indigo-700 !text-white">
             <Plus className="size-4 mr-2" />
             Agregar Empleado
           </Button>
@@ -177,7 +177,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
               <tbody className="divide-y">
                 {/* New Rows */}
                 {newRows.map((row) => (
-                  <tr key={row.tempId} className="bg-blue-50/50 hover:bg-blue-50">
+                  <tr key={row.tempId} className="bg-blue-50/50 hover:bg-blue-50 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 transition-colors">
                     <td className="px-4 py-2">
                       <Input
                         value={row.employeeNumber}
@@ -248,7 +248,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                       </div>
                     </td>
                     <td className="px-4 py-2">
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Nuevo</span>
+                      <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-1 rounded">Nuevo</span>
                     </td>
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
@@ -312,9 +312,9 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                     </td>
                     <td className="px-4 py-2">
                       <span className={`text-xs px-2 py-1 rounded ${
-                        emp.employmentStatus === 'ACTIVE' ? 'bg-green-100 text-green-700' :
-                        emp.employmentStatus === 'INACTIVE' ? 'bg-gray-100 text-gray-700' :
-                        'bg-orange-100 text-orange-700'
+                        emp.employmentStatus === 'ACTIVE' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                        emp.employmentStatus === 'INACTIVE' ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' :
+                        'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
                       }`}>
                         {emp.employmentStatus === 'ACTIVE' ? 'Activo' : emp.employmentStatus === 'INACTIVE' ? 'Inactivo' : emp.employmentStatus === 'ON_LEAVE' ? 'Licencia' : emp.employmentStatus === 'TERMINATED' ? 'Terminado' : emp.employmentStatus}
                       </span>
@@ -354,7 +354,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
       {viewMode === 'cards' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredEmployees.map((emp: any) => (
-            <div key={emp.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+            <div key={emp.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow dark:bg-slate-900/50">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <div className="size-12 rounded-full bg-primary flex items-center justify-center text-white font-bold text-lg">
@@ -366,7 +366,9 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                   </div>
                 </div>
                 <span className={`text-xs px-2 py-1 rounded ${
-                  emp.employmentStatus === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                  emp.employmentStatus === 'ACTIVE' 
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                    : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
                 }`}>
                   {emp.employmentStatus === 'ACTIVE' ? 'Activo' : emp.employmentStatus === 'INACTIVE' ? 'Inactivo' : emp.employmentStatus}
                 </span>

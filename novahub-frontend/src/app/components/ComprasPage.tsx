@@ -10,6 +10,7 @@ import { Button } from './ui/button';
 import { cn } from './ui/utils';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../contexts/AuthContext';
 import {
   suppliersService, expensesService, recurringExpensesService,
   purchaseOrdersService, purchaseReceiptsService,
@@ -33,15 +34,15 @@ import { PagosRealizadosView }     from './compras/PagosRealizadosView';
 import { CreditosProveedorView }   from './compras/CreditosProveedorView';
 
 const COMPRAS_SECTIONS = [
-  { id: 'proveedores',    label: 'Proveedores',           icon: Truck,          description: 'Directorio de proveedores' },
-  { id: 'gastos',        label: 'Gastos',                icon: Wallet,         description: 'Registro de gastos' },
-  { id: 'gastos-rec',    label: 'Gastos Recurrentes',    icon: CalendarClock,  description: 'Gastos fijos periódicos' },
-  { id: 'ordenes',       label: 'Orden de Compra',       icon: ClipboardList,  description: 'Pedidos a proveedores' },
-  { id: 'recepciones',   label: 'Recepciones',           icon: PackageCheck,   description: 'Entrada de mercancía' },
-  { id: 'facturas-prov', label: 'Facturas Proveedor',    icon: FileInput,      description: 'Cuentas por pagar' },
-  { id: 'facturas-rec',  label: 'Facturas Recurrentes',  icon: RotateCcw,      description: 'Contratos periódicos' },
-  { id: 'pagos',         label: 'Pagos Realizados',      icon: Banknote,       description: 'Histórico de pagos' },
-  { id: 'creditos',      label: 'Créditos Proveedor',   icon: BadgeDollarSign, description: 'Notas de crédito recibidas' },
+  { id: 'proveedores',    label: 'Proveedores',           icon: Truck,          description: 'Directorio de proveedores', requiredModules: ['PURCHASES_PROVIDERS'] },
+  { id: 'gastos',        label: 'Gastos',                icon: Wallet,         description: 'Registro de gastos', requiredModules: ['PURCHASES_EXPENSES'] },
+  { id: 'gastos-rec',    label: 'Gastos Recurrentes',    icon: CalendarClock,  description: 'Gastos fijos periódicos', requiredModules: ['PURCHASES_EXPENSES_REC'] },
+  { id: 'ordenes',       label: 'Orden de Compra',       icon: ClipboardList,  description: 'Pedidos a proveedores', requiredModules: ['PURCHASES_ORDERS'] },
+  { id: 'recepciones',   label: 'Recepciones',           icon: PackageCheck,   description: 'Entrada de mercancía', requiredModules: ['PURCHASES_RECEIPTS'] },
+  { id: 'facturas-prov', label: 'Facturas Proveedor',    icon: FileInput,      description: 'Cuentas por pagar', requiredModules: ['PURCHASES_INVOICES'] },
+  { id: 'facturas-rec',  label: 'Facturas Recurrentes',  icon: RotateCcw,      description: 'Contratos periódicos', requiredModules: ['PURCHASES_INVOICES_REC'] },
+  { id: 'pagos',         label: 'Pagos Realizados',      icon: Banknote,       description: 'Histórico de pagos', requiredModules: ['PURCHASES_PAYMENTS'] },
+  { id: 'creditos',      label: 'Créditos Proveedor',   icon: BadgeDollarSign, description: 'Notas de crédito recibidas', requiredModules: ['PURCHASES_RETURNS'] },
 ];
 
 interface ComprasPageProps {
@@ -61,6 +62,7 @@ type ComprasData = {
 };
 
 export function ComprasPage({ activeSubModule }: ComprasPageProps) {
+  const { user } = useAuth();
   const normalize = (s?: string) => {
     if (!s) return 'proveedores';
     const map: Record<string, string> = {
@@ -163,7 +165,11 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
 
           <Tabs value={activeSection} className="w-full" onValueChange={setActiveSection}>
             <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
-              {COMPRAS_SECTIONS.map((section) => (
+              {COMPRAS_SECTIONS.map((section) => {
+                const hasAccess = !section.requiredModules || !user?.enabledModules
+                  || section.requiredModules.some(mod => user.enabledModules.includes(mod));
+                if (!hasAccess) return null;
+                return (
                 <TabsTrigger 
                   key={section.id} 
                   value={section.id}
@@ -174,7 +180,8 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
                   <section.icon className="size-4" />
                   <span className="hidden sm:inline">{section.label}</span>
                 </TabsTrigger>
-              ))}
+                );
+              })}
             </TabsList>
           <AnimatePresence mode="wait">
             <motion.div

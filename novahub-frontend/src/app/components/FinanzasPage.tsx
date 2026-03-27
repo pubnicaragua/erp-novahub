@@ -13,13 +13,17 @@ import { accountsService, incomeService, expensesService, recurringExpensesServi
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
 }
 
 export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
+  const { user } = useAuth();
   const { displayCurrency, exchangeRate: globalRate, convertAmount } = useCurrency();
+
+  const hasAccess = (moduleId: string) => !user?.enabledModules || user.enabledModules.includes(moduleId);
   const tabMap: Record<string, string> = { 
     'ingresos': 'ingresos', 
     'egresos': 'gastos', 
@@ -301,6 +305,7 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
             <BarChart3 className="size-4" />
             <span className="hidden sm:inline">Dashboard</span>
           </TabsTrigger>
+          {hasAccess('FINANCIAL_INCOMES') && (
           <TabsTrigger value="ingresos" 
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
               data-[state=active]:bg-gradient-to-br data-[state=active]:from-green-600 data-[state=active]:to-green-700
@@ -308,6 +313,8 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
             <TrendingUp className="size-4" />
             <span className="hidden sm:inline">Ingresos</span>
           </TabsTrigger>
+          )}
+          {hasAccess('FINANCIAL_EXPENSES') && (
           <TabsTrigger value="gastos" 
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
               data-[state=active]:bg-gradient-to-br data-[state=active]:from-red-600 data-[state=active]:to-red-700
@@ -315,6 +322,8 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
             <TrendingDown className="size-4" />
             <span className="hidden sm:inline">Gastos</span>
           </TabsTrigger>
+          )}
+          {hasAccess('FINANCIAL_EXPENSES_REC') && (
           <TabsTrigger value="gastos-rec" 
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
               data-[state=active]:bg-gradient-to-br data-[state=active]:from-purple-600 data-[state=active]:to-purple-700
@@ -322,6 +331,8 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
             <CalendarClock className="size-4" />
             <span className="hidden sm:inline">Recurrentes</span>
           </TabsTrigger>
+          )}
+          {hasAccess('FINANCIAL_BALANCE') && (
           <TabsTrigger value="balance" 
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
               data-[state=active]:bg-gradient-to-br data-[state=active]:from-blue-600 data-[state=active]:to-blue-700
@@ -329,6 +340,7 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
             <Landmark className="size-4" />
             <span className="hidden sm:inline">Balance</span>
           </TabsTrigger>
+          )}
         </TabsList>
 
         <div className="mt-4 min-h-[600px]">

@@ -104,7 +104,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
 
       {/* New Request Button */}
       <div className="flex justify-end">
-        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-indigo-600 hover:bg-indigo-700 !text-white">
           <Plus className="size-4 mr-2" />
           Nueva Solicitud
         </Button>

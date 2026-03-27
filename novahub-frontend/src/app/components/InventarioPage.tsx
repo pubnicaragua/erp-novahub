@@ -14,6 +14,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
+import { useAuth } from '../contexts/AuthContext';
 
 import { DashboardView } from './inventory/DashboardView';
 import { ProductosView } from './inventory/ProductosView';
@@ -25,7 +26,17 @@ import { MovimientosView } from './inventory/MovimientosView';
 import { inventoryService } from '../services/inventario.service';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const INVENTORY_SECTIONS = [
+  { id: 'dashboard',       label: 'Dashboard',       icon: BarChart3, requiredModules: [] as string[] },
+  { id: 'productos',       label: 'Productos',       icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
+  { id: 'almacenes',       label: 'Almacenes',       icon: Warehouse, requiredModules: ['INVENTORY_WAREHOUSES'] },
+  { id: 'transferencias',  label: 'Transferencias',  icon: Truck,     requiredModules: ['INVENTORY_TRANSFERS'] },
+  { id: 'ajustes',         label: 'Ajustes',         icon: Scale,     requiredModules: ['INVENTORY_ADJUSTMENTS'] },
+  { id: 'movimientos',     label: 'Movimientos',     icon: History,   requiredModules: ['INVENTORY_MOVEMENTS'] },
+];
+
 export function InventarioPage() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState<any>({
@@ -150,48 +161,22 @@ export function InventarioPage() {
       {/* Main Navigation Tabs */}
       <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
         <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40">
-          <TabsTrigger value="dashboard" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-            <BarChart3 className="size-4" />
-            <span className="hidden sm:inline">Dashboard</span>
-          </TabsTrigger>
-          <TabsTrigger value="productos" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-            <Package className="size-4" />
-            <span className="hidden sm:inline">Productos</span>
-          </TabsTrigger>
-          <TabsTrigger value="almacenes" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-            <Warehouse className="size-4" />
-            <span className="hidden sm:inline">Almacenes</span>
-          </TabsTrigger>
-          <TabsTrigger value="transferencias" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-            <Truck className="size-4" />
-            <span className="hidden sm:inline">Transferencias</span>
-          </TabsTrigger>
-          <TabsTrigger value="ajustes" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-            <Scale className="size-4" />
-            <span className="hidden sm:inline">Ajustes</span>
-          </TabsTrigger>
-          <TabsTrigger value="movimientos" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-              data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
-            <History className="size-4" />
-            <span className="hidden sm:inline">Movimientos</span>
-          </TabsTrigger>
+          {INVENTORY_SECTIONS.map((section) => {
+            const hasAccess = section.requiredModules.length === 0 || !user?.enabledModules
+              || section.requiredModules.some(mod => user.enabledModules.includes(mod));
+            if (!hasAccess) return null;
+            return (
+              <TabsTrigger 
+                key={section.id}
+                value={section.id} 
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+                  data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+                  data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
+                <section.icon className="size-4" />
+                <span className="hidden sm:inline">{section.label}</span>
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
         <div className="mt-4 min-h-[600px]">

@@ -169,12 +169,12 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             Exportar
           </Button>
           {pendingCount > 0 && (
-            <Button size="sm" onClick={handleMarkAllAsPaid} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button size="sm" onClick={handleMarkAllAsPaid} className="bg-emerald-600 hover:bg-emerald-700 !text-white">
               <CheckCircle className="size-4 mr-2" />
               Pagar Todas ({pendingCount})
             </Button>
           )}
-          <Button size="sm" onClick={handleProcessPayroll} className="bg-green-600 hover:bg-green-700 text-white">
+          <Button size="sm" onClick={handleProcessPayroll} className="bg-green-600 hover:bg-green-700 !text-white">
             <Calculator className="size-4 mr-2" />
             Procesar Nómina
           </Button>
@@ -241,9 +241,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-1 rounded ${
-                        payroll.status === 'PAID' ? 'bg-green-100 text-green-700' :
-                        payroll.status === 'PENDING' ? 'bg-orange-100 text-orange-700' :
-                        'bg-gray-100 text-gray-700'
+                        payroll.status === 'PAID' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                        payroll.status === 'PENDING' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                        'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
                       }`}>
                         {payroll.status === 'PAID' ? 'Pagado' : payroll.status === 'PENDING' ? 'Pendiente' : payroll.status}
                       </span>

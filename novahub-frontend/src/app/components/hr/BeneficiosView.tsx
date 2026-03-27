@@ -86,7 +86,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
           </div>
         </div>
         {!addingNew && (
-          <Button onClick={() => { setAddingNew(true); setForm(EMPTY_FORM); }} className="rounded-xl gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-white">
+          <Button onClick={() => { setAddingNew(true); setForm(EMPTY_FORM); }} className="rounded-xl gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 !text-white">
             <Plus className="size-4" /> Nuevo Beneficio
           </Button>
         )}

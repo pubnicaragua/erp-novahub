@@ -96,11 +96,11 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
               emptyMessage="No se encontró el empleado"
             />
           </div>
-          <Button onClick={handleClockIn} className="bg-green-600 hover:bg-green-700 text-white">
+          <Button onClick={handleClockIn} className="bg-green-600 hover:bg-green-700 !text-white">
             <LogIn className="size-4 mr-2" />
             Entrada
           </Button>
-          <Button onClick={handleClockOut} className="bg-red-600 hover:bg-red-700 text-white">
+          <Button onClick={handleClockOut} className="bg-red-600 hover:bg-red-700 !text-white">
             <LogOut className="size-4 mr-2" />
             Salida
           </Button>

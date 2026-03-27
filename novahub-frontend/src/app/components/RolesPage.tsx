@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, Plus, Search, Edit, Trash2, Eye, Check, X } from 'lucide-react';
+import { Shield, Users, Plus, Search, Edit, Trash2, Eye, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -33,8 +33,18 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { rolesService } from '../services/roles.service';
 import { usersService } from '../services/users.service';
-import type { RoleManagement, User, Permission } from '../types';
 import { toast } from 'sonner';
+import {
+  SALES_SUBMODULES,
+  PURCHASES_SUBMODULES,
+  INVENTORY_SUBMODULES,
+  FINANCIAL_SUBMODULES,
+  HR_SUBMODULES,
+  NOTIFICATIONS_SUBMODULES,
+  ACTIVITIES_SUBMODULES,
+  DOCUMENTS_SUBMODULES,
+  REPORTS_SUBMODULES,
+} from '../types/modules';
 
 const SYSTEM_ROLE_OPTIONS = [
   { value: 'admin', label: 'Administrador' },
@@ -43,24 +53,41 @@ const SYSTEM_ROLE_OPTIONS = [
   { value: 'viewer', label: 'Visualizador' },
 ];
 
+// Module groups for the allowedModules selector
+const MODULE_GROUPS = [
+  { id: 'SALES', label: 'Ventas', submodules: SALES_SUBMODULES },
+  { id: 'PURCHASES', label: 'Compras', submodules: PURCHASES_SUBMODULES },
+  { id: 'INVENTORY', label: 'Inventario', submodules: INVENTORY_SUBMODULES },
+  { id: 'FINANCIAL', label: 'Finanzas', submodules: FINANCIAL_SUBMODULES },
+  { id: 'HR', label: 'Recursos Humanos', submodules: HR_SUBMODULES },
+  { id: 'ACTIVITIES', label: 'Actividades', submodules: ACTIVITIES_SUBMODULES },
+  { id: 'DOCUMENTS', label: 'Documentos', submodules: DOCUMENTS_SUBMODULES },
+  { id: 'TICKETS', label: 'Tickets', submodules: [] },
+  { id: 'NOTIFICATIONS', label: 'Notificaciones', submodules: NOTIFICATIONS_SUBMODULES },
+  { id: 'REPORTS', label: 'Reportes', submodules: REPORTS_SUBMODULES },
+  { id: 'CONFIGURATION', label: 'Configuración', submodules: [] },
+];
+
+const MODULES = ['Ventas', 'Compras', 'Inventario', 'Finanzas', 'RRHH', 'Clientes', 'Proveedores', 'Actividades', 'Tickets', 'Documentos', 'Notificaciones', 'Transferencias', 'Reportes', 'Roles', 'Configuracion', 'Schema'];
+
 export function RolesPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [rolesData, setRolesData] = useState<RoleManagement[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [rolesData, setRolesData] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const MODULES = ['Ventas', 'Compras', 'Inventario', 'Finanzas', 'RRHH', 'Clientes', 'Proveedores', 'Actividades', 'Tickets', 'Documentos', 'Notificaciones', 'Transferencias', 'Reportes', 'Roles', 'Configuracion', 'Schema'];
-
-  const emptyRole: Partial<RoleManagement> = {
+  const emptyRole: any = {
     name: '',
     description: '',
     color: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-    permissions: MODULES.map(m => ({ module: m, read: false, write: false, delete: false }))
+    permissions: MODULES.map(m => ({ module: m, read: false, write: false, delete: false })),
+    allowedModules: [] as string[],
   };
 
-  const [roleForm, setRoleForm] = useState<Partial<RoleManagement>>(emptyRole);
+  const [roleForm, setRoleForm] = useState<any>(emptyRole);
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchData();
@@ -73,7 +100,8 @@ export function RolesPage() {
         rolesService.getAll(),
         usersService.getAll()
       ]);
-      setRolesData(rolesRes.data || []);
+      const rolesList = Array.isArray(rolesRes) ? rolesRes : (rolesRes as any)?.data || [];
+      setRolesData(rolesList);
       const usersList = Array.isArray(usersRes) ? usersRes : ((usersRes as any)?.data || []);
       setUsers((usersList || []).map((u: any) => ({
         ...u,
@@ -112,44 +140,90 @@ export function RolesPage() {
   const handleOpenNew = () => {
     setRoleForm({ ...emptyRole });
     setIsEditing(false);
+    setExpandedGroups({});
     setIsRoleModalOpen(true);
   };
 
-  const handleOpenEdit = (role: RoleManagement) => {
-    setRoleForm({ ...role });
+  const handleOpenEdit = (role: any) => {
+    setRoleForm({ ...role, allowedModules: role.allowedModules || [] });
     setIsEditing(true);
+    setExpandedGroups({});
     setIsRoleModalOpen(true);
   };
 
   const handleDeleteRole = async (id: string) => {
     try {
-      if (window.confirm('¿Estás seguro de eliminar este rol?')) {
+      if (window.confirm('¿Estás seguro de eliminar este rol? Los usuarios asignados serán desvinculados.')) {
         await rolesService.delete(id);
+        toast.success('Rol eliminado correctamente');
         fetchData();
       }
-    } catch (error) {
-      console.error('Error deleting role:', error);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al eliminar rol');
     }
   };
 
   const handleSaveRole = async () => {
+    if (!roleForm.name?.trim()) {
+      toast.error('El nombre del rol es requerido');
+      return;
+    }
     try {
+      const payload = {
+        name: roleForm.name,
+        description: roleForm.description,
+        color: roleForm.color,
+        permissions: roleForm.permissions,
+        allowedModules: roleForm.allowedModules || [],
+      };
       if (isEditing && roleForm.id) {
-        await rolesService.update(roleForm.id, roleForm);
+        await rolesService.update(roleForm.id, payload);
+        toast.success('Rol actualizado correctamente');
       } else {
-        await rolesService.create(roleForm);
+        await rolesService.create(payload);
+        toast.success('Rol creado correctamente');
       }
       setIsRoleModalOpen(false);
       fetchData();
-    } catch (error) {
-      console.error('Error saving role:', error);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al guardar rol');
     }
   };
 
   const updatePerm = (module: string, field: 'read' | 'write' | 'delete', val: boolean) => {
-    setRoleForm(prev => ({
+    setRoleForm((prev: any) => ({
       ...prev,
       permissions: (prev.permissions || []).map((p: any) => p.module === module ? { ...p, [field]: val } : p)
+    }));
+  };
+
+  // Toggle a single module ID in allowedModules
+  const toggleAllowedModule = (moduleId: string) => {
+    setRoleForm((prev: any) => {
+      const current = prev.allowedModules || [];
+      const isIncluded = current.includes(moduleId);
+      return {
+        ...prev,
+        allowedModules: isIncluded
+          ? current.filter((m: string) => m !== moduleId)
+          : [...current, moduleId],
+      };
+    });
+  };
+
+  // Toggle all submodules in a group
+  const toggleGroupModules = (group: typeof MODULE_GROUPS[0]) => {
+    const allIds = group.submodules.length > 0
+      ? group.submodules.map(s => s.id)
+      : [group.id];
+    const current = roleForm.allowedModules || [];
+    const allSelected = allIds.every((id: string) => current.includes(id));
+
+    setRoleForm((prev: any) => ({
+      ...prev,
+      allowedModules: allSelected
+        ? (prev.allowedModules || []).filter((m: string) => !allIds.includes(m))
+        : [...new Set([...(prev.allowedModules || []), ...allIds])],
     }));
   };
 
@@ -172,7 +246,7 @@ export function RolesPage() {
         </div>
         <Dialog open={isRoleModalOpen} onOpenChange={setIsRoleModalOpen}>
           <DialogTrigger asChild>
-            <Button onClick={handleOpenNew} className="gap-2 bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-500/20">
+            <Button onClick={handleOpenNew} className="gap-2 bg-purple-600 hover:bg-purple-700 !text-white shadow-md shadow-purple-500/20">
               <Plus className="size-4" />
               Crear Rol
             </Button>
@@ -181,7 +255,7 @@ export function RolesPage() {
             <DialogHeader>
               <DialogTitle>{isEditing ? `Editar Rol: ${roleForm.name}` : 'Crear Nuevo Rol'}</DialogTitle>
               <DialogDescription>
-                {isEditing ? 'Actualiza los permisos y detalles del rol.' : 'Define un nuevo rol con permisos personalizados'}
+                {isEditing ? 'Actualiza los permisos y accesos del rol.' : 'Define un nuevo rol con permisos y módulos permitidos'}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -208,8 +282,81 @@ export function RolesPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* ─── Módulos Permitidos ─── */}
               <div className="grid gap-3">
-                <Label>Permisos por Módulo</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-bold">Módulos Permitidos</Label>
+                  <Badge variant="outline" className="text-xs">
+                    {(roleForm.allowedModules || []).length} seleccionados
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground -mt-2">
+                  Selecciona a qué partes del sistema tendrán acceso los usuarios con este rol. Solo verán los módulos que estén habilitados aquí <strong>y</strong> en la suscripción de la empresa.
+                </p>
+                <div className="rounded-lg border border-border divide-y divide-border">
+                  {MODULE_GROUPS.map(group => {
+                    const allIds = group.submodules.length > 0
+                      ? group.submodules.map(s => s.id)
+                      : [group.id];
+                    const currentModules = roleForm.allowedModules || [];
+                    const selectedCount = allIds.filter((id: string) => currentModules.includes(id)).length;
+                    const allSelected = selectedCount === allIds.length;
+                    const isExpanded = expandedGroups[group.id] || false;
+
+                    return (
+                      <div key={group.id}>
+                        <div
+                          className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/30 transition-colors"
+                          onClick={() => setExpandedGroups(prev => ({ ...prev, [group.id]: !prev[group.id] }))}
+                        >
+                          <div className="flex items-center gap-3">
+                            {group.submodules.length > 0 ? (
+                              isExpanded ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />
+                            ) : (
+                              <div className="size-4" />
+                            )}
+                            <span className="font-medium text-sm">{group.label}</span>
+                            {selectedCount > 0 && (
+                              <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30 text-[10px]">
+                                {selectedCount}/{allIds.length}
+                              </Badge>
+                            )}
+                          </div>
+                          <Switch
+                            checked={allSelected}
+                            onCheckedChange={(e) => {
+                              e; // consume event
+                              toggleGroupModules(group);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                        {isExpanded && group.submodules.length > 0 && (
+                          <div className="pl-10 pr-3 pb-3 space-y-1">
+                            {group.submodules.map(sub => (
+                              <div key={sub.id} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-muted/20 transition-colors">
+                                <div>
+                                  <p className="text-sm font-medium">{sub.label}</p>
+                                  <p className="text-xs text-muted-foreground">{sub.description}</p>
+                                </div>
+                                <Switch
+                                  checked={currentModules.includes(sub.id)}
+                                  onCheckedChange={() => toggleAllowedModule(sub.id)}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ─── Permisos por Módulo (CRUD) ─── */}
+              <div className="grid gap-3">
+                <Label>Permisos por Módulo (Lectura/Escritura/Eliminación)</Label>
                 <div className="rounded-lg border border-border">
                   <Table>
                     <TableHeader>
@@ -244,7 +391,7 @@ export function RolesPage() {
               <Button variant="outline" onClick={() => setIsRoleModalOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleSaveRole}>
+              <Button onClick={handleSaveRole} className="bg-purple-600 hover:bg-purple-700 !text-white">
                 {isEditing ? 'Guardar Cambios' : 'Crear Rol'}
               </Button>
             </DialogFooter>
@@ -297,10 +444,10 @@ export function RolesPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <p className="text-sm font-medium text-muted-foreground">Permisos</p>
-              <p className="text-3xl font-bold tracking-tight text-foreground">{MODULES.length}</p>
+              <p className="text-sm font-medium text-muted-foreground">Módulos</p>
+              <p className="text-3xl font-bold tracking-tight text-foreground">{MODULE_GROUPS.length}</p>
             </div>
-            <div className="mt-4 text-xs font-medium text-green-500/80">Módulos asegurados</div>
+            <div className="mt-4 text-xs font-medium text-green-500/80">Módulos configurables por rol</div>
           </CardContent>
         </Card>
 
@@ -321,11 +468,119 @@ export function RolesPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="usuarios" className="w-full">
+      <Tabs defaultValue="roles" className="w-full">
         <TabsList className="mb-4">
-          <TabsTrigger value="usuarios" className="min-w-[120px]">Usuarios</TabsTrigger>
           <TabsTrigger value="roles" className="min-w-[120px]">Roles y Permisos</TabsTrigger>
+          <TabsTrigger value="usuarios" className="min-w-[120px]">Usuarios</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="roles" className="space-y-4">
+          {/* Search Roles */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar roles..."
+              className="pl-9 max-w-md"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          {/* Roles Cards */}
+          <div className="grid gap-4 md:grid-cols-2">
+            {filteredRoles.map((role) => {
+              const allowedCount = (role.allowedModules || []).length;
+              const userCount = role._count?.users || role.usuarios || 0;
+              return (
+                <Card key={role.id} className="hover:shadow-lg transition-shadow">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`rounded-lg p-2 ${role.color}`}>
+                          <Shield className="size-5" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">{role.name}</CardTitle>
+                          <CardDescription className="mt-1">{role.description}</CardDescription>
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          onClick={() => handleOpenEdit(role)}
+                        >
+                          <Edit className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-red-400 hover:text-red-300"
+                          onClick={() => handleDeleteRole(role.id)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Users className="size-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
+                          {userCount} {userCount === 1 ? 'usuario' : 'usuarios'}
+                        </span>
+                      </div>
+                      {allowedCount > 0 && (
+                        <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30 text-[10px]">
+                          {allowedCount} módulos permitidos
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium">Permisos por Módulo</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => handleOpenEdit(role)}
+                        >
+                          <Eye className="mr-1 size-3" />
+                          Ver detalles
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {(role.permissions || []).slice(0, 4).map((permiso: any) => (
+                          <div
+                            key={permiso.module}
+                            className="flex items-center gap-1 rounded-md bg-muted/50 px-2 py-1.5"
+                          >
+                            {permiso.read && permiso.write && permiso.delete ? (
+                              <Check className="size-3 text-green-400" />
+                            ) : permiso.read ? (
+                              <Eye className="size-3 text-blue-400" />
+                            ) : (
+                              <X className="size-3 text-red-400" />
+                            )}
+                            <span className="truncate">{permiso.module}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {role.permissions && role.permissions.length > 4 && (
+                        <p className="text-xs text-muted-foreground text-center">
+                          +{role.permissions.length - 4} módulos más
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </TabsContent>
 
         <TabsContent value="usuarios" className="space-y-4">
           {/* Search Usuarios */}
@@ -349,8 +604,8 @@ export function RolesPage() {
                       <TableHead>Nombre</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Estado</TableHead>
-                      <TableHead>Rol Asignado</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
+                      <TableHead>Rol del Sistema</TableHead>
+                      <TableHead>Rol Personalizado</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -359,8 +614,8 @@ export function RolesPage() {
                         <TableCell className="font-medium">{u.name}</TableCell>
                         <TableCell>{u.email}</TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className={u.isActive ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}>
-                            {u.isActive ? 'Activo' : 'Inactivo'}
+                          <Badge variant="secondary" className={u.isActive !== false ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}>
+                            {u.isActive !== false ? 'Activo' : 'Inactivo'}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -378,10 +633,29 @@ export function RolesPage() {
                             </SelectContent>
                           </Select>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" className="text-red-400 hover:text-red-300">
-                            <Trash2 className="size-4" />
-                          </Button>
+                        <TableCell>
+                          <Select
+                            value={u.customRoleId || 'none'}
+                            onValueChange={async (val) => {
+                              try {
+                                await usersService.update(u.id, { customRoleId: val === 'none' ? null : val } as any);
+                                setUsers(users.map(usr => usr.id === u.id ? { ...usr, customRoleId: val === 'none' ? null : val } : usr));
+                                toast.success('Rol personalizado actualizado');
+                              } catch {
+                                toast.error('Error al asignar rol');
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="w-[180px]">
+                              <SelectValue placeholder="Sin rol personalizado" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Sin rol personalizado</SelectItem>
+                              {rolesData.map(r => (
+                                <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -390,108 +664,6 @@ export function RolesPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="roles" className="space-y-4">
-
-          {/* Search Roles */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar roles..."
-              className="pl-9 max-w-md"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-
-          {/* Roles Cards */}
-          <div className="grid gap-4 md:grid-cols-2">
-            {filteredRoles.map((role) => (
-              <Card key={role.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`rounded-lg p-2 ${role.color}`}>
-                        <Shield className="size-5" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-lg">{role.name}</CardTitle>
-                        <CardDescription className="mt-1">{role.description}</CardDescription>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8"
-                        onClick={() => handleOpenEdit(role)}
-                      >
-                        <Edit className="size-4" />
-                      </Button>
-                      {role.id !== 'admin' && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-red-400 hover:text-red-300"
-                          onClick={() => handleDeleteRole(role.id)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Users className="size-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      {role.usuarios} {role.usuarios === 1 ? 'usuario' : 'usuarios'}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">Permisos por Módulo</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => handleOpenEdit(role)}
-                      >
-                        <Eye className="mr-1 size-3" />
-                        Ver detalles
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {(role.permissions || []).slice(0, 4).map((permiso: any) => (
-                        <div
-                          key={permiso.module}
-                          className="flex items-center gap-1 rounded-md bg-muted/50 px-2 py-1.5"
-                        >
-                          {permiso.read && permiso.write && permiso.delete ? (
-                            <Check className="size-3 text-green-400" />
-                          ) : permiso.read ? (
-                            <Eye className="size-3 text-blue-400" />
-                          ) : (
-                            <X className="size-3 text-red-400" />
-                          )}
-                          <span className="truncate">{permiso.module}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {role.permissions && role.permissions.length > 4 && (
-                      <p className="text-xs text-muted-foreground text-center">
-                        +{role.permissions.length - 4} módulos más
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-
         </TabsContent>
       </Tabs>
     </div>

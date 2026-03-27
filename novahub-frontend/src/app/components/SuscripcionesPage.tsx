@@ -41,7 +41,9 @@ import {
   Briefcase,
   Package,
   Headphones,
-  BellRing
+  BellRing,
+  X,
+  KeyRound
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from './ui/utils';
@@ -56,6 +58,10 @@ import {
   INVENTORY_SUBMODULES, 
   FINANCIAL_SUBMODULES, 
   HR_SUBMODULES, 
+  NOTIFICATIONS_SUBMODULES,
+  ACTIVITIES_SUBMODULES,
+  DOCUMENTS_SUBMODULES,
+  REPORTS_SUBMODULES,
   type Submodule 
 } from '../types/modules';
 import { storageService } from '../services/storage.service';
@@ -66,11 +72,11 @@ const AVAILABLE_MODULES = [
   { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General', submodules: FINANCIAL_SUBMODULES },
   { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra', submodules: PURCHASES_SUBMODULES },
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados', submodules: HR_SUBMODULES },
-  { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
-  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
+  { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades', submodules: ACTIVITIES_SUBMODULES },
+  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental', submodules: DOCUMENTS_SUBMODULES },
   { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
-  { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
-  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
+  { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema', submodules: NOTIFICATIONS_SUBMODULES },
+  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis', submodules: REPORTS_SUBMODULES },
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
 ];
 
@@ -117,6 +123,8 @@ export function SuscripcionesPage() {
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'EMPLOYEE' });
+  const [tenantUsers, setTenantUsers] = useState<any[]>([]);
+  const [editingUser, setEditingUser] = useState<any>(null);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [tenantDetails, setTenantDetails] = useState<any>(null);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
@@ -312,18 +320,22 @@ export function SuscripcionesPage() {
         clientTenantId: selectedTenant.id,
         name: userForm.name,
         email: userForm.email,
-        password: userForm.password || 'DefaultPass123!',
+        password: userForm.password || undefined,
         role: systemRole,
         avatar: avatarUrl
       });
       if (userForm.role !== systemRole) {
         toast.info(`Rol aplicado como ${systemRole}. Los roles personalizados se mapean al sistema actual.`);
       }
-      toast.success('Usuario agregado exitosamente');
+      toast.success('Usuario agregado exitosamente (contraseña: 123456)');
       setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' });
       setAvatarFile(null);
       setAvatarPreview('');
-      setIsUserDialogOpen(false);
+      // Refresh users list in dialog
+      try {
+        const updatedUsers = await tenantsService.getUsers(selectedTenant.id);
+        setTenantUsers(Array.isArray(updatedUsers) ? updatedUsers : (updatedUsers as any)?.data || []);
+      } catch {}
       fetchData();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Error al agregar usuario');
@@ -429,6 +441,37 @@ export function SuscripcionesPage() {
     } catch (error: any) {
       console.error('Error desactivación:', error);
       toast.error(error?.message || 'Error al desactivar módulo');
+      fetchData();
+    }
+  };
+
+  const handleToggleAllSubmodules = async (tenantId: string, submodules: any[], currentlyAllActive: boolean) => {
+    if (user?.role?.toLowerCase() !== 'admin') {
+      toast.info('Solo administradores pueden hacer cambios masivos directos.');
+      return;
+    }
+    
+    try {
+      toast.loading(currentlyAllActive ? 'Desactivando catálogo...' : 'Activando catálogo...', { id: 'batch-toggle' });
+      for (const sub of submodules) {
+        if (currentlyAllActive) {
+          await subscriptionsService.toggleModuleStatus({ clientTenantId: tenantId, module: sub.id, isActive: false, notes: 'Desactivación masiva' });
+        } else {
+          // Si no está activo actualmente, no necesitamos verificar de nuevo ya que estamos activando todo.
+          // Pero para optimizar podríamos revisar si ya está activo.
+          const isAlreadyActive = tenants.find((t: any) => t.id === tenantId)?.subscriptions?.some((s: any) => s.module === sub.id && s.isActive);
+          if (!isAlreadyActive) {
+             const res = await subscriptionsService.createRequest({ clientTenantId: tenantId, requestedModule: sub.id, customPrice: 0, notes: 'Activación masiva por admin' });
+             await subscriptionsService.updateRequestStatus(res.id, { status: 'APPROVED' });
+          }
+        }
+      }
+      toast.success(currentlyAllActive ? 'Catálogo desactivado exitosamente' : 'Catálogo activado exitosamente', { id: 'batch-toggle' });
+      fetchData();
+      refreshEnabledModules();
+    } catch (error) {
+      console.error('Error operación masiva:', error);
+      toast.error('Error en operación masiva', { id: 'batch-toggle' });
       fetchData();
     }
   };
@@ -807,7 +850,14 @@ export function SuscripcionesPage() {
                           variant="ghost" 
                           size="icon" 
                           className="text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10 rounded-xl"
-                          onClick={() => { setSelectedTenant(tenant); setIsUserDialogOpen(true); }}
+                          onClick={async () => { 
+                            setSelectedTenant(tenant); 
+                            setIsUserDialogOpen(true);
+                            try {
+                              const users = await tenantsService.getUsers(tenant.id);
+                              setTenantUsers(Array.isArray(users) ? users : (users as any)?.data || []);
+                            } catch { setTenantUsers(tenant.users || []); }
+                          }}
                         >
                           <Users className="size-5" />
                         </Button>
@@ -838,76 +888,102 @@ export function SuscripcionesPage() {
                             const isActive = tenant.subscriptions?.some((s: any) => s.module === mod.id && s.isActive);
                             const isPending = requests.some(r => r.clientTenantId === tenant.id && r.requestedModule === mod.id && r.status === 'PENDING');
                             const isExpanded = expandedModules[`${tenant.id}-${mod.id}`];
-                            const hasSubmodules = mod.submodules && mod.submodules.length > 0;
+                            const hasSubmodules = mod.submodules ? mod.submodules.length > 0 : false;
+                            
+                            const activeSubmodulesCount = hasSubmodules ? mod.submodules!.filter((sub: any) => tenant.subscriptions?.some((s: any) => s.module === sub.id && s.isActive)).length : 0;
+                            const allSubmodulesActive = hasSubmodules ? activeSubmodulesCount === mod.submodules!.length : false;
+                            const visualIsActive = hasSubmodules ? allSubmodulesActive : isActive;
+                            const isPartial = hasSubmodules && !allSubmodulesActive && activeSubmodulesCount > 0;
                             
                             return (
-                              <div key={mod.id} className="space-y-1">
-                                {/* Módulo Principal */}
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => hasSubmodules 
-                                      ? setExpandedModules(prev => ({ ...prev, [`${tenant.id}-${mod.id}`]: !isExpanded }))
-                                      : handleToggleModule(tenant.id, mod.id, isActive)
-                                    }
-                                    disabled={isPending && !hasSubmodules}
-                                    className={cn(
-                                      "flex-1 flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-tight transition-all",
-                                      isActive 
-                                        ? "bg-emerald-500 text-white border-emerald-400/50 shadow-lg shadow-emerald-500/10" 
-                                        : isPending
-                                          ? "bg-amber-500/20 text-amber-600 dark:text-amber-500 border-amber-500/30 animate-pulse"
-                                          : "bg-muted/50 text-muted-foreground/60 border-border/50 hover:border-primary/30 hover:text-foreground/80"
-                                    )}
-                                  >
-                                    <mod.icon className={cn("size-3.5", isActive ? "text-white" : "text-muted-foreground/50")} />
-                                    {mod.label}
-                                    {isActive && !hasSubmodules && <Check className="size-3 ml-auto" />}
-                                    {isPending && !hasSubmodules && <Clock className="size-3 ml-auto" />}
-                                    {hasSubmodules && (
-                                      <span className="ml-auto text-[8px] opacity-60">
-                                        {isExpanded ? '▼' : '▶'} {mod.submodules.length} submódulos
-                                      </span>
-                                    )}
-                                  </button>
-                                </div>
-
-                                {/* Submódulos Expandibles */}
-                                {hasSubmodules && isExpanded && (
-                                  <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="pl-6 space-y-1"
-                                  >
-                                    {mod.submodules.map((sub: Submodule) => {
-                                      const subIsActive = tenant.subscriptions?.some((s: any) => s.module === sub.id && s.isActive);
-                                      const subIsPending = requests.some(r => r.clientTenantId === tenant.id && r.requestedModule === sub.id && r.status === 'PENDING');
-                                      
-                                      return (
-                                        <button
-                                          key={sub.id}
-                                          onClick={() => handleToggleModule(tenant.id, sub.id, subIsActive)}
-                                          disabled={subIsPending}
-                                          className={cn(
-                                            "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-tight transition-all",
-                                            subIsActive 
-                                              ? "bg-emerald-500/80 text-white border-emerald-400/40" 
-                                              : subIsPending
-                                                ? "bg-amber-500/15 text-amber-600 dark:text-amber-500 border-amber-500/20 animate-pulse"
-                                                : "bg-muted/30 text-muted-foreground/50 border-border/30 hover:border-primary/20 hover:text-foreground/70"
+                               <React.Fragment key={mod.id}>
+                                  <div className="space-y-1">
+                                    {/* Módulo Principal */}
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() => setExpandedModules(prev => ({ ...prev, [`${tenant.id}-${mod.id}`]: !isExpanded }))}
+                                        disabled={isPending && !hasSubmodules}
+                                        className={cn(
+                                          "flex-1 flex items-center justify-between px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-tight transition-all",
+                                          visualIsActive 
+                                            ? "bg-emerald-500 text-white border-emerald-400/50 shadow-lg shadow-emerald-500/10" 
+                                            : isPending
+                                              ? "bg-amber-500/20 text-amber-600 dark:text-amber-500 border-amber-500/30 animate-pulse"
+                                              : isPartial 
+                                                ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                                : "bg-muted/50 text-muted-foreground/60 border-border/50 hover:border-primary/30 hover:text-foreground/80"
+                                        )}
+                                      >
+                                        <div className="flex items-center gap-2" onClick={(e) => {
+                                          if (!hasSubmodules) {
+                                            e.stopPropagation();
+                                            handleToggleModule(tenant.id, mod.id, isActive);
+                                          }
+                                        }}>
+                                          <mod.icon className={cn("size-3.5", visualIsActive ? "text-white" : isPartial ? "text-emerald-500" : "text-muted-foreground/50")} />
+                                          {mod.label}
+                                          {visualIsActive && !hasSubmodules && <Check className="size-3 ml-1" />}
+                                          {isPending && !hasSubmodules && <Clock className="size-3 ml-1" />}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          {hasSubmodules && (
+                                            <div className="flex items-center gap-1.5" onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleToggleAllSubmodules(tenant.id, mod.submodules!, allSubmodulesActive);
+                                            }}>
+                                              <div className={cn(
+                                                "flex items-center justify-center p-1 rounded-md transition-all",
+                                                visualIsActive ? "bg-white/20 hover:bg-white/30 text-white" : "bg-muted dark:bg-black/40 hover:bg-emerald-500 hover:text-white border border-border/50"
+                                              )} title={visualIsActive ? "Desactivar Todo" : "Activar Todo"}>
+                                                <Zap className={cn("size-3", isPartial && !visualIsActive ? "text-emerald-500 group-hover:text-white" : "")} />
+                                              </div>
+                                            </div>
                                           )}
-                                          title={sub.description}
-                                        >
-                                          <span className="size-1.5 rounded-full bg-current" />
-                                          {sub.label}
-                                          {subIsActive && <Check className="size-2.5 ml-auto" />}
-                                          {subIsPending && <Clock className="size-2.5 ml-auto" />}
-                                        </button>
-                                      );
-                                    })}
-                                  </motion.div>
-                                )}
-                              </div>
+                                          <div className={cn("p-1 transition-transform", isExpanded ? "rotate-180" : "rotate-0")}>
+                                            {hasSubmodules && <span className="opacity-70 text-[10px]">▼</span>}
+                                          </div>
+                                        </div>
+                                      </button>
+                                    </div>
+
+                                    {/* Submódulos Expandibles */}
+                                    {hasSubmodules && isExpanded && (
+                                      <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="pl-6 space-y-1"
+                                      >
+                                        {mod.submodules!.map((sub: Submodule) => {
+                                          const subIsActive = tenant.subscriptions?.some((s: any) => s.module === sub.id && s.isActive);
+                                          const subIsPending = requests.some(r => r.clientTenantId === tenant.id && r.requestedModule === sub.id && r.status === 'PENDING');
+                                          
+                                          return (
+                                            <button
+                                              key={sub.id}
+                                              onClick={() => handleToggleModule(tenant.id, sub.id, subIsActive)}
+                                              disabled={subIsPending}
+                                              className={cn(
+                                                "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-tight transition-all",
+                                                subIsActive 
+                                                  ? "bg-emerald-500/80 text-white border-emerald-400/40" 
+                                                  : subIsPending
+                                                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-500 border-amber-500/20 animate-pulse"
+                                                    : "bg-muted/30 text-muted-foreground/50 border-border/30 hover:border-primary/20 hover:text-foreground/70"
+                                              )}
+                                              title={sub.description}
+                                            >
+                                              <span className="size-1.5 rounded-full bg-current" />
+                                              {sub.label}
+                                              {subIsActive && <Check className="size-2.5 ml-auto" />}
+                                              {subIsPending && <Clock className="size-2.5 ml-auto" />}
+                                            </button>
+                                          );
+                                        })}
+                                      </motion.div>
+                                    )}
+                                  </div>
+                                </React.Fragment>
                             );
                           })}
                         </div>
@@ -995,32 +1071,90 @@ export function SuscripcionesPage() {
         </TabsContent>
       </Tabs>
       <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="size-5 text-blue-500" />
               Gestión de Usuarios: {selectedTenant?.name}
             </DialogTitle>
-            <DialogDescription>Listado de colaboradores con acceso a este tenant.</DialogDescription>
+            <DialogDescription>Administra usuarios, roles y accesos de esta empresa. Contraseña por defecto: 123456</DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
-            {(selectedTenant?.users || []).map((u: any) => (
-              <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl bg-muted/10 border border-border/50 transition-all hover:border-primary/20">
-                <div className="flex items-center gap-3">
-                  <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                    {u.name?.charAt(0) || '?'}
+            {/* User list */}
+            {tenantUsers.length > 0 ? tenantUsers.map((u: any) => (
+              <div key={u.id} className="p-4 rounded-2xl bg-muted/10 border border-border/50 transition-all hover:border-primary/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`size-10 rounded-full flex items-center justify-center font-bold text-sm ${u.isActive ? 'bg-primary/10 text-primary' : 'bg-red-500/10 text-red-400'}`}>
+                      {u.name?.charAt(0) || '?'}
+                    </div>
+                    <div>
+                      <p className="font-bold text-foreground text-sm">{u.name}</p>
+                      <p className="text-xs text-muted-foreground">{u.email}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-bold text-foreground text-sm">{u.name}</p>
-                    <p className="text-xs text-muted-foreground">{u.email}</p>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className={`text-[10px] uppercase font-black tracking-widest px-2 py-0.5 ${
+                      u.isActive ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-red-500/10 text-red-400 border-red-400/30'
+                    }`}>
+                      {u.isActive ? 'Activo' : 'Inactivo'}
+                    </Badge>
+                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] uppercase font-black tracking-widest px-2 py-0.5">
+                      {u.customRole?.name || u.role}
+                    </Badge>
                   </div>
                 </div>
-                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] uppercase font-black tracking-widest px-3 py-1">
-                  {u.role}
-                </Badge>
+                {/* Actions Row */}
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/30">
+                  <Select
+                    value={u.role?.toLowerCase()}
+                    onValueChange={async (val) => {
+                      try {
+                        await tenantsService.updateUser(selectedTenant.id, u.id, { role: val.toUpperCase() });
+                        setTenantUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: val.toUpperCase() } : x));
+                        toast.success('Rol actualizado');
+                      } catch (err: any) { toast.error(err.response?.data?.message || 'Error'); }
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px] h-8 text-xs bg-muted/10 border-border/50 rounded-lg">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Administrador</SelectItem>
+                      <SelectItem value="manager">Gerente</SelectItem>
+                      <SelectItem value="employee">Empleado</SelectItem>
+                      <SelectItem value="viewer">Visualizador</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline" size="sm"
+                    className="h-8 text-xs rounded-lg gap-1.5"
+                    onClick={async () => {
+                      try {
+                        await tenantsService.updateUser(selectedTenant.id, u.id, { isActive: !u.isActive });
+                        setTenantUsers(prev => prev.map(x => x.id === u.id ? { ...x, isActive: !u.isActive } : x));
+                        toast.success(u.isActive ? 'Usuario desactivado' : 'Usuario activado');
+                      } catch (err: any) { toast.error(err.response?.data?.message || 'Error'); }
+                    }}
+                  >
+                    {u.isActive ? <><X className="size-3" /> Desactivar</> : <><Check className="size-3" /> Activar</>}
+                  </Button>
+                  <Button
+                    variant="outline" size="sm"
+                    className="h-8 text-xs rounded-lg gap-1.5"
+                    onClick={async () => {
+                      if (!confirm('¿Resetear contraseña a 123456?')) return;
+                      try {
+                        await tenantsService.updateUser(selectedTenant.id, u.id, { password: '123456' });
+                        toast.success('Contraseña reseteada a 123456');
+                      } catch (err: any) { toast.error(err.response?.data?.message || 'Error'); }
+                    }}
+                  >
+                    <KeyRound className="size-3" /> Resetear Pass
+                  </Button>
+                </div>
               </div>
-            ))}
-            {(!selectedTenant?.users || selectedTenant.users.length === 0) && (
+            )) : (
               <p className="text-center py-10 text-muted-foreground uppercase text-xs font-black tracking-widest italic">No hay usuarios registrados</p>
             )}
             
@@ -1041,13 +1175,6 @@ export function SuscripcionesPage() {
                   onChange={e => setUserForm({...userForm, email: e.target.value})}
                   className="bg-muted/10 border-border/50 rounded-xl"
                 />
-                <Input 
-                  type="password" 
-                  placeholder="Contraseña (opcional - DefaultPass123!)" 
-                  value={userForm.password} 
-                  onChange={e => setUserForm({...userForm, password: e.target.value})}
-                  className="bg-muted/10 border-border/50 rounded-xl"
-                />
                 <Select value={userForm.role} onValueChange={v => setUserForm({...userForm, role: v})}>
                   <SelectTrigger className="bg-muted/10 border-border/50 rounded-xl">
                     <SelectValue placeholder="Seleccionar rol..." />
@@ -1061,56 +1188,16 @@ export function SuscripcionesPage() {
                         </div>
                       </SelectItem>
                     ))}
-                    {LEGACY_ROLE_OPTIONS.map(role => (
-                      <SelectItem key={`legacy-${role.value}`} value={`legacy:${role.value}`}>
-                        <div className="flex flex-col">
-                          <span className="font-bold">{role.label}</span>
-                          <span className="text-xs text-muted-foreground">{role.description}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                    {customRoles.map((role: any) => (
-                      <SelectItem key={`custom-${role.id}`} value={`custom:${role.id}`}>
-                        <div className="flex flex-col">
-                          <span className="font-bold">{role.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {role.description || 'Rol personalizado'}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))}
                   </SelectContent>
                 </Select>
-                {/* Upload Foto Perfil (Opcional) */}
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold text-muted-foreground">Foto de Perfil (Opcional)</Label>
-                  <div className="flex items-center gap-3">
-                    {avatarPreview && (
-                      <img src={avatarPreview} alt="Avatar preview" className="size-12 rounded-full object-cover border-2 border-primary/20" />
-                    )}
-                    <Input 
-                      type="file" 
-                      accept="image/*"
-                      className="bg-muted/10 border-border/50 rounded-xl file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-500 file:text-white hover:file:bg-blue-600"
-                      onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setAvatarFile(file);
-                          const reader = new FileReader();
-                          reader.onloadend = () => setAvatarPreview(reader.result as string);
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
+                <p className="text-xs text-muted-foreground italic">La contraseña por defecto será: 123456</p>
                 
                 <Button 
                   onClick={handleAddUser}
                   disabled={uploading}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold uppercase text-xs tracking-wide disabled:opacity-50"
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 !text-white rounded-xl font-bold uppercase text-xs tracking-wide disabled:opacity-50"
                 >
-                  {uploading ? 'Subiendo...' : <><Plus className="size-4 mr-2" />Agregar Usuario</>}
+                  {uploading ? 'Creando...' : <><Plus className="size-4 mr-2" />Agregar Usuario</>}
                 </Button>
               </div>
             </div>

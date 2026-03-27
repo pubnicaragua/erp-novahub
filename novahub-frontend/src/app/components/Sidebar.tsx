@@ -47,6 +47,8 @@ import {
   Send,
   CheckCircle2,
   Layers,
+  Archive,
+  History,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -111,6 +113,28 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   egresos: ['FINANCIAL_EXPENSES'],
   'gastos-recurrentes-fin': ['FINANCIAL_EXPENSES_REC'],
   balance: ['FINANCIAL_BALANCE'],
+  // Inventario
+  productos: ['INVENTORY_PRODUCTS'],
+  almacenes: ['INVENTORY_WAREHOUSES'],
+  transferencias: ['INVENTORY_TRANSFERS'],
+  ajustes: ['INVENTORY_ADJUSTMENTS'],
+  movimientos: ['INVENTORY_MOVEMENTS'],
+  // Notificaciones
+  alertas: ['NOTIFICATIONS_ALERTS'],
+  mensajes: ['NOTIFICATIONS_MESSAGES'],
+  push: ['NOTIFICATIONS_PUSH'],
+  // Documentos
+  archivos: ['DOCUMENTS_FILES'],
+  carpetas: ['DOCUMENTS_FOLDERS'],
+  contratos: ['DOCUMENTS_CONTRACTS'],
+  // Actividades
+  tareas: ['ACTIVITIES_TASKS'],
+  calendario: ['ACTIVITIES_CALENDAR'],
+  reuniones: ['ACTIVITIES_MEETINGS'],
+  // Reportes
+  'reportes-ventas': ['REPORTS_SALES'],
+  'reportes-financieros': ['REPORTS_FINANCIAL'],
+  'reportes-inventario': ['REPORTS_INVENTORY'],
 };
 
 const menuItems: MenuItem[] = [
@@ -152,7 +176,18 @@ const menuItems: MenuItem[] = [
       { id: 'creditos-proveedor', label: 'Creditos del proveedor', icon: <BadgeDollarSign className="size-4" /> },
     ]
   },
-  { id: 'inventario', label: 'Inventario', icon: <Package className="size-5" /> },
+  {
+    id: 'inventario',
+    label: 'Inventario',
+    icon: <Package className="size-5" />,
+    submenu: [
+      { id: 'productos', label: 'Productos', icon: <Package className="size-4" /> },
+      { id: 'almacenes', label: 'Almacenes', icon: <Archive className="size-4" /> },
+      { id: 'transferencias', label: 'Transferencias', icon: <Truck className="size-4" /> },
+      { id: 'ajustes', label: 'Ajustes', icon: <Scale className="size-4" /> },
+      { id: 'movimientos', label: 'Movimientos', icon: <History className="size-4" /> },
+    ]
+  },
   {
     id: 'finanzas',
     label: 'Finanzas',
@@ -219,16 +254,12 @@ const menuItems: MenuItem[] = [
     icon: <BarChart3 className="size-5" />, 
     section: 'Sistema',
     submenu: [
-      { id: 'ejecutivo', label: 'Ejecutivo', icon: <Zap className="size-4" /> },
-      { id: 'financiero', label: 'Financiero', icon: <DollarSign className="size-4" /> },
-      { id: 'ventas', label: 'Ventas', icon: <ShoppingCart className="size-4" /> },
-      { id: 'inventario', label: 'Inventario', icon: <Package className="size-4" /> },
-      { id: 'clientes', label: 'Clientes', icon: <Users className="size-4" /> },
-      { id: 'suscripciones', label: 'Suscripciones', icon: <Layers className="size-4" /> },
-      { id: 'aprobaciones', label: 'Aprobaciones', icon: <CheckCircle2 className="size-4" /> }
+      { id: 'reportes-ventas', label: 'Ventas', icon: <ShoppingCart className="size-4" /> },
+      { id: 'reportes-financieros', label: 'Financiero', icon: <DollarSign className="size-4" /> },
+      { id: 'reportes-inventario', label: 'Inventario', icon: <Package className="size-4" /> }
     ]
   },
-  { id: 'suscripciones', label: 'Suscripciones', icon: <Zap className="size-5" /> },
+  { id: 'suscripciones', label: 'Suscripciones', icon: <Zap className="size-5" />, section: 'Sistema' },
   { id: 'configuracion', label: 'Configuracion', icon: <Settings className="size-5" /> },
 ];
 
@@ -341,6 +372,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                   ? item.submenu.filter(subItem => hasSubmenuAccess(item.id, subItem.id))
                   : undefined;
 
+                if (item.submenu && (!visibleSubmenu || visibleSubmenu.length === 0)) return null;
+
                 const isActive = activeModule === item.id;
                 const isExpanded = expandedMenus.has(item.id);
                 const showSection = item.section && item.section !== lastSection;
@@ -375,7 +408,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                         </span>
                         {!isCollapsed && (
                           <>
-                            <span className={cn("flex-1 text-left truncate", item.label === 'Notificaciones' && "odoo-highlight w-fit flex-none")}>
+                            <span className="flex-1 text-left truncate">
                               {user?.role === 'partner' && item.id === 'clientes' ? 'Mis Clientes' : item.label}
                             </span>
                             {visibleSubmenu && visibleSubmenu.length > 0 && (

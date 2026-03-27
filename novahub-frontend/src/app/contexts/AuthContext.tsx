@@ -213,11 +213,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'INVENTORY',
         'INVENTORY_PRODUCTS', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS',
         'INVENTORY_ADJUSTMENTS', 'INVENTORY_COUNT', 'INVENTORY_SERIALS', 'INVENTORY_LOTS',
+        'INVENTORY_MOVEMENTS',
       ],
       finanzas: [
         'FINANCIAL',
         'FINANCIAL_ACCOUNTS', 'FINANCIAL_JOURNAL', 'FINANCIAL_LEDGER',
         'FINANCIAL_BANK', 'FINANCIAL_BUDGET', 'FINANCIAL_REPORTS',
+        'FINANCIAL_INCOMES', 'FINANCIAL_EXPENSES', 'FINANCIAL_EXPENSES_REC', 'FINANCIAL_BALANCE',
+      ],
+      actividades: [
+        'ACTIVITIES',
+        'ACTIVITIES_TASKS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS',
+      ],
+      documentos: [
+        'DOCUMENTS',
+        'DOCUMENTS_FILES', 'DOCUMENTS_FOLDERS', 'DOCUMENTS_CONTRACTS',
+      ],
+      notificaciones: [
+        'NOTIFICATIONS',
+        'NOTIFICATIONS_ALERTS', 'NOTIFICATIONS_MESSAGES', 'NOTIFICATIONS_PUSH',
+      ],
+      reportes: [
+        'REPORTS',
+        'REPORTS_SALES', 'REPORTS_FINANCIAL', 'REPORTS_INVENTORY',
+      ],
+      tickets: [
+        'TICKETS',
       ],
     };
 
