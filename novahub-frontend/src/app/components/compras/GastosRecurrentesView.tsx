@@ -13,16 +13,17 @@ import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Props { data: RecurringExpense[]; loading: boolean; onRefresh: () => void; }
 
 const freqOpts = [
-  { label: 'Semanal',    value: 'WEEKLY' },  
-  { label: 'Mensual',    value: 'MONTHLY' },
-  { label: 'Trimestral', value: 'QUARTERLY' }, 
-  { label: 'Anual',      value: 'YEARLY' },
+  { label: 'Semanal',    value: 'weekly' },  
+  { label: 'Mensual',    value: 'monthly' },
+  { label: 'Trimestral', value: 'quarterly' }, 
+  { label: 'Anual',      value: 'yearly' },
 ];
-const freqMap: Record<string,string> = { WEEKLY:'Semanal', MONTHLY:'Mensual', QUARTERLY:'Trimestral', YEARLY:'Anual' };
+const freqMap: Record<string,string> = { weekly:'Semanal', monthly:'Mensual', quarterly:'Trimestral', yearly:'Anual' };
 const statusOpts = [
   { label: 'Activo',     value: 'ACTIVE',    color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Pausado',    value: 'PAUSED',    color: 'bg-amber-500/10 text-amber-500' },
@@ -30,6 +31,7 @@ const statusOpts = [
 ];
 
 export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
+  const { canPerform } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -78,19 +80,19 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
   const filtered = data.filter(e => (e.description||'').toLowerCase().includes(searchTerm.toLowerCase()));
 
   const columns: ColumnDef<RecurringExpense>[] = [
-    { key: 'description', header: 'Descripción', editable: true },
+    { key: 'description', header: 'Descripción', editable: canPerform('compras', 'edit') },
     { key: 'amount',      header: 'Monto',       width: '130px',
       render: (val, row) => (
         <span className="font-black tabular-nums text-rose-500">
           {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
         </span>
       ) },
-    { key: 'frequency',   header: 'Frecuencia',  width: '120px', editable: true, type: 'select', options: freqOpts,
-      render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{freqMap[(val||'').toUpperCase()]||val}</Badge> },
+    { key: 'frequency',   header: 'Frecuencia',  width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: freqOpts,
+      render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{freqMap[(val||'').toLowerCase()]||val}</Badge> },
 
     { key: 'startDate',   header: 'Inicio',      width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
-    { key: 'status',      header: 'Estado',      width: '110px', editable: true, type: 'select', options: statusOpts,
+    { key: 'status',      header: 'Estado',      width: '110px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -162,15 +164,17 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-             {!isNew && (
+             {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
-            <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-              Guardar Configuración
-            </Button>
+            {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+                Guardar Configuración
+              </Button>
+            )}
           </div>
         </div>
 
@@ -181,11 +185,18 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Descripción / Nombre</p>
-                  <Input value={localDoc.description || ''} onChange={(e) => setLocalDoc({ ...localDoc, description: e.target.value })} className="h-8 text-xs font-bold" placeholder="Ej. Suscripción a Software, AWS, etc" />
+                  <Input 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    value={localDoc.description || ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, description: e.target.value })} 
+                    className="h-8 text-xs font-bold" 
+                    placeholder="Ej. Suscripción a Software, AWS, etc" 
+                  />
                 </div>
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor (Opcional)</p>
                   <Combobox
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     options={suppliers.map(s => ({ label: s.name, value: s.id, description: s.phone || 'Sin teléfono' }))}
                     value={localDoc.supplierId || ''}
                     onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
@@ -195,6 +206,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1 font-black uppercase text-primary">Cuenta Contable (Egreso)</p>
                   <Combobox 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     options={accounts.filter(a => a.type?.toLowerCase() === 'expense' || a.type?.toLowerCase() === 'asset').map(a => ({ label: `${a.code} - ${a.name}`, value: a.id, description: a.type }))}
                     value={localDoc.accountId || ''}
                     onChange={(val) => setLocalDoc({ ...localDoc, accountId: val })}
@@ -203,20 +215,39 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha de Inicio</p>
-                  <Input type="date" value={localDoc.startDate ? new Date(localDoc.startDate).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, startDate: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                  <Input 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    type="date" 
+                    value={localDoc.startDate ? new Date(localDoc.startDate).toISOString().split('T')[0] : ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, startDate: new Date(e.target.value).toISOString() })} 
+                    className="h-8 text-xs" 
+                  />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha de Fin (Opcional)</p>
-                  <Input type="date" value={localDoc.endDate ? new Date(localDoc.endDate).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, endDate: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                  <Input 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    type="date" 
+                    value={localDoc.endDate ? new Date(localDoc.endDate).toISOString().split('T')[0] : ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, endDate: new Date(e.target.value).toISOString() })} 
+                    className="h-8 text-xs" 
+                  />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Categoría</p>
-                  <Input value={localDoc.category || ''} onChange={(e) => setLocalDoc({ ...localDoc, category: e.target.value })} className="h-8 text-xs uppercase" placeholder="OPERACIONAL" />
+                  <Input 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    value={localDoc.category || ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, category: e.target.value })} 
+                    className="h-8 text-xs uppercase" 
+                    placeholder="OPERACIONAL" 
+                  />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
                   <select 
-                    value={localDoc.frequency || 'MONTHLY'} 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    value={localDoc.frequency || 'monthly'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, frequency: e.target.value as RecurringExpense['frequency'] })}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase text-primary"
                   >
@@ -226,7 +257,8 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <select 
-                    value={localDoc.status || 'ACTIVE'} 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    value={localDoc.status || 'active'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                     className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
                   >
@@ -245,6 +277,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
                      <div className="w-1/2">
                         <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
                         <select 
+                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                           value={localDoc.currency || 'NIO'} 
                           onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
                           className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
@@ -255,7 +288,15 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
                      </div>
                      <div className="w-1/2 flex flex-col items-end">
                         <p className="text-[10px] text-muted-foreground mb-1">Monto Fijo Estimado</p>
-                        <Input type="number" min="0" value={localDoc.amount || ''} onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })} className="h-10 text-xl font-black text-rose-500 text-right w-full max-w-[150px]" placeholder="0.00" />
+                        <Input 
+                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                          type="number" 
+                          min="0" 
+                          value={localDoc.amount || ''} 
+                          onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })} 
+                          className="h-10 text-xl font-black text-rose-500 text-right w-full max-w-[150px]" 
+                          placeholder="0.00" 
+                        />
                      </div>
                   </div>
                   <div className="flex justify-between items-center text-base pt-2">
@@ -305,11 +346,13 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
           <div><h2 className="text-xl font-black uppercase tracking-tight">Gastos Recurrentes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Compromisos fijos periódicos</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={() => setEditingId('NEW')} className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Recurrente</Button>
+            {canPerform('compras', 'create') && (
+              <Button onClick={() => setEditingId('NEW')} className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Recurrente</Button>
+            )}
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={async (ids) => {
+          onBulkDelete={canPerform('compras', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
@@ -320,11 +363,13 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
             } catch (e) {
               toast.error('Error al eliminar');
             }
-          }}
+          } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title="Editar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+              <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              {canPerform('compras', 'delete') && (
+                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+              )}
             </div>
           )}
         />

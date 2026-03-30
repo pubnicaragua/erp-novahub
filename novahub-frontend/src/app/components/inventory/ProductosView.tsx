@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Trash2, Save, X, Check, Package, ChevronDown } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Search, Plus, Trash2, Save, X, Check, Package } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ProductosViewProps {
   products: any[];
@@ -28,15 +29,16 @@ interface EditingProduct {
   isNew?: boolean;
 }
 
-export function ProductosView({ products, categories, warehouses, onRefresh }: ProductosViewProps) {
+export function ProductosView({ products, categories, onRefresh }: ProductosViewProps) {
   const { formatAmount } = useCurrency();
+  const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [editingRows, setEditingRows] = useState<Map<string, EditingProduct>>(new Map());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const newRowRef = useRef<HTMLInputElement>(null);
 
-  const filteredProducts = products.filter(p => {
+  const filteredProducts = products.filter((p: any) => {
     const matchesSearch = !searchTerm || 
       p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.code?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -286,14 +288,16 @@ export function ProductosView({ products, categories, warehouses, onRefresh }: P
             </SelectContent>
           </Select>
         </div>
-        <Button 
-          size="sm" 
-          className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
-          onClick={handleAddNewRow}
-        >
-          <Plus className="size-4" />
-          Agregar Producto
-        </Button>
+        {canPerform('inventario_productos', 'create') && (
+          <Button 
+            size="sm" 
+            className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
+            onClick={handleAddNewRow}
+          >
+            <Plus className="size-4" />
+            Agregar Producto
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -337,7 +341,7 @@ export function ProductosView({ products, categories, warehouses, onRefresh }: P
                   <TableRow 
                     key={product.id} 
                     className="group hover:bg-muted/30 cursor-pointer"
-                    onDoubleClick={() => handleEditRow(product)}
+                    onDoubleClick={() => canPerform('inventario_productos', 'edit') && handleEditRow(product)}
                   >
                     <TableCell className="font-mono text-xs text-muted-foreground">{product.code}</TableCell>
                     <TableCell>
@@ -356,22 +360,26 @@ export function ProductosView({ products, categories, warehouses, onRefresh }: P
                     <TableCell className="text-right text-muted-foreground tabular-nums">{formatAmount(product.costPrice || 0)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1 transition-opacity">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="size-7"
-                          onClick={() => handleEditRow(product)}
-                        >
-                          <Save className="size-3.5" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="size-7 text-red-600 hover:text-black hover:bg-red-500"
-                          onClick={() => handleDeleteProduct(product.id)}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
+                        {canPerform('inventario_productos', 'edit') && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="size-7"
+                            onClick={() => handleEditRow(product)}
+                          >
+                            <Save className="size-3.5" />
+                          </Button>
+                        )}
+                        {canPerform('inventario_productos', 'delete') && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="size-7 text-red-600 hover:text-black hover:bg-red-500"
+                            onClick={() => handleDeleteProduct(product.id)}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

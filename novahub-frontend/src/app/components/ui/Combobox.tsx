@@ -26,6 +26,7 @@ interface ComboboxProps {
   placeholder?: string
   emptyMessage?: string
   className?: string
+  disabled?: boolean
 }
 
 export function Combobox({
@@ -35,17 +36,21 @@ export function Combobox({
   placeholder = "Seleccionar...",
   emptyMessage = "No se encontraron resultados.",
   className,
+  disabled = false,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-full justify-between h-8 text-xs font-medium", className)}
+          disabled={disabled}
+          className={cn("w-full justify-between h-8 text-xs font-medium", className, 
+            disabled && "opacity-50 cursor-not-allowed bg-muted/50"
+          )}
         >
           {value
             ? options.find((option) => option.value === value)?.label

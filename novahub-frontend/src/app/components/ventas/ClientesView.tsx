@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Users, UserPlus, Search, TrendingUp, CreditCard, CheckCircle2, Eye, Trash2
+  Users, UserPlus, Search, TrendingUp, CreditCard, CheckCircle2, Eye, Trash2, Plus
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -9,6 +9,7 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { customersService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Customer } from '../../types';
 import { Badge } from '../ui/badge';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -22,8 +23,8 @@ interface ClientesViewProps {
 
 export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
   const { formatConvertedAmount } = useCurrency();
+  const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -49,7 +50,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
       await customersService.create({
         code,
         name: 'Nuevo Cliente',
-        type: 'INDIVIDUAL'
+        type: 'individual' as any
       });
       toast.success('Nuevo cliente creado');
       onRefresh();
@@ -69,7 +70,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
     { 
       key: 'name', 
       header: 'Nombre del Cliente', 
-      editable: true,
+      editable: canPerform('ventas', 'edit'),
       render: (val) => (
         <div className="flex items-center gap-3">
           <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center font-black text-primary text-xs border border-primary/20">
@@ -79,12 +80,12 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
         </div>
       )
     },
-    { key: 'contactName', header: 'Contacto', editable: true },
+    { key: 'contactName', header: 'Contacto', editable: canPerform('ventas', 'edit') },
     { 
       key: 'type', 
       header: 'Tipo', 
       width: '120px',
-      editable: true,
+      editable: canPerform('ventas', 'edit'),
       type: 'select',
       options: [
         { label: 'Particular', value: 'INDIVIDUAL', color: 'bg-blue-500/10 text-blue-500' },
@@ -99,8 +100,8 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
         </Badge>
       )
     },
-    { key: 'email', header: 'Email / Envío', editable: true },
-    { key: 'phone', header: 'Teléfono', width: '130px', editable: true },
+    { key: 'email', header: 'Email / Envío', editable: canPerform('ventas', 'edit') },
+    { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('ventas', 'edit') },
     { 
       key: 'balance', 
       header: 'Saldo Deudor', 
@@ -118,7 +119,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
       key: 'status', 
       header: 'Estado', 
       width: '120px',
-      editable: true,
+      editable: canPerform('ventas', 'edit'),
       type: 'select',
       options: [
         { label: 'Activo', value: 'ACTIVE', color: 'bg-emerald-500/10 text-emerald-500' },
@@ -180,12 +181,14 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button 
-               onClick={handleAddClient}
-               className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
-            >
-              <UserPlus className="size-4" /> Nuevo Cliente
-            </Button>
+            {canPerform('ventas', 'create') && (
+              <Button 
+                onClick={handleAddClient}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
+              >
+                <UserPlus className="size-4" /> Nuevo Cliente
+              </Button>
+            )}
           </div>
         </div>
 
@@ -209,8 +212,10 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+               <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => toast.info('Detalle de cliente en desarrollo')}><Eye className="size-4" /></Button>
+               {canPerform('ventas', 'delete') && (
+                 <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+               )}
             </div>
           )}
         />

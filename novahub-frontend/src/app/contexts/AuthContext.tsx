@@ -11,6 +11,12 @@ export type Module =
   | 'finanzas'
   | 'rh'
   | 'clientes'
+  | 'facturas'
+  | 'inventario_productos'
+  | 'inventario_almacenes'
+  | 'inventario_transferencias'
+  | 'inventario_ajustes'
+  | 'inventario_movimientos'
   | 'proveedores'
   | 'actividades'
   | 'tickets'
@@ -21,7 +27,8 @@ export type Module =
   | 'roles'
   | 'configuracion'
   | 'suscripciones'
-  | 'schema';
+  | 'schema'
+  | 'inventario_productos';
 
 export type SubModule = string;
 
@@ -84,16 +91,16 @@ const getPermissionsByRole = (role: Role): Permission[] => {
       return ALL_MODULES.map(module => ({
         module,
         canView: true,
-        canCreate: module !== 'roles' && module !== 'configuracion' && module !== 'schema',
-        canEdit: module !== 'roles' && module !== 'configuracion' && module !== 'schema',
-        canDelete: module !== 'roles' && module !== 'configuracion' && module !== 'schema',
+        canCreate: !['roles', 'configuracion', 'schema', 'suscripciones'].includes(module),
+        canEdit: !['roles', 'configuracion', 'schema', 'suscripciones'].includes(module),
+        canDelete: !['roles', 'configuracion', 'schema', 'suscripciones'].includes(module),
       }));
     case 'employee':
       return ALL_MODULES.map(module => ({
         module,
-        canView: module !== 'roles' && module !== 'configuracion' && module !== 'finanzas',
-        canCreate: ['inventario', 'ventas', 'compras', 'tickets', 'actividades'].includes(module),
-        canEdit: ['inventario', 'ventas', 'compras', 'tickets'].includes(module),
+        canView: !['roles', 'configuracion', 'finanzas', 'suscripciones', 'schema'].includes(module),
+        canCreate: false, // Por defecto no crea nada sin un rol específico
+        canEdit: false,   // Por defecto no edita nada sin un rol específico
         canDelete: false,
       }));
     case 'partner':
@@ -136,11 +143,65 @@ const createUserObject = (apiUser: any): User => {
   // Platform Admins: SuperAdmin, Partner, or the specific DEV master admin ID
   const isPlatformAdmin = ['superadmin', 'partner'].includes(role) || apiUser.id === 'admin-001';
   
+  const moduleEnumMapInverse: Record<string, string> = {
+    'SALES': 'ventas',
+    'PURCHASES': 'compras',
+    'INVENTORY': 'inventario',
+    'FINANCIAL': 'finanzas',
+    'HR': 'rh',
+    'PROJECTS': 'proyectos',
+    'CLIENTS': 'clientes',
+    'PROVIDERS': 'proveedores',
+    'TOOLS': 'herramientas',
+    'ACTIVITIES': 'actividades',
+    'DOCUMENTS': 'documentos',
+    'NOTIFICATIONS': 'notificaciones',
+    'REPORTS': 'reportes',
+    'TICKETS': 'tickets'
+  };
+
+  const defaultPermissions = getPermissionsByRole(role);
+  const serverPermissionsSnippet = apiUser.permissions || [];
+  
+  // Mapeamos los permisos del servidor a la estructura del frontend
+  const mergedPermissions = defaultPermissions.map(def => {
+    // Buscar si el servidor envió algo para este módulo (o su nombre interno en el backend)
+    const serverMatch = serverPermissionsSnippet.find((sp: any) => {
+      const spMod = (sp.module || sp.id || '').toUpperCase();
+      const defModBackend = Object.entries(moduleEnumMapInverse).find(([_, v]) => v === def.module)?.[0] || def.module.toUpperCase();
+      return spMod === defModBackend || spMod === def.module.toUpperCase();
+    });
+
+    if (serverMatch) {
+      return {
+        module: def.module,
+        canView: !!serverMatch.read,
+        canCreate: !!serverMatch.write,
+        canEdit: !!serverMatch.write,
+        canDelete: !!serverMatch.delete
+      };
+    }
+    
+    // Si tiene un rol personalizado pero no hay permiso explícito del servidor para este módulo
+    // y NO es un admin global, denegamos cualquier acción de escritura/borrado.
+    if (apiUser.customRoleId && !isPlatformAdmin) {
+      return {
+        ...def,
+        canCreate: false,
+        canEdit: false,
+        canDelete: false
+      };
+    }
+
+    return def;
+  });
+  
   console.log('[Auth] User Loaded:', { 
     id: apiUser.id, 
     role, 
     isPlatformAdmin, 
-    tenant: apiUser.clientTenantId 
+    tenant: apiUser.clientTenantId,
+    permissionsCount: mergedPermissions.length
   });
 
   return {
@@ -151,7 +212,7 @@ const createUserObject = (apiUser: any): User => {
     role,
     tenantId: apiUser.clientTenantId,
     tenantName: apiUser.clientTenant?.name || 'Nova Hub',
-    permissions: getPermissionsByRole(role),
+    permissions: mergedPermissions,
     enabledModules: apiUser.enabledModules || [],
     isPlatformAdmin,
     isTenantUser: !isPlatformAdmin,
@@ -301,6 +362,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const canPerform = useCallback((module: Module, action: 'view' | 'create' | 'edit' | 'delete'): boolean => {
     if (!user) return false;
+    if (user.isPlatformAdmin) return hasAccess(module);
+    
     const permission = user.permissions.find(p => p.module === module);
     if (!permission) return false;
     switch (action) {
@@ -310,7 +373,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       case 'delete': return permission.canDelete;
       default: return false;
     }
-  }, [user]);
+  }, [user, hasAccess]);
 
   const login = useCallback(async (email: string, password: string) => {
     try {

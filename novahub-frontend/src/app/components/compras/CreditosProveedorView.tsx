@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { BadgeDollarSign, Plus, Search, Eye, CheckCircle2, TrendingUp, Hash, Trash2, ChevronLeft } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { BadgeDollarSign, Plus, Search, Eye, TrendingUp, Hash, Trash2, ChevronLeft } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { vendorCreditsService, suppliersService } from '../../services/compras.service';
-import type { SupplierCredit, Supplier, SupplierCreditItem } from '../../types';
+import type { SupplierCredit, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; }
@@ -23,6 +24,7 @@ const statusOpts = [
 ];
 
 export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
+  const { canPerform } = useAuth();
   const { displayCurrency, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -74,7 +76,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'total',    header: 'Total',      width: '120px',
       render: (val) => <span className="font-black tabular-nums">{formatConvertedAmount(Number(val||0), 'USD')}</span> },
-    { key: 'status',   header: 'Estado',     width: '110px', editable: true, type: 'select', options: statusOpts,
+    { key: 'status',   header: 'Estado',     width: '110px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toLowerCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -161,15 +163,17 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-             {!isNew && (
+             {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
-            <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-              Guardar Nota
-            </Button>
+            {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+                Guardar Nota
+              </Button>
+            )}
           </div>
         </div>
 
@@ -181,6 +185,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
                   <Combobox
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     options={suppliers.map(s => ({ label: s.name, value: s.id, description: s.phone || 'Sin teléfono' }))}
                     value={localDoc.supplierId || ''}
                     onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
@@ -189,11 +194,18 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
-                  <Input type="date" value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                  <Input 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    type="date" 
+                    value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
+                    className="h-8 text-xs" 
+                  />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <select 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     value={localDoc.status || 'issued'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                     className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
@@ -203,7 +215,13 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
                 </div>
                 <div className="md:col-span-4">
                   <p className="text-[10px] text-muted-foreground mb-1">Razón / Concepto</p>
-                  <Input value={localDoc.reason || ''} onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })} className="h-8 text-xs" placeholder="Ej. Devolución de mercadería" />
+                  <Input 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    value={localDoc.reason || ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })} 
+                    className="h-8 text-xs" 
+                    placeholder="Ej. Devolución de mercadería" 
+                  />
                 </div>
               </div>
             </CardContent>
@@ -213,12 +231,14 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalles</p>
-                <Button variant="outline" size="sm" onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, total: 0 }];
-                  setLocalDoc({ ...localDoc, items: newItems as any });
-                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                  <Plus className="size-3 mr-2" /> Agregar Item
-                </Button>
+                {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+                  <Button variant="outline" size="sm" onClick={() => {
+                    const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, total: 0 }];
+                    setLocalDoc({ ...localDoc, items: newItems as any });
+                  }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                    <Plus className="size-3 mr-2" /> Agregar Item
+                  </Button>
+                )}
               </div>
               
               <div className="space-y-2">
@@ -231,19 +251,43 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
                 {(localDoc.items || []).map((item: any, idx: number) => (
                   <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
                     <div className="col-span-5">
-                      <Input value={item.description || ''} onChange={(e) => handleItemChange(idx, 'description', e.target.value)} className="h-8 text-xs" placeholder="Concepto" />
+                      <Input 
+                        disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                        value={item.description || ''} 
+                        onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
+                        className="h-8 text-xs" 
+                        placeholder="Concepto" 
+                      />
                     </div>
                     <div className="col-span-2">
-                      <Input type="number" min="0" value={item.quantity === 0 ? '' : item.quantity} onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
+                      <Input 
+                        disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                        type="number" 
+                        min="0" 
+                        value={item.quantity === 0 ? '' : item.quantity} 
+                        onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} 
+                        className="h-8 text-xs text-right" 
+                        placeholder="0" 
+                      />
                     </div>
                     <div className="col-span-3">
-                      <Input type="number" min="0" value={item.unitPrice === 0 ? '' : item.unitPrice} onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
+                      <Input 
+                        disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                        type="number" 
+                        min="0" 
+                        value={item.unitPrice === 0 ? '' : item.unitPrice} 
+                        onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
+                        className="h-8 text-xs text-right" 
+                        placeholder="0" 
+                      />
                     </div>
                     <div className="col-span-2 flex items-center justify-end gap-2">
                       <span className="text-xs font-black w-20 text-right tabular-nums">{formatConvertedAmount(Number(item.total || 0), 'USD')}</span>
-                      <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
-                        <Trash2 className="size-3" />
-                      </Button>
+                      {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+                        <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
+                          <Trash2 className="size-3" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -258,14 +302,6 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
           </Card>
         </div>
 
-        <ConfirmDialog
-          open={!!pendingDeleteId}
-          onOpenChange={(open) => !open && setPendingDeleteId(null)}
-          loading={deleteLoading}
-          title="Eliminar Crédito"
-          description="¿Estás seguro de eliminar esta nota de crédito? Esta acción no se puede deshacer y los montos a favor del proveedor serán revertidos."
-          onConfirm={handleDeleteConfirm}
-        />
       </div>
     );
   }
@@ -294,14 +330,18 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
           <div><h2 className="text-xl font-black uppercase tracking-tight">Créditos de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={() => setEditingId('NEW')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Crédito</Button>
+            {canPerform('compras', 'create') && (
+              <Button onClick={() => setEditingId('NEW')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Crédito</Button>
+            )}
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (
              <div className="flex gap-1">
-              <Button title="Editar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+              <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              {canPerform('compras', 'delete') && (
+                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+              )}
             </div>
           )}
         />

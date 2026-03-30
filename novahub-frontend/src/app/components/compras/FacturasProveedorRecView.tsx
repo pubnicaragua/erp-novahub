@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { RotateCcw, Plus, Search, Eye, CalendarClock, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { RotateCcw, Plus, Search, Eye, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -12,16 +12,17 @@ import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; }
 
 const freqOpts = [
-  { label: 'Semanal',    value: 'WEEKLY' },  
-  { label: 'Mensual',    value: 'MONTHLY' },
-  { label: 'Trimestral', value: 'QUARTERLY' }, 
-  { label: 'Anual',      value: 'YEARLY' },
+  { label: 'Semanal',    value: 'weekly' },  
+  { label: 'Mensual',    value: 'monthly' },
+  { label: 'Trimestral', value: 'quarterly' }, 
+  { label: 'Anual',      value: 'yearly' },
 ];
-const freqMap: Record<string,string> = { WEEKLY:'Semanal', MONTHLY:'Mensual', QUARTERLY:'Trimestral', YEARLY:'Anual' };
+const freqMap: Record<string,string> = { weekly:'Semanal', monthly:'Mensual', quarterly:'Trimestral', yearly:'Anual' };
 const statusOpts = [
   { label: 'Activo',     value: 'ACTIVE',    color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Pausado',    value: 'PAUSED',    color: 'bg-amber-500/10 text-amber-500' },
@@ -29,6 +30,7 @@ const statusOpts = [
 ];
 
 export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
+  const { canPerform } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
          nextMonth.setMonth(nextMonth.getMonth() + 1);
          setLocalDoc({
            supplierId: '',
-           frequency: 'MONTHLY',
+           frequency: 'monthly',
            startDate: new Date().toISOString(),
            nextInvoiceDate: nextMonth.toISOString(),
            currency: 'NIO',
@@ -76,19 +78,19 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
   );
 
   const columns: ColumnDef<RecurringSupplierInvoice>[] = [
-    { key: 'description' as any, header: 'Descripción', editable: true, 
+    { key: 'description' as any, header: 'Descripción', editable: canPerform('compras', 'edit'), 
       render: (val, row) => <span className="text-xs font-bold text-primary">{(row as any).description || 'Factura Automática'}</span> },
     { key: 'supplier' as any,    header: 'Proveedor',
-      render: (_v, row) => <span className="font-bold text-sm">{(row as any).supplier?.name||'-'}</span> },
+      render: (_, row) => <span className="font-bold text-sm">{(row as any).supplier?.name||'-'}</span> },
     { key: 'total' as any,       header: 'Monto Estimado',       width: '120px',
       render: (val, row) => (
         <span className="font-black tabular-nums text-rose-500">
           {formatConvertedAmount(Number(val || (row as any).amount || 0), row.currency, row.exchangeRate)}
         </span>
       ) },
-    { key: 'frequency' as any,   header: 'Frecuencia',  width: '120px', editable: true, type: 'select', options: freqOpts,
-      render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-purple-500/10 text-purple-500 border-none">{freqMap[(val||'').toUpperCase()]||val||'-'}</Badge> },
-    { key: 'status' as any,      header: 'Estado',      width: '110px', editable: true, type: 'select', options: statusOpts,
+    { key: 'frequency' as any,   header: 'Frecuencia',  width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: freqOpts,
+      render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-purple-500/10 text-purple-500 border-none">{freqMap[(val||'').toLowerCase()]||val||'-'}</Badge> },
+    { key: 'status' as any,      header: 'Estado',      width: '110px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -102,15 +104,12 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
     if (!localDoc?.nextInvoiceDate) return toast.error('Debe configurar la próxima fecha de factura');
 
     try {
+      const finalDoc = { ...localDoc, total: localDoc.total || (localDoc as any).amount || 0 };
       if (editingId === 'NEW') {
-        const payload = {
-            ...localDoc, 
-            amount: localDoc.total, // For compatibility
-        } as any;
-        await recurringSupplierInvoicesService.create(payload);
+        await recurringSupplierInvoicesService.create(finalDoc as any);
         toast.success('Configuración de factura recurrente creada');
       } else {
-        await recurringSupplierInvoicesService.update(editingId!, localDoc as any);
+        await recurringSupplierInvoicesService.update(editingId!, finalDoc as any);
         toast.success('Configuración guardada');
       }
       setEditingId(null);
@@ -163,19 +162,17 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-             {!isNew && (
+             {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => {
-                     {
-                         try { await recurringSupplierInvoicesService.delete(editingId); toast.success('Eliminado'); setEditingId(null); onRefresh(); } catch { toast.error('Error al eliminar'); }
-                     }
-                  }}>
+                  onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
-            <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-              Guardar Configuración
-            </Button>
+            {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+                Guardar Configuración
+              </Button>
+            )}
           </div>
         </div>
 
@@ -186,11 +183,18 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Nombre Descriptivo</p>
-                  <Input value={(localDoc as any).description || ''} onChange={(e) => setLocalDoc({ ...localDoc, description: e.target.value } as any)} className="h-8 text-xs font-bold" placeholder="Ej. Alquiler de Local (Oficina 2) Mensual" />
+                  <Input 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    value={(localDoc as any).description || ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, description: e.target.value } as any)} 
+                    className="h-8 text-xs font-bold" 
+                    placeholder="Ej. Alquiler de Local (Oficina 2) Mensual" 
+                  />
                 </div>
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor Obligatorio</p>
                   <Combobox
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     options={suppliers.map(s => ({ label: s.name, value: s.id, description: s.phone || 'Sin teléfono' }))}
                     value={localDoc.supplierId || ''}
                     onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
@@ -200,8 +204,9 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
                   <select 
-                    value={localDoc.frequency || 'MONTHLY'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, frequency: e.target.value })}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    value={localDoc.frequency || 'monthly'} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, frequency: e.target.value as any })}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase text-primary"
                   >
                     {freqOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -209,15 +214,28 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha de Inicio</p>
-                  <Input type="date" value={localDoc.startDate ? new Date(localDoc.startDate).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, startDate: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                  <Input 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    type="date" 
+                    value={localDoc.startDate ? new Date(localDoc.startDate).toISOString().split('T')[0] : ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, startDate: new Date(e.target.value).toISOString() })} 
+                    className="h-8 text-xs" 
+                  />
                 </div>
                 <div>
                   <p className="text-[10px] font-black text-rose-500 mb-1 tracking-widest">Siguiente Factura *</p>
-                  <Input type="date" value={(localDoc as any).nextInvoiceDate ? new Date((localDoc as any).nextInvoiceDate).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, nextInvoiceDate: new Date(e.target.value).toISOString() } as any)} className="h-8 text-xs font-bold border-rose-500/50" />
+                  <Input 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    type="date" 
+                    value={(localDoc as any).nextInvoiceDate ? new Date((localDoc as any).nextInvoiceDate).toISOString().split('T')[0] : ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, nextInvoiceDate: new Date(e.target.value).toISOString() } as any)} 
+                    className="h-8 text-xs font-bold border-rose-500/50" 
+                  />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <select 
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     value={localDoc.status || 'ACTIVE'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                     className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
@@ -233,12 +251,14 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
              <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Plantilla de Ítems</p>
-                  <Button variant="outline" size="sm" onClick={() => {
-                    const newItems = [...((localDoc as any).items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, total: 0 }];
-                    setLocalDoc({ ...localDoc, items: newItems } as any);
-                  }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                    <Plus className="size-3 mr-2" /> Agregar Item
-                  </Button>
+                  {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+                    <Button variant="outline" size="sm" onClick={() => {
+                      const newItems = [...((localDoc as any).items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, total: 0 }];
+                      setLocalDoc({ ...localDoc, items: newItems } as any);
+                    }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                      <Plus className="size-3 mr-2" /> Agregar Item
+                    </Button>
+                  )}
                 </div>
               
                 <div className="space-y-2">
@@ -251,19 +271,43 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                   {((localDoc as any).items || []).map((item: any, idx: number) => (
                     <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
                       <div className="col-span-6">
-                        <Input value={item.description || ''} onChange={(e) => handleItemChange(idx, 'description', e.target.value)} className="h-8 text-xs" placeholder="Concepto (mensualidad, alquiler, etc.)" />
+                        <Input 
+                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                          value={item.description || ''} 
+                          onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
+                          className="h-8 text-xs" 
+                          placeholder="Concepto (mensualidad, alquiler, etc.)" 
+                        />
                       </div>
                       <div className="col-span-2">
-                        <Input type="number" min="0" value={item.quantity === 0 ? '' : item.quantity} onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
+                        <Input 
+                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                          type="number" 
+                          min="0" 
+                          value={item.quantity === 0 ? '' : item.quantity} 
+                          onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} 
+                          className="h-8 text-xs text-right" 
+                          placeholder="0" 
+                        />
                       </div>
                       <div className="col-span-2">
-                        <Input type="number" min="0" value={item.unitPrice === 0 ? '' : item.unitPrice} onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} className="h-8 text-xs text-right" placeholder="0" />
+                        <Input 
+                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                          type="number" 
+                          min="0" 
+                          value={item.unitPrice === 0 ? '' : item.unitPrice} 
+                          onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
+                          className="h-8 text-xs text-right" 
+                          placeholder="0" 
+                        />
                       </div>
                       <div className="col-span-2 flex items-center justify-end gap-2">
                         <span className="text-xs font-black w-20 text-right tabular-nums">${Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                        <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
-                          <Trash2 className="size-3" />
-                        </Button>
+                        {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+                          <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
+                            <Trash2 className="size-3" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -279,6 +323,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                       <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
                          <div className="w-1/2">
                             <select 
+                              disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                               value={localDoc.currency || 'NIO'} 
                               onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value, exchangeRate: globalRate } as any)}
                               className="h-6 w-full max-w-[80px] rounded-md border border-input bg-background px-1 text-[10px] font-bold uppercase"
@@ -297,12 +342,31 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
              </CardContent>
           </Card>
         </div>
+        <ConfirmDialog
+          open={!!pendingDeleteId}
+          onOpenChange={(open) => !open && setPendingDeleteId(null)}
+          loading={deleteLoading}
+          title="Eliminar Configuración"
+          description="¿Estás seguro de eliminar esta configuración recurrente? No se generarán más facturas automáticamente."
+          onConfirm={async () => {
+            if (!pendingDeleteId) return;
+            setDeleteLoading(true);
+            try {
+               await recurringSupplierInvoicesService.delete(pendingDeleteId);
+               toast.success('Eliminado');
+               setPendingDeleteId(null);
+               setEditingId(null);
+               onRefresh();
+            } catch { toast.error('Error al eliminar'); }
+            finally { setDeleteLoading(false); }
+          }}
+        />
       </div>
     );
   }
 
   const monthly = data
-    .filter(r => ((r as any).frequency || '').toUpperCase() === 'MONTHLY')
+    .filter(r => ((r as any).frequency || '').toLowerCase() === 'monthly')
     .reduce((acc, recurring) => {
       const sourceAmount = (recurring as any).total ?? (recurring as any).amount ?? 0;
       return acc + convertAmount(sourceAmount, recurring.currency, recurring.exchangeRate);
@@ -337,11 +401,13 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
           <div><h2 className="text-xl font-black uppercase tracking-tight">Facturas Recurrentes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Servicios y pagos automáticos</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={() => setEditingId('NEW')} className="bg-purple-600 hover:bg-purple-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Config.</Button>
+            {canPerform('compras', 'create') && (
+              <Button onClick={() => setEditingId('NEW')} className="bg-purple-600 hover:bg-purple-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Config.</Button>
+            )}
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={async (ids) => {
+          onBulkDelete={canPerform('compras', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
@@ -352,11 +418,13 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
             } catch (e) {
               toast.error('Error al eliminar');
             }
-          }}
+          } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title="Editar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+              <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              {canPerform('compras', 'delete') && (
+                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+              )}
             </div>
           )}
         />

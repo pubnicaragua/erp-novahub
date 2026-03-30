@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   ClipboardList, Plus, Search, TrendingUp, Clock, FilePlus, Package, Eye, Trash2, ChevronLeft
 } from 'lucide-react';
@@ -40,7 +40,7 @@ const statusOptions = [
 
 export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, customers = [], products = [] }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount, formatAmount } = useCurrency();
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -151,7 +151,15 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       width: '200px',
       render: (val, row) => (
         <div className="flex items-center gap-2">
-          <span className="text-xs font-black font-mono text-primary cursor-pointer hover:underline" onClick={() => setEditingId(row.id)}>{val}</span>
+          <span 
+            className={cn(
+              "text-xs font-black font-mono text-primary",
+              canPerform('ventas', 'edit') ? "cursor-pointer hover:underline" : "cursor-default"
+            )} 
+            onClick={() => canPerform('ventas', 'edit') && setEditingId(row.id)}
+          >
+            {val}
+          </span>
           {row.estimateId && (
             <Badge className="text-[8px] font-black bg-orange-500/10 text-orange-500 border-none px-1.5 py-0">
               Desde Cotización
@@ -185,7 +193,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       key: 'status', 
       header: 'Estado', 
       width: '130px',
-      editable: true,
+      editable: canPerform('ventas', 'edit'),
       type: 'select',
       options: statusOptions,
       render: (val) => {
@@ -244,14 +252,18 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
-              onClick={() => { handleUpdate(localDoc!.id, { status: 'DRAFT' as any }); setEditingId(null); }}>
-              Guardar Borrador
-            </Button>
-            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-              onClick={() => { handleUpdate(localDoc!.id, { status: 'CONFIRMED' as any }); setEditingId(null); toast.success('Orden confirmada'); }}>
-              Confirmar Orden
-            </Button>
+            {canPerform('ventas', 'edit') && (
+              <>
+                <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
+                  onClick={() => { handleUpdate(localDoc!.id, { status: 'DRAFT' as any }); setEditingId(null); }}>
+                  Guardar Borrador
+                </Button>
+                <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                  onClick={() => { handleUpdate(localDoc!.id, { status: 'CONFIRMED' as any }); setEditingId(null); toast.success('Orden confirmada'); }}>
+                  Confirmar Orden
+                </Button>
+              </>
+            )}
           </div>
         </div>
         <div className="grid md:grid-cols-2 gap-4">
@@ -562,9 +574,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button onClick={handleAddOrder} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
-              <Plus className="size-4" /> Nueva Orden
-            </Button>
+            {canPerform('ventas', 'create') && (
+              <Button onClick={handleAddOrder} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+                <Plus className="size-4" /> Nueva Orden
+              </Button>
+            )}
           </div>
         </div>
 
@@ -587,20 +601,22 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               {row.status === 'confirmed' && (
-                 <Button 
-                   title="Generar Factura" 
-                   onClick={() => onGenerateInvoice(row)}
-                   variant="ghost" 
-                   size="icon" 
-                   className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
-                 >
-                   <FilePlus className="size-4" />
-                 </Button>
-               )}
-               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
-               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                {row.status === 'confirmed' && canPerform('ventas', 'edit') && (
+                  <Button 
+                    title="Generar Factura" 
+                    onClick={() => onGenerateInvoice(row)}
+                    variant="ghost" 
+                    size="icon" 
+                    className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
+                  >
+                    <FilePlus className="size-4" />
+                  </Button>
+                )}
+                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
+                {canPerform('ventas', 'delete') && (
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                )}
              </div>
            )}
          />

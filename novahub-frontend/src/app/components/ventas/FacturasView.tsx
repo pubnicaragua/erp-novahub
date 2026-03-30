@@ -49,7 +49,7 @@ const editableStatusOptions = [
 
 export function FacturasView({ data, loading, onRefresh, customers = [], products = [], invoiceDraft, onClearInvoiceDraft }: FacturasViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -262,7 +262,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     {
       key: 'customer',
       header: 'Cliente',
-      render: (val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Varios'}</span>
+      render: (_val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Varios'}</span>
     },
     {
       key: 'date',
@@ -295,7 +295,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       key: 'status',
       header: 'Estado',
       width: '130px',
-      editable: true,
+      editable: canPerform('ventas', 'edit'),
       type: 'select',
       options: editableStatusOptions,
       render: (val) => {
@@ -364,15 +364,18 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             </div>
           </div>
           <div className="flex items-center gap-3">
-
-            <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
-              onClick={() => handleSaveInvoice(false)}>
-              Guardar Borrador
-            </Button>
-            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-              onClick={() => handleSaveInvoice(true)}>
-              Emitir Factura
-            </Button>
+            {((isCreating && canPerform('ventas', 'create')) || (!isCreating && canPerform('ventas', 'edit'))) && (
+              <>
+                <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
+                  onClick={() => handleSaveInvoice(false)}>
+                  Guardar Borrador
+                </Button>
+                <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                  onClick={() => handleSaveInvoice(true)}>
+                  Emitir Factura
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
@@ -627,9 +630,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button onClick={startNewInvoice} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
-              <Plus className="size-4" /> Nueva Factura
-            </Button>
+            {canPerform('ventas', 'create') && (
+              <Button onClick={startNewInvoice} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+                <Plus className="size-4" /> Nueva Factura
+              </Button>
+            )}
           </div>
         </div>
 
@@ -652,11 +657,13 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           isLoading={loading}
           bulkActions={() => null}
           actions={(row) => (
-             <div className="flex items-center gap-1">
-               <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'invoice' as any }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
-               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
-             </div>
+              <div className="flex items-center gap-1">
+                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'invoice' as any }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
+                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                {canPerform('ventas', 'delete') && (
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                )}
+              </div>
           )}
         />
       </div>

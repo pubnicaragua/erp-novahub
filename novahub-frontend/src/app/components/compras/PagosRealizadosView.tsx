@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Banknote, Plus, Search, Eye, CheckCircle2, Wallet, TrendingDown, Hash, ChevronLeft, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Search, Eye, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -11,17 +11,19 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Props { data: PaymentMade[]; loading: boolean; onRefresh: () => void; }
 
 const methodOpts = [
-  { label: 'Transferencia', value: 'TRANSFER' },
-  { label: 'Efectivo',      value: 'CASH' },
-  { label: 'Cheque',        value: 'CHECK' },
-  { label: 'Tarjeta',       value: 'CARD' },
+  { label: 'Transferencia', value: 'transfer' },
+  { label: 'Efectivo',      value: 'cash' },
+  { label: 'Cheque',        value: 'check' },
+  { label: 'Tarjeta',       value: 'card' },
 ];
 
 export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
+  const { canPerform } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -49,7 +51,7 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
            amount: 0,
            currency: 'NIO',
            exchangeRate: globalRate,
-           method: 'TRANSFER',
+           method: 'transfer',
            reference: `PAG-${Date.now().toString().slice(-5)}`,
            notes: '',
          });
@@ -68,7 +70,7 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
   );
 
   const columns: ColumnDef<PaymentMade>[] = [
-    { key: 'reference', header: 'Referencia', width: '130px', editable: true },
+    { key: 'reference', header: 'Referencia', width: '130px', editable: canPerform('compras', 'edit') },
     { key: 'supplier',  header: 'Proveedor',
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'date',      header: 'Fecha',      width: '110px',
@@ -79,8 +81,8 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
           {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
         </span>
       ) },
-    { key: 'method',    header: 'Método',     width: '120px', editable: true, type: 'select', options: methodOpts,
-      render: (val) => { const o = methodOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{o?.label||val||'-'}</Badge>; } },
+    { key: 'method',    header: 'Método',     width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: methodOpts,
+      render: (val) => { const o = methodOpts.find(x => x.value === (val||'').toLowerCase()); return <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{o?.label||val||'-'}</Badge>; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PaymentMade>) => {
@@ -125,7 +127,7 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-             {!isNew && (
+             {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={async () => {
                      if(confirm('¿Seguro que deseas eliminar este pago?')){
@@ -135,9 +137,11 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
-            <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-              Guardar Pago
-            </Button>
+            {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+                Guardar Pago
+              </Button>
+            )}
           </div>
         </div>
 
@@ -150,6 +154,7 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
                     <Combobox
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       options={suppliers.map(s => ({ label: s.name, value: s.id, description: s.phone || 'Sin teléfono' }))}
                       value={localDoc.supplierId || ''}
                       onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val, supplierInvoiceId: '' })}
@@ -159,6 +164,7 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Factura a Pagar / Abono (Opcional)</p>
                     <Combobox
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       options={currentBills.map(s => ({ label: `${s.number} (Total: ${s.total})`, value: s.id }))}
                       value={localDoc.supplierInvoiceId || ''}
                       onChange={(val) => {
@@ -171,12 +177,19 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Fecha de Pago</p>
-                    <Input type="date" value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                    <Input 
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      type="date" 
+                      value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
+                      onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
+                      className="h-8 text-xs" 
+                    />
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Método de Pago</p>
                     <select 
-                      value={localDoc.method || 'TRANSFER'} 
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      value={localDoc.method || 'transfer'} 
                       onChange={(e) => setLocalDoc({ ...localDoc, method: e.target.value as any })}
                       className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs uppercase"
                     >
@@ -185,11 +198,23 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
                   </div>
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Referencia / Transferencia #</p>
-                    <Input value={localDoc.reference || ''} onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} className="h-8 text-xs font-mono" placeholder="Ej. TRANSF-001" />
+                    <Input 
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      value={localDoc.reference || ''} 
+                      onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} 
+                      className="h-8 text-xs font-mono" 
+                      placeholder="Ej. TRANSF-001" 
+                    />
                   </div>
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Notas ADicionales</p>
-                    <Input value={localDoc.notes || ''} onChange={(e) => setLocalDoc({ ...localDoc, notes: e.target.value })} className="h-8 text-xs" placeholder="Concepto interno..." />
+                    <Input 
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      value={localDoc.notes || ''} 
+                      onChange={(e) => setLocalDoc({ ...localDoc, notes: e.target.value })} 
+                      className="h-8 text-xs" 
+                      placeholder="Concepto interno..." 
+                    />
                   </div>
                 </div>
               </div>
@@ -203,18 +228,27 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
                 <div className="flex justify-between items-center text-sm border-b border-border/50 pb-4">
                    <div className="w-1/2">
                       <p className="text-[10px] text-muted-foreground mb-1">Moneda de Pago</p>
-                      <select 
-                        value={localDoc.currency || 'NIO'} 
-                        onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value, exchangeRate: globalRate })}
-                        className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
-                      >
+                        <select 
+                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                          value={localDoc.currency || 'NIO'} 
+                          onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
+                          className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
+                        >
                         <option value="NIO">NIO</option>
                         <option value="USD">USD</option>
                       </select>
                    </div>
                    <div className="w-1/2 flex flex-col items-end">
                       <p className="text-[10px] text-muted-foreground mb-1">Monto de Salida</p>
-                      <Input type="number" min="0" value={localDoc.amount || ''} onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })} className="h-10 text-xl font-black text-emerald-500 text-right w-full max-w-[150px]" placeholder="0.00" />
+                      <Input 
+                        disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                        type="number" 
+                        min="0" 
+                        value={localDoc.amount || ''} 
+                        onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })} 
+                        className="h-10 text-xl font-black text-emerald-500 text-right w-full max-w-[150px]" 
+                        placeholder="0.00" 
+                      />
                    </div>
                 </div>
                 
@@ -266,11 +300,13 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
           <div><h2 className="text-xl font-black uppercase tracking-tight">Pagos Realizados</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Desembolsos a proveedores</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={() => setEditingId('NEW')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Pago</Button>
+            {canPerform('compras', 'create') && (
+              <Button onClick={() => setEditingId('NEW')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Pago</Button>
+            )}
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={async (ids) => {
+          onBulkDelete={canPerform('compras', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
@@ -281,11 +317,13 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
             } catch (e) {
               toast.error('Error al eliminar');
             }
-          }}
+          } : undefined}
           actions={(row) => (
              <div className="flex gap-1">
-              <Button title="Editar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { await paymentsService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
+              <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              {canPerform('compras', 'delete') && (
+                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { await paymentsService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
+              )}
             </div>
           )}
         />

@@ -35,7 +35,7 @@ const statusOptions = [
 ];
 
 export function EstimacionesView({ data, loading: _loading, onRefresh, customers = [], products = [] }: EstimacionesViewProps) {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -147,8 +147,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
       width: '140px',
       render: (val, row) => (
         <span 
-          className="text-xs font-black font-mono text-primary cursor-pointer hover:underline"
-          onClick={() => setEditingId(row.id)}
+          className={cn(
+            "text-xs font-black font-mono text-primary",
+            canPerform('ventas', 'edit') ? "cursor-pointer hover:underline" : "cursor-default"
+          )}
+          onClick={() => canPerform('ventas', 'edit') && setEditingId(row.id)}
         >
           {val}
         </span>
@@ -178,7 +181,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
       key: 'status', 
       header: 'Estado', 
       width: '130px',
-      editable: true,
+      editable: canPerform('ventas', 'edit'),
       type: 'select',
       options: statusOptions,
       render: (val) => {
@@ -238,14 +241,18 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
-              onClick={() => { handleUpdate(localDoc!.id, { status: 'DRAFT' as any }); setEditingId(null); }}>
-              Guardar Borrador
-            </Button>
-            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-              onClick={() => { handleUpdate(localDoc!.id, { status: 'APPROVED' as any }); setEditingId(null); }}>
-              Aprobar Y Crear Orden
-            </Button>
+            {canPerform('ventas', 'edit') && (
+              <>
+                <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
+                  onClick={() => { handleUpdate(localDoc!.id, { status: 'DRAFT' as any }); setEditingId(null); }}>
+                  Guardar Borrador
+                </Button>
+                <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                  onClick={() => { handleUpdate(localDoc!.id, { status: 'APPROVED' as any }); setEditingId(null); }}>
+                  Aprobar Y Crear Orden
+                </Button>
+              </>
+            )}
           </div>
         </div>
         <div className="grid md:grid-cols-2 gap-4">
@@ -520,9 +527,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button onClick={handleAddEstimate} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
-              <Plus className="size-4" /> Nueva Cotización
-            </Button>
+            {canPerform('ventas', 'create') && (
+              <Button onClick={handleAddEstimate} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+                <Plus className="size-4" /> Nueva Cotización
+              </Button>
+            )}
           </div>
         </div>
 
@@ -560,9 +569,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
               <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setEditingId(row.id); }}>
                 <Eye className="size-4 text-muted-foreground hover:text-primary" />
               </Button>
-              <Button variant="ghost" size="icon" className="hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}>
-                <Trash2 className="size-4" />
-              </Button>
+              {canPerform('ventas', 'delete') && (
+                <Button variant="ghost" size="icon" className="hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}>
+                  <Trash2 className="size-4" />
+                </Button>
+              )}
             </>
           )}
         />
