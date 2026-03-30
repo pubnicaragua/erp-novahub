@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import { api } from '../services/api';
 import { subscriptionsService } from '../services/subscriptions.service';
 
-export type Role = 'admin' | 'partner' | 'manager' | 'employee' | 'viewer';
+export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer';
 
 export type Module =
   | 'inventario'
@@ -43,6 +43,9 @@ export interface User {
   tenantName: string;
   permissions: Permission[];
   enabledModules: string[];
+  isPlatformAdmin: boolean;
+  isTenantUser: boolean;
+  isTenantAdmin: boolean;
 }
 
 interface AuthContextType {
@@ -68,6 +71,7 @@ const ALL_MODULES: Module[] = [
 
 const getPermissionsByRole = (role: Role): Permission[] => {
   switch (role) {
+    case 'superadmin':
     case 'admin':
       return ALL_MODULES.map(module => ({
         module,
@@ -119,6 +123,42 @@ const getPermissionsByRole = (role: Role): Permission[] => {
   }
 };
 
+const normalizeRole = (rawRole: string): Role => {
+  if (!rawRole) return 'employee';
+  const lowered = rawRole.toLowerCase().replace(/[^a-z_]/g, '');
+  if (lowered === 'superadmin' || lowered === 'super_admin') return 'superadmin';
+  return lowered as Role;
+};
+
+const createUserObject = (apiUser: any): User => {
+  const role = normalizeRole(apiUser.role);
+  
+  // Platform Admins: SuperAdmin, Partner, or the specific DEV master admin ID
+  const isPlatformAdmin = ['superadmin', 'partner'].includes(role) || apiUser.id === 'admin-001';
+  
+  console.log('[Auth] User Loaded:', { 
+    id: apiUser.id, 
+    role, 
+    isPlatformAdmin, 
+    tenant: apiUser.clientTenantId 
+  });
+
+  return {
+    id: apiUser.id,
+    name: apiUser.name,
+    email: apiUser.email,
+    avatar: apiUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(apiUser.name)}&background=10b981&color=fff`,
+    role,
+    tenantId: apiUser.clientTenantId,
+    tenantName: apiUser.clientTenant?.name || 'Nova Hub',
+    permissions: getPermissionsByRole(role),
+    enabledModules: apiUser.enabledModules || [],
+    isPlatformAdmin,
+    isTenantUser: !isPlatformAdmin,
+    isTenantAdmin: role === 'admin' && !isPlatformAdmin,
+  };
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -148,18 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
         localStorage.setItem('nh-auth-token', response.access_token);
 
-        const { user: apiUser } = response;
-        setUser({
-          id: apiUser.id,
-          name: apiUser.name,
-          email: apiUser.email,
-          avatar: apiUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(apiUser.name)}&background=10b981&color=fff`,
-          role: apiUser.role.toLowerCase() as Role,
-          tenantId: apiUser.clientTenantId,
-          tenantName: apiUser.clientTenant?.name || 'Nova Hub',
-          permissions: getPermissionsByRole(apiUser.role.toLowerCase() as Role),
-          enabledModules: apiUser.enabledModules || [],
-        });
+        setUser(createUserObject(response.user));
       } catch (error) {
         console.error('Error restoring session:', error);
         localStorage.removeItem('nh-auth-token');
@@ -174,13 +203,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasAccess = useCallback((module: string): boolean => {
     if (!user) return false;
 
+    // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
+    if (user.isPlatformAdmin) {
+      const platformModules = ['dashboard', 'suscripciones', 'configuracion', 'notificaciones'];
+      return platformModules.includes(module);
+    }
+
     // Módulos solo para admin
-    const adminOnlyModules = ['suscripciones', 'roles', 'schema'];
-    if (adminOnlyModules.includes(module) && user.role !== 'admin') return false;
+    const adminOnlyModules = ['roles', 'schema'];
+    if (adminOnlyModules.includes(module) && !user.isTenantAdmin) return false;
 
     // 1. Verificar si el módulo está habilitado para el tenant (Suscripción)
     // Algunos módulos de sistema siempre están activos
-    const coreModules = ['configuracion', 'dashboard'];
+    const coreModules = ['configuracion', 'dashboard', 'suscripciones'];
     const moduleEnumMap: Record<string, string> = {
       'ventas': 'SALES',
       'compras': 'PURCHASES',
@@ -243,7 +278,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const backendModuleName = moduleEnumMap[module] || module.toUpperCase();
-    const isAdminControlModule = adminOnlyModules.includes(module) && user.role === 'admin';
+    const isAdminControlModule = adminOnlyModules.includes(module) && user.isTenantAdmin;
     const groupModules = moduleGroupMap[module] || [];
     
     // HR es especial: buscar cualquier submódulo HR_*
@@ -282,20 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await api.post<{ access_token: string; user: any }>('/auth/login', { email, password });
       
       localStorage.setItem('nh-auth-token', response.access_token);
-      
-      const { user: apiUser } = response;
-      
-      setUser({
-        id: apiUser.id,
-        name: apiUser.name,
-        email: apiUser.email,
-        avatar: apiUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(apiUser.name)}&background=10b981&color=fff`,
-        role: apiUser.role.toLowerCase() as Role,
-        tenantId: apiUser.clientTenantId,
-        tenantName: apiUser.clientTenant?.name || 'Nova Hub',
-        permissions: getPermissionsByRole(apiUser.role.toLowerCase() as Role),
-        enabledModules: apiUser.enabledModules || [],
-      });
+      setUser(createUserObject(response.user));
     } catch (error: any) {
       throw new Error(error.message || 'Error al iniciar sesión. Verifica tus credenciales.');
     }
@@ -311,18 +333,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
       localStorage.setItem('nh-auth-token', response.access_token);
       
-      const { user: apiUser } = response;
-      setUser({
-        id: apiUser.id,
-        name: apiUser.name,
-        email: apiUser.email,
-        avatar: apiUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(apiUser.name)}&background=10b981&color=fff`,
-        role: apiUser.role.toLowerCase() as Role,
-        tenantId: apiUser.clientTenantId,
-        tenantName: apiUser.clientTenant?.name || 'Nova Hub',
-        permissions: getPermissionsByRole(apiUser.role.toLowerCase() as Role),
-        enabledModules: apiUser.enabledModules || [],
-      });
+      setUser(createUserObject(response.user));
       window.location.reload(); // Recargar para asegurar que todos los servicios se reinicien
     } catch (error: any) {
       console.error('Error switching identity:', error);

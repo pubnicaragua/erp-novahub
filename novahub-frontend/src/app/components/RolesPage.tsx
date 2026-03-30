@@ -34,6 +34,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { rolesService } from '../services/roles.service';
 import { usersService } from '../services/users.service';
 import { toast } from 'sonner';
+import { useAuth } from '../contexts/AuthContext';
 import {
   SALES_SUBMODULES,
   PURCHASES_SUBMODULES,
@@ -71,6 +72,7 @@ const MODULE_GROUPS = [
 const MODULES = ['Ventas', 'Compras', 'Inventario', 'Finanzas', 'RRHH', 'Clientes', 'Proveedores', 'Actividades', 'Tickets', 'Documentos', 'Notificaciones', 'Transferencias', 'Reportes', 'Roles', 'Configuracion', 'Schema'];
 
 export function RolesPage() {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [rolesData, setRolesData] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -90,19 +92,31 @@ export function RolesPage() {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const [rolesRes, usersRes] = await Promise.all([
-        rolesService.getAll(),
+        rolesService.getAll({ clientTenantId: user?.tenantId }),
         usersService.getAll()
       ]);
-      const rolesList = Array.isArray(rolesRes) ? rolesRes : (rolesRes as any)?.data || [];
+      let rolesList = Array.isArray(rolesRes) ? rolesRes : (rolesRes as any)?.data || [];
+      // Asegurar aislamiento frontend por si el backend no lo filtra
+      if (!user?.isPlatformAdmin) {
+        rolesList = rolesList.filter((r: any) => r.clientTenantId === user?.tenantId || r.isSystemRole);
+      }
       setRolesData(rolesList);
-      const usersList = Array.isArray(usersRes) ? usersRes : ((usersRes as any)?.data || []);
+      
+      let usersList = Array.isArray(usersRes) ? usersRes : ((usersRes as any)?.data || []);
+      // Filtrar usuarios por tenant si no es platform admin
+      if (!user?.isPlatformAdmin) {
+        usersList = usersList.filter((u: any) => u.clientTenantId === user?.tenantId);
+      }
+      
       setUsers((usersList || []).map((u: any) => ({
         ...u,
         role: String(u.role || 'employee').toLowerCase(),
@@ -175,6 +189,7 @@ export function RolesPage() {
         color: roleForm.color,
         permissions: roleForm.permissions,
         allowedModules: roleForm.allowedModules || [],
+        clientTenantId: user?.tenantId // Asegurar que el rol se asocie al tenant actual
       };
       if (isEditing && roleForm.id) {
         await rolesService.update(roleForm.id, payload);

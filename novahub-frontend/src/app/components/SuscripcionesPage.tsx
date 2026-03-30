@@ -111,6 +111,8 @@ const LEGACY_ROLE_MAP: Record<string, 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER
   'rh-manager': 'MANAGER',
 };
 
+import { TenantSubscriptionView } from './suscripciones/TenantSubscriptionView';
+
 export function SuscripcionesPage() {
   const { user, refreshEnabledModules } = useAuth();
   const [requests, setRequests] = useState<SubscriptionRequest[]>([]);
@@ -155,36 +157,39 @@ export function SuscripcionesPage() {
   });
 
   useEffect(() => {
-    if (user && user.role === 'admin') {
+    if (user && (user.isPlatformAdmin || user.isTenantAdmin)) {
       fetchData();
-      // Actualización automática cada 5 segundos SOLO para admin
-      const interval = setInterval(() => {
-        fetchData();
-      }, 5000);
-      return () => clearInterval(interval);
+      // Actualización automática cada 5 segundos SOLO para platform admins
+      if (user.isPlatformAdmin) {
+        const interval = setInterval(() => {
+          fetchData();
+        }, 5000);
+        return () => clearInterval(interval);
+      }
     }
   }, [user]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      if (user?.role?.toLowerCase() === 'admin') {
+      if (user?.isPlatformAdmin) {
         const [reqs, allTenants, rolesRes] = await Promise.all([
-          subscriptionsService.getAllRequests(),
+          user.role === 'partner' ? subscriptionsService.getPartnerRequests() : subscriptionsService.getAllRequests(),
           tenantsService.getAll(),
           rolesService.getAll()
         ]);
-        console.log('Tenants structure:', allTenants[0]); // Debug
         setRequests(reqs);
         setTenants(allTenants);
         setCustomRoles(Array.isArray((rolesRes as any)?.data) ? (rolesRes as any).data : []);
-      } else if (user?.role?.toLowerCase() === 'partner') {
-        const [reqs, myTenants] = await Promise.all([
-          subscriptionsService.getPartnerRequests(),
-          tenantsService.getAll()
+      } else if (user?.isTenantAdmin) {
+        const [reqs, myTenants, rolesRes] = await Promise.all([
+          subscriptionsService.getAllRequests(),
+          tenantsService.getAll(),
+          rolesService.getAll({ clientTenantId: user.tenantId })
         ]);
         setRequests(reqs);
         setTenants(myTenants);
+        setCustomRoles(Array.isArray(rolesRes) ? rolesRes : (rolesRes as any)?.data || []);
       }
     } catch (error) {
       console.error('Error fetching subscription data:', error);
@@ -377,15 +382,15 @@ export function SuscripcionesPage() {
 
   const handleToggleModule = (tenantId: string, moduleName: string, currentlyActive: boolean) => {
     if (currentlyActive) {
-      if (user?.role?.toLowerCase() !== 'admin') {
-        toast.info('Solo Super Admin puede desactivar módulos directamente');
+      if (!user?.isPlatformAdmin) {
+        toast.info('Solo administradores de NovaHub pueden desactivar módulos directamente');
         return;
       }
       handleDirectDisable(tenantId, moduleName);
       return;
     }
 
-    if (user?.role?.toLowerCase() !== 'admin') {
+    if (user?.role === 'partner') {
       setRequestForm({
         tenantId,
         module: moduleName,
@@ -393,12 +398,13 @@ export function SuscripcionesPage() {
         notes: ''
       });
       setIsRequestDialogOpen(true);
-    } else {
+    } else if (user?.isPlatformAdmin) {
       handleDirectEnable(tenantId, moduleName);
     }
   };
 
   const handleDirectEnable = async (tenantId: string, moduleName: string) => {
+    if (!user?.isPlatformAdmin) return;
     if (!tenantId) {
       toast.error('ID de empresa inválido. Por favor recarga la página.');
       return;
@@ -423,6 +429,7 @@ export function SuscripcionesPage() {
   };
 
   const handleDirectDisable = async (tenantId: string, moduleName: string) => {
+    if (!user?.isPlatformAdmin) return;
     if (!tenantId) {
       toast.error('ID de empresa inválido. Por favor recarga la página.');
       return;
@@ -446,8 +453,8 @@ export function SuscripcionesPage() {
   };
 
   const handleToggleAllSubmodules = async (tenantId: string, submodules: any[], currentlyAllActive: boolean) => {
-    if (user?.role?.toLowerCase() !== 'admin') {
-      toast.info('Solo administradores pueden hacer cambios masivos directos.');
+    if (!user?.isPlatformAdmin) {
+      toast.info('Solo administradores de NovaHub pueden realizar cambios masivos directos.');
       return;
     }
     
@@ -514,12 +521,13 @@ export function SuscripcionesPage() {
     }
   };
 
-  const filteredTenants = tenants.filter(t => 
-    t.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const isSystemAdmin = user?.isPlatformAdmin;
+
+  const filteredTenants = tenants.filter(t =>
+    t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     t.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
     t.industry?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
   const getIndustryIcon = (industry: string) => {
     switch (industry) {
       case 'ARCHITECTURE': return Globe;
@@ -537,6 +545,34 @@ export function SuscripcionesPage() {
       default: return 'bg-muted/30 text-muted-foreground border-border/50';
     }
   };
+
+  if (user && !user.isPlatformAdmin) {
+    const myTenant = tenants.find(t => t.id === user.tenantId);
+    return (
+      <TenantSubscriptionView 
+        tenant={myTenant} 
+        availableModules={AVAILABLE_MODULES} 
+        requests={requests}
+        customRoles={customRoles}
+        onRefresh={fetchData}
+        onRequestModule={(moduleId, notes) => {
+          setRequestForm({ tenantId: user.tenantId, module: moduleId, price: 0, notes });
+          // In a real flow, you'd trigger the submission directly here, but we can reuse handleSubmitRequest if we wire it up or just do it inline:
+          subscriptionsService.createRequest({
+            clientTenantId: user.tenantId,
+            requestedModule: moduleId,
+            customPrice: 0,
+            notes: notes
+          }).then(() => {
+            toast.success('Solicitud enviada correctamente');
+            fetchData();
+          }).catch((err: any) => {
+            toast.error(err.response?.data?.message || 'Error al enviar solicitud');
+          });
+        }}
+      />
+    );
+  }
 
   return (
     <div className="p-6 space-y-8 max-w-7xl mx-auto min-h-screen">

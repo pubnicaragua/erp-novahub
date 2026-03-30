@@ -11,9 +11,9 @@ export function DevIdentitySwitcher() {
 
   // Identidades predefinidas (Ajustar según IDs reales de la DB/Seed)
   const presets = [
-    { id: 'admin-001', label: 'Super Admin', role: 'admin', icon: <Shield className="size-4" /> },
+    { id: 'admin-001', label: 'Super Admin', role: 'superadmin', icon: <Shield className="size-4" /> },
     { id: 'partner-demo-001', label: 'Partner Demo', role: 'partner', icon: <Users className="size-4" /> },
-    { id: 'client-demo-001', label: 'Cliente Demo (Full)', role: 'client', icon: <User className="size-4" /> },
+    { id: 'client-demo-001', label: 'Cliente Demo (Full)', role: 'admin', icon: <User className="size-4" /> },
   ];
 
   if (process.env.NODE_ENV === 'production') return null;

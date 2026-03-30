@@ -18,6 +18,7 @@ import {
   FolderOpen,
   BellRing,
   LayoutDashboard,
+  Building2,
   UserCircle,
   FileSpreadsheet,
   ClipboardList,
@@ -259,14 +260,36 @@ const menuItems: MenuItem[] = [
       { id: 'reportes-inventario', label: 'Inventario', icon: <Package className="size-4" /> }
     ]
   },
-  { id: 'suscripciones', label: 'Suscripciones', icon: <Zap className="size-5" />, section: 'Sistema' },
+  { id: 'suscripciones', label: 'Mi Suscripción', icon: <Zap className="size-5" />, section: 'Sistema' },
   { id: 'configuracion', label: 'Configuracion', icon: <Settings className="size-5" /> },
+];
+
+const platformMenuItems: MenuItem[] = [
+  {
+    id: 'overview',
+    label: 'Master Console',
+    icon: <LayoutDashboard className="size-5" />,
+    section: 'NovaHub Platform',
+  },
+  {
+    id: 'suscripciones',
+    label: 'Gestión de Empresas',
+    icon: <Building2 className="size-5" />,
+  },
+  {
+    id: 'configuracion',
+    label: 'Configuración Global',
+    icon: <Settings className="size-5" />,
+    section: 'Ajustes',
+  },
 ];
 
 export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview }: SidebarProps) {
   const { hasAccess, user } = useAuth();
   const { themeConfig } = useTheme();
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(['ventas', 'compras']));
+
+  const activeMenuArray = user?.isPlatformAdmin ? platformMenuItems : menuItems;
 
   const toggleMenu = (id: string) => {
     if (isCollapsed) return; // Disallow expanding submenus while collapsed, or you could auto-expand the sidebar
@@ -299,7 +322,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
-    if (user.role === 'admin' && subId in SUBMENU_MODULE_REQUIREMENTS) {
+    if (user.isTenantAdmin && subId in SUBMENU_MODULE_REQUIREMENTS) {
       // Admin también respeta módulos habilitados del tenant.
       return SUBMENU_MODULE_REQUIREMENTS[subId].some(mod => user.enabledModules.includes(mod));
     }
@@ -366,7 +389,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
           {/* Navigation */}
           <div className="flex-1 min-h-0 overflow-y-auto py-3 no-scrollbar">
             <nav className="px-3 space-y-0.5">
-              {menuItems.map((item) => {
+              {activeMenuArray.map((item) => {
                 if (item.id !== 'overview' && !hasAccess(item.id as Module)) return null;
                 const visibleSubmenu = item.submenu
                   ? item.submenu.filter(subItem => hasSubmenuAccess(item.id, subItem.id))

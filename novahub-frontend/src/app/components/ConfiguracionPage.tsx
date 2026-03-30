@@ -6,7 +6,8 @@ import {
   ShoppingCart, UserCheck, Users, Plus, Settings2, KeyRound, Layers,
   Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
-  BarChart3, X, Info, Coins
+  BarChart3, X, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
+  CalendarDays, Headphones, BellRing, FileText, Activity
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -31,12 +32,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from './ui/textarea';
 
 const AVAILABLE_MODULES = [
-  { id: 'SALES', label: 'Ventas', icon: ShoppingBag, description: 'Cotizaciones, Facturación y Clientes' },
+  { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes' },
   { id: 'INVENTORY', label: 'Inventario', icon: Package, description: 'Stock, Almacenes y SKU' },
   { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General' },
-  { id: 'PURCHASES', label: 'Compras', icon: ShoppingCart, description: 'Proveedores y Órdenes de Compra' },
-  { id: 'HR', label: 'Recursos Humanos', icon: Users, description: 'Nómina y Gestión de Empleados' },
-  { id: 'PROJECTS', label: 'Proyectos', icon: Briefcase, description: 'Tareas y Cronogramas de Obra' },
+  { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra' },
+  { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados' },
+  { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
+  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
+  { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
+  { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
+  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
+  { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
 ];
 
 // ---- Hex / OKLCH conversion helpers ----
@@ -405,8 +411,15 @@ export function ConfiguracionPage() {
   const fetchRoles = async () => {
     setIsLoadingRoles(true);
     try {
-      const res = await rolesService.getAll();
-      setRoles(res.data || []);
+      // Filtrar roles por tenantId para asegurar aislamiento
+      const res = await rolesService.getAll({ clientTenantId: user?.tenantId });
+      let rolesList = Array.isArray(res) ? res : (res as any)?.data || [];
+      
+      if (!user?.isPlatformAdmin) {
+        rolesList = rolesList.filter((r: any) => r.clientTenantId === user?.tenantId || r.isSystemRole);
+      }
+      
+      setRoles(rolesList);
     } catch (error) {
       console.error('Error fetching roles:', error);
     } finally {
@@ -472,21 +485,32 @@ export function ConfiguracionPage() {
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Partial<RoleManagement> | null>(null);
 
-  const handleEditRole = (role: RoleManagement) => {
-    setEditingRole(role);
-    setIsRoleDialogOpen(true);
-  };
-
   const handleCreateRole = () => {
     setEditingRole({
       name: '',
       description: '',
-      permissions: AVAILABLE_MODULES.map(m => ({
+      permissions: ALL_PERM_MODULES.map(m => ({
         module: m.id,
         read: true,
         write: false,
         delete: false
-      }))
+      })),
+      clientTenantId: user?.tenantId as any
+    });
+    setIsRoleDialogOpen(true);
+  };
+
+  const handleEditRole = (role: RoleManagement) => {
+    // Asegurar que el rol tenga todos los módulos actuales (por si se agregaron nuevos al sistema)
+    const currentPerms = role.permissions || [];
+    const fullPerms = ALL_PERM_MODULES.map(m => {
+      const existing = currentPerms.find(p => p.module === m.id);
+      return existing || { module: m.id, read: false, write: false, delete: false };
+    });
+    
+    setEditingRole({
+      ...role,
+      permissions: fullPerms
     });
     setIsRoleDialogOpen(true);
   };
@@ -498,11 +522,16 @@ export function ConfiguracionPage() {
     }
 
     try {
+      const payload = {
+        ...editingRole,
+        clientTenantId: user?.tenantId
+      };
+
       if (editingRole.id) {
-        await rolesService.update(editingRole.id, editingRole);
+        await rolesService.update(editingRole.id, payload);
         toast.success('Rol actualizado con éxito');
       } else {
-        await rolesService.create(editingRole);
+        await rolesService.create(payload);
         toast.success('Nuevo rol creado correctamente');
       }
       setIsRoleDialogOpen(false);
