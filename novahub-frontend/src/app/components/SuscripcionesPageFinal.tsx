@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { toast } from 'sonner';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { cn } from './ui/utils';
 import {
   Building2, Users, CheckCircle2, XCircle, Clock, Plus, Search, Edit2, Trash2,

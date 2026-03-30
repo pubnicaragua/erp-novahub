@@ -24,7 +24,7 @@ import { ControlStockView } from './inventory/ControlStockView';
 import { MovimientosView } from './inventory/MovimientosView';
 
 import { inventoryService } from '../services/inventario.service';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 const INVENTORY_SECTIONS = [
   { id: 'dashboard',       label: 'Dashboard',       icon: BarChart3, requiredModules: [] as string[] },

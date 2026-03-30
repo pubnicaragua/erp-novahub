@@ -9,7 +9,7 @@ import {
 } from './dialog';
 import { Button } from './button';
 import { AlertTriangle } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface ConfirmDialogProps {
   open: boolean;

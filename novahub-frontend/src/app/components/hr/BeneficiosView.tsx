@@ -6,7 +6,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { useCurrency } from '../../contexts/CurrencyContext';
 
 const BENEFIT_TYPE_COLORS: Record<string, string> = {

@@ -3,7 +3,7 @@ import { Button } from './ui/button';
 import { Headphones, TicketIcon, Users, BookOpen } from 'lucide-react';
 import { cn } from './ui/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { TicketsView } from './support/TicketsView';
 import { Ticket } from '../types';
 import { supportService, knowledgeBaseService, supportAgentsService } from '../services/support.service';

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { 
   Users, Zap, TrendingUp, AlertCircle, 
   ArrowUpRight, Building2, LayoutGrid, Clock,

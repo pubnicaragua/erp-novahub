@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Activity, ListTodo, CalendarDays, Bell, Database } from 'lucide-react';
 import { cn } from './ui/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { TareasView } from './actividades/TareasView';
 import { EventosView } from './actividades/EventosView';
 import { RecordatoriosView } from './actividades/RecordatoriosView';

@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Bell, AlertTriangle, MessageSquare, Send } from 'lucide-react';
 import { cn } from './ui/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { AlertasView } from './notificaciones/AlertasView';
 import { MensajesView } from './notificaciones/MensajesView';
 import { PushView } from './notificaciones/PushView';

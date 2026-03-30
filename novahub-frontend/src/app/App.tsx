@@ -93,7 +93,7 @@ function DashboardLayout() {
       case 'notificaciones': return <NotificacionesPage activeSubModule={activeSubModule} />;
       case 'transferencias': return <TransferenciasPage />;
       case 'reportes': return <ReportesPage activeSubModule={activeSubModule} />;
-      case 'roles': return <RolesPage />;
+      case 'roles': return <ConfiguracionPage initialTab="roles" />;
       case 'configuracion': return <ConfiguracionPage />;
       case 'suscripciones': return <SuscripcionesPage />;
       case 'schema': return <PrismaSchemaPage />;

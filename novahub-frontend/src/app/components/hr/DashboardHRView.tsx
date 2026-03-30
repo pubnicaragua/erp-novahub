@@ -2,7 +2,7 @@ import React from 'react';
 import { Users, Briefcase, UserCheck, TrendingUp, TrendingDown, Clock, Award, DollarSign, Activity, Gift } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { useCurrency } from '../../contexts/CurrencyContext';
 
 const DEPT_COLORS = [

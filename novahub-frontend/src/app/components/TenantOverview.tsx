@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion, Variants } from 'framer-motion';
+import { motion, Variants } from 'motion/react';
 import {
   TrendingUp, TrendingDown, Package, DollarSign, ShoppingCart, Users,
   ArrowUpRight, Loader2, Target, Download, Building2

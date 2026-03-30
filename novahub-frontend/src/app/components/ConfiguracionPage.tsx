@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Palette, RotateCcw, Save, Upload, Eye, Check, Paintbrush, Sparkles,
   Package, ShoppingBag, DollarSign, Briefcase, ShieldCheck, Building2, Globe,
@@ -7,7 +7,7 @@ import {
   Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
   BarChart3, X, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
-  CalendarDays, Headphones, BellRing, FileText, Activity
+  CalendarDays, Headphones, BellRing, FileText, Activity, Settings
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -43,6 +43,23 @@ const AVAILABLE_MODULES = [
   { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
   { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
+];
+
+// Submódulos para permisos ultra-granulares
+const SUBMODULES_FOR_PERMS = [
+  { id: 'SALES_QUOTES', label: 'Cotizaciones', parent: 'SALES' },
+  { id: 'SALES_INVOICES', label: 'Facturación', parent: 'SALES' },
+  { id: 'INVENTORY_PRODUCTS', label: 'Productos', parent: 'INVENTORY' },
+  { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', parent: 'INVENTORY' },
+  { id: 'PURCHASES_ORDERS', label: 'Órdenes de Compra', parent: 'PURCHASES' },
+  { id: 'HR_EMPLOYEES', label: 'Empleados', parent: 'HR' },
+  { id: 'HR_NOMINAS', label: 'Nóminas', parent: 'HR' },
+];
+
+// Fusionar para la lista de permisos
+const ALL_PERM_MODULES = [
+  ...AVAILABLE_MODULES,
+  ...SUBMODULES_FOR_PERMS.map(s => ({ ...s, icon: Activity, description: `Submódulo de ${s.parent}` }))
 ];
 
 // ---- Hex / OKLCH conversion helpers ----
@@ -217,7 +234,7 @@ const ALL_TABS: TabDef[] = [
 ];
 
 // ---- Main Component ----
-export function ConfiguracionPage() {
+export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: string }) {
   const { themeConfig, updateTheme, updateConfig, resetTheme } = useTheme();
   const { user } = useAuth();
   const { refreshRate: refreshCurrencyContext } = useCurrency();
@@ -237,7 +254,7 @@ export function ConfiguracionPage() {
   const [companyName, setCompanyName] = useState('');
   const [companySlug, setCompanySlug] = useState('');
   const [companyIndustry, setCompanyIndustry] = useState('OTHER');
-  const [activeTab, setActiveTab] = useState('branding');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   // Security state
@@ -411,9 +428,11 @@ export function ConfiguracionPage() {
   const fetchRoles = async () => {
     setIsLoadingRoles(true);
     try {
-      // Filtrar roles por tenantId para asegurar aislamiento
+      console.log('[Config] Fetching roles for tenant:', user?.tenantId);
       const res = await rolesService.getAll({ clientTenantId: user?.tenantId });
       let rolesList = Array.isArray(res) ? res : (res as any)?.data || [];
+      
+      console.log('[Config] Roles received:', rolesList.length);
       
       if (!user?.isPlatformAdmin) {
         rolesList = rolesList.filter((r: any) => r.clientTenantId === user?.tenantId || r.isSystemRole);
@@ -982,17 +1001,28 @@ export function ConfiguracionPage() {
                           </thead>
                           <tbody className="divide-y divide-border/30">
                             {(editingRole?.permissions || []).map((p) => {
-                              const mod = AVAILABLE_MODULES.find(m => m.id === p.module);
+                              const mod = ALL_PERM_MODULES.find(m => m.id === p.module);
+                              const isSubmodule = 'parent' in (mod || {});
                               const Icon = mod?.icon;
+                              
                               return (
-                                <tr key={p.module} className="hover:bg-muted/10 transition-colors">
+                                <tr key={p.module} className={cn(
+                                  "hover:bg-muted/10 transition-colors",
+                                  isSubmodule ? "bg-muted/5 opacity-90" : "bg-card"
+                                )}>
                                   <td className="px-4 py-3">
-                                    <div className="flex items-center gap-3">
-                                      <div className="size-8 rounded-lg bg-muted/30 flex items-center justify-center flex-shrink-0">
-                                        {Icon && <Icon className="size-4 text-muted-foreground" />}
+                                    <div className={cn("flex items-center gap-3", isSubmodule && "pl-8")}>
+                                      <div className={cn(
+                                        "size-8 rounded-lg flex items-center justify-center flex-shrink-0",
+                                        isSubmodule ? "bg-muted/20" : "bg-primary/10"
+                                      )}>
+                                        {Icon && <Icon className={cn("size-4", isSubmodule ? "text-muted-foreground" : "text-primary")} />}
                                       </div>
                                       <div>
-                                        <p className="font-bold text-sm">{mod?.label || p.module}</p>
+                                        <p className={cn("font-bold", isSubmodule ? "text-xs" : "text-sm")}>
+                                          {mod?.label || p.module}
+                                          {isSubmodule && <span className="ml-2 text-[9px] font-black text-muted-foreground/50 uppercase">SUB</span>}
+                                        </p>
                                         <p className="text-[10px] text-muted-foreground">{mod?.description || ''}</p>
                                       </div>
                                     </div>

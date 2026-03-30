@@ -45,7 +45,7 @@ import {
   X,
   KeyRound
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './ui/utils';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Label } from './ui/label';
@@ -65,6 +65,7 @@ import {
   type Submodule 
 } from '../types/modules';
 import { storageService } from '../services/storage.service';
+import { TenantSubscriptionView } from './suscripciones/TenantSubscriptionView';
 
 const AVAILABLE_MODULES = [
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes', submodules: SALES_SUBMODULES },
@@ -87,18 +88,6 @@ const SYSTEM_ROLE_OPTIONS = [
   { value: 'VIEWER', label: 'Visualizador', description: 'Solo lectura' },
 ];
 
-const LEGACY_ROLE_OPTIONS = [
-  { value: 'super-admin', label: 'Super Administrador', description: 'Rol histórico (mapea a ADMIN)' },
-  { value: 'admin', label: 'Administrador clásico', description: 'Rol histórico (mapea a ADMIN)' },
-  { value: 'gerente', label: 'Gerente', description: 'Rol histórico (mapea a MANAGER)' },
-  { value: 'contador', label: 'Contador', description: 'Rol histórico (mapea a MANAGER)' },
-  { value: 'vendedor', label: 'Vendedor', description: 'Rol histórico (mapea a EMPLOYEE)' },
-  { value: 'almacenero', label: 'Almacenero', description: 'Rol histórico (mapea a EMPLOYEE)' },
-  { value: 'comprador', label: 'Comprador', description: 'Rol histórico (mapea a EMPLOYEE)' },
-  { value: 'empleado', label: 'Empleado clásico', description: 'Rol histórico (mapea a EMPLOYEE)' },
-  { value: 'rh-manager', label: 'RH Manager', description: 'Rol histórico (mapea a MANAGER)' },
-];
-
 const LEGACY_ROLE_MAP: Record<string, 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER'> = {
   'super-admin': 'ADMIN',
   admin: 'ADMIN',
@@ -110,8 +99,6 @@ const LEGACY_ROLE_MAP: Record<string, 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER
   empleado: 'EMPLOYEE',
   'rh-manager': 'MANAGER',
 };
-
-import { TenantSubscriptionView } from './suscripciones/TenantSubscriptionView';
 
 export function SuscripcionesPage() {
   const { user, refreshEnabledModules } = useAuth();
@@ -279,17 +266,6 @@ export function SuscripcionesPage() {
     }
   };
 
-  const handleArchiveTenant = async (id: string) => {
-    if (!confirm('¿Estás seguro de archivar esta empresa? No aparecerá en la lista activa.')) return;
-    try {
-      await api.patch(`/tenants/${id}`, { isActive: false });
-      toast.success('Empresa archivada exitosamente');
-      setTenants(prev => prev.filter(t => t.id !== id));
-    } catch (error) {
-      toast.error('Error al archivar empresa');
-    }
-  };
-
   const handleDeleteTenant = async (id: string, name: string) => {
     if (!confirm(`¿Eliminar permanentemente "${name}"? Esta acción NO se puede deshacer.`)) return;
     try {
@@ -304,49 +280,6 @@ export function SuscripcionesPage() {
   const handleViewDetails = async (tenant: any) => {
     setTenantDetails(tenant);
     setIsDetailsDialogOpen(true);
-  };
-
-  const handleAddUser = async () => {
-    if (!userForm.name || !userForm.email) {
-      toast.error('Complete nombre y email');
-      return;
-    }
-    try {
-      setUploading(true);
-      let avatarUrl = null;
-      const systemRole = resolveSelectedRoleToSystemRole(userForm.role);
-      
-      if (avatarFile) {
-        const tempUserId = `${selectedTenant.id}-${Date.now()}`;
-        avatarUrl = await storageService.uploadUserAvatar(avatarFile, tempUserId);
-      }
-      
-      await tenantsService.addUser({
-        clientTenantId: selectedTenant.id,
-        name: userForm.name,
-        email: userForm.email,
-        password: userForm.password || undefined,
-        role: systemRole,
-        avatar: avatarUrl
-      });
-      if (userForm.role !== systemRole) {
-        toast.info(`Rol aplicado como ${systemRole}. Los roles personalizados se mapean al sistema actual.`);
-      }
-      toast.success('Usuario agregado exitosamente (contraseña: 123456)');
-      setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' });
-      setAvatarFile(null);
-      setAvatarPreview('');
-      // Refresh users list in dialog
-      try {
-        const updatedUsers = await tenantsService.getUsers(selectedTenant.id);
-        setTenantUsers(Array.isArray(updatedUsers) ? updatedUsers : (updatedUsers as any)?.data || []);
-      } catch {}
-      fetchData();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Error al agregar usuario');
-    } finally {
-      setUploading(false);
-    }
   };
 
   const resetTenantForm = () => {
@@ -464,8 +397,6 @@ export function SuscripcionesPage() {
         if (currentlyAllActive) {
           await subscriptionsService.toggleModuleStatus({ clientTenantId: tenantId, module: sub.id, isActive: false, notes: 'Desactivación masiva' });
         } else {
-          // Si no está activo actualmente, no necesitamos verificar de nuevo ya que estamos activando todo.
-          // Pero para optimizar podríamos revisar si ya está activo.
           const isAlreadyActive = tenants.find((t: any) => t.id === tenantId)?.subscriptions?.some((s: any) => s.module === sub.id && s.isActive);
           if (!isAlreadyActive) {
              const res = await subscriptionsService.createRequest({ clientTenantId: tenantId, requestedModule: sub.id, customPrice: 0, notes: 'Activación masiva por admin' });
@@ -521,13 +452,12 @@ export function SuscripcionesPage() {
     }
   };
 
-  const isSystemAdmin = user?.isPlatformAdmin;
-
   const filteredTenants = tenants.filter(t =>
     t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     t.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
     t.industry?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
   const getIndustryIcon = (industry: string) => {
     switch (industry) {
       case 'ARCHITECTURE': return Globe;
@@ -556,8 +486,6 @@ export function SuscripcionesPage() {
         customRoles={customRoles}
         onRefresh={fetchData}
         onRequestModule={(moduleId, notes) => {
-          setRequestForm({ tenantId: user.tenantId, module: moduleId, price: 0, notes });
-          // In a real flow, you'd trigger the submission directly here, but we can reuse handleSubmitRequest if we wire it up or just do it inline:
           subscriptionsService.createRequest({
             clientTenantId: user.tenantId,
             requestedModule: moduleId,
@@ -623,7 +551,7 @@ export function SuscripcionesPage() {
                         setTenantForm({
                           ...tenantForm, 
                           name: newName,
-                          slug: autoSlug // SIEMPRE auto-genera en tiempo real
+                          slug: autoSlug
                         });
                       }}
                     />
@@ -768,63 +696,13 @@ export function SuscripcionesPage() {
         ))}
       </div>
 
-      {/* Request Module Dialog */}
-      <Dialog open={isRequestDialogOpen} onOpenChange={setIsRequestDialogOpen}>
-        <DialogContent className="bg-card border-border text-card-foreground sm:max-w-[450px]">
-          <DialogHeader>
-            <DialogTitle>Solicitar Activación de Módulo</DialogTitle>
-            <DialogDescription className="text-muted-foreground"> Envía una solicitud de habilitación para el cliente seleccionado. </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-5 py-4">
-            <div className="flex items-center gap-4 p-3 rounded-xl bg-muted/10 border border-border/50">
-              <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                <Zap className="size-5" />
-              </div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Módulo a Habilitar</p>
-                <p className="text-sm font-bold text-foreground">{AVAILABLE_MODULES.find(m => m.id === requestForm.module)?.label}</p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Precio de Venta Sugerido (USD)</Label>
-              <div className="relative">
-                <DollarSign className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-                <Input 
-                  type="number"
-                  placeholder="0.00"
-                  className="bg-muted/10 border-border/50 pl-9"
-                  value={requestForm.price}
-                  onChange={e => setRequestForm({...requestForm, price: Number(e.target.value)})}
-                />
-              </div>
-              <p className="text-[10px] text-muted-foreground italic">Este precio será comunicado al cliente en su facturación.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Notas o Requerimientos Especiales</Label>
-              <Textarea 
-                placeholder="Ej: El cliente necesita acceso a reportes personalizados..."
-                className="bg-muted/10 border-border/50 min-h-[100px]"
-                value={requestForm.notes}
-                onChange={e => setRequestForm({...requestForm, notes: e.target.value})}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" className="border-border text-foreground hover:bg-muted/10" onClick={() => setIsRequestDialogOpen(false)}>Cancelar</Button>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleSubmitRequest}>Enviar Solicitud</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Tabs defaultValue="active" className="w-full">
         <TabsList className="grid w-full grid-cols-2 lg:w-[400px] bg-muted/20 border border-border/50 p-1 h-12">
           <TabsTrigger value="active" className="text-muted-foreground hover:text-foreground hover:bg-muted/40 data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-black tracking-widest gap-2">
             <Building2 className="size-4" /> Gestión Empresas
           </TabsTrigger>
           <TabsTrigger value="requests" className="text-muted-foreground hover:text-foreground hover:bg-muted/40 data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-black tracking-widest gap-2">
-            <Clock className="size-4" /> {user?.role === 'admin' ? 'Aprobaciones' : 'Solicitudes'}
+            <Clock className="size-4" /> Solicitudes
             {requests.filter(r => r.status === 'PENDING').length > 0 && (
               <Badge className="bg-rose-500 text-[10px] size-5 p-0 flex items-center justify-center rounded-full ml-1 animate-pulse border-none">
                 {requests.filter(r => r.status === 'PENDING').length}
@@ -874,45 +752,23 @@ export function SuscripcionesPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 rounded-xl"
-                          onClick={() => openEditTenant(tenant)}
-                        >
+                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 rounded-xl" onClick={() => openEditTenant(tenant)}>
                           <Edit2 className="size-5" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10 rounded-xl"
-                          onClick={async () => { 
+                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10 rounded-xl" onClick={async () => { 
                             setSelectedTenant(tenant); 
                             setIsUserDialogOpen(true);
                             try {
                               const users = await tenantsService.getUsers(tenant.id);
                               setTenantUsers(Array.isArray(users) ? users : (users as any)?.data || []);
                             } catch { setTenantUsers(tenant.users || []); }
-                          }}
-                        >
+                          }}>
                           <Users className="size-5" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="text-muted-foreground hover:text-purple-500 hover:bg-purple-500/10 rounded-xl"
-                          onClick={() => handleViewDetails(tenant)}
-                          title="Ver detalles"
-                        >
+                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-purple-500 hover:bg-purple-500/10 rounded-xl" onClick={() => handleViewDetails(tenant)}>
                           <Eye className="size-5" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded-xl"
-                          onClick={() => handleDeleteTenant(tenant.id, tenant.name)}
-                          title="Eliminar permanentemente"
-                        >
+                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded-xl" onClick={() => handleDeleteTenant(tenant.id, tenant.name)}>
                           <Trash2 className="size-5" />
                         </Button>
                       </div>
@@ -934,7 +790,6 @@ export function SuscripcionesPage() {
                             return (
                                <React.Fragment key={mod.id}>
                                   <div className="space-y-1">
-                                    {/* Módulo Principal */}
                                     <div className="flex items-center gap-2">
                                       <button
                                         onClick={() => setExpandedModules(prev => ({ ...prev, [`${tenant.id}-${mod.id}`]: !isExpanded }))}
@@ -982,18 +837,11 @@ export function SuscripcionesPage() {
                                       </button>
                                     </div>
 
-                                    {/* Submódulos Expandibles */}
                                     {hasSubmodules && isExpanded && (
-                                      <motion.div
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: 'auto' }}
-                                        exit={{ opacity: 0, height: 0 }}
-                                        className="pl-6 space-y-1"
-                                      >
+                                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="pl-6 space-y-1">
                                         {mod.submodules!.map((sub: Submodule) => {
                                           const subIsActive = tenant.subscriptions?.some((s: any) => s.module === sub.id && s.isActive);
                                           const subIsPending = requests.some(r => r.clientTenantId === tenant.id && r.requestedModule === sub.id && r.status === 'PENDING');
-                                          
                                           return (
                                             <button
                                               key={sub.id}
@@ -1048,7 +896,6 @@ export function SuscripcionesPage() {
                     <div className="size-14 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shrink-0">
                       <LayoutGrid className="size-7 text-primary" />
                     </div>
-                    
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="text-lg font-bold text-foreground uppercase tracking-tight">{req.requestedModule}</h3>
@@ -1063,40 +910,15 @@ export function SuscripcionesPage() {
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground uppercase font-bold tracking-tighter">
                         <span className="flex items-center gap-1"><Building2 className="size-3" /> {req.clientTenant?.name}</span>
-                        <span className="flex items-center gap-1"><ShieldCheck className="size-3" /> Partner: {req.partner?.name || 'Sistema'}</span>
                         <span className="flex items-center gap-1 text-primary/80"><DollarSign className="size-3" /> Precio Proyectado: ${req.customPrice || 0}</span>
                       </div>
-                      {req.notes && (
-                         <div className="mt-3 p-3 rounded-lg bg-muted/10 border border-border/50 flex gap-3">
-                           <MessageSquare className="size-4 text-muted-foreground/50 shrink-0" />
-                           <p className="text-xs text-muted-foreground leading-relaxed italic">"{req.notes}"</p>
-                         </div>
-                      )}
                     </div>
-
                     <div className="flex items-center gap-2">
-                       {user?.role === 'admin' && req.status === 'PENDING' ? (
+                       {user?.isPlatformAdmin && req.status === 'PENDING' && (
                         <>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleReject(req.id)}
-                            className="bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500 hover:text-white uppercase text-[10px] font-black px-4"
-                          >
-                            Rechazar
-                          </Button>
-                          <Button 
-                            size="sm"
-                            onClick={() => handleApprove(req.id)}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 uppercase text-[10px] font-black px-4"
-                          >
-                            Aprobar
-                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => handleReject(req.id)} className="bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500 hover:text-white uppercase text-[10px] font-black px-4">Rechazar</Button>
+                          <Button size="sm" onClick={() => handleApprove(req.id)} className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 uppercase text-[10px] font-black px-4">Aprobar</Button>
                         </>
-                       ) : (
-                         <Button variant="ghost" disabled className="text-muted-foreground uppercase text-[10px] font-black tracking-widest italic">
-                           {req.status === 'PENDING' ? 'En espera de revisión' : 'Solicitud Finalizada'}
-                         </Button>
                        )}
                     </div>
                   </div>
@@ -1106,6 +928,7 @@ export function SuscripcionesPage() {
           </div>
         </TabsContent>
       </Tabs>
+
       <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -1116,9 +939,8 @@ export function SuscripcionesPage() {
             <DialogDescription>Administra usuarios, roles y accesos de esta empresa. Contraseña por defecto: 123456</DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
-            {/* User list */}
             {tenantUsers.length > 0 ? tenantUsers.map((u: any) => (
-              <div key={u.id} className="p-4 rounded-2xl bg-muted/10 border border-border/50 transition-all hover:border-primary/20 space-y-3">
+              <div key={u.id} className="p-4 rounded-2xl bg-muted/10 border border-border/50 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className={`size-10 rounded-full flex items-center justify-center font-bold text-sm ${u.isActive ? 'bg-primary/10 text-primary' : 'bg-red-500/10 text-red-400'}`}>
@@ -1129,122 +951,19 @@ export function SuscripcionesPage() {
                       <p className="text-xs text-muted-foreground">{u.email}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className={`text-[10px] uppercase font-black tracking-widest px-2 py-0.5 ${
-                      u.isActive ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-red-500/10 text-red-400 border-red-400/30'
-                    }`}>
-                      {u.isActive ? 'Activo' : 'Inactivo'}
-                    </Badge>
-                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] uppercase font-black tracking-widest px-2 py-0.5">
-                      {u.customRole?.name || u.role}
-                    </Badge>
-                  </div>
-                </div>
-                {/* Actions Row */}
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/30">
-                  <Select
-                    value={u.role?.toLowerCase()}
-                    onValueChange={async (val) => {
-                      try {
-                        await tenantsService.updateUser(selectedTenant.id, u.id, { role: val.toUpperCase() });
-                        setTenantUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: val.toUpperCase() } : x));
-                        toast.success('Rol actualizado');
-                      } catch (err: any) { toast.error(err.response?.data?.message || 'Error'); }
-                    }}
-                  >
-                    <SelectTrigger className="w-[140px] h-8 text-xs bg-muted/10 border-border/50 rounded-lg">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Administrador</SelectItem>
-                      <SelectItem value="manager">Gerente</SelectItem>
-                      <SelectItem value="employee">Empleado</SelectItem>
-                      <SelectItem value="viewer">Visualizador</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline" size="sm"
-                    className="h-8 text-xs rounded-lg gap-1.5"
-                    onClick={async () => {
-                      try {
-                        await tenantsService.updateUser(selectedTenant.id, u.id, { isActive: !u.isActive });
-                        setTenantUsers(prev => prev.map(x => x.id === u.id ? { ...x, isActive: !u.isActive } : x));
-                        toast.success(u.isActive ? 'Usuario desactivado' : 'Usuario activado');
-                      } catch (err: any) { toast.error(err.response?.data?.message || 'Error'); }
-                    }}
-                  >
-                    {u.isActive ? <><X className="size-3" /> Desactivar</> : <><Check className="size-3" /> Activar</>}
-                  </Button>
-                  <Button
-                    variant="outline" size="sm"
-                    className="h-8 text-xs rounded-lg gap-1.5"
-                    onClick={async () => {
-                      if (!confirm('¿Resetear contraseña a 123456?')) return;
-                      try {
-                        await tenantsService.updateUser(selectedTenant.id, u.id, { password: '123456' });
-                        toast.success('Contraseña reseteada a 123456');
-                      } catch (err: any) { toast.error(err.response?.data?.message || 'Error'); }
-                    }}
-                  >
-                    <KeyRound className="size-3" /> Resetear Pass
-                  </Button>
+                  <Badge variant="outline" className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 ${u.isActive ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-red-500/10 text-red-400 border-red-400/30'}`}>
+                    {u.isActive ? 'Activo' : 'Inactivo'}
+                  </Badge>
                 </div>
               </div>
-            )) : (
-              <p className="text-center py-10 text-muted-foreground uppercase text-xs font-black tracking-widest italic">No hay usuarios registrados</p>
-            )}
-            
-            {/* Agregar Nuevo Usuario */}
-            <div className="border-t border-border/50 pt-4 mt-4">
-              <h4 className="text-sm font-bold mb-3 uppercase tracking-wide">Agregar Nuevo Usuario</h4>
-              <div className="space-y-3">
-                <Input 
-                  placeholder="Nombre completo" 
-                  value={userForm.name} 
-                  onChange={e => setUserForm({...userForm, name: e.target.value})}
-                  className="bg-muted/10 border-border/50 rounded-xl"
-                />
-                <Input 
-                  type="email" 
-                  placeholder="Email" 
-                  value={userForm.email} 
-                  onChange={e => setUserForm({...userForm, email: e.target.value})}
-                  className="bg-muted/10 border-border/50 rounded-xl"
-                />
-                <Select value={userForm.role} onValueChange={v => setUserForm({...userForm, role: v})}>
-                  <SelectTrigger className="bg-muted/10 border-border/50 rounded-xl">
-                    <SelectValue placeholder="Seleccionar rol..." />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[400px]">
-                    {SYSTEM_ROLE_OPTIONS.map(role => (
-                      <SelectItem key={role.value} value={role.value}>
-                        <div className="flex flex-col">
-                          <span className="font-bold">{role.label}</span>
-                          <span className="text-xs text-muted-foreground">{role.description}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground italic">La contraseña por defecto será: 123456</p>
-                
-                <Button 
-                  onClick={handleAddUser}
-                  disabled={uploading}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 !text-white rounded-xl font-bold uppercase text-xs tracking-wide disabled:opacity-50"
-                >
-                  {uploading ? 'Creando...' : <><Plus className="size-4 mr-2" />Agregar Usuario</>}
-                </Button>
-              </div>
-            </div>
+            )) : <p className="text-center py-10 text-muted-foreground italic text-xs">No hay usuarios registrados</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" className="w-full rounded-xl border-border text-foreground" onClick={() => setIsUserDialogOpen(false)}>Cerrar Panel</Button>
+            <Button variant="outline" className="w-full rounded-xl" onClick={() => setIsUserDialogOpen(false)}>Cerrar Panel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Detalles de Empresa */}
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto border-border/50">
           <DialogHeader>
@@ -1252,101 +971,7 @@ export function SuscripcionesPage() {
               <Building2 className="size-6 text-emerald-500" />
               Detalles: {tenantDetails?.name}
             </DialogTitle>
-            <DialogDescription>Información completa de la empresa y su historial</DialogDescription>
           </DialogHeader>
-          
-          {tenantDetails && (
-            <div className="space-y-6 py-4">
-              {/* Info General */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-muted/20 border border-border/50">
-                  <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground mb-2">ID Sistema</p>
-                  <p className="text-sm font-mono text-foreground">{tenantDetails.id}</p>
-                </div>
-                <div className="p-4 rounded-xl bg-muted/20 border border-border/50">
-                  <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground mb-2">Slug URL</p>
-                  <p className="text-sm font-bold text-emerald-500">{tenantDetails.slug}.novahub.io</p>
-                </div>
-                <div className="p-4 rounded-xl bg-muted/20 border border-border/50">
-                  <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground mb-2">Industria</p>
-                  <p className="text-sm font-bold text-foreground">{tenantDetails.industry}</p>
-                </div>
-                <div className="p-4 rounded-xl bg-muted/20 border border-border/50">
-                  <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground mb-2">Plan</p>
-                  <p className="text-sm font-bold text-foreground">{tenantDetails.plan}</p>
-                </div>
-              </div>
-
-              {/* Módulos Activos */}
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground mb-3">Módulos Habilitados</h3>
-                <div className="flex flex-wrap gap-2">
-                  {tenantDetails.subscriptions && tenantDetails.subscriptions.length > 0 ? (
-                    tenantDetails.subscriptions.map((sub: any) => (
-                      <Badge key={sub.id} className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-xs font-bold uppercase">
-                        <Check className="size-3 mr-1" /> {sub.module}
-                      </Badge>
-                    ))
-                  ) : (
-                    <p className="text-muted-foreground text-xs italic">Sin módulos habilitados</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Usuarios */}
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground mb-3">Usuarios ({tenantDetails._count?.users || 0})</h3>
-                <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                  {tenantDetails.users && tenantDetails.users.length > 0 ? (
-                    tenantDetails.users.map((u: any) => (
-                      <div key={u.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/10 border border-border/50">
-                        <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                          {u.name?.charAt(0) || '?'}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-bold text-foreground text-sm">{u.name}</p>
-                          <p className="text-xs text-muted-foreground">{u.email}</p>
-                        </div>
-                        <Badge variant="outline" className="text-[10px] uppercase font-black">{u.role}</Badge>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-muted-foreground text-xs italic">Sin usuarios registrados</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Historial de Solicitudes */}
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground mb-3">Historial de Solicitudes</h3>
-                <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                  {requests.filter(r => r.clientTenantId === tenantDetails.id).length > 0 ? (
-                    requests.filter(r => r.clientTenantId === tenantDetails.id).map((req) => (
-                      <div key={req.id} className="p-3 rounded-xl bg-muted/10 border border-border/50">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-bold text-foreground text-sm">{req.requestedModule}</p>
-                            <p className="text-xs text-muted-foreground">{req.notes || 'Sin notas'}</p>
-                          </div>
-                          <Badge variant="outline" className={cn(
-                            "text-[10px] uppercase font-black",
-                            req.status === 'PENDING' ? "text-amber-500 border-amber-500/30" :
-                            req.status === 'APPROVED' ? "text-emerald-500 border-emerald-500/30" :
-                            "text-rose-500 border-rose-500/30"
-                          )}>
-                            {req.status}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-muted-foreground text-xs italic">Sin historial de solicitudes</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-          
           <DialogFooter>
             <Button variant="outline" className="w-full rounded-xl" onClick={() => setIsDetailsDialogOpen(false)}>Cerrar</Button>
           </DialogFooter>

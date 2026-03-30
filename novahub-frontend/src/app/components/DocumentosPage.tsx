@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Files, FileText, Scale, FileBarChart, HardDrive } from 'lucide-react';
 import { cn } from './ui/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { ContratosView } from './documentos/ContratosView';
 import { FacturasLegalesView } from './documentos/FacturasLegalesView';
 import { ReportesView } from './documentos/ReportesView';
