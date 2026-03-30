@@ -6,7 +6,7 @@ import {
   ShoppingCart, UserCheck, Users, Plus, Settings2, KeyRound, Layers,
   Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
-  BarChart3, X, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
+  BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -20,10 +20,9 @@ import { Switch } from './ui/switch';
 import { useTheme, type BrandColors } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { tenantsService } from '../services/tenants.service';
 import { rolesService } from '../services/roles.service';
 import { subscriptionsService } from '../services/subscriptions.service';
-import { brandingService, type Branding } from '../services/branding.service';
+import { brandingService } from '../services/branding.service';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
@@ -215,9 +214,9 @@ async function uploadLogoToStorage(file: File, tenantId: string): Promise<string
 function getScenario(role?: string): 'superadmin' | 'partner' | 'client' {
   if (!role) return 'client';
   const r = role.toLowerCase();
-  if (r === 'admin' || r === 'superadmin') return 'superadmin';
+  if (r === 'superadmin') return 'superadmin';
   if (r === 'partner') return 'partner';
-  return 'client';
+  return 'client'; // admin, manager, employee are all client scenario
 }
 
 // ---- TAB CONFIG per scenario ----
@@ -276,10 +275,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [allowCurrencySwitch, setAllowCurrencySwitch] = useState(true);
   const [isSavingCurrency, setIsSavingCurrency] = useState(false);
 
-  // New role dialog state
-  const [newRoleName, setNewRoleName] = useState('');
-  const [newRoleDesc, setNewRoleDesc] = useState('');
-  const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null);
+  // New role dialog state (removed unused)
 
   // Load branding and currency on mount
   useEffect(() => {
@@ -514,17 +510,31 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         write: false,
         delete: false
       })),
-      clientTenantId: user?.tenantId as any
+      tenantId: user?.tenantId
     });
     setIsRoleDialogOpen(true);
   };
 
   const handleEditRole = (role: RoleManagement) => {
-    // Asegurar que el rol tenga todos los módulos actuales (por si se agregaron nuevos al sistema)
+    // Asegurar que el rol tenga todos los módulos actuales
     const currentPerms = role.permissions || [];
     const fullPerms = ALL_PERM_MODULES.map(m => {
-      const existing = currentPerms.find(p => p.module === m.id);
-      return existing || { module: m.id, read: false, write: false, delete: false };
+      // Buscar permiso existente (ignorando mayúsculas/minúsculas y buscando por ID o Label)
+      const existing = currentPerms.find(p => 
+        p.module?.toUpperCase() === m.id.toUpperCase() ||
+        p.module?.toUpperCase() === m.label.toUpperCase()
+      );
+      
+      if (existing) {
+        return { 
+          module: m.id, 
+          read: !!existing.read, 
+          write: !!existing.write, 
+          delete: !!existing.delete 
+        };
+      }
+      
+      return { module: m.id, read: false, write: false, delete: false };
     });
     
     setEditingRole({
@@ -541,10 +551,18 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     }
 
     try {
+      // Limpiar el objeto de envío para eliminar campos innecesarios o automáticos
+      const { id, _count, createdAt, updatedAt, ...cleanRole } = editingRole as any;
+      
       const payload = {
-        ...editingRole,
+        name: cleanRole.name,
+        description: cleanRole.description || '',
+        permissions: cleanRole.permissions || [],
+        allowedModules: cleanRole.allowedModules || [],
         clientTenantId: user?.tenantId
       };
+
+      console.log('Guardando rol con payload:', payload);
 
       if (editingRole.id) {
         await rolesService.update(editingRole.id, payload);
@@ -555,8 +573,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       }
       setIsRoleDialogOpen(false);
       fetchRoles();
-    } catch (error) {
-      toast.error('Error al guardar el rol');
+    } catch (error: any) {
+      console.error('Error al guardar rol:', error);
+      toast.error(error.response?.data?.message || 'Error al guardar el rol');
     }
   };
 
@@ -872,7 +891,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       return (
                         <div key={role.id}
                           className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card hover:border-primary/30 hover:shadow-lg transition-all p-5">
-                          <div className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-5 transition-all" />
+                          <div className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-5 transition-all pointer-events-none" />
 
                           {/* Role Header */}
                           <div className="flex items-start justify-between mb-5">
@@ -885,7 +904,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                 <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{role.permissions?.length || 0} módulos configurados</p>
                               </div>
                             </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                            <div className="flex gap-1 transition-all relative z-20">
                               <button onClick={() => handleEditRole(role)}
                                 className="size-7 rounded-lg bg-primary/10 hover:bg-primary/20 flex items-center justify-center text-primary transition-all">
                                 <Edit2 className="size-3.5" />
@@ -920,7 +939,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                           </div>
 
                           <button onClick={() => handleEditRole(role)}
-                            className="w-full text-xs font-black uppercase tracking-widest py-2 rounded-xl border border-primary/20 text-primary hover:bg-primary/5 transition-all">
+                            className="w-full text-xs font-black uppercase tracking-widest py-2 rounded-xl border border-primary/20 text-primary hover:bg-primary/5 transition-all relative z-20">
                             Editar Permisos →
                           </button>
                         </div>
@@ -952,108 +971,100 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </motion.div>
 
           {/* Role Edit Dialog */}
-          <AnimatePresence>
-            {isRoleDialogOpen && editingRole && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                  className="w-full max-w-4xl bg-card border border-border/50 rounded-3xl shadow-2xl overflow-hidden">
-                  <div className="flex items-center justify-between p-6 border-b border-border/30 bg-muted/10">
-                    <div>
-                      <h3 className="text-lg font-black">{editingRole?.id ? 'Editar Rol' : 'Nuevo Rol'}</h3>
-                      <p className="text-sm text-muted-foreground">Define nombre y matriz de permisos</p>
-                    </div>
-                    <button onClick={() => setIsRoleDialogOpen(false)} className="size-8 rounded-xl hover:bg-muted flex items-center justify-center">
-                      <X className="size-4" />
-                    </button>
-                  </div>
-                  <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre del Rol *</Label>
-                        <Input placeholder="Ej: Gerente de Ventas" className="rounded-xl h-11"
-                          value={editingRole?.name || ''} onChange={e => setEditingRole({ ...editingRole, name: e.target.value })} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Descripción</Label>
-                        <Input placeholder="Descripción del rol" className="rounded-xl h-11"
-                          value={editingRole?.description || ''} onChange={e => setEditingRole({ ...editingRole, description: e.target.value })} />
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Matriz de Permisos por Módulo</Label>
-                        <div className="flex gap-4 text-[10px] font-black uppercase tracking-widest">
-                          <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-blue-500 inline-block" />Leer = ver registros</span>
-                          <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-500 inline-block" />Escribir = crear/editar</span>
-                          <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" />Borrar = eliminar</span>
-                        </div>
-                      </div>
-                      <div className="rounded-2xl border border-border/40 overflow-hidden">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/30">
-                            <tr>
-                              <th className="text-left px-4 py-3 text-xs font-black uppercase tracking-widest text-muted-foreground w-1/2">Módulo</th>
-                              <th className="px-4 py-3 text-center text-xs font-black text-blue-500 w-1/6">LEER</th>
-                              <th className="px-4 py-3 text-center text-xs font-black text-emerald-500 w-1/6">ESCRIBIR</th>
-                              <th className="px-4 py-3 text-center text-xs font-black text-rose-500 w-1/6">BORRAR</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border/30">
-                            {(editingRole?.permissions || []).map((p) => {
-                              const mod = ALL_PERM_MODULES.find(m => m.id === p.module);
-                              const isSubmodule = 'parent' in (mod || {});
-                              const Icon = mod?.icon;
-                              
-                              return (
-                                <tr key={p.module} className={cn(
-                                  "hover:bg-muted/10 transition-colors",
-                                  isSubmodule ? "bg-muted/5 opacity-90" : "bg-card"
-                                )}>
-                                  <td className="px-4 py-3">
-                                    <div className={cn("flex items-center gap-3", isSubmodule && "pl-8")}>
-                                      <div className={cn(
-                                        "size-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                                        isSubmodule ? "bg-muted/20" : "bg-primary/10"
-                                      )}>
-                                        {Icon && <Icon className={cn("size-4", isSubmodule ? "text-muted-foreground" : "text-primary")} />}
-                                      </div>
-                                      <div>
-                                        <p className={cn("font-bold", isSubmodule ? "text-xs" : "text-sm")}>
-                                          {mod?.label || p.module}
-                                          {isSubmodule && <span className="ml-2 text-[9px] font-black text-muted-foreground/50 uppercase">SUB</span>}
-                                        </p>
-                                        <p className="text-[10px] text-muted-foreground">{mod?.description || ''}</p>
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <Switch checked={p.read} onCheckedChange={() => togglePermission(p.module, 'read')} />
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <Switch checked={p.write} onCheckedChange={() => togglePermission(p.module, 'write')} />
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <Switch checked={p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} />
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-3 p-6 border-t border-border/30 bg-muted/10">
-                    <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setIsRoleDialogOpen(false)}>Cancelar</Button>
-                    <Button className="flex-1 rounded-xl gap-2 font-black" onClick={handleSaveRole}>
-                      <Save className="size-4" />Guardar Rol
-                    </Button>
-                  </div>
-                </motion.div>
+          <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 rounded-3xl border-none">
+              <div className="flex items-center justify-between p-6 border-b border-border/30 bg-muted/10">
+                <div>
+                  <DialogTitle className="text-lg font-black">{editingRole?.id ? 'Editar Rol' : 'Nuevo Rol'}</DialogTitle>
+                  <DialogDescription className="text-sm text-muted-foreground">Define nombre y matriz de permisos</DialogDescription>
+                </div>
               </div>
-            )}
-          </AnimatePresence>
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre del Rol *</Label>
+                    <Input placeholder="Ej: Gerente de Ventas" className="rounded-xl h-11"
+                      value={editingRole?.name || ''} onChange={e => setEditingRole({ ...editingRole, name: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Descripción</Label>
+                    <Input placeholder="Descripción del rol" className="rounded-xl h-11"
+                      value={editingRole?.description || ''} onChange={e => setEditingRole({ ...editingRole, description: e.target.value })} />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Matriz de Permisos por Módulo</Label>
+                    <div className="flex gap-4 text-[10px] font-black uppercase tracking-widest">
+                      <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-blue-500 inline-block" />Leer</span>
+                      <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-500 inline-block" />Escribir</span>
+                      <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" />Borrar</span>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-border/40 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/30">
+                        <tr>
+                          <th className="text-left px-4 py-3 text-xs font-black uppercase tracking-widest text-muted-foreground w-1/2">Módulo</th>
+                          <th className="px-4 py-3 text-center text-xs font-black text-blue-500 w-1/6">LEER</th>
+                          <th className="px-4 py-3 text-center text-xs font-black text-emerald-500 w-1/6">ESCRIBIR</th>
+                          <th className="px-4 py-3 text-center text-xs font-black text-rose-500 w-1/6">BORRAR</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/30">
+                        {(editingRole?.permissions || []).map((p) => {
+                          const mod = ALL_PERM_MODULES.find(m => m.id === p.module);
+                          const isSubmodule = mod && 'parent' in mod;
+                          const Icon = mod?.icon;
+                          
+                          return (
+                            <tr key={p.module} className={cn(
+                              "hover:bg-muted/10 transition-colors",
+                              isSubmodule ? "bg-muted/5 opacity-90" : "bg-card"
+                            )}>
+                              <td className="px-4 py-3">
+                                <div className={cn("flex items-center gap-3", isSubmodule && "pl-8")}>
+                                  <div className={cn(
+                                    "size-8 rounded-lg flex items-center justify-center flex-shrink-0",
+                                    isSubmodule ? "bg-muted/20" : "bg-primary/10"
+                                  )}>
+                                    {Icon && <Icon className={cn("size-4", isSubmodule ? "text-muted-foreground" : "text-primary")} />}
+                                  </div>
+                                  <div>
+                                    <p className={cn("font-bold", isSubmodule ? "text-xs" : "text-sm")}>
+                                      {mod?.label || p.module}
+                                      {isSubmodule && <span className="ml-2 text-[9px] font-black text-muted-foreground/50 uppercase">SUB</span>}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground">{mod?.description || ''}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <Switch checked={p.read} onCheckedChange={() => togglePermission(p.module, 'read')} />
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <Switch checked={p.write} onCheckedChange={() => togglePermission(p.module, 'write')} />
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <Switch checked={p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter className="flex gap-3 p-6 border-t border-border/30 bg-muted/10 mt-0">
+                <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setIsRoleDialogOpen(false)}>Cancelar</Button>
+                <Button className="flex-1 rounded-xl gap-2 font-black" onClick={handleSaveRole}>
+                  <Save className="size-4" />Guardar Rol
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* ══════════ TAB: SEGURIDAD ══════════ */}

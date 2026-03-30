@@ -119,8 +119,6 @@ export function SuscripcionesPage() {
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>('');
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string>('');
   const [uploading, setUploading] = useState(false);
 
   // Form state for module request
@@ -628,7 +626,6 @@ export function SuscripcionesPage() {
                   </div>
                 </div>
                 
-                {/* Upload Logo */}
                 <div className="space-y-2">
                   <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Logo de Empresa (Opcional)</Label>
                   <div className="flex items-center gap-4">
@@ -664,7 +661,6 @@ export function SuscripcionesPage() {
         </div>
       </motion.div>
 
-      {/* --- STATS DASHBOARD --- */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Empresas Activas', value: (tenants || []).length, icon: Building2, color: 'text-blue-500', bg: 'bg-blue-500/10' },
@@ -695,6 +691,55 @@ export function SuscripcionesPage() {
           </motion.div>
         ))}
       </div>
+
+      <Dialog open={isRequestDialogOpen} onOpenChange={setIsRequestDialogOpen}>
+        <DialogContent className="bg-card border-border text-card-foreground sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle>Solicitar Activación de Módulo</DialogTitle>
+            <DialogDescription className="text-muted-foreground"> Envía una solicitud de habilitación para el cliente seleccionado. </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-5 py-4">
+            <div className="flex items-center gap-4 p-3 rounded-xl bg-muted/10 border border-border/50">
+              <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                <Zap className="size-5" />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Módulo a Habilitar</p>
+                <p className="text-sm font-bold text-foreground">{AVAILABLE_MODULES.find(m => m.id === requestForm.module)?.label}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Precio de Venta Sugerido (USD)</Label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                <Input 
+                  type="number"
+                  placeholder="0.00"
+                  className="bg-muted/10 border-border/50 pl-9"
+                  value={requestForm.price}
+                  onChange={e => setRequestForm({...requestForm, price: Number(e.target.value)})}
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground italic">Este precio será comunicado al cliente en su facturación.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Notas o Requerimientos Especiales</Label>
+              <Textarea 
+                placeholder="Ej: El cliente necesita acceso a reportes personalizados..."
+                className="bg-muted/10 border-border/50 min-h-[100px]"
+                value={requestForm.notes}
+                onChange={e => setRequestForm({...requestForm, notes: e.target.value})}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="border-border text-foreground hover:bg-muted/10" onClick={() => setIsRequestDialogOpen(false)}>Cancelar</Button>
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleSubmitRequest}>Enviar Solicitud</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Tabs defaultValue="active" className="w-full">
         <TabsList className="grid w-full grid-cols-2 lg:w-[400px] bg-muted/20 border border-border/50 p-1 h-12">
