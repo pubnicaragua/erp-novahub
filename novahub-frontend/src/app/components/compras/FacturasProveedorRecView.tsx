@@ -79,7 +79,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
 
   const columns: ColumnDef<RecurringSupplierInvoice>[] = [
     { key: 'description' as any, header: 'Descripción', editable: canPerform('compras', 'edit'), 
-      render: (val, row) => <span className="text-xs font-bold text-primary">{(row as any).description || 'Factura Automática'}</span> },
+      render: (_, row) => <span className="text-xs font-bold text-primary">{(row as any).description || 'Factura Automática'}</span> },
     { key: 'supplier' as any,    header: 'Proveedor',
       render: (_, row) => <span className="font-bold text-sm">{(row as any).supplier?.name||'-'}</span> },
     { key: 'total' as any,       header: 'Monto Estimado',       width: '120px',
@@ -195,7 +195,9 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor Obligatorio</p>
                   <Combobox
                     disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
-                    options={suppliers.map(s => ({ label: s.name, value: s.id, description: s.phone || 'Sin teléfono' }))}
+                    options={suppliers
+                      .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
+                      .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
                     value={localDoc.supplierId || ''}
                     onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
                     placeholder="Seleccionar proveedor de la factura..."

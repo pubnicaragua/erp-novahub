@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  FileOutput, Plus, Search, TrendingUp, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, ShieldCheck, FileDown
+  FileOutput, Plus, Search, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, ShieldCheck, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -144,8 +144,8 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         </span>
       )
     },
-    { key: 'customer', header: 'Cliente', render: (val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
-    { key: 'invoice', header: 'Factura Origen', render: (val, row) => <span className="text-xs font-bold text-blue-500">{row.invoice?.number || 'N/A'}</span> },
+    { key: 'customer', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
+    { key: 'invoice', header: 'Factura Origen', render: (_, row) => <span className="text-xs font-bold text-blue-500">{row.invoice?.number || 'N/A'}</span> },
     { key: 'date', header: 'Fecha', render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span> },
     { key: 'total', header: 'Total', width: '130px', render: (val) => <span className="text-[13px] font-black tabular-nums text-rose-500">{formatConvertedAmount(Number(val||0), 'USD')}</span> },
     { key: 'status', header: 'Estado', width: '130px', render: (val) => {
@@ -195,7 +195,14 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
-                  <Combobox options={customers.map(c => ({ label: c.phone ? `${c.name} — ${c.phone}` : c.name, value: c.id }))} value={localDoc?.customerId || ''} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} placeholder="Seleccionar Cliente" /></div>
+                  <Combobox 
+                    options={(customers || [])
+                      .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
+                      .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))} 
+                    value={localDoc?.customerId || ''} 
+                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} 
+                    placeholder="Seleccionar Cliente" 
+                  /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Factura Origen</p>
                   <Combobox options={customerInvoices.map(i => ({ label: `${i.number} — ${formatConvertedAmount(Number(i.total||0), 'USD')}`, value: i.id }))} value={localDoc?.invoiceId || ''} onChange={(val) => setLocalDoc({ ...localDoc, invoiceId: val })} placeholder="Seleccionar Factura" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>

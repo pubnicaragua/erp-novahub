@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  CreditCard, Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, Trash2, ChevronLeft, FileDown
+  Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, Trash2, ChevronLeft, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -121,7 +121,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
 
   const columns: ColumnDef<PaymentReceived>[] = [
     { key: 'number', header: 'ID Pago', width: '120px', render: (val) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val}</span> },
-    { key: 'customer', header: 'Cliente', render: (val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
+    { key: 'customer', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
     { key: 'reference', header: 'Referencia / Factura', render: (val, row) => <span className="text-xs font-bold text-primary">{row.invoice?.number || val || 'Anticipo'}</span> },
     { key: 'date', header: 'Fecha', render: (val) => {
       if (!val) return <span className="text-xs text-muted-foreground">N/A</span>;
@@ -192,7 +192,14 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Pago</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
-                  <Combobox options={customers.map(c => ({ label: c.phone ? `${c.name} — ${c.phone}` : c.name, value: c.id }))} value={localDoc.customerId} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} placeholder="Seleccionar Cliente" /></div>
+                  <Combobox 
+                    options={(customers || [])
+                      .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc.customerId)
+                      .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))} 
+                    value={localDoc.customerId} 
+                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} 
+                    placeholder="Seleccionar Cliente" 
+                  /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Factura (Opcional)</p>
                   <Combobox options={customerInvoices.map(i => ({
                     label: `${i.number} — ${formatConvertedAmount(Number(i.balance || 0), i.currency, i.exchangeRate)} pend.`,

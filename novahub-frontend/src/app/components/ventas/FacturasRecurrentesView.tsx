@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Eye, Trash2, ChevronLeft, FileDown
 } from 'lucide-react';
@@ -173,7 +173,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
 
   const columns: ColumnDef<RecurringInvoice>[] = [
     { key: 'id', header: 'Referencia', width: '180px',
-      render: (val, row) => (
+      render: (_, row) => (
         <span 
           className={cn(
             "text-xs font-black font-mono text-primary group-hover:underline",
@@ -185,7 +185,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         </span>
       )
     },
-    { key: 'customer', header: 'Cliente', render: (val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
+    { key: 'customer', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
     { key: 'frequency', header: 'Frecuencia', width: '120px', editable: canPerform('ventas', 'edit'), type: 'select', options: frequencyOptions,
       render: (val) => { const freqMap: Record<string, string> = { WEEKLY: 'Semanal', MONTHLY: 'Mensual', QUARTERLY: 'Trimestral', YEARLY: 'Anual' };
         return <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-500 border-none">{freqMap[(val||'').toUpperCase()] || val}</Badge>; } },
@@ -257,7 +257,14 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Configuración</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
-                  <Combobox options={customers.map(c => ({ label: c.phone ? `${c.name} — ${c.phone}` : c.name, value: c.id }))} value={localDoc?.customerId || ''} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val })} placeholder="Seleccionar Cliente" /></div>
+                  <Combobox 
+                    options={(customers || [])
+                      .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
+                      .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))} 
+                    value={localDoc?.customerId || ''} 
+                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val })} 
+                    placeholder="Seleccionar Cliente" 
+                  /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
                   <select value={localDoc?.frequency || 'MONTHLY'} onChange={(e) => setLocalDoc({ ...localDoc, frequency: e.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                     {frequencyOptions.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}

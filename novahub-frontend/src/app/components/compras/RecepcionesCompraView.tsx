@@ -163,7 +163,9 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
                   <Combobox 
                     disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
-                    options={suppliers.map(c => ({ label: c.name, value: c.id, description: c.phone || 'Sin teléfono' }))}
+                    options={suppliers
+                      .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
+                      .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
                     value={localDoc.supplierId || ''}
                     onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val, purchaseOrderId: '' })}
                     placeholder="Seleccionar Proveedor"

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  FileMinus, Plus, Search, TrendingUp, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, Send, FileDown
+  FileMinus, Plus, Search, TrendingUp, Clock, CheckCircle2, Eye, Trash2, ChevronLeft, Send, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -137,7 +137,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
         </span>
       )
     },
-    { key: 'customerId', header: 'Cliente', render: (val, row) => <span className="text-[13px] font-bold text-foreground">{getCustomerName(row)}</span> },
+    { key: 'customerId', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{getCustomerName(row)}</span> },
     { key: 'date', header: 'Fecha', render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span> },
     { key: 'reason', header: 'Razón', render: (val) => <span className="text-xs text-muted-foreground truncate max-w-[200px] block">{val}</span> },
     { key: 'total', header: 'Total', width: '130px', render: (val) => <span className="text-[13px] font-black tabular-nums text-rose-500">{formatConvertedAmount(Number(val||0), 'USD')}</span> },
@@ -188,7 +188,14 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información de la Nota</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
-                  <Combobox options={customers.map(c => ({ label: c.phone ? `${c.name} — ${c.phone}` : c.name, value: c.id }))} value={localDoc?.customerId || ''} onChange={(val) => setLocalDoc({ ...localDoc, customerId: val })} placeholder="Seleccionar Cliente" /></div>
+                  <Combobox 
+                    options={(customers || [])
+                      .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
+                      .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))} 
+                    value={localDoc?.customerId || ''} 
+                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val })} 
+                    placeholder="Seleccionar Cliente" 
+                  /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
                   <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
                 {!isCreating && <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
