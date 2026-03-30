@@ -194,3 +194,83 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   // Descargar PDF
   doc.save(`${estimate.number || 'Cotizacion'}.pdf`);
 };
+
+export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, formatAmount, tenantLogo }: any) => {
+  const doc = new jsPDF();
+  
+  const primaryColor = [16, 185, 129] as [number, number, number];
+  const textColor = [51, 65, 85] as [number, number, number];
+  
+  let titleY = 25;
+  if (tenantLogo) {
+    try {
+      doc.addImage(tenantLogo, 'PNG', 14, 15, 30, 15);
+      titleY = 38;
+      doc.setFontSize(14);
+    } catch (error) {
+      doc.setFontSize(22);
+    }
+  } else {
+    doc.setFontSize(22);
+  }
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Historial de Compras (Productos y Servicios)', 14, titleY + 7);
+  
+  doc.setFontSize(18);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text('HISTORIAL', 196, 25, { align: 'right' });
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Proveedor: ${supplier.name || 'N/A'}`, 196, 32, { align: 'right' });
+  doc.text(`Fecha Emisión: ${new Date().toLocaleDateString()}`, 196, 38, { align: 'right' });
+  
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(14, 46, 196, 46);
+
+  const tableData = items.map((item: any) => [
+    item.date,
+    item.type,
+    item.docNumber,
+    item.description || 'N/A',
+    Number(item.quantity).toString(),
+    formatAmount(Number(item.unitPrice), item.currency, item.exchangeRate),
+    formatAmount(Number(item.total), item.currency, item.exchangeRate)
+  ]);
+
+  autoTable(doc, {
+    startY: 55,
+    head: [['Fecha', 'Tipo', 'Documento', 'Descripción', 'Cant.', 'Precio U.', 'Total']],
+    body: tableData,
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 9, fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { textColor: textColor, fontSize: 8 },
+    columnStyles: {
+      0: { cellWidth: 20, halign: 'center' },
+      1: { cellWidth: 20, halign: 'center' },
+      2: { cellWidth: 25, halign: 'center' },
+      3: { cellWidth: 'auto', halign: 'left' },
+      4: { cellWidth: 15, halign: 'center' },
+      5: { cellWidth: 25, halign: 'right' },
+      6: { cellWidth: 25, halign: 'right' }
+    },
+    styles: { overflow: 'linebreak', cellPadding: 3 }
+  });
+
+  const pageHeight = doc.internal.pageSize.height;
+  
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'italic');
+  doc.text(`Generado por ${tenantName} - Módulo de Compras`, 14, pageHeight - 10);
+
+  doc.save(`Historial_${supplier.name.replace(/\s+/g, '_')}.pdf`);
+};

@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
+import { SupplierHistoryModal } from './SupplierHistoryModal';
 
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; }
 
@@ -19,6 +20,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState<Supplier | null>(null);
 
   const filtered = data.filter(s => {
     const search = searchTerm.toLowerCase();
@@ -118,7 +120,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
           onAddRow={canPerform('proveedores', 'create') ? handleAdd : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => toast.info(`${row.name} | Contacto: ${row.contactName||'N/A'} | ${row.email||'N/A'} | Saldo: $${Number(row.balance||0).toLocaleString()}`)}><Eye className="size-4" /></Button>
+              <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierForHistory(row)}><Eye className="size-4" /></Button>
               {canPerform('proveedores', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
               )}
@@ -154,6 +156,12 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
             setPendingDeleteId(null);
           }
         }}
+      />
+
+      <SupplierHistoryModal
+        supplier={selectedSupplierForHistory}
+        open={!!selectedSupplierForHistory}
+        onOpenChange={(open) => !open && setSelectedSupplierForHistory(null)}
       />
     </div>
   );
