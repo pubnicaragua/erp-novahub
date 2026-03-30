@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput
+  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput, Download, FileText
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -8,6 +8,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { purchaseOrdersService, suppliersService } from '../../services/compras.service';
+import { storageService } from '../../services/storage.service';
 import type { PurchaseOrder, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
@@ -15,8 +16,13 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { generatePurchaseOrderPDF } from '../../utils/pdfGenerator';
+import { exportToCsv } from '../../utils/exportUtils';
 
 interface Props { data: PurchaseOrder[]; loading: boolean; onRefresh: () => void; onConvertToInvoice?: (draft: any) => void; }
+
+const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
 
 const statusOpts = [
   { label: 'Borrador',   value: 'DRAFT',      color: 'bg-muted/20 text-muted-foreground' },
@@ -27,7 +33,7 @@ const statusOpts = [
 ];
 
 export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice }: Props) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -36,6 +42,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseOrder> | null>(null);
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
 
   useEffect(() => {
     suppliersService.getAll().then(res => {
@@ -48,31 +55,55 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     if (editingId) {
       if (editingId === 'NEW') {
          setLocalDoc({
-           supplierId: '',
-           date: new Date().toISOString(),
-           expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
-           currency: displayCurrency,
-           exchangeRate: globalRate,
-           status: 'DRAFT',
-           requestedBy: 'Admin',
-           items: [],
-           subtotal: 0,
-           taxAmount: 0,
-           total: 0
-         });
+            supplierId: '',
+            date: new Date().toISOString(),
+            expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
+            currency: displayCurrency,
+            exchangeRate: globalRate,
+            status: 'DRAFT',
+            requestedBy: 'Admin',
+            address: '',
+            includeTax: true,
+            taxRate: 15,
+            withholdingRate: 0,
+            items: [],
+            subtotal: 0,
+            taxAmount: 0,
+            withholdingAmount: 0,
+            total: 0
+          });
       } else {
          const found = data.find(x => x.id === editingId);
          setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
       }
+      setEvidenceFile(null);
     } else {
       setLocalDoc(null);
+      setEvidenceFile(null);
     }
   }, [editingId, data, globalRate]);
 
-  const filtered = data.filter(o =>
-    (o.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (o.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const filtered = data.filter(o => {
+    if (!normalizedSearchTerm) return true;
+    const haystack = [
+      o.number,
+      o.supplier?.name,
+      o.address,
+      o.requestedBy,
+      o.notes,
+      ...(o.items || []).flatMap((it: any) => [
+        it.code,
+        it.name,
+        it.category,
+        it.description,
+      ]),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(normalizedSearchTerm);
+  });
 
   const columns: ColumnDef<PurchaseOrder>[] = [
     { key: 'number',   header: 'Número',   width: '120px',
@@ -115,16 +146,63 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
 
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
+    if (!String(localDoc.address || '').trim()) return toast.error('Debe ingresar la dirección');
+    if ((localDoc.items || []).length === 0) return toast.error('Debe agregar al menos un ítem');
+    if ((localDoc.items || []).some((it: any) => !String(it.code || '').trim() || !String(it.name || '').trim() || !String(it.category || '').trim())) {
+      return toast.error('Cada ítem requiere código, nombre y categoría');
+    }
+
+    const cleanedDoc: any = {
+      ...localDoc,
+      includeTax: localDoc.includeTax !== false,
+      taxRate: Number(localDoc.taxRate || 0),
+      withholdingRate: Number(localDoc.withholdingRate || 0),
+      subtotal: Number(localDoc.subtotal || 0),
+      taxAmount: Number(localDoc.taxAmount || 0),
+      withholdingAmount: Number(localDoc.withholdingAmount || 0),
+      total: Number(localDoc.total || 0),
+      items: (localDoc.items || []).map((it: any) => ({
+        ...it,
+        quantity: Number(it.quantity || 0),
+        unitPrice: Number(it.unitPrice || 0),
+        stock: it.stock === '' || it.stock === undefined || it.stock === null ? undefined : Number(it.stock),
+        total: Number(it.total || 0),
+      })),
+    };
+    if (!cleanedDoc.includeTax) {
+      cleanedDoc.taxRate = 0;
+      cleanedDoc.taxAmount = 0;
+    }
+
+    if (evidenceFile) {
+      const isImage = evidenceFile.type.startsWith('image/');
+      if (isImage && evidenceFile.size > MAX_EVIDENCE_IMAGE_BYTES) {
+        return toast.error('La imagen es muy pesada. Máximo 2MB');
+      }
+      if (!isImage && evidenceFile.size > MAX_EVIDENCE_FILE_BYTES) {
+        return toast.error('El archivo es muy pesado. Máximo 10MB');
+      }
+      try {
+        const evidenceFileUrl = await storageService.fileToBase64(evidenceFile);
+        cleanedDoc.evidenceFileUrl = evidenceFileUrl;
+        cleanedDoc.evidenceFileName = evidenceFile.name;
+        cleanedDoc.evidenceFileType = evidenceFile.type;
+        cleanedDoc.evidenceFileSize = evidenceFile.size;
+      } catch {
+        return toast.error('No se pudo procesar el archivo adjunto');
+      }
+    }
     
     try {
       if (editingId === 'NEW') {
-        await purchaseOrdersService.create(localDoc as any);
+        await purchaseOrdersService.create(cleanedDoc);
         toast.success('Orden creada');
       } else {
-        await purchaseOrdersService.update(editingId!, localDoc as any);
+        await purchaseOrdersService.update(editingId!, cleanedDoc);
         toast.success('Orden guardada');
       }
       setEditingId(null);
+      setEvidenceFile(null);
       onRefresh();
     } catch (e: any) {
       toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
@@ -147,7 +225,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       currency: order.currency || 'NIO',
       exchangeRate: order.exchangeRate || globalRate,
       status: 'PENDING',
-      items: (order.items || []).map(it => ({ ...it })),
+      items: (order.items || []).map((it: any) => ({
+        ...it,
+        description: it.description || it.name || '',
+        taxRate: 0,
+      })),
       subtotal: order.subtotal,
       taxAmount: order.taxAmount,
       total: order.total,
@@ -157,27 +239,73 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     toast.success('Abriendo formulario de factura...', { position: 'bottom-right' });
   };
 
+  const calculateTotals = (items: any[], options?: { includeTax?: boolean; taxRate?: number; withholdingRate?: number }) => {
+    const subtotal = items.reduce((acc, it) => acc + (Number(it.quantity||0) * Number(it.unitPrice||0)), 0);
+    const includeTax = options?.includeTax ?? (localDoc?.includeTax !== false);
+    const taxRate = Number(options?.taxRate ?? localDoc?.taxRate ?? 0);
+    const withholdingRate = Number(options?.withholdingRate ?? localDoc?.withholdingRate ?? 0);
+    const taxAmount = includeTax ? subtotal * (taxRate / 100) : 0;
+    const withholdingAmount = subtotal * (withholdingRate / 100);
+    const total = subtotal + taxAmount - withholdingAmount;
+    return { subtotal, taxAmount, withholdingAmount, total };
+  };
+
   const handleItemChange = (idx: number, field: string, value: any) => {
     if (!localDoc) return;
     const newItems = [...(localDoc.items || [])];
     newItems[idx] = { ...newItems[idx], [field]: value };
+
+    if (field === 'stockApplies' && !value) {
+      newItems[idx].stock = undefined;
+    }
     
-    if (['quantity', 'unitPrice', 'taxRate'].includes(field)) {
+    if (['quantity', 'unitPrice'].includes(field)) {
        const q = Number(newItems[idx].quantity || 0);
        const p = Number(newItems[idx].unitPrice || 0);
-       const t = Number(newItems[idx].taxRate || 0);
        const sub = q * p;
-       const tax = sub * (t / 100);
-       newItems[idx].total = sub + tax;
+       newItems[idx].total = sub;
     }
     recalculateTotals(newItems);
   };
 
-  const recalculateTotals = (items: any[]) => {
-    const subtotal = items.reduce((acc, it) => acc + (Number(it.quantity||0) * Number(it.unitPrice||0)), 0);
-    const taxAmount = items.reduce((acc, it) => acc + ((Number(it.quantity||0) * Number(it.unitPrice||0)) * (Number(it.taxRate||0)/100)), 0);
-    const total = subtotal + taxAmount;
-    setLocalDoc(prev => ({ ...prev!, items, subtotal, taxAmount, total }));
+  const recalculateTotals = (items: any[], options?: { includeTax?: boolean; taxRate?: number; withholdingRate?: number }) => {
+    const totals = calculateTotals(items, options);
+    setLocalDoc(prev => ({ ...prev!, ...options, items, ...totals }));
+  };
+
+  const handleTaxToggle = (checked: boolean) => {
+    if (!localDoc) return;
+    recalculateTotals(localDoc.items || [], { includeTax: checked });
+  };
+
+  const handlePurchaseOrderExportCSV = (doc: Partial<PurchaseOrder>) => {
+    const rows = (doc.items || []).map((item: any) => [
+      item.code || '',
+      item.name || '',
+      item.category || '',
+      item.stock ?? '',
+      item.quantity || 0,
+      item.unitPrice || 0,
+      item.total || 0,
+    ]);
+    exportToCsv(`OC_${doc.number || doc.id || 'borrador'}`, [
+      ['Numero', doc.number || '-'],
+      ['Proveedor', doc.supplier?.name || '-'],
+      ['Direccion', doc.address || '-'],
+      ['Fecha', doc.date ? new Date(doc.date).toLocaleDateString() : '-'],
+      ['Entrega Esperada', doc.expectedDelivery ? new Date(doc.expectedDelivery).toLocaleDateString() : '-'],
+      ['Moneda', doc.currency || 'NIO'],
+      ['IVA Habilitado', doc.includeTax === false ? 'No' : 'Si'],
+      ['IVA %', Number(doc.taxRate || 0)],
+      ['Retencion IR %', Number(doc.withholdingRate || 0)],
+      ['Subtotal', Number(doc.subtotal || 0)],
+      ['IVA', Number(doc.taxAmount || 0)],
+      ['Retencion IR', Number(doc.withholdingAmount || 0)],
+      ['Total', Number(doc.total || 0)],
+      [],
+      ['Codigo', 'Nombre', 'Categoria', 'Stock', 'Cantidad', 'Precio U.', 'Total'],
+      ...rows,
+    ]);
   };
 
   if (editingId && localDoc) {
@@ -202,6 +330,29 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   onClick={() => handleConvertToInvoice(localDoc)}>
                   <FileInput className="size-3 mr-2" /> Convertir a Factura
                 </Button>
+             )}
+             {!isNew && (
+               <>
+                 <Button
+                   variant="outline"
+                   className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
+                   onClick={() => generatePurchaseOrderPDF({
+                     order: localDoc,
+                     tenantName: user?.tenantName || 'Nova Hub',
+                     formatAmount: (amount: number, currency?: string, rate?: number) =>
+                       formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
+                   })}
+                 >
+                   <Download className="size-3 mr-2" /> Exportar PDF
+                 </Button>
+                 <Button
+                   variant="outline"
+                   className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
+                   onClick={() => handlePurchaseOrderExportCSV(localDoc)}
+                 >
+                   <FileText className="size-3 mr-2" /> Exportar Excel
+                 </Button>
+               </>
              )}
              {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
@@ -283,6 +434,33 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                     <option value="USD">USD (Dolares)</option>
                   </select>
                 </div>
+                <div className="col-span-2">
+                  <p className="text-[10px] text-muted-foreground mb-1">Dirección</p>
+                  <Input
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    value={localDoc.address || ''}
+                    onChange={(e) => setLocalDoc({ ...localDoc, address: e.target.value })}
+                    className="h-8 text-xs"
+                    placeholder="Dirección de entrega o facturación"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[10px] text-muted-foreground mb-1">Adjuntar evidencia (PDF, imagen, XLSX)</p>
+                  <Input
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    type="file"
+                    accept=".pdf,.xlsx,.xls,image/*"
+                    onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+                    className="h-8 text-xs"
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">Imágenes max 2MB. Otros archivos max 10MB.</p>
+                  {(evidenceFile || localDoc.evidenceFileName) && (
+                    <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-primary">
+                      <FileText className="size-3" />
+                      {evidenceFile?.name || localDoc.evidenceFileName}
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -296,8 +474,50 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   <span className="font-bold tabular-nums">${Number(localDoc.subtotal||0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Impuesto</span>
+                  <span className="text-muted-foreground">IVA</span>
                   <span className="font-bold tabular-nums text-rose-500">${Number(localDoc.taxAmount||0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Retención IR</span>
+                  <span className="font-bold tabular-nums text-amber-500">-${Number(localDoc.withholdingAmount||0).toLocaleString()}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 border-t pt-3 border-border/50">
+                  <div className="col-span-1">
+                    <p className="text-[10px] text-muted-foreground mb-1">IVA habilitado</p>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={localDoc.includeTax !== false}
+                        onChange={(e) => handleTaxToggle(e.target.checked)}
+                      />
+                      <span>{localDoc.includeTax !== false ? 'Sí' : 'No'}</span>
+                    </label>
+                  </div>
+                  <div className="col-span-1">
+                    <p className="text-[10px] text-muted-foreground mb-1">IVA %</p>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      disabled={localDoc.includeTax === false}
+                      value={localDoc.taxRate === 0 ? '' : localDoc.taxRate}
+                      onChange={(e) => recalculateTotals(localDoc.items || [], { taxRate: Number(e.target.value || 0) })}
+                      className="h-8 text-xs text-right"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="col-span-1">
+                    <p className="text-[10px] text-muted-foreground mb-1">Retención IR %</p>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={localDoc.withholdingRate === 0 ? '' : localDoc.withholdingRate}
+                      onChange={(e) => recalculateTotals(localDoc.items || [], { withholdingRate: Number(e.target.value || 0) })}
+                      className="h-8 text-xs text-right"
+                      placeholder="0"
+                    />
+                  </div>
                 </div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black uppercase text-xs tracking-widest">Total</span>
@@ -317,7 +537,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Ítems de Orden</p>
               {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
                 <Button variant="outline" size="sm" onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, taxRate: 0, total: 0 }];
+                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, code: '', name: '', category: '', stockApplies: false, stock: undefined, quantity: 1, unitPrice: 0, total: 0 }];
                   setLocalDoc({ ...localDoc, items: newItems as any });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                   <Plus className="size-3 mr-2" /> Agregar Item
@@ -327,24 +547,76 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
             
             <div className="space-y-2">
               <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className="col-span-4">Descripción</div>
-                <div className="col-span-2 text-right">Cant.</div>
-                <div className="col-span-2 text-right">Precio Unitario</div>
-                <div className="col-span-2 text-right">Imp. %</div>
+                <div className="col-span-2">Código</div>
+                <div className="col-span-2">Nombre</div>
+                <div className="col-span-2">Categoría</div>
+                <div className="col-span-2 text-right">Stock</div>
+                <div className="col-span-1 text-right">Cant.</div>
+                <div className="col-span-1 text-right">Precio</div>
                 <div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-4">
+                  <div className="col-span-2">
                     <Input 
                       disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
-                      value={item.description || ''} 
-                      onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
+                      value={item.code || ''} 
+                      onChange={(e) => handleItemChange(idx, 'code', e.target.value)} 
                       className="h-8 text-xs" 
-                      placeholder="Descripción del producto" 
+                      placeholder="Código" 
                     />
                   </div>
                   <div className="col-span-2">
+                    <Input 
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      value={item.name || ''} 
+                      onChange={(e) => handleItemChange(idx, 'name', e.target.value)} 
+                      className="h-8 text-xs" 
+                      placeholder="Nombre del producto" 
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Input 
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      value={item.category || ''} 
+                      onChange={(e) => handleItemChange(idx, 'category', e.target.value)} 
+                      className="h-8 text-xs" 
+                      placeholder="Categoría" 
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <div className="flex items-center justify-end gap-2">
+                      <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={!!item.stockApplies}
+                          onChange={(e) => handleItemChange(idx, 'stockApplies', e.target.checked)}
+                        />
+                        Stock
+                      </label>
+                      <Input 
+                        disabled={!item.stockApplies || (isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit'))}
+                        type="number"
+                        min="0"
+                        value={item.stock === 0 ? '' : (item.stock ?? '')} 
+                        onChange={(e) => handleItemChange(idx, 'stock', e.target.value)} 
+                        className="h-8 text-xs text-right w-20" 
+                        placeholder="-" 
+                      />
+                    </div>
+                  </div>
+                  <div className="col-span-1">
+                    <Input 
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      type="number" 
+                      min="0" 
+                      value={item.quantity === 0 ? '' : item.quantity} 
+                      onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} 
+                      className="h-8 text-xs text-right" 
+                      placeholder="0" 
+                    />
+                  </div>
+                  <div className="col-span-1">
                     <Input 
                       disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       type="number" 
@@ -362,17 +634,6 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                       min="0" 
                       value={item.unitPrice === 0 ? '' : item.unitPrice} 
                       onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
-                      className="h-8 text-xs text-right" 
-                      placeholder="0" 
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
-                      type="number" 
-                      min="0" 
-                      value={item.taxRate === 0 ? '' : item.taxRate} 
-                      onChange={(e) => handleItemChange(idx, 'taxRate', e.target.value)} 
                       className="h-8 text-xs text-right" 
                       placeholder="0" 
                     />

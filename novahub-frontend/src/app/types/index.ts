@@ -349,6 +349,15 @@ export interface PurchaseOrder {
   baseTotal?: number;
   status: PurchaseOrderStatus;
   requestedBy: string;
+  address?: string;
+  includeTax?: boolean;
+  taxRate?: number;
+  withholdingRate?: number;
+  withholdingAmount?: number;
+  evidenceFileName?: string;
+  evidenceFileType?: string;
+  evidenceFileSize?: number;
+  evidenceFileUrl?: string;
   notes?: string;
   items: PurchaseOrderItem[];
   createdAt: string;
@@ -361,10 +370,15 @@ export interface PurchaseOrderItem {
   id: string;
   purchaseOrderId: string;
   productId?: string;
-  description: string;
+  description?: string;
+  code?: string;
+  name?: string;
+  category?: string;
+  stockApplies?: boolean;
+  stock?: number;
   quantity: number;
   unitPrice: number;
-  taxRate: number;
+  taxRate?: number;
   total: number;
 }
 

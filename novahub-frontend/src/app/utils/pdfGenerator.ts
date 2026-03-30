@@ -333,3 +333,106 @@ export const generateExpensePDF = async ({
 
   doc.save(`${expense.number || expense.id || 'gasto'}.pdf`);
 };
+
+export const generatePurchaseOrderPDF = async ({
+  order,
+  tenantName,
+  formatAmount,
+}: {
+  order: any;
+  tenantName: string;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+}) => {
+  const doc = new jsPDF();
+  const primaryColor = [16, 185, 129] as [number, number, number];
+  const textColor = [51, 65, 85] as [number, number, number];
+
+  doc.setFontSize(20);
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(tenantName || 'Nova Hub', 14, 22);
+
+  doc.setFontSize(12);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Orden de Compra', 14, 30);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`N°: ${order.number || order.id || 'N/A'}`, 196, 22, { align: 'right' });
+  doc.text(`Fecha: ${order.date ? new Date(order.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
+  doc.text(`Entrega: ${order.expectedDelivery ? new Date(order.expectedDelivery).toLocaleDateString() : 'N/A'}`, 196, 34, { align: 'right' });
+
+  autoTable(doc, {
+    startY: 45,
+    head: [['Campo', 'Detalle']],
+    body: [
+      ['Proveedor', order.supplier?.name || '-'],
+      ['Dirección', order.address || '-'],
+      ['Estado', order.status || '-'],
+      ['Moneda', order.currency || '-'],
+      ['Evidencia', order.evidenceFileName || 'No adjunta'],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold' },
+    bodyStyles: { textColor },
+    columnStyles: { 0: { cellWidth: 50, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
+    styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak' },
+  });
+
+  const itemsRows = (order.items || []).map((item: any) => [
+    item.code || '-',
+    item.name || item.description || '-',
+    item.category || '-',
+    item.stockApplies ? Number(item.stock || 0).toString() : '-',
+    Number(item.quantity || 0).toString(),
+    formatAmount(Number(item.unitPrice || 0), order.currency, order.exchangeRate),
+    formatAmount(Number(item.total || 0), order.currency, order.exchangeRate),
+  ]);
+
+  autoTable(doc, {
+    startY: ((doc as any).lastAutoTable?.finalY || 45) + 8,
+    head: [['Código', 'Nombre', 'Categoría', 'Stock', 'Cant.', 'Precio U.', 'Total']],
+    body: itemsRows.length > 0 ? itemsRows : [['-', '-', '-', '-', '-', '-', '-']],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { textColor, fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 20, halign: 'left' },
+      1: { cellWidth: 'auto', halign: 'left' },
+      2: { cellWidth: 25, halign: 'left' },
+      3: { cellWidth: 15, halign: 'right' },
+      4: { cellWidth: 15, halign: 'right' },
+      5: { cellWidth: 25, halign: 'right' },
+      6: { cellWidth: 25, halign: 'right' },
+    },
+    styles: { cellPadding: 3, overflow: 'linebreak' },
+  });
+
+  const baseY = ((doc as any).lastAutoTable?.finalY || 140) + 10;
+  const labelX = 140;
+  const valueX = 196;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Subtotal:', labelX, baseY);
+  doc.text(formatAmount(Number(order.subtotal || 0), order.currency, order.exchangeRate), valueX, baseY, { align: 'right' });
+  doc.text(`IVA (${Number(order.taxRate || 0)}%):`, labelX, baseY + 7);
+  doc.text(formatAmount(Number(order.taxAmount || 0), order.currency, order.exchangeRate), valueX, baseY + 7, { align: 'right' });
+  doc.text(`Retención IR (${Number(order.withholdingRate || 0)}%):`, labelX, baseY + 14);
+  doc.text(`-${formatAmount(Number(order.withholdingAmount || 0), order.currency, order.exchangeRate)}`, valueX, baseY + 14, { align: 'right' });
+
+  doc.setDrawColor(226, 232, 240);
+  doc.line(labelX, baseY + 19, valueX, baseY + 19);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.text('TOTAL:', labelX, baseY + 25);
+  doc.text(formatAmount(Number(order.total || 0), order.currency, order.exchangeRate), valueX, baseY + 25, { align: 'right' });
+
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'italic');
+  doc.text(`Generado por ${tenantName} - Módulo de Compras`, 14, doc.internal.pageSize.height - 10);
+
+  doc.save(`${order.number || order.id || 'orden_compra'}.pdf`);
+};
