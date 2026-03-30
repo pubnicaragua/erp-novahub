@@ -7,7 +7,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { billsService, suppliersService } from '../../services/compras.service';
+import { billsService, suppliersService, purchaseOrdersService } from '../../services/compras.service';
 import type { SupplierInvoice, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
@@ -16,7 +16,7 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 
-interface Props { data: SupplierInvoice[]; loading: boolean; onRefresh: () => void; }
+interface Props { data: SupplierInvoice[]; loading: boolean; onRefresh: () => void; draftInvoiceFromOrder?: any; onDraftConsumed?: () => void; }
 
 const statusOpts = [
   { label: 'Pendiente',   value: 'PENDING',  color: 'bg-amber-500/10 text-amber-500' },
@@ -26,7 +26,7 @@ const statusOpts = [
   { label: 'Reembolsada', value: 'REFUNDED', color: 'bg-muted/30 text-muted-foreground/50' },
 ];
 
-export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
+export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed }: Props) {
   const { canPerform } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,28 +45,35 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
   }, []);
 
   useEffect(() => {
-    if (editingId) {
-      if (editingId === 'NEW') {
-         setLocalDoc({
-           supplierId: '',
-           date: new Date().toISOString(),
-           dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-           currency: 'NIO',
-           exchangeRate: globalRate,
-           status: 'PENDING',
-           items: [],
-           subtotal: 0,
-           taxAmount: 0,
-           total: 0
-         });
-      } else {
-         const found = data.find(x => x.id === editingId);
-         setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
-      }
-    } else {
-      setLocalDoc(null);
+    if (draftInvoiceFromOrder) {
+      setLocalDoc({ ...draftInvoiceFromOrder, _fromDraft: true });
+      setEditingId('NEW');
+      if (onDraftConsumed) onDraftConsumed();
     }
-  }, [editingId, data, globalRate]);
+  }, [draftInvoiceFromOrder]);
+
+  useEffect(() => {
+    if (editingId && editingId !== 'NEW') {
+       const found = data.find(x => x.id === editingId);
+       setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+    }
+  }, [editingId, data]);
+
+  const handleCreateNew = () => {
+    setLocalDoc({
+      supplierId: '',
+      date: new Date().toISOString(),
+      dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+      currency: 'NIO',
+      exchangeRate: globalRate,
+      status: 'PENDING',
+      items: [],
+      subtotal: 0,
+      taxAmount: 0,
+      total: 0
+    });
+    setEditingId('NEW');
+  };
 
   const filtered = data.filter(b =>
     (b.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -105,7 +112,10 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
       await billsService.delete(pendingDeleteId);
       toast.success('Factura eliminada correctamente');
       setPendingDeleteId(null);
-      if (editingId === pendingDeleteId) setEditingId(null);
+      if (editingId === pendingDeleteId) {
+        setEditingId(null);
+        setLocalDoc(null);
+      }
       onRefresh();
     } catch {
       toast.error('Error al eliminar factura');
@@ -119,17 +129,31 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
     
     try {
       if (editingId === 'NEW') {
+        const payloadToSave: any = { ...localDoc };
+        delete payloadToSave._sourceOrderId;
+        delete payloadToSave._fromDraft;
+
         await billsService.create({
-          ...localDoc, 
+          ...payloadToSave, 
           // Defaulting number if empty for invoices since it comes from vendor usually
-          number: localDoc.number || `INV-${Date.now().toString().slice(-5)}`
-        } as any);
+          number: payloadToSave.number || `INV-${Date.now().toString().slice(-5)}`
+        });
+        
+        if ((localDoc as any)._sourceOrderId) {
+          try {
+            await purchaseOrdersService.update((localDoc as any)._sourceOrderId, { status: 'RECEIVED' });
+          } catch (err) {
+            console.error('Failed to update source order status', err);
+          }
+        }
+        
         toast.success('Factura creada exitosamente');
       } else {
         await billsService.update(editingId!, localDoc as any);
         toast.success('Factura guardada');
       }
       setEditingId(null);
+      setLocalDoc(null);
       onRefresh();
     } catch (e: any) {
       toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
@@ -174,7 +198,7 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setLocalDoc(null); }} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -418,7 +442,7 @@ export function FacturasProveedorView({ data, loading, onRefresh }: Props) {
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('compras', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Factura</Button>
+              <Button onClick={handleCreateNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Factura</Button>
             )}
           </div>
         </div>

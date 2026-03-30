@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Truck, Plus, Search, Eye, Trash2, Star, TrendingDown, CheckCircle2 } from 'lucide-react';
+import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { suppliersService } from '../../services/compras.service';
 import type { Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -18,6 +19,7 @@ interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: 
 export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewProps) {
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [balanceOrder, setBalanceOrder] = useState<'all' | 'highest' | 'lowest'>('all');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState<Supplier | null>(null);
@@ -30,6 +32,12 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
       (s.code || '').toLowerCase().includes(search) ||
       (s.phone || '').toLowerCase().includes(search)
     );
+  });
+
+  const filteredAndSorted = [...filtered].sort((a, b) => {
+    if (balanceOrder === 'highest') return Number(b.balance || 0) - Number(a.balance || 0);
+    if (balanceOrder === 'lowest') return Number(a.balance || 0) - Number(b.balance || 0);
+    return 0;
   });
 
   const statusOptions = [
@@ -80,7 +88,6 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
     { title: 'Total',     value: data.length,                                                                              icon: Truck,         color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Activos',   value: data.filter(s => (s.status||'').toUpperCase() === 'ACTIVE').length,                       icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Saldo Total', value: `$${data.reduce((a, s) => a + Number(s.balance||0), 0).toLocaleString()}`,              icon: TrendingDown,  color: 'text-rose-500',    bg: 'bg-rose-500/10'    },
-    { title: 'Rating Prom.', value: data.length ? (data.reduce((a, s) => a + Number(s.rating||0), 0) / data.length).toFixed(1) : '0', icon: Star, color: 'text-amber-500', bg: 'bg-amber-500/10' },
   ];
 
   return (
@@ -96,6 +103,28 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
             </div></CardContent>
           </Card>
         ))}
+        <Card className="bg-card border-border/50 rounded-2xl shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-amber-500/10 text-amber-500">
+                <ArrowUpDown className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Filtro Saldo</p>
+                <Select value={balanceOrder} onValueChange={(value: 'all' | 'highest' | 'lowest') => setBalanceOrder(value)}>
+                  <SelectTrigger className="mt-1 h-9 text-xs">
+                    <SelectValue placeholder="Ordenar por saldo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Sin ordenar</SelectItem>
+                    <SelectItem value="highest">Mayor compra</SelectItem>
+                    <SelectItem value="lowest">Menor compra</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="flex flex-col gap-4">
@@ -116,7 +145,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+        <EditableDataTable data={filteredAndSorted} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           onAddRow={canPerform('proveedores', 'create') ? handleAdd : undefined}
           actions={(row) => (
             <div className="flex gap-1">

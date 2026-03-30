@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft
+  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -16,7 +16,7 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 
-interface Props { data: PurchaseOrder[]; loading: boolean; onRefresh: () => void; }
+interface Props { data: PurchaseOrder[]; loading: boolean; onRefresh: () => void; onConvertToInvoice?: (draft: any) => void; }
 
 const statusOpts = [
   { label: 'Borrador',   value: 'DRAFT',      color: 'bg-muted/20 text-muted-foreground' },
@@ -26,7 +26,7 @@ const statusOpts = [
   { label: 'Cancelada',  value: 'CANCELLED',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
+export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice }: Props) {
   const { canPerform } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -138,6 +138,25 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
     recalculateTotals(newItems);
   };
 
+  const handleConvertToInvoice = (order: Partial<PurchaseOrder>) => {
+    if (!onConvertToInvoice) return;
+    const draft = {
+      supplierId: order.supplierId,
+      date: new Date().toISOString(),
+      dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+      currency: order.currency || 'NIO',
+      exchangeRate: order.exchangeRate || globalRate,
+      status: 'PENDING',
+      items: (order.items || []).map(it => ({ ...it })),
+      subtotal: order.subtotal,
+      taxAmount: order.taxAmount,
+      total: order.total,
+      _sourceOrderId: order.id,
+    };
+    onConvertToInvoice(draft);
+    toast.success('Abriendo formulario de factura...', { position: 'bottom-right' });
+  };
+
   const handleItemChange = (idx: number, field: string, value: any) => {
     if (!localDoc) return;
     const newItems = [...(localDoc.items || [])];
@@ -178,6 +197,12 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-3">
+             {!isNew && (
+                <Button variant="outline" className="rounded-xl border-primary/50 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4"
+                  onClick={() => handleConvertToInvoice(localDoc)}>
+                  <FileInput className="size-3 mr-2" /> Convertir a Factura
+                </Button>
+             )}
              {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
@@ -428,6 +453,7 @@ export function OrdenesCompraView({ data, loading, onRefresh }: Props) {
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
+              <Button title="Convertir a Factura" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => handleConvertToInvoice(row)}><FileInput className="size-4" /></Button>
               <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
               {canPerform('compras', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>

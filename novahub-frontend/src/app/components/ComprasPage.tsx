@@ -80,11 +80,17 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
   };
 
   const [activeSection, setActiveSection] = useState(normalize(activeSubModule));
+  const [draftInvoiceFromOrder, setDraftInvoiceFromOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ComprasData>({
     proveedores: [], gastos: [], gastosRec: [], ordenes: [],
     recepciones: [], facturasProv: [], facturasRec: [], pagos: [], creditos: [],
   });
+
+  const handleConvertToInvoice = (draft: any) => {
+    setDraftInvoiceFromOrder(draft);
+    setActiveSection('facturas-prov');
+  };
 
   useEffect(() => {
     if (activeSubModule) setActiveSection(normalize(activeSubModule));
@@ -173,23 +179,29 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
               })}
             </TabsList>
           <AnimatePresence mode="wait">
-            <motion.div
-              key={activeSection}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-            >
-              {activeSection === 'proveedores'  && <ProveedoresView    data={data.proveedores}  loading={loading} onRefresh={fetchData} />}
-              {activeSection === 'gastos'        && <GastosView          data={data.gastos}        loading={loading} onRefresh={fetchData} />}
-              {activeSection === 'gastos-rec'    && <GastosRecurrentesView data={data.gastosRec}  loading={loading} onRefresh={fetchData} />}
-              {activeSection === 'ordenes'       && <OrdenesCompraView   data={data.ordenes}       loading={loading} onRefresh={fetchData} />}
-              {activeSection === 'recepciones'   && <RecepcionesCompraView data={data.recepciones} loading={loading} onRefresh={fetchData} />}
-              {activeSection === 'facturas-prov' && <FacturasProveedorView  data={data.facturasProv} loading={loading} onRefresh={fetchData} />}
-              {activeSection === 'facturas-rec'  && <FacturasProveedorRecView data={data.facturasRec} loading={loading} onRefresh={fetchData} />}
-              {activeSection === 'pagos'         && <PagosRealizadosView  data={data.pagos}         loading={loading} onRefresh={fetchData} />}
-              {activeSection === 'creditos'      && <CreditosProveedorView data={data.creditos}     loading={loading} onRefresh={fetchData} />}
-            </motion.div>
+            {COMPRAS_SECTIONS.map(section => {
+               if (activeSection !== section.id) return null;
+               const commonProps = { loading, onRefresh: fetchData };
+               return (
+                 <motion.div
+                   key={section.id}
+                   initial={{ opacity: 0, y: 10 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   exit={{ opacity: 0, y: -10 }}
+                   transition={{ duration: 0.2 }}
+                 >
+                   {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={data.proveedores} />}
+                   {section.id === 'gastos'        && <GastosView         {...commonProps} data={data.gastos} />}
+                   {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} data={data.gastosRec} />}
+                   {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} data={data.ordenes} onConvertToInvoice={handleConvertToInvoice} />}
+                   {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} data={data.recepciones} />}
+                   {section.id === 'facturas-prov' && <FacturasProveedorView {...commonProps} data={data.facturasProv} draftInvoiceFromOrder={draftInvoiceFromOrder} onDraftConsumed={() => setDraftInvoiceFromOrder(null)} />}
+                   {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} data={data.facturasRec} />}
+                   {section.id === 'pagos'         && <PagosRealizadosView {...commonProps} data={data.pagos} />}
+                   {section.id === 'creditos'      && <CreditosProveedorView {...commonProps} data={data.creditos} />}
+                 </motion.div>
+               );
+            })}
           </AnimatePresence>
           </Tabs>
         </div>
