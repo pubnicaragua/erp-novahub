@@ -258,7 +258,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 <div className="pt-3 border-t mt-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Costo</span>
-                    <span className="font-bold text-indigo-600">{formatConvertedAmount(training.cost, 'USD')}</span>
+                    <span className="font-bold text-indigo-600">{formatConvertedAmount(training.cost, training.currency)}</span>
                   </div>
                 </div>
               )}

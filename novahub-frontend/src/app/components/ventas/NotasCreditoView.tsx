@@ -32,7 +32,7 @@ const statusOptions = [
 ];
 
 export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: NotasCreditoViewProps) {
-  const { displayCurrency, formatConvertedAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -67,6 +67,8 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
       reason: '',
       items: [],
       total: 0,
+      currency: displayCurrency,
+      exchangeRate: globalRate,
     });
   };
 
@@ -89,7 +91,8 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           })),
           total: localDoc.total,
           status: 'DRAFT',
-          currency: displayCurrency === 'USD' ? 'USD' : 'NIO',
+          currency: localDoc.currency || displayCurrency,
+          exchangeRate: localDoc.exchangeRate || globalRate,
         } as any);
         toast.success('Nota de crédito creada exitosamente');
       } else {
@@ -140,17 +143,24 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
     { key: 'customerId', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{getCustomerName(row)}</span> },
     { key: 'date', header: 'Fecha', render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span> },
     { key: 'reason', header: 'Razón', render: (val) => <span className="text-xs text-muted-foreground truncate max-w-[200px] block">{val}</span> },
-    { key: 'total', header: 'Total', width: '130px', render: (val) => <span className="text-[13px] font-black tabular-nums text-rose-500">{formatConvertedAmount(Number(val||0), 'USD')}</span> },
+    { key: 'total', header: 'Total', width: '130px', render: (val, row) => <span className="text-[13px] font-black tabular-nums text-rose-500">{formatConvertedAmount(Number(val||0), (row as any).currency, (row as any).exchangeRate)}</span> },
     { key: 'status', header: 'Estado', width: '120px', render: (val) => {
       const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
       return <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none", opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>; } },
   ];
 
+  const issuedTotalInDisplayCurrency = data
+    .filter(cn => (cn.status||'').toUpperCase() === 'ISSUED')
+    .reduce((acc, cn) => acc + convertAmount(cn.total || 0, (cn as any).currency, (cn as any).exchangeRate), 0);
+  const liveCreditInDisplayCurrency = data
+    .filter(cn => ['ISSUED','APPLIED'].includes((cn.status||'').toUpperCase()))
+    .reduce((acc, cn) => acc + convertAmount(cn.total || 0, (cn as any).currency, (cn as any).exchangeRate), 0);
+
   const kpis = [
-    { title: 'Total Emitido',  value: formatConvertedAmount(data.filter(cn => (cn.status||'').toUpperCase() === 'ISSUED').reduce((acc, cn) => acc + Number(cn.total||0), 0), 'USD'), icon: FileMinus,    color: 'text-rose-500',    bg: 'bg-rose-500/10'     },
+    { title: 'Total Emitido',  value: formatConvertedAmount(issuedTotalInDisplayCurrency, displayCurrency), icon: FileMinus,    color: 'text-rose-500',    bg: 'bg-rose-500/10'     },
     { title: 'Borradores',     value: data.filter(cn => (cn.status||'').toUpperCase() === 'DRAFT').length,  icon: Clock,        color: 'text-amber-500',   bg: 'bg-amber-500/10'    },
     { title: 'Emitidas',       value: data.filter(cn => (cn.status||'').toUpperCase() === 'ISSUED').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10'  },
-    { title: 'Crédito Vivo',   value: formatConvertedAmount(data.filter(cn => ['ISSUED','APPLIED'].includes((cn.status||'').toUpperCase())).reduce((acc, cn) => acc + Number(cn.total||0), 0), 'USD'), icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/10' },
+    { title: 'Crédito Vivo',   value: formatConvertedAmount(liveCreditInDisplayCurrency, displayCurrency), icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/10' },
   ];
 
   // ─── INLINE FORM ────────────────────────────────────────────────────
@@ -213,7 +223,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen</p>
               <div className="flex justify-between items-center text-base border-b pb-3 border-border/50">
                 <span className="font-black">Total Nota de Crédito</span>
-                <span className="text-rose-500 font-black text-lg">{formatConvertedAmount(Number(localDoc?.total||0), 'USD')}</span>
+                <span className="text-rose-500 font-black text-lg">{formatConvertedAmount(Number(localDoc?.total||0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
               </div>
               <p className="text-[10px] text-muted-foreground italic">Al emitir esta nota, el balance del cliente se reducirá por el monto total.</p>
             </CardContent>
@@ -245,7 +255,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
                     setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-8 text-xs text-right" /></div>
                   <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black text-rose-500">{formatConvertedAmount(Number(item.total || 0), 'USD')}</span>
+                    <span className="text-xs font-black text-rose-500">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
                     <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
                       onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }}><Trash2 className="size-3" /></Button>
                   </div>

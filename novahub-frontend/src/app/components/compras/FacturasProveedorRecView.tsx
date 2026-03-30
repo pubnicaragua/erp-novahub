@@ -57,7 +57,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
            frequency: 'monthly',
            startDate: new Date().toISOString(),
            nextInvoiceDate: nextMonth.toISOString(),
-           currency: 'NIO',
+            currency: displayCurrency,
            exchangeRate: globalRate,
            status: 'ACTIVE',
            items: [],

@@ -157,7 +157,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const kpis = [
     {
       title: `Total Recaudado (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${totalCollectedInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      value: formatConvertedAmount(totalCollectedInDisplayCurrency, displayCurrency),
       icon: TrendingUp,
       color: 'text-emerald-500',
       bg: 'bg-emerald-500/10',

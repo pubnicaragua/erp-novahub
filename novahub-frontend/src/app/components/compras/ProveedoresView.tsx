@@ -13,11 +13,13 @@ import { cn } from '../ui/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { SupplierHistoryModal } from './SupplierHistoryModal';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; }
 
 export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewProps) {
   const { canPerform } = useAuth();
+  const { formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [balanceOrder, setBalanceOrder] = useState<'all' | 'highest' | 'lowest'>('all');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
     { key: 'email',       header: 'Email',     editable: canPerform('proveedores', 'edit') },
     { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('proveedores', 'edit') },
     { key: 'balance', header: 'Saldo', width: '130px',
-      render: (val) => <span className="font-black text-rose-500 tabular-nums">${Number(val||0).toLocaleString()}</span>
+      render: (val) => <span className="font-black text-rose-500 tabular-nums">{formatConvertedAmount(val || 0)}</span>
     },
     { key: 'status', header: 'Estado', width: '120px', editable: canPerform('proveedores', 'edit'), type: 'select', options: statusOptions,
       render: (val) => {
@@ -87,7 +89,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
   const kpis = [
     { title: 'Total',     value: data.length,                                                                              icon: Truck,         color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Activos',   value: data.filter(s => (s.status||'').toUpperCase() === 'ACTIVE').length,                       icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Saldo Total', value: `$${data.reduce((a, s) => a + Number(s.balance||0), 0).toLocaleString()}`,              icon: TrendingDown,  color: 'text-rose-500',    bg: 'bg-rose-500/10'    },
+    { title: 'Saldo Total', value: formatConvertedAmount(data.reduce((a, s) => a + Number(s.balance||0), 0)),              icon: TrendingDown,  color: 'text-rose-500',    bg: 'bg-rose-500/10'    },
   ];
 
   return (

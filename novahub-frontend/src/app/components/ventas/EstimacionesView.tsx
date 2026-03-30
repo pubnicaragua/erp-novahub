@@ -53,15 +53,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
     }
   }, [editingId, data]);
 
-  // Si se cambia la moneda global mientras se edita, se aplica al documento
-  useEffect(() => {
-    if (editingId && localDoc && localDoc.currency !== displayCurrency) {
-      setLocalDoc((prev: any) => prev ? { ...prev, currency: displayCurrency, exchangeRate: globalRate } : null);
-      // Autoguardamos este cambio referencial solo en estimaciones activas
-      handleUpdate(editingId, { currency: displayCurrency, exchangeRate: globalRate });
-    }
-  }, [displayCurrency, globalRate, editingId]);
-
   const filtered = data.filter(e => 
     e.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (e.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -216,7 +207,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
   const kpis = [
     {
       title: `Total Cotizado (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${quotedTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      value: formatConvertedAmount(quotedTotalInDisplayCurrency, displayCurrency),
       icon: FileSpreadsheet,
       color: 'text-blue-500',
       bg: 'bg-blue-500/10',

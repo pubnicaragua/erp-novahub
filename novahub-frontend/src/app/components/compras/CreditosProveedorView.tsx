@@ -25,7 +25,7 @@ const statusOpts = [
 
 export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
   const { canPerform } = useAuth();
-  const { displayCurrency, formatConvertedAmount } = useCurrency();
+  const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -67,6 +67,8 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     (c.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const resolveSourceCurrency = (value?: string) => ((value || '').toUpperCase() === 'USD' ? 'USD' : 'NIO');
+
   const columns: ColumnDef<SupplierCredit>[] = [
     { key: 'number',   header: 'Nota #',     width: '120px',
       render: (_v, row) => <span className="font-black font-mono text-primary text-xs">{row.number||row.id?.slice(0,8)}</span> },
@@ -75,7 +77,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     { key: 'date',     header: 'Fecha',      width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'total',    header: 'Total',      width: '120px',
-      render: (val) => <span className="font-black tabular-nums">{formatConvertedAmount(Number(val||0), 'USD')}</span> },
+      render: (val, row) => <span className="font-black tabular-nums">{formatConvertedAmount(Number(val || 0), resolveSourceCurrency((row as any)?.currency), (row as any)?.exchangeRate)}</span> },
     { key: 'status',   header: 'Estado',     width: '110px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toLowerCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
@@ -284,7 +286,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
                       />
                     </div>
                     <div className="col-span-2 flex items-center justify-end gap-2">
-                      <span className="text-xs font-black w-20 text-right tabular-nums">{formatConvertedAmount(Number(item.total || 0), 'USD')}</span>
+                      <span className="text-xs font-black w-20 text-right tabular-nums">{formatConvertedAmount(Number(item.total || 0), resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</span>
                       {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
                         <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
                           <Trash2 className="size-3" />
@@ -295,11 +297,11 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
                 ))}
               </div>
               
-              <div className="flex justify-end mt-4">
-                 <div className="w-64 space-y-2 text-sm bg-muted/10 p-4 rounded-xl border border-border/50">
-                    <div className="flex justify-between pt-2 border-t font-black"><span className="uppercase text-[10px] tracking-widest">Total</span><span className="text-lg text-primary">{formatConvertedAmount(recalculatedTotal, 'USD')}</span></div>
-                 </div>
-              </div>
+               <div className="flex justify-end mt-4">
+                  <div className="w-64 space-y-2 text-sm bg-muted/10 p-4 rounded-xl border border-border/50">
+                     <div className="flex justify-between pt-2 border-t font-black"><span className="uppercase text-[10px] tracking-widest">Total</span><span className="text-lg text-primary">{formatConvertedAmount(recalculatedTotal, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</span></div>
+                  </div>
+               </div>
             </CardContent>
           </Card>
         </div>
@@ -308,9 +310,11 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     );
   }
 
-  const disponible = data.filter(c => (c.status||'').toLowerCase() === 'issued').reduce((a,c) => a+Number(c.total||0), 0);
+  const disponible = data
+    .filter(c => (c.status || '').toLowerCase() === 'issued')
+    .reduce((a, c) => a + convertAmount(Number(c.total || 0), resolveSourceCurrency((c as any)?.currency), (c as any)?.exchangeRate), 0);
   const kpis = [
-    { title: 'Crédito Disponible', value: formatConvertedAmount(disponible, 'USD'),                                                icon: TrendingUp,      color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Crédito Disponible', value: formatConvertedAmount(disponible, displayCurrency),                                                icon: TrendingUp,      color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Total Notas',        value: data.length,                                                                         icon: Hash,            color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Emitidas',           value: data.filter(c => (c.status||'').toLowerCase() === 'issued').length,                                icon: BadgeDollarSign, color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
   ];

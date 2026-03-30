@@ -31,7 +31,7 @@ const BENEFIT_TYPE_LABELS: Record<string, string> = {
 const EMPTY_FORM = { name: '', description: '', type: 'OTHER', cost: '', isActive: true };
 
 export function BeneficiosView({ benefits, employees, onRefresh }: any) {
-  const { displayCurrency, formatConvertedAmount } = useCurrency();
+  const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
   const [addingNew, setAddingNew] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<any>(EMPTY_FORM);
@@ -72,7 +72,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
     setEditForm({ name: b.name, description: b.description || '', type: b.type, cost: b.cost ?? '', currency: b.currency || 'USD' });
   };
 
-  const totalCost = benefits.reduce((sum: number, b: any) => sum + (Number(b.cost) || 0), 0);
+  const totalCost = benefits.reduce((sum: number, b: any) => sum + convertAmount(Number(b.cost) || 0, b.currency), 0);
 
   return (
     <div className="space-y-6">
@@ -82,7 +82,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
           <div className="flex gap-4 text-sm text-muted-foreground">
             <span><strong className="text-foreground">{benefits.length}</strong> beneficios</span>
             <span className="text-muted-foreground/40">·</span>
-            <span>Costo total: <strong className="text-foreground">{formatConvertedAmount(totalCost, 'USD')}/mes</strong></span>
+            <span>Costo total: <strong className="text-foreground">{formatConvertedAmount(totalCost, displayCurrency)}/mes</strong></span>
           </div>
         </div>
         {!addingNew && (

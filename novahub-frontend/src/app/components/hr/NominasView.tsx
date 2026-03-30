@@ -7,7 +7,7 @@ import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
-  const { formatConvertedAmount } = useCurrency();
+  const { convertAmount, formatConvertedAmount, displayCurrency } = useCurrency();
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
 
@@ -94,9 +94,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     toast.success('Archivo CSV descargado');
   };
 
-  const totalGross = filteredPayrolls.reduce((sum: number, p: any) => sum + Number(p.grossPay || 0), 0);
-  const totalNet = filteredPayrolls.reduce((sum: number, p: any) => sum + Number(p.netPay || 0), 0);
-  const totalTaxes = filteredPayrolls.reduce((sum: number, p: any) => sum + Number(p.taxes || 0), 0);
+  const totalGross = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.grossPay || 0), p.employee?.currency || p.currency), 0);
+  const totalNet = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.netPay || 0), p.employee?.currency || p.currency), 0);
+  const totalTaxes = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.taxes || 0), p.employee?.currency || p.currency), 0);
   const pendingCount = filteredPayrolls.filter((p: any) => p.status === 'PENDING').length;
 
   return (
@@ -107,7 +107,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Bruto</p>
-              <h3 className="text-2xl font-bold text-green-700 dark:text-green-400">{formatConvertedAmount(totalGross, 'USD')}</h3>
+              <h3 className="text-2xl font-bold text-green-700 dark:text-green-400">{formatConvertedAmount(totalGross, displayCurrency)}</h3>
             </div>
             <DollarSign className="size-8 text-green-500" />
           </div>
@@ -116,7 +116,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Neto</p>
-              <h3 className="text-2xl font-bold text-blue-700 dark:text-blue-400">{formatConvertedAmount(totalNet, 'USD')}</h3>
+              <h3 className="text-2xl font-bold text-blue-700 dark:text-blue-400">{formatConvertedAmount(totalNet, displayCurrency)}</h3>
             </div>
             <DollarSign className="size-8 text-blue-500" />
           </div>
@@ -125,7 +125,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Impuestos</p>
-              <h3 className="text-2xl font-bold text-orange-700 dark:text-orange-400">{formatConvertedAmount(totalTaxes, 'USD')}</h3>
+              <h3 className="text-2xl font-bold text-orange-700 dark:text-orange-400">{formatConvertedAmount(totalTaxes, displayCurrency)}</h3>
             </div>
             <DollarSign className="size-8 text-orange-500" />
           </div>

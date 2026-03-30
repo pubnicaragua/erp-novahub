@@ -51,7 +51,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
            supplierId: '',
            date: new Date().toISOString(),
            expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
-           currency: 'NIO',
+           currency: displayCurrency,
            exchangeRate: globalRate,
            status: 'DRAFT',
            requestedBy: 'Admin',

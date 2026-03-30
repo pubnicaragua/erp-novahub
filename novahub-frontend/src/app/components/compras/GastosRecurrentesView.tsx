@@ -63,7 +63,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
            frequency: 'monthly',
            startDate: new Date().toISOString(),
            amount: 0,
-           currency: 'NIO',
+            currency: displayCurrency,
            exchangeRate: globalRate,
            status: 'active',
            category: 'OPERACIONAL'
@@ -349,7 +349,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('compras', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Recurrente</Button>
+              <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Recurrente</Button>
             )}
           </div>
         </div>

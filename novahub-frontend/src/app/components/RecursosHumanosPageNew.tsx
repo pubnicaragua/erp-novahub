@@ -16,7 +16,6 @@ import {
   FileText,
   Plus,
   Search,
-  RefreshCw,
   BarChart3,
   UserX,
   CheckCircle2,
@@ -43,7 +42,7 @@ export function RecursosHumanosPageNew() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [employeesRes, departmentsRes, payrollsRes, leaveRequestsRes] = await Promise.all([
+      const [employeesRes, departmentsRes, payrollsRes, leaveRequestsRes] = await Promise.all<any>([
         hrService.getEmployees(),
         hrService.getDepartments(),
         hrService.getPayrolls(),
@@ -135,10 +134,7 @@ export function RecursosHumanosPageNew() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchData}>
-            <RefreshCw className="size-4 mr-2" />
-            Actualizar
-          </Button>
+
           <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white">
             <Plus className="size-4 mr-2" />
             Nuevo Empleado

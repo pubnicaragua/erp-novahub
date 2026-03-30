@@ -177,18 +177,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
               </div>
             </div>
             
-            <div className="flex items-center gap-2">
-              <Button 
-                onClick={fetchData} 
-                variant="outline" 
-                size="sm"
-                className="rounded-xl font-bold"
-                disabled={loading}
-              >
-                <RotateCcw className={cn("size-4 mr-2", loading && "animate-spin")} />
-                Actualizar
-              </Button>
-            </div>
+
           </div>
 
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>

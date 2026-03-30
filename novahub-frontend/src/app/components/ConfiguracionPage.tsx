@@ -1272,7 +1272,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <div>
                         <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Permitir Cambio de Moneda</p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                          Si se desactiva, nadie podrá cambiar `COR/USD` desde la barra superior.
+                          Si se desactiva, nadie podrá cambiar `NIO/USD` desde la barra superior.
                         </p>
                       </div>
                       <Switch checked={allowCurrencySwitch} onCheckedChange={setAllowCurrencySwitch} />

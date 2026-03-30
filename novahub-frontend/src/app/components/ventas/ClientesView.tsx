@@ -116,7 +116,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           "text-[13px] font-black tabular-nums",
           (val || 0) > 0 ? "text-rose-500" : "text-emerald-500"
         )}>
-          {formatConvertedAmount(val || 0, 'USD')}
+          {formatConvertedAmount(val || 0)}
         </span>
       )
     },
@@ -145,7 +145,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
     { title: 'Total Clientes', value: data.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
     { title: 'Particulares', value: data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
     { title: 'Empresas', value: data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length, icon: CheckCircle2, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'Saldo Pendiente', value: formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.balance || 0), 0), 'USD'), icon: CreditCard, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+    { title: 'Saldo Pendiente', value: formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.balance || 0), 0)), icon: CreditCard, color: 'text-rose-500', bg: 'bg-rose-500/10' },
   ];
 
   return (

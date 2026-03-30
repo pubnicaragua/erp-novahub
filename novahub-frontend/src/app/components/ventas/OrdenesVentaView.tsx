@@ -109,14 +109,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     }
   }, [editingId]); // Intentionally removed 'data' to prevent server-refreshes from destroying mid-edit local states
 
-  // Sincronizar moneda con layout global
-  useEffect(() => {
-    if (editingId && localDoc && localDoc.currency !== displayCurrency) {
-      setLocalDoc((prev: any) => prev ? { ...prev, currency: displayCurrency, exchangeRate: globalRate } : null);
-      handleUpdate(editingId, { currency: displayCurrency, exchangeRate: globalRate });
-    }
-  }, [displayCurrency, globalRate, editingId]);
-
   const handleAddOrder = async () => {
     if (!customers || customers.length === 0) {
       toast.error('Debe registrar al menos un cliente primero');
@@ -228,7 +220,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     { title: 'Órdenes Abiertas',  value: data.filter(o => (o.status||'').toUpperCase() === 'CONFIRMED').length, icon: Package, color: 'text-orange-500', bg: 'bg-orange-500/10' },
     {
       title: `Monto Confirmado (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${confirmedAmountInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      value: formatConvertedAmount(confirmedAmountInDisplayCurrency, displayCurrency),
       icon: TrendingUp,
       color: 'text-emerald-500',
       bg: 'bg-emerald-500/10',
@@ -443,7 +435,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                                 STOCK: {stock}
                               </Badge>
                               <span className="text-[9px] font-bold text-muted-foreground/60 uppercase">
-                                Costo: {formatConvertedAmount(Number(p.costPrice || 0), 'USD')} | Venta: {formatConvertedAmount(Number(p.salePrice || 0), 'USD')}
+                                Costo: {formatConvertedAmount(Number(p.costPrice || 0))} | Venta: {formatConvertedAmount(Number(p.salePrice || 0))}
                               </span>
                             </>
                           );

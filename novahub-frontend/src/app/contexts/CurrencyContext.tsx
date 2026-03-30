@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
 
-export type Currency = 'USD' | 'COR';
+export type Currency = 'USD' | 'NIO';
 type MonetarySourceCurrency = string | undefined;
 type DisplayCurrency = 'USD' | 'NIO';
 
@@ -15,7 +15,7 @@ interface CurrencyContextType {
   displayCurrency: DisplayCurrency;
   lockedDisplayCurrency: DisplayCurrency;
   currencyInteractionEnabled: boolean;
-  formatAmount: (amount: number) => string;
+  formatAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => string;
   convertAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => number;
   formatConvertedAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => string;
   toggleCurrency: () => void;
@@ -27,8 +27,9 @@ const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined
 
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = useState<Currency>(() => {
-    const saved = localStorage.getItem(STORAGE_CURRENCY_KEY);
-    return (saved as Currency) || 'USD';
+    const saved = (localStorage.getItem(STORAGE_CURRENCY_KEY) || '').toUpperCase();
+    if (saved === 'COR') return 'NIO';
+    return saved === 'USD' ? 'USD' : 'NIO';
   });
   const [exchangeRate, setExchangeRate] = useState<number>(36.5);
   const [currencyInteractionEnabled, setCurrencyInteractionEnabled] = useState<boolean>(() => {
@@ -44,7 +45,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toAppCurrency = (display: DisplayCurrency): Currency => {
-    return display === 'USD' ? 'USD' : 'COR';
+    return display === 'USD' ? 'USD' : 'NIO';
   };
 
   const refreshRate = async () => {
@@ -91,7 +92,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
 
   const toggleCurrency = () => {
     if (!currencyInteractionEnabled) return;
-    const next = currency === 'USD' ? 'COR' : 'USD';
+    const next = currency === 'USD' ? 'NIO' : 'USD';
     setCurrency(next);
   };
 
@@ -134,8 +135,12 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     return `${symbol} ${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const formatAmount = (amount: number) => {
-    return formatConvertedAmount(amount, 'USD', exchangeRate);
+  const formatAmount = (
+    amount: number,
+    sourceCurrency: MonetarySourceCurrency = 'USD',
+    sourceExchangeRate?: number,
+  ) => {
+    return formatConvertedAmount(amount, sourceCurrency, sourceExchangeRate);
   };
 
   return (

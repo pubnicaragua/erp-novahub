@@ -64,7 +64,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       supplierId: '',
       date: new Date().toISOString(),
       dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-      currency: 'NIO',
+      currency: displayCurrency,
       exchangeRate: globalRate,
       status: 'PENDING',
       items: [],

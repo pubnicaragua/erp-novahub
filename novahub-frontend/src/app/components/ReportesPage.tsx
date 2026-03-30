@@ -26,11 +26,18 @@ import { subscriptionsService } from '../services/subscriptions.service';
 import { tenantsService } from '../services/tenants.service';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
+import { useCurrency } from '../contexts/CurrencyContext';
 
 const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
-function fmt(n: number) { return `$${n.toLocaleString('es-NI', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`; }
+function formatWithSymbol(n: number, symbol: string) {
+  return `${symbol}${n.toLocaleString('es-NI', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+function formatCompactWithSymbol(n: number, symbol: string) {
+  return `${symbol}${(n / 1000).toFixed(0)}k`;
+}
 function pct(v: number, t: number) { return t > 0 ? ((v / t) * 100).toFixed(1) + '%' : '0%'; }
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -75,6 +82,7 @@ interface ReportesPageProps {
 }
 
 export function ReportesPage({ activeSubModule }: ReportesPageProps) {
+  const { displayCurrency } = useCurrency();
   const [dateRange, setDateRange] = useState('ultimo-mes');
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'ejecutivo');
   const [loading, setLoading] = useState(true);
@@ -90,6 +98,9 @@ export function ReportesPage({ activeSubModule }: ReportesPageProps) {
   const [tenantReports, setTenantReports] = useState<any[]>([]);
   const [subscriptionRequests, setSubscriptionRequests] = useState<any[]>([]);
   const [hasSubscriptionsAccess, setHasSubscriptionsAccess] = useState(false);
+  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$ ';
+  const fmt = (n: number) => formatWithSymbol(n, currencySymbol);
+  const fmtCompact = (n: number) => formatCompactWithSymbol(n, currencySymbol);
 
   const filteredIncomes = useMemo(() => incomes.filter(i => isDateInRange(i.date, dateRange)), [incomes, dateRange]);
   const filteredExpenses = useMemo(() => expenses.filter(e => isDateInRange(e.date, dateRange)), [expenses, dateRange]);
@@ -552,7 +563,7 @@ export function ReportesPage({ activeSubModule }: ReportesPageProps) {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtCompact(Number(v || 0))} />
                     <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
                     <Legend iconType="circle" />
                     <Area type="monotone" dataKey="ingresos" stroke="#10b981" fill="url(#gInc)" strokeWidth={2} name="Ingresos" />
@@ -657,7 +668,7 @@ export function ReportesPage({ activeSubModule }: ReportesPageProps) {
                   <BarChart data={monthlyTrend} barGap={6}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtCompact(Number(v || 0))} />
                     <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
                     <Legend />
                     <Bar dataKey="ingresos" fill="#10b981" name="Ingresos" radius={[4,4,0,0]} />
@@ -696,7 +707,7 @@ export function ReportesPage({ activeSubModule }: ReportesPageProps) {
                 <BarChart data={monthlyTrend}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtCompact(Number(v || 0))} />
                   <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
                   <ReferenceLine y={0} stroke="hsl(var(--border))" />
                   <Bar dataKey="utilidad" name="Utilidad" radius={[4,4,0,0]}
@@ -740,7 +751,7 @@ export function ReportesPage({ activeSubModule }: ReportesPageProps) {
                   <LineChart data={monthlyTrend}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtCompact(Number(v || 0))} />
                     <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
                     <Legend />
                     <Line type="monotone" dataKey="ingresos" stroke="#10b981" strokeWidth={3} name="Ingresos" dot={{ fill: '#10b981', r: 4 }} />
@@ -779,7 +790,7 @@ export function ReportesPage({ activeSubModule }: ReportesPageProps) {
                 <ResponsiveContainer width="100%" height={250}>
                   <BarChart data={customerSegments} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtCompact(Number(v || 0))} />
                     <YAxis type="category" dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} width={160} />
                     <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
                     <Bar dataKey="value" name="Total Facturado" radius={[0, 4, 4, 0]}>
@@ -826,7 +837,7 @@ export function ReportesPage({ activeSubModule }: ReportesPageProps) {
                     <BarChart data={topProducts}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={v => v.length > 12 ? v.slice(0, 12) + '…' : v} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtCompact(Number(v || 0))} />
                       <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
                       <Bar dataKey="valor" name="Valor Total" radius={[4, 4, 0, 0]}>
                         {topProducts.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}

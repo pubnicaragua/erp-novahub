@@ -274,3 +274,62 @@ export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, 
 
   doc.save(`Historial_${supplier.name.replace(/\s+/g, '_')}.pdf`);
 };
+
+export const generateExpensePDF = async ({
+  expense,
+  tenantName,
+  formatAmount,
+}: {
+  expense: any;
+  tenantName: string;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+}) => {
+  const doc = new jsPDF();
+  const primaryColor = [16, 185, 129] as [number, number, number];
+  const textColor = [51, 65, 85] as [number, number, number];
+
+  doc.setFontSize(20);
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(tenantName || 'Nova Hub', 14, 22);
+
+  doc.setFontSize(12);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Comprobante de Gasto', 14, 30);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`N°: ${expense.number || expense.id || 'N/A'}`, 196, 22, { align: 'right' });
+  doc.text(`Fecha: ${expense.date ? new Date(expense.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
+  doc.text(`Hora: ${expense.time || (expense.date ? new Date(expense.date).toLocaleTimeString() : 'N/A')}`, 196, 34, { align: 'right' });
+
+  autoTable(doc, {
+    startY: 45,
+    head: [['Campo', 'Detalle']],
+    body: [
+      ['Descripción', expense.description || '-'],
+      ['Categoría', expense.category === 'OTRO' ? (expense.categoryCustom || 'OTRO') : (expense.category || '-')],
+      ['Monto', formatAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate)],
+      ['Pagado a', expense.paidTo || '-'],
+      ['Cuenta de origen', expense.paymentSource || '-'],
+      ['Referencia', expense.reference || '-'],
+      ['Estado', expense.status || '-'],
+      ['Evidencia', expense.evidenceFileName || 'No adjunta'],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold' },
+    bodyStyles: { textColor },
+    columnStyles: {
+      0: { cellWidth: 50, fontStyle: 'bold' },
+      1: { cellWidth: 'auto' },
+    },
+    styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak' },
+  });
+
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'italic');
+  doc.text(`Generado por ${tenantName} - Módulo de Compras`, 14, doc.internal.pageSize.height - 10);
+
+  doc.save(`${expense.number || expense.id || 'gasto'}.pdf`);
+};

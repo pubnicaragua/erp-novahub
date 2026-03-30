@@ -49,7 +49,7 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
            supplierInvoiceId: '',
            date: new Date().toISOString(),
            amount: 0,
-           currency: 'NIO',
+            currency: displayCurrency,
            exchangeRate: globalRate,
            method: 'transfer',
            reference: `PAG-${Date.now().toString().slice(-5)}`,

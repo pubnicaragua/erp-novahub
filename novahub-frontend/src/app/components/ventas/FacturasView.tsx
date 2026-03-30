@@ -104,13 +104,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
   }, [editingId, invoiceDraft]);
 
-  // Si se cambia la moneda global mientras se edita/crea, se aplica al documento (al igual que en NC)
-  useEffect(() => {
-    if ((editingId || isCreating) && localDoc && localDoc.currency !== displayCurrency) {
-      setLocalDoc((prev: any) => prev ? { ...prev, currency: displayCurrency, exchangeRate: globalRate } : null);
-    }
-  }, [displayCurrency, globalRate, editingId, isCreating]);
-
   const filtered = data.filter(f =>
     f.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (f.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -326,14 +319,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const kpis = [
     {
       title: `Facturado Total (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${totalBilledInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      value: formatConvertedAmount(totalBilledInDisplayCurrency, displayCurrency),
       icon: FileText,
       color: 'text-primary',
       bg: 'bg-primary/10',
     },
     {
       title: `Por Cobrar (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${accountsReceivableInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      value: formatConvertedAmount(accountsReceivableInDisplayCurrency, displayCurrency),
       icon: TrendingUp,
       color: 'text-orange-500',
       bg: 'bg-orange-500/10',
@@ -341,7 +334,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     { title: 'Vencidas', value: data.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length, icon: AlertCircle, color: 'text-rose-500', bg: 'bg-rose-500/10' },
     {
       title: `Cobrado (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${paidInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      value: formatConvertedAmount(paidInDisplayCurrency, displayCurrency),
       icon: CheckCircle2,
       color: 'text-emerald-500',
       bg: 'bg-emerald-500/10',
@@ -521,7 +514,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                                 STOCK: {stock}
                               </Badge>
                               <span className="text-[9px] font-bold text-muted-foreground/60 uppercase">
-                                Costo: {formatConvertedAmount(Number(p.costPrice || 0), 'USD')} | Venta: {formatConvertedAmount(Number(p.salePrice || 0), 'USD')}
+                                Costo: {formatConvertedAmount(Number(p.costPrice || 0))} | Venta: {formatConvertedAmount(Number(p.salePrice || 0))}
                               </span>
                             </>
                           );

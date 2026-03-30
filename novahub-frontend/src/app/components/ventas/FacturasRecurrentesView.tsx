@@ -210,7 +210,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const kpis = [
     {
       title: `MRR (Total ${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${activeRecurringInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      value: formatConvertedAmount(activeRecurringInDisplayCurrency, displayCurrency),
       icon: RotateCcw,
       color: 'text-primary',
       bg: 'bg-primary/10',
@@ -219,7 +219,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     { title: 'Pausadas',       value: data.filter(r => (r.status||'').toUpperCase() === 'PAUSED').length, icon: Clock,     color: 'text-amber-500', bg: 'bg-amber-500/10' },
     {
       title: `Total Mensual (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${totalRecurringInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      value: formatConvertedAmount(totalRecurringInDisplayCurrency, displayCurrency),
       icon: TrendingUp,
       color: 'text-emerald-500',
       bg: 'bg-emerald-500/10',
@@ -280,9 +280,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen por Ciclo</p>
               <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Subtotal</span><span className="font-black">{displayCurrency === 'USD' ? '$' : 'C$'} {Number(localDoc?.subtotal||0).toLocaleString()}</span></div>
+                <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Subtotal</span><span className="font-black">{formatConvertedAmount(Number(localDoc?.subtotal || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50"><span className="font-black">Total por Ciclo</span>
-                  <span className="text-primary font-black text-lg">{displayCurrency === 'USD' ? '$' : 'C$'} {Number(localDoc?.total||0).toLocaleString()}</span></div>
+                  <span className="text-primary font-black text-lg">{formatConvertedAmount(Number(localDoc?.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
               </div>
             </CardContent>
           </Card>
@@ -313,7 +313,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                   <div className="col-span-2"><Input type="number" min="0" value={Number(item.unitPrice) || ''} onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
                     const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }} className="h-8 text-xs text-right" /></div>
-                  <div className="col-span-2 text-right"><span className="text-xs font-black">{displayCurrency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString()}</span></div>
+                  <div className="col-span-2 text-right"><span className="text-xs font-black">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
                   <div className="col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
                     onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }}><Trash2 className="size-3" /></Button></div>
                 </div>
