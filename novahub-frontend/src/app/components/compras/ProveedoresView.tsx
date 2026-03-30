@@ -20,10 +20,15 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const filtered = data.filter(s =>
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.email || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = data.filter(s => {
+    const search = searchTerm.toLowerCase();
+    return (
+      s.name.toLowerCase().includes(search) ||
+      (s.email || '').toLowerCase().includes(search) ||
+      (s.code || '').toLowerCase().includes(search) ||
+      (s.phone || '').toLowerCase().includes(search)
+    );
+  });
 
   const statusOptions = [
     { label: 'Activo',   value: 'ACTIVE',   color: 'bg-emerald-500/10 text-emerald-500' },
@@ -33,7 +38,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
   const columns: ColumnDef<Supplier>[] = [
     { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('proveedores', 'edit') },
     { key: 'name',        header: 'Nombre',    editable: canPerform('proveedores', 'edit') },
-    { key: 'contactName', header: 'Contacto',  editable: canPerform('proveedores', 'edit') },
+    { key: 'contactName', header: 'direccion',  editable: canPerform('proveedores', 'edit') },
     { key: 'email',       header: 'Email',     editable: canPerform('proveedores', 'edit') },
     { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('proveedores', 'edit') },
     { key: 'balance', header: 'Saldo', width: '130px',

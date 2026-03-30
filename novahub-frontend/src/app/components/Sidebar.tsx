@@ -420,7 +420,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                           'hover:bg-sidebar-accent hover:text-sidebar-foreground',
                           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                           isActive && !item.submenu
-                            ? 'bg-[#048833] text-white shadow-sm font-semibold'
+                            ? 'bg-sidebar-accent/80 text-sidebar-foreground shadow-sm font-semibold'
                             : isActive && item.submenu
                               ? 'bg-sidebar-accent/80 text-sidebar-foreground'
                               : 'text-sidebar-foreground/70'

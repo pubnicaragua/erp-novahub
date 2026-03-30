@@ -28,10 +28,15 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const filtered = data.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = data.filter(c => {
+    const search = searchTerm.toLowerCase();
+    return (
+      c.name.toLowerCase().includes(search) || 
+      (c.email || '').toLowerCase().includes(search) ||
+      (c.code || '').toLowerCase().includes(search) ||
+      (c.phone || '').toLowerCase().includes(search)
+    );
+  });
 
   const handleUpdate = async (id: string | number, updates: Partial<Customer>) => {
     try {
