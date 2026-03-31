@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft
+  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -8,6 +8,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { billsService, suppliersService, purchaseOrdersService } from '../../services/compras.service';
+import { expensesService as financialExpensesService, accountsService } from '../../services/finanzas.service';
 import type { SupplierInvoice, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
@@ -15,6 +16,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { generateSupplierInvoicePDF } from '../../utils/pdfGenerator';
 
 interface Props { data: SupplierInvoice[]; loading: boolean; onRefresh: () => void; draftInvoiceFromOrder?: any; onDraftConsumed?: () => void; }
 
@@ -27,7 +29,7 @@ const statusOpts = [
 ];
 
 export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed }: Props) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -36,6 +38,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<SupplierInvoice> | null>(null);
+  const generateSupplierInvoiceNumber = () => `INV-${Date.now().toString().slice(-6)}`;
 
   useEffect(() => {
     suppliersService.getAll().then(res => {
@@ -46,7 +49,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   useEffect(() => {
     if (draftInvoiceFromOrder) {
-      setLocalDoc({ ...draftInvoiceFromOrder, _fromDraft: true });
+      setLocalDoc({ number: generateSupplierInvoiceNumber(), ...draftInvoiceFromOrder, _fromDraft: true });
       setEditingId('NEW');
       if (onDraftConsumed) onDraftConsumed();
     }
@@ -67,6 +70,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       currency: displayCurrency,
       exchangeRate: globalRate,
       status: 'PENDING',
+      number: generateSupplierInvoiceNumber(),
       items: [],
       subtotal: 0,
       taxAmount: 0,
@@ -75,10 +79,100 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     setEditingId('NEW');
   };
 
-  const filtered = data.filter(b =>
-    (b.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (b.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const filtered = data.filter((b) => {
+    if (!normalizedSearchTerm) return true;
+    const haystack = [
+      b.number,
+      b.supplier?.name,
+      b.supplier?.code,
+      b.supplier?.email,
+      b.supplier?.phone,
+      b.notes,
+      b.status,
+      b.date ? new Date(b.date).toLocaleDateString() : '',
+      b.dueDate ? new Date(b.dueDate).toLocaleDateString() : '',
+      String(b.total ?? ''),
+      String(b.amountPaid ?? ''),
+      String(b.balance ?? ''),
+      ...(b.items || []).map((item: any) => item.description),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(normalizedSearchTerm);
+  });
+
+  const isSupplierActive = (supplierId?: string) =>
+    !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
+  const isPayingStatus = (status?: string) => ['PAID', 'PARTIAL'].includes((status || '').toUpperCase());
+
+  const ensureFinanceExpenseForInvoice = async (invoice: Partial<SupplierInvoice>) => {
+    try {
+      if (!invoice.id || !isPayingStatus(String(invoice.status || ''))) return;
+
+      const reference = `SUPPLIER_INVOICE:${invoice.id}`;
+      const existingExpenses = await financialExpensesService.getAll().catch(() => []);
+      const existingList = Array.isArray(existingExpenses)
+        ? existingExpenses
+        : ((existingExpenses as any)?.data || []);
+      const alreadyExists = (existingList || []).some(
+        (expense: any) => String(expense?.reference || '') === reference,
+      );
+      if (alreadyExists) return;
+
+      const supplierName =
+        invoice.supplier?.name ||
+        suppliers.find((s) => s.id === invoice.supplierId)?.name ||
+        'Proveedor';
+
+      const amount =
+        String(invoice.status || '').toUpperCase() === 'PARTIAL'
+          ? Number(invoice.amountPaid || invoice.total || 0)
+          : Number(invoice.total || 0);
+
+      if (amount <= 0) return;
+
+      const accountsResponse = await accountsService.getAll().catch(() => []);
+      const accountsList = Array.isArray(accountsResponse)
+        ? accountsResponse
+        : ((accountsResponse as any)?.data || []);
+      const activeAccounts = (accountsList || []).filter((acc: any) => acc?.isActive !== false);
+      let expenseAccount =
+        activeAccounts.find((acc: any) => String(acc?.type || '').toUpperCase() === 'EXPENSE') ||
+        activeAccounts.find((acc: any) => String(acc?.type || '').toUpperCase() === 'ASSET') ||
+        (accountsList || []).find((acc: any) => String(acc?.type || '').toUpperCase() === 'EXPENSE') ||
+        (accountsList || []).find((acc: any) => String(acc?.type || '').toUpperCase() === 'ASSET');
+
+      if (!expenseAccount) {
+        const suffix = Date.now().toString().slice(-6);
+        const createdAccountResponse = await accountsService.create({
+          code: `GAS-${suffix}`,
+          name: 'Gastos Generales',
+          type: 'expense' as any,
+        }).catch(() => null);
+        expenseAccount = (createdAccountResponse as any)?.data || createdAccountResponse;
+      }
+
+      await financialExpensesService.create({
+        accountId: expenseAccount?.id,
+        supplierId: invoice.supplierId,
+        date: invoice.date || new Date().toISOString(),
+        amount,
+        currency: invoice.currency || 'NIO',
+        exchangeRate: invoice.exchangeRate,
+        category: 'OTROS' as any,
+        description: `Pago factura proveedor ${invoice.number || invoice.id}`,
+        paidTo: supplierName,
+        paymentSource: 'EFECTIVO' as any,
+        reference,
+        status: 'PAID' as any,
+      });
+    } catch (error) {
+      console.error('Error sincronizando gasto financiero desde factura proveedor', error);
+      toast.error('Factura actualizada, pero no se pudo reflejar en Finanzas > Gastos');
+    }
+  };
 
   const columns: ColumnDef<SupplierInvoice>[] = [
     { key: 'number',   header: 'Factura #',   width: '120px',
@@ -101,8 +195,29 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<SupplierInvoice>) => {
-    try { await billsService.update(id as string, updates); toast.success('Factura actualizada'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
+    const currentInvoice = data.find((x) => x.id === id);
+    const previousStatus = String(currentInvoice?.status || '').toUpperCase();
+    const statusToApply = (updates.status || currentInvoice?.status || '').toString();
+    if (isPayingStatus(statusToApply) && currentInvoice?.supplierId && !isSupplierActive(currentInvoice.supplierId)) {
+      toast.error('No se puede registrar pago en facturas de proveedores inactivos');
+      throw new Error('Inactive supplier cannot be paid');
+    }
+    try {
+      const updatedResponse = await billsService.update(id as string, updates);
+      const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
+      const nextStatus = String(updatedInvoice?.status || updates.status || previousStatus).toUpperCase();
+      if (!isPayingStatus(previousStatus) && isPayingStatus(nextStatus)) {
+        await ensureFinanceExpenseForInvoice({
+          ...(currentInvoice || {}),
+          ...(updatedInvoice || {}),
+          id: String(id),
+          status: nextStatus,
+        });
+      }
+      toast.success('Factura actualizada');
+      onRefresh();
+    }
+    catch { toast.error('Error al actualizar'); }
   };
 
   const handleDeleteConfirm = async () => {
@@ -126,18 +241,21 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
+    if (isPayingStatus(String(localDoc.status || '')) && !isSupplierActive(localDoc.supplierId)) {
+      return toast.error('No se puede registrar pago en facturas de proveedores inactivos');
+    }
     
     try {
       if (editingId === 'NEW') {
         const payloadToSave: any = { ...localDoc };
         delete payloadToSave._sourceOrderId;
         delete payloadToSave._fromDraft;
-
-        await billsService.create({
-          ...payloadToSave, 
-          // Defaulting number if empty for invoices since it comes from vendor usually
-          number: payloadToSave.number || `INV-${Date.now().toString().slice(-5)}`
+        const createdResponse = await billsService.create({
+          ...payloadToSave,
+          number: payloadToSave.number || generateSupplierInvoiceNumber(),
         });
+        const created = (createdResponse as any)?.data || createdResponse;
+        await ensureFinanceExpenseForInvoice(created);
         
         if ((localDoc as any)._sourceOrderId) {
           try {
@@ -148,12 +266,31 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         }
         
         toast.success('Factura creada exitosamente');
+        if (created?.id) {
+          setEditingId(created.id);
+          setLocalDoc(created);
+        } else {
+          setEditingId(null);
+          setLocalDoc(null);
+        }
       } else {
-        await billsService.update(editingId!, localDoc as any);
+        const existingInvoice = data.find((x) => x.id === editingId);
+        const previousStatus = String(existingInvoice?.status || '').toUpperCase();
+        const updatedResponse = await billsService.update(editingId!, localDoc as any);
+        const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
+        const nextStatus = String(updatedInvoice?.status || localDoc.status || '').toUpperCase();
+        if (!isPayingStatus(previousStatus) && isPayingStatus(nextStatus)) {
+          await ensureFinanceExpenseForInvoice({
+            ...(existingInvoice || {}),
+            ...(updatedInvoice || {}),
+            id: editingId!,
+            status: nextStatus,
+          });
+        }
         toast.success('Factura guardada');
+        setLocalDoc((prev) => prev ? { ...prev } : prev);
+        setEditingId(editingId);
       }
-      setEditingId(null);
-      setLocalDoc(null);
       onRefresh();
     } catch (e: any) {
       toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
@@ -207,6 +344,20 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             </div>
           </div>
           <div className="flex items-center gap-3">
+             {!isNew && (
+               <Button
+                 variant="outline"
+                 className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
+                 onClick={() => generateSupplierInvoicePDF({
+                   invoice: localDoc,
+                   tenantName: user?.tenantName || 'Nova Hub',
+                   formatAmount: (amount: number, currency?: string, rate?: number) =>
+                     formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
+                 })}
+               >
+                 <Download className="size-3 mr-2" /> Descargar
+               </Button>
+             )}
              {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
@@ -227,13 +378,12 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="col-span-2">
-                  <p className="text-[10px] text-muted-foreground mb-1">Número de Factura Físico (Opcional)</p>
+                  <p className="text-[10px] text-muted-foreground mb-1">Número de Factura</p>
                   <Input 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled
                     value={localDoc.number || ''} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, number: e.target.value })} 
                     className="h-8 text-xs font-black uppercase" 
-                    placeholder="Ej. F-0294" 
+                    placeholder="Se genera automáticamente" 
                   />
                 </div>
                 <div className="col-span-2">

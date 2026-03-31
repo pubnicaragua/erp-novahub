@@ -436,3 +436,99 @@ export const generatePurchaseOrderPDF = async ({
 
   doc.save(`${order.number || order.id || 'orden_compra'}.pdf`);
 };
+
+export const generateSupplierInvoicePDF = async ({
+  invoice,
+  tenantName,
+  formatAmount,
+}: {
+  invoice: any;
+  tenantName: string;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+}) => {
+  const doc = new jsPDF();
+  const primaryColor = [16, 185, 129] as [number, number, number];
+  const textColor = [51, 65, 85] as [number, number, number];
+
+  doc.setFontSize(20);
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(tenantName || 'Nova Hub', 14, 22);
+
+  doc.setFontSize(12);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Factura de Proveedor', 14, 30);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`N°: ${invoice.number || invoice.id || 'N/A'}`, 196, 22, { align: 'right' });
+  doc.text(`Emisión: ${invoice.date ? new Date(invoice.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
+  doc.text(`Vence: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'}`, 196, 34, { align: 'right' });
+
+  autoTable(doc, {
+    startY: 45,
+    head: [['Campo', 'Detalle']],
+    body: [
+      ['Proveedor', invoice.supplier?.name || '-'],
+      ['Estado', invoice.status || '-'],
+      ['Moneda', invoice.currency || '-'],
+      ['Notas', invoice.notes || '-'],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold' },
+    bodyStyles: { textColor },
+    columnStyles: { 0: { cellWidth: 50, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
+    styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak' },
+  });
+
+  const itemsRows = (invoice.items || []).map((item: any) => [
+    item.description || '-',
+    Number(item.quantity || 0).toString(),
+    formatAmount(Number(item.unitPrice || 0), invoice.currency, invoice.exchangeRate),
+    `${Number(item.taxRate || 0).toFixed(2)}%`,
+    formatAmount(Number(item.total || 0), invoice.currency, invoice.exchangeRate),
+  ]);
+
+  autoTable(doc, {
+    startY: ((doc as any).lastAutoTable?.finalY || 45) + 8,
+    head: [['Descripción', 'Cant.', 'Precio U.', 'Imp. %', 'Total']],
+    body: itemsRows.length > 0 ? itemsRows : [['-', '-', '-', '-', '-']],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { textColor, fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 'auto', halign: 'left' },
+      1: { cellWidth: 18, halign: 'right' },
+      2: { cellWidth: 30, halign: 'right' },
+      3: { cellWidth: 18, halign: 'right' },
+      4: { cellWidth: 30, halign: 'right' },
+    },
+    styles: { cellPadding: 3, overflow: 'linebreak' },
+  });
+
+  const baseY = ((doc as any).lastAutoTable?.finalY || 140) + 10;
+  const labelX = 140;
+  const valueX = 196;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Subtotal:', labelX, baseY);
+  doc.text(formatAmount(Number(invoice.subtotal || 0), invoice.currency, invoice.exchangeRate), valueX, baseY, { align: 'right' });
+  doc.text('Impuesto:', labelX, baseY + 7);
+  doc.text(formatAmount(Number(invoice.taxAmount || 0), invoice.currency, invoice.exchangeRate), valueX, baseY + 7, { align: 'right' });
+
+  doc.setDrawColor(226, 232, 240);
+  doc.line(labelX, baseY + 12, valueX, baseY + 12);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.text('TOTAL:', labelX, baseY + 18);
+  doc.text(formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate), valueX, baseY + 18, { align: 'right' });
+
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'italic');
+  doc.text(`Generado por ${tenantName} - Módulo de Compras`, 14, doc.internal.pageSize.height - 10);
+
+  doc.save(`${invoice.number || invoice.id || 'factura_proveedor'}.pdf`);
+};

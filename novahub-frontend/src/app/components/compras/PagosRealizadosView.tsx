@@ -69,6 +69,9 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
     (p.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const isSupplierActive = (supplierId?: string) =>
+    !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
+
   const columns: ColumnDef<PaymentMade>[] = [
     { key: 'reference', header: 'Referencia', width: '130px', editable: canPerform('compras', 'edit') },
     { key: 'supplier',  header: 'Proveedor',
@@ -93,6 +96,7 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
+    if (!isSupplierActive(localDoc.supplierId)) return toast.error('No se pueden registrar pagos a proveedores inactivos');
     
     try {
       if (editingId === 'NEW') {
@@ -109,7 +113,7 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
     }
   };
 
-  const currentBills = bills.filter(b => b.supplierId === localDoc?.supplierId && ['OPEN', 'DRAFT'].includes((b.status||'').toUpperCase()));
+  const currentBills = bills.filter(b => b.supplierId === localDoc?.supplierId && ['PENDING', 'PARTIAL'].includes((b.status||'').toUpperCase()));
 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';

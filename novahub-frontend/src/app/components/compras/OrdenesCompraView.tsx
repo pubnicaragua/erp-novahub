@@ -6,6 +6,7 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Switch } from '../ui/switch';
 import { Combobox } from '../ui/Combobox';
 import { purchaseOrdersService, suppliersService } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
@@ -54,16 +55,17 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
   useEffect(() => {
     if (editingId) {
       if (editingId === 'NEW') {
-         setLocalDoc({
-            supplierId: '',
-            date: new Date().toISOString(),
-            expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
-            currency: displayCurrency,
-            exchangeRate: globalRate,
-            status: 'DRAFT',
-            requestedBy: 'Admin',
-            address: '',
-            includeTax: true,
+             setLocalDoc({
+                supplierId: '',
+                date: new Date().toISOString(),
+                expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
+                currency: displayCurrency,
+                exchangeRate: globalRate,
+                status: 'DRAFT',
+                isService: false,
+                requestedBy: 'Admin',
+                address: '',
+                includeTax: true,
             taxRate: 15,
             withholdingRate: 0,
             items: [],
@@ -163,6 +165,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       total: Number(localDoc.total || 0),
       items: (localDoc.items || []).map((it: any) => ({
         ...it,
+        description: it.description || it.name || '',
         quantity: Number(it.quantity || 0),
         unitPrice: Number(it.unitPrice || 0),
         stock: it.stock === '' || it.stock === undefined || it.stock === null ? undefined : Number(it.stock),
@@ -268,6 +271,16 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     recalculateTotals(newItems);
   };
 
+  const handleServiceToggle = (checked: boolean) => {
+    if (!localDoc) return;
+    const updatedItems = (localDoc.items || []).map((item: any) => ({
+      ...item,
+      stockApplies: checked ? false : !!item.stockApplies,
+      stock: checked ? undefined : item.stock,
+    }));
+    setLocalDoc((prev) => prev ? { ...prev, isService: checked, items: updatedItems } : prev);
+  };
+
   const recalculateTotals = (items: any[], options?: { includeTax?: boolean; taxRate?: number; withholdingRate?: number }) => {
     const totals = calculateTotals(items, options);
     setLocalDoc(prev => ({ ...prev!, ...options, items, ...totals }));
@@ -295,6 +308,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       ['Fecha', doc.date ? new Date(doc.date).toLocaleDateString() : '-'],
       ['Entrega Esperada', doc.expectedDelivery ? new Date(doc.expectedDelivery).toLocaleDateString() : '-'],
       ['Moneda', doc.currency || 'NIO'],
+      ['Tipo OC', doc.isService ? 'Servicio' : 'Producto'],
       ['IVA Habilitado', doc.includeTax === false ? 'No' : 'Si'],
       ['IVA %', Number(doc.taxRate || 0)],
       ['Retencion IR %', Number(doc.withholdingRate || 0)],
@@ -434,6 +448,17 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                     <option value="USD">USD (Dolares)</option>
                   </select>
                 </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Tipo de OC</p>
+                  <div className="h-8 px-3 rounded-md border border-input bg-background flex items-center justify-between">
+                    <span className="text-xs font-bold">{localDoc.isService ? 'Servicio' : 'Producto'}</span>
+                    <Switch
+                      checked={!!localDoc.isService}
+                      onCheckedChange={handleServiceToggle}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    />
+                  </div>
+                </div>
                 <div className="col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Dirección</p>
                   <Input
@@ -537,7 +562,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Ítems de Orden</p>
               {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
                 <Button variant="outline" size="sm" onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, code: '', name: '', category: '', stockApplies: false, stock: undefined, quantity: 1, unitPrice: 0, total: 0 }];
+                  const isServiceOrder = !!localDoc.isService;
+                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, code: '', name: '', category: '', stockApplies: isServiceOrder ? false : false, stock: undefined, quantity: 1, unitPrice: 0, total: 0 }];
                   setLocalDoc({ ...localDoc, items: newItems as any });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                   <Plus className="size-3 mr-2" /> Agregar Item
@@ -553,7 +579,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div className="col-span-2 text-right">Stock</div>
                 <div className="col-span-1 text-right">Cant.</div>
                 <div className="col-span-1 text-right">Precio</div>
-                <div className="col-span-2 text-right">Total</div>
+                <div className="col-span-1 text-right">Total</div>
+                <div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
@@ -572,7 +599,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                       value={item.name || ''} 
                       onChange={(e) => handleItemChange(idx, 'name', e.target.value)} 
                       className="h-8 text-xs" 
-                      placeholder="Nombre del producto" 
+                      placeholder={localDoc.isService ? 'Nombre del servicio' : 'Nombre del producto'} 
                     />
                   </div>
                   <div className="col-span-2">
@@ -591,6 +618,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                           type="checkbox"
                           checked={!!item.stockApplies}
                           onChange={(e) => handleItemChange(idx, 'stockApplies', e.target.checked)}
+                          disabled={!!localDoc.isService || (isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit'))}
                         />
                         Stock
                       </label>
@@ -621,25 +649,22 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                       disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       type="number" 
                       min="0" 
-                      value={item.quantity === 0 ? '' : item.quantity} 
-                      onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} 
-                      className="h-8 text-xs text-right" 
-                      placeholder="0" 
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
-                      type="number" 
-                      min="0" 
                       value={item.unitPrice === 0 ? '' : item.unitPrice} 
                       onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
                       className="h-8 text-xs text-right" 
                       placeholder="0" 
                     />
                   </div>
-                  <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black w-20 text-right tabular-nums">${Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                  <div className="col-span-1">
+                    <Input 
+                      disabled
+                      type="number" 
+                      value={Number(item.total || 0)} 
+                      className="h-8 text-xs text-right bg-muted/20" 
+                      readOnly
+                    />
+                  </div>
+                  <div className="col-span-1 flex items-center justify-end gap-2">
                     {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
                       <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
                         <Trash2 className="size-3" />
