@@ -90,13 +90,17 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       toast.error('Complete nombre y email');
       return;
     }
+    if (!userForm.password || userForm.password.length < 10) {
+      toast.error('La contraseña es obligatoria y debe tener al menos 10 caracteres');
+      return;
+    }
     try {
       setUploading(true);
       await tenantsService.addUser({
         clientTenantId: tenant.id,
         name: userForm.name,
         email: userForm.email,
-        password: userForm.password || '123456',
+        password: userForm.password,
         role: userForm.role,
       });
       toast.success('Usuario agregado correctamente');
@@ -148,7 +152,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   };
 
   const isModulePending = (modId: string) => {
-    return requests.some((r: any) => r.requestedModule === modId && r.status === 'PENDING');
+    return requests.some((r: any) => r.clientTenantId === tenant.id && r.requestedModule === modId && r.status === 'PENDING');
   };
 
   return (
@@ -543,10 +547,15 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 </SelectContent>
               </Select>
             </div>
-            <div className="bg-amber-500/5 border border-amber-500/20 p-3 rounded-xl">
-              <p className="text-[10px] text-amber-600 font-bold leading-tight">
-                Nota: La contraseña temporal por defecto será "123456". El usuario deberá cambiarla al ingresar.
-              </p>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Contraseña Temporal *</Label>
+              <Input
+                type="password"
+                placeholder="Mínimo 10 caracteres"
+                value={userForm.password}
+                onChange={e => setUserForm({ ...userForm, password: e.target.value })}
+                className="bg-muted/10 h-11"
+              />
             </div>
           </div>
           <DialogFooter>

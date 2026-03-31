@@ -235,10 +235,18 @@ const ALL_TABS: TabDef[] = [
 // ---- Main Component ----
 export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: string }) {
   const { themeConfig, updateTheme, updateConfig, resetTheme } = useTheme();
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const { refreshRate: refreshCurrencyContext } = useCurrency();
   const scenario = getScenario(user?.role);
-  const visibleTabs = ALL_TABS.filter(t => t.scenario.includes(scenario));
+  const visibleTabs = ALL_TABS.filter(t => {
+    if (!t.scenario.includes(scenario)) return false;
+    if (t.id === 'roles' && !canPerform('roles', 'view')) return false;
+    return true;
+  });
+  const canViewRoles = canPerform('roles', 'view');
+  const canCreateRoles = canPerform('roles', 'create');
+  const canEditRoles = canPerform('roles', 'edit');
+  const canDeleteRoles = canPerform('roles', 'delete');
 
   // Hex state for the color pickers
   const [primaryHex, setPrimaryHex] = useState(() => oklchToApproxHex(themeConfig.colors.primary));
@@ -415,11 +423,11 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
 
   useEffect(() => {
-    if (user?.tenantId) {
+    if (user?.tenantId && canViewRoles) {
       fetchRoles();
-      fetchEnabledModules();
     }
-  }, [user?.tenantId]);
+    if (user?.tenantId) fetchEnabledModules();
+  }, [user?.tenantId, canViewRoles]);
 
   const fetchRoles = async () => {
     setIsLoadingRoles(true);
@@ -431,7 +439,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       console.log('[Config] Roles received:', rolesList.length);
       
       if (!user?.isPlatformAdmin) {
-        rolesList = rolesList.filter((r: any) => r.clientTenantId === user?.tenantId || r.isSystemRole);
+        rolesList = rolesList.filter((r: any) => r.clientTenantId === user?.tenantId);
       }
       
       setRoles(rolesList);
@@ -501,6 +509,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [editingRole, setEditingRole] = useState<Partial<RoleManagement> | null>(null);
 
   const handleCreateRole = () => {
+    if (!canCreateRoles) {
+      toast.error('No tienes permisos para crear roles');
+      return;
+    }
     setEditingRole({
       name: '',
       description: '',
@@ -516,6 +528,14 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const handleEditRole = (role: RoleManagement) => {
+    if (!canEditRoles) {
+      toast.error('No tienes permisos para editar roles');
+      return;
+    }
+    if (!user?.isPlatformAdmin && (role as any).clientTenantId && (role as any).clientTenantId !== user?.tenantId) {
+      toast.error('No puedes editar roles de otra empresa');
+      return;
+    }
     // Asegurar que el rol tenga todos los módulos actuales
     const currentPerms = role.permissions || [];
     const fullPerms = ALL_PERM_MODULES.map(m => {
@@ -545,6 +565,15 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const handleSaveRole = async () => {
+    const isEditing = !!editingRole?.id;
+    if (isEditing && !canEditRoles) {
+      toast.error('No tienes permisos para editar roles');
+      return;
+    }
+    if (!isEditing && !canCreateRoles) {
+      toast.error('No tienes permisos para crear roles');
+      return;
+    }
     if (!editingRole?.name) {
       toast.error('El nombre del rol es obligatorio');
       return;
@@ -868,7 +897,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     <CardTitle className="flex items-center gap-2 font-black"><ShieldCheck className="size-5 text-primary" />Gestión de Roles & Permisos</CardTitle>
                     <CardDescription>Define niveles de acceso por módulo para cada rol de usuario</CardDescription>
                   </div>
-                  <Button onClick={handleCreateRole} className="rounded-xl gap-2 font-black text-xs uppercase tracking-widest h-10">
+                  <Button onClick={handleCreateRole} disabled={!canCreateRoles} className="rounded-xl gap-2 font-black text-xs uppercase tracking-widest h-10">
                     <Plus className="size-4" />Nuevo Rol
                   </Button>
                 </div>
@@ -905,13 +934,17 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                               </div>
                             </div>
                             <div className="flex gap-1 transition-all relative z-20">
-                              <button onClick={() => handleEditRole(role)}
+                              <button onClick={() => handleEditRole(role)} disabled={!canEditRoles}
                                 className="size-7 rounded-lg bg-primary/10 hover:bg-primary/20 flex items-center justify-center text-primary transition-all">
                                 <Edit2 className="size-3.5" />
                               </button>
-                              {!['Administrador', 'Admin'].includes(role.name) && (
+                              {!['Administrador', 'Admin'].includes(role.name) && canDeleteRoles && (
                                 <button onClick={async () => {
                                   if (!confirm(`¿Eliminar el rol "${role.name}"?`)) return;
+                                  if (!user?.isPlatformAdmin && (role as any).clientTenantId && (role as any).clientTenantId !== user?.tenantId) {
+                                    toast.error('No puedes eliminar roles de otra empresa');
+                                    return;
+                                  }
                                   try { await rolesService.delete(role.id); toast.success('Rol eliminado'); fetchRoles(); }
                                   catch { toast.error('Error al eliminar rol'); }
                                 }} className="size-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 flex items-center justify-center text-rose-500 transition-all">
@@ -938,7 +971,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                             )}
                           </div>
 
-                          <button onClick={() => handleEditRole(role)}
+                          <button onClick={() => handleEditRole(role)} disabled={!canEditRoles}
                             className="w-full text-xs font-black uppercase tracking-widest py-2 rounded-xl border border-primary/20 text-primary hover:bg-primary/5 transition-all relative z-20">
                             Editar Permisos →
                           </button>
@@ -947,7 +980,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     })}
 
                     {/* Add New Role Card */}
-                    <button onClick={handleCreateRole}
+                    <button onClick={handleCreateRole} disabled={!canCreateRoles}
                       className="group flex flex-col items-center justify-center gap-3 p-5 rounded-2xl border-2 border-dashed border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all min-h-[200px]">
                       <div className="size-12 rounded-xl bg-muted/20 group-hover:bg-primary/10 flex items-center justify-center transition-all">
                         <Plus className="size-6 text-muted-foreground group-hover:text-primary transition-all" />
@@ -1041,13 +1074,13 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-center">
-                                <Switch checked={p.read} onCheckedChange={() => togglePermission(p.module, 'read')} />
+                                <Switch disabled={!canEditRoles} checked={p.read} onCheckedChange={() => togglePermission(p.module, 'read')} />
                               </td>
                               <td className="px-4 py-3 text-center">
-                                <Switch checked={p.write} onCheckedChange={() => togglePermission(p.module, 'write')} />
+                                <Switch disabled={!canEditRoles} checked={p.write} onCheckedChange={() => togglePermission(p.module, 'write')} />
                               </td>
                               <td className="px-4 py-3 text-center">
-                                <Switch checked={p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} />
+                                <Switch disabled={!canEditRoles} checked={p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} />
                               </td>
                             </tr>
                           );
@@ -1059,7 +1092,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               </div>
               <DialogFooter className="flex gap-3 p-6 border-t border-border/30 bg-muted/10 mt-0">
                 <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setIsRoleDialogOpen(false)}>Cancelar</Button>
-                <Button className="flex-1 rounded-xl gap-2 font-black" onClick={handleSaveRole}>
+                <Button disabled={!(editingRole?.id ? canEditRoles : canCreateRoles)} className="flex-1 rounded-xl gap-2 font-black" onClick={handleSaveRole}>
                   <Save className="size-4" />Guardar Rol
                 </Button>
               </DialogFooter>

@@ -168,12 +168,14 @@ export function SuscripcionesPage() {
         setCustomRoles(Array.isArray((rolesRes as any)?.data) ? (rolesRes as any).data : []);
       } else if (user?.isTenantAdmin) {
         const [reqs, myTenants, rolesRes] = await Promise.all([
-          subscriptionsService.getAllRequests(),
+          subscriptionsService.getAllRequests({ clientTenantId: user.tenantId } as any),
           tenantsService.getAll(),
           rolesService.getAll({ clientTenantId: user.tenantId })
         ]);
-        setRequests(reqs);
-        setTenants(myTenants);
+        const filteredRequests = (Array.isArray(reqs) ? reqs : []).filter((r: any) => r.clientTenantId === user.tenantId);
+        const filteredTenants = (Array.isArray(myTenants) ? myTenants : []).filter((t: any) => t.id === user.tenantId);
+        setRequests(filteredRequests);
+        setTenants(filteredTenants);
         setCustomRoles(Array.isArray(rolesRes) ? rolesRes : (rolesRes as any)?.data || []);
       }
     } catch (error) {
@@ -480,7 +482,7 @@ export function SuscripcionesPage() {
       <TenantSubscriptionView 
         tenant={myTenant} 
         availableModules={AVAILABLE_MODULES} 
-        requests={requests}
+        requests={requests.filter((r: any) => r.clientTenantId === user.tenantId)}
         customRoles={customRoles}
         onRefresh={fetchData}
         onRequestModule={(moduleId, notes) => {
@@ -981,7 +983,7 @@ export function SuscripcionesPage() {
               <Users className="size-5 text-blue-500" />
               Gestión de Usuarios: {selectedTenant?.name}
             </DialogTitle>
-            <DialogDescription>Administra usuarios, roles y accesos de esta empresa. Contraseña por defecto: 123456</DialogDescription>
+            <DialogDescription>Administra usuarios, roles y accesos de esta empresa.</DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             {tenantUsers.length > 0 ? tenantUsers.map((u: any) => (

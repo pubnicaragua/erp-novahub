@@ -42,11 +42,11 @@ export const subscriptionsService = {
   createRequest: (data: CreateSubscriptionRequestDto) => 
     api.post<SubscriptionRequest>('/subscriptions/request', data),
     
-  getAllRequests: () => 
-    api.get<SubscriptionRequest[]>('/subscriptions/requests'),
+  getAllRequests: (filters?: ApiFilters) => 
+    api.get<SubscriptionRequest[]>('/subscriptions/requests', filters as any),
     
-  getPartnerRequests: () => 
-    api.get<SubscriptionRequest[]>('/subscriptions/requests/partner'),
+  getPartnerRequests: (filters?: ApiFilters) => 
+    api.get<SubscriptionRequest[]>('/subscriptions/requests/partner', filters as any),
     
   updateRequestStatus: (id: string, data: UpdateSubscriptionStatusDto) => 
     api.patch<SubscriptionRequest>(`/subscriptions/requests/${id}/status`, data),
@@ -54,6 +54,6 @@ export const subscriptionsService = {
   toggleModuleStatus: (data: ToggleModuleStatusDto) =>
     api.patch('/subscriptions/module-status', data),
     
-  getEnabledModules: (clientTenantId: string) => 
-    api.get<string[]>(`/subscriptions/enabled/${clientTenantId}`),
+  getEnabledModules: (clientTenantId: string, filters?: ApiFilters) => 
+    api.get<string[]>(`/subscriptions/enabled/${clientTenantId}`, filters as any),
 };

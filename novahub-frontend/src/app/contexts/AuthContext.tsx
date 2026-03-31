@@ -137,11 +137,14 @@ const normalizeRole = (rawRole: string): Role => {
   return lowered as Role;
 };
 
-const createUserObject = (apiUser: any): User => {
-  const role = normalizeRole(apiUser.role);
+const createUserObject = (apiPayload: any): User => {
+  // Manejar el caso donde el backend devuelve { user: {...} } o { data: {...} }
+  const apiUser = apiPayload?.user || apiPayload?.data || apiPayload || {};
   
-  // Platform Admins: SuperAdmin, Partner
-  const isPlatformAdmin = ['superadmin', 'partner'].includes(role);
+  const role = normalizeRole(apiUser?.role);
+  
+  // Platform Admins: SuperAdmin, Partner, or DEV admin
+  const isPlatformAdmin = ['superadmin', 'partner'].includes(role) || apiUser?.id === 'admin-001';
   
   const moduleEnumMapInverse: Record<string, string> = {
     'SALES': 'ventas',
@@ -236,20 +239,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // Decode JWT payload to get userId
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const userId = payload.sub;
-        if (!userId) {
-          localStorage.removeItem('nh-auth-token');
-          setIsLoading(false);
-          return;
+        try {
+          const me = await api.get<any>('/auth/me');
+          setUser(createUserObject(me));
+        } catch {
+          // Backward compatibility with backends that still use switch-context for session restore.
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          const userId = payload.sub;
+          if (!userId) {
+            localStorage.removeItem('nh-auth-token');
+            setIsLoading(false);
+            return;
+          }
+          const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
+          localStorage.setItem('nh-auth-token', response.access_token);
+          setUser(createUserObject(response.user));
         }
-
-        // Re-authenticate using switch-context to get fresh user data
-        const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
-        localStorage.setItem('nh-auth-token', response.access_token);
-
-        setUser(createUserObject(response.user));
       } catch (error) {
         console.error('Error restoring session:', error);
         localStorage.removeItem('nh-auth-token');
@@ -392,6 +397,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const switchIdentity = useCallback(async (userId: string) => {
+    if (!(import.meta as any).env.DEV) {
+      console.warn('switchIdentity is disabled outside development');
+      return;
+    }
     try {
       const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
       localStorage.setItem('nh-auth-token', response.access_token);

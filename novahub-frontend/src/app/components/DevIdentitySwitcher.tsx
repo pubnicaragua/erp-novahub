@@ -16,7 +16,7 @@ export function DevIdentitySwitcher() {
     { id: 'client-demo-001', label: 'Cliente Demo (Full)', role: 'admin', icon: <User className="size-4" /> },
   ];
 
-  if (process.env.NODE_ENV === 'production') return null;
+  if (!import.meta.env.DEV) return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-[9999] flex flex-col items-end gap-2">

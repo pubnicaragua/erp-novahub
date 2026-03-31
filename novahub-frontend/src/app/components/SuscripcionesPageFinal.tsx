@@ -35,6 +35,7 @@ const AVAILABLE_MODULES = [
 
 export function SuscripcionesPageFinal() {
   const { user } = useAuth();
+  const isPlatformAdmin = !!user?.isPlatformAdmin;
   const [loading, setLoading] = useState(true);
   const [tenants, setTenants] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
@@ -57,6 +58,12 @@ export function SuscripcionesPageFinal() {
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
+    if (!isPlatformAdmin) {
+      setLoading(false);
+      setTenants([]);
+      setRequests([]);
+      return;
+    }
     try {
       setLoading(true);
       const [tenantsRes, requestsRes] = await Promise.all([
@@ -74,6 +81,10 @@ export function SuscripcionesPageFinal() {
   };
 
   const handleCreateTenant = async () => {
+    if (!isPlatformAdmin) return toast.error('No autorizado');
+    if (!tenantForm.adminPassword || tenantForm.adminPassword.length < 10) {
+      return toast.error('La contraseña del administrador es obligatoria y debe tener al menos 10 caracteres');
+    }
     try {
       const payload = {
         name: tenantForm.name,
@@ -83,7 +94,7 @@ export function SuscripcionesPageFinal() {
         adminUser: {
           name: tenantForm.adminName,
           email: tenantForm.adminEmail,
-          password: tenantForm.adminPassword || 'DefaultPass123!'
+          password: tenantForm.adminPassword
         }
       };
       await tenantsService.create(payload);
@@ -98,6 +109,7 @@ export function SuscripcionesPageFinal() {
   };
 
   const handleUpdateTenant = async () => {
+    if (!isPlatformAdmin) return toast.error('No autorizado');
     try {
       await tenantsService.update(selectedTenant.id, {
         name: tenantForm.name,
@@ -115,6 +127,7 @@ export function SuscripcionesPageFinal() {
   };
 
   const handleDeleteTenant = async (id: string, name: string) => {
+    if (!isPlatformAdmin) return toast.error('No autorizado');
     if (!confirm(`¿Eliminar empresa "${name}"? Esta acción no se puede deshacer.`)) return;
     try {
       await tenantsService.delete(id);
@@ -126,12 +139,16 @@ export function SuscripcionesPageFinal() {
   };
 
   const handleAddUser = async () => {
+    if (!isPlatformAdmin) return toast.error('No autorizado');
+    if (!userForm.password || userForm.password.length < 10) {
+      return toast.error('La contraseña es obligatoria y debe tener al menos 10 caracteres');
+    }
     try {
       const payload = {
         clientTenantId: selectedTenant.id,
         name: userForm.name,
         email: userForm.email,
-        password: userForm.password || 'DefaultPass123!',
+        password: userForm.password,
         role: userForm.role
       };
       await tenantsService.addUser(payload);
@@ -146,6 +163,7 @@ export function SuscripcionesPageFinal() {
   };
 
   const handleEnableModule = async () => {
+    if (!isPlatformAdmin) return toast.error('No autorizado');
     try {
       const payload = {
         clientTenantId: selectedTenant.id,
@@ -156,7 +174,7 @@ export function SuscripcionesPageFinal() {
       const request = await subscriptionsService.createRequest(payload);
       
       // Auto-approve if admin
-      if (user?.role === 'admin') {
+      if (isPlatformAdmin) {
         await subscriptionsService.updateRequestStatus(request.id, { status: 'APPROVED' });
         toast.success('Módulo activado exitosamente');
       } else {
@@ -173,6 +191,7 @@ export function SuscripcionesPageFinal() {
   };
 
   const handleApproveRequest = async (id: string) => {
+    if (!isPlatformAdmin) return toast.error('No autorizado');
     try {
       await subscriptionsService.updateRequestStatus(id, { status: 'APPROVED' });
       toast.success('Solicitud aprobada');
@@ -183,6 +202,7 @@ export function SuscripcionesPageFinal() {
   };
 
   const handleRejectRequest = async (id: string) => {
+    if (!isPlatformAdmin) return toast.error('No autorizado');
     try {
       await subscriptionsService.updateRequestStatus(id, { status: 'REJECTED' });
       toast.success('Solicitud rechazada');
@@ -236,6 +256,18 @@ export function SuscripcionesPageFinal() {
     { title: 'Solicitudes Pendientes', value: pendingRequests.length, icon: Clock, color: 'text-orange-600', bgColor: 'bg-orange-50 dark:bg-orange-950/30' },
     { title: 'Usuarios Totales', value: tenants.reduce((sum, t) => sum + (t.users?.length || 0), 0), icon: Users, color: 'text-purple-600', bgColor: 'bg-purple-50 dark:bg-purple-950/30' },
   ];
+
+  if (!isPlatformAdmin) {
+    return (
+      <div className="space-y-6 p-6">
+        <Card className="border-border/40">
+          <CardContent className="p-8 text-center">
+            <p className="text-sm text-muted-foreground">Vista restringida: solo administradores de plataforma.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -377,7 +409,7 @@ export function SuscripcionesPageFinal() {
                       </p>
                       {req.notes && <p className="text-sm text-muted-foreground mt-2 italic">"{req.notes}"</p>}
                     </div>
-                    {user?.role === 'admin' && req.status === 'PENDING' && (
+                    {isPlatformAdmin && req.status === 'PENDING' && (
                       <div className="flex items-center gap-2">
                         <Button size="sm" onClick={() => handleApproveRequest(req.id)} className="bg-emerald-600 hover:bg-emerald-700">
                           <CheckCircle2 className="size-4 mr-2" />Aprobar
@@ -461,7 +493,7 @@ export function SuscripcionesPageFinal() {
                     </div>
                     <div className="space-y-2">
                       <Label>Contraseña (opcional)</Label>
-                      <Input type="password" value={tenantForm.adminPassword} onChange={e => setTenantForm({...tenantForm, adminPassword: e.target.value})} placeholder="DefaultPass123! si se deja vacío" />
+                      <Input type="password" value={tenantForm.adminPassword} onChange={e => setTenantForm({...tenantForm, adminPassword: e.target.value})} placeholder="Requerida, mínimo 10 caracteres" />
                     </div>
                   </div>
                 </div>
@@ -538,7 +570,7 @@ export function SuscripcionesPageFinal() {
               <div className="space-y-3">
                 <Input placeholder="Nombre completo" value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} />
                 <Input type="email" placeholder="Email" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} />
-                <Input type="password" placeholder="Contraseña (opcional)" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} />
+                <Input type="password" placeholder="Contraseña temporal (mín. 10 caracteres)" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} />
                 <Select value={userForm.role} onValueChange={v => setUserForm({...userForm, role: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
