@@ -808,7 +808,10 @@ export function SuscripcionesPage() {
                             try {
                               const users = await tenantsService.getUsers(tenant.id);
                               setTenantUsers(Array.isArray(users) ? users : (users as any)?.data || []);
-                            } catch { setTenantUsers(tenant.users || []); }
+                            } catch (error: any) {
+                              setTenantUsers(tenant.users || []);
+                              toast.error(error?.message || 'No se pudieron cargar los usuarios del tenant');
+                            }
                           }}>
                           <Users className="size-5" />
                         </Button>
