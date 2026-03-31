@@ -23,16 +23,14 @@ export function OverviewDashboard({ onNavigate }: OverviewDashboardProps) {
     );
   }
 
-  // --- ADMIN ROLE ---
-  if (role === 'admin') {
+  // --- PLATFORM ADMIN ---
+  if (user.isPlatformAdmin) {
+    if (role === 'partner') {
+      return <PartnerDashboard onNavigate={onNavigate} />;
+    }
     return <AdminOverview />;
   }
 
-  // --- PARTNER ROLE ---
-  if (role === 'partner') {
-    return <PartnerDashboard onNavigate={onNavigate} />;
-  }
-
-  // --- TENANT ROLE (Default) ---
+  // --- TENANT ROLE (Default for admin, manager, employee, viewer) ---
   return <TenantOverview onNavigate={onNavigate} />;
 }

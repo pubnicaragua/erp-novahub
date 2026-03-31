@@ -140,8 +140,8 @@ const normalizeRole = (rawRole: string): Role => {
 const createUserObject = (apiUser: any): User => {
   const role = normalizeRole(apiUser.role);
   
-  // Platform Admins: SuperAdmin, Partner, or the specific DEV master admin ID
-  const isPlatformAdmin = ['superadmin', 'partner'].includes(role) || apiUser.id === 'admin-001';
+  // Platform Admins: SuperAdmin, Partner
+  const isPlatformAdmin = ['superadmin', 'partner'].includes(role);
   
   const moduleEnumMapInverse: Record<string, string> = {
     'SALES': 'ventas',
