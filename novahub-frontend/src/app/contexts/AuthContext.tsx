@@ -164,7 +164,19 @@ const createUserObject = (apiPayload: any): User => {
   };
 
   const defaultPermissions = getPermissionsByRole(role);
-  const serverPermissionsSnippet = apiUser.permissions || [];
+  
+  // Normalizar permisos del servidor: puede venir como objeto {moduleName: {read,write,delete}} o como array
+  const rawPerms = apiUser.permissions;
+  let serverPermissionsSnippet: any[] = [];
+  if (Array.isArray(rawPerms)) {
+    serverPermissionsSnippet = rawPerms;
+  } else if (rawPerms && typeof rawPerms === 'object') {
+    // Convertir objeto a array: { ventas: { read: true, write: true, delete: false } } => [{ module: 'ventas', read: true, ... }]
+    serverPermissionsSnippet = Object.entries(rawPerms).map(([key, val]: [string, any]) => ({
+      module: key,
+      ...(typeof val === 'object' ? val : {}),
+    }));
+  }
   
   // Mapeamos los permisos del servidor a la estructura del frontend
   const mergedPermissions = defaultPermissions.map(def => {
