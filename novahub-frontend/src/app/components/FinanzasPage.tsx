@@ -171,6 +171,10 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
   };
 
   const handleUpdateExpense = async (id: string, updates: any) => {
+    if (id.startsWith('pm-')) {
+      toast.error('Los pagos de facturas deben gestionarse desde el módulo de Compras');
+      return;
+    }
     await expensesService.update(id, updates);
     setExpenses(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
   };
@@ -395,6 +399,10 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
                     onUpdate={handleUpdateExpense}
                     onAdd={handleAddExpense}
                     onDelete={async (id) => {
+                      if (id.startsWith('pm-')) {
+                        toast.error('Los pagos de facturas no pueden eliminarse desde aquí. Use el módulo de Compras.');
+                        return;
+                      }
                       await expensesService.delete(id);
                       setExpenses(prev => prev.filter(e => e.id !== id));
                       toast.success('Gasto eliminado');

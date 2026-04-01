@@ -8,7 +8,6 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { billsService, suppliersService, purchaseOrdersService } from '../../services/compras.service';
-import { expensesService as financialExpensesService, accountsService } from '../../services/finanzas.service';
 import type { SupplierInvoice, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
@@ -107,71 +106,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
   const isPayingStatus = (status?: string) => ['PAID', 'PARTIAL'].includes((status || '').toUpperCase());
 
-  const ensureFinanceExpenseForInvoice = async (invoice: Partial<SupplierInvoice>) => {
-    try {
-      if (!invoice.id || !isPayingStatus(String(invoice.status || ''))) return;
-
-      const reference = `SUPPLIER_INVOICE:${invoice.id}`;
-      const existingExpenses = await financialExpensesService.getAll().catch(() => []);
-      const existingList = Array.isArray(existingExpenses)
-        ? existingExpenses
-        : ((existingExpenses as any)?.data || []);
-      const alreadyExists = (existingList || []).some(
-        (expense: any) => String(expense?.reference || '') === reference,
-      );
-      if (alreadyExists) return;
-
-      const supplierName =
-        invoice.supplier?.name ||
-        suppliers.find((s) => s.id === invoice.supplierId)?.name ||
-        'Proveedor';
-
-      const amount =
-        String(invoice.status || '').toUpperCase() === 'PARTIAL'
-          ? Number(invoice.amountPaid || invoice.total || 0)
-          : Number(invoice.total || 0);
-
-      if (amount <= 0) return;
-
-      const accountsResponse = await accountsService.getAll().catch(() => []);
-      const accountsList = Array.isArray(accountsResponse)
-        ? accountsResponse
-        : ((accountsResponse as any)?.data || []);
-      const activeAccounts = (accountsList || []).filter((acc: any) => acc?.isActive !== false);
-      let expenseAccount =
-        activeAccounts.find((acc: any) => String(acc?.type || '').toUpperCase() === 'EXPENSE') ||
-        activeAccounts.find((acc: any) => String(acc?.type || '').toUpperCase() === 'ASSET') ||
-        (accountsList || []).find((acc: any) => String(acc?.type || '').toUpperCase() === 'EXPENSE') ||
-        (accountsList || []).find((acc: any) => String(acc?.type || '').toUpperCase() === 'ASSET');
-
-      if (!expenseAccount) {
-        const suffix = Date.now().toString().slice(-6);
-        const createdAccountResponse = await accountsService.create({
-          code: `GAS-${suffix}`,
-          name: 'Gastos Generales',
-          type: 'expense' as any,
-        }).catch(() => null);
-        expenseAccount = (createdAccountResponse as any)?.data || createdAccountResponse;
-      }
-
-      await financialExpensesService.create({
-        accountId: expenseAccount?.id,
-        supplierId: invoice.supplierId,
-        date: invoice.date || new Date().toISOString(),
-        amount,
-        currency: invoice.currency || 'NIO',
-        exchangeRate: invoice.exchangeRate,
-        category: 'OTROS' as any,
-        description: `Pago factura proveedor ${invoice.number || invoice.id}`,
-        paidTo: supplierName,
-        paymentSource: 'EFECTIVO' as any,
-        reference,
-        status: 'PAID' as any,
-      });
-    } catch (error) {
-      console.error('Error sincronizando gasto financiero desde factura proveedor', error);
-      toast.error('Factura actualizada, pero no se pudo reflejar en Finanzas > Gastos');
-    }
+  const ensureFinanceExpenseForInvoice = async (_invoice: Partial<SupplierInvoice>) => {
+    return;
   };
 
   const columns: ColumnDef<SupplierInvoice>[] = [
@@ -200,7 +136,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     const statusToApply = (updates.status || currentInvoice?.status || '').toString();
     if (isPayingStatus(statusToApply) && currentInvoice?.supplierId && !isSupplierActive(currentInvoice.supplierId)) {
       toast.error('No se puede registrar pago en facturas de proveedores inactivos');
-      throw new Error('Inactive supplier cannot be paid');
+      return;
     }
     try {
       const updatedResponse = await billsService.update(id as string, updates);
@@ -250,6 +186,14 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         const payloadToSave: any = { ...localDoc };
         delete payloadToSave._sourceOrderId;
         delete payloadToSave._fromDraft;
+
+        if (payloadToSave.purchaseOrderId) {
+          const duplicateForOrder = data.some((inv) => inv.purchaseOrderId === payloadToSave.purchaseOrderId);
+          if (duplicateForOrder) {
+            return toast.error('Ya existe una factura para esta orden de compra');
+          }
+        }
+
         const createdResponse = await billsService.create({
           ...payloadToSave,
           number: payloadToSave.number || generateSupplierInvoiceNumber(),
@@ -266,13 +210,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         }
         
         toast.success('Factura creada exitosamente');
-        if (created?.id) {
-          setEditingId(created.id);
-          setLocalDoc(created);
-        } else {
-          setEditingId(null);
-          setLocalDoc(null);
-        }
+        setEditingId(null);
+        setLocalDoc(null);
       } else {
         const existingInvoice = data.find((x) => x.id === editingId);
         const previousStatus = String(existingInvoice?.status || '').toUpperCase();

@@ -10,7 +10,7 @@ import { Switch } from '../ui/switch';
 import { Combobox } from '../ui/Combobox';
 import { purchaseOrdersService, suppliersService } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
-import type { PurchaseOrder, Supplier } from '../../types';
+import type { PurchaseOrder, Supplier, SupplierInvoice } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -20,7 +20,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { generatePurchaseOrderPDF } from '../../utils/pdfGenerator';
 import { exportToCsv } from '../../utils/exportUtils';
 
-interface Props { data: PurchaseOrder[]; loading: boolean; onRefresh: () => void; onConvertToInvoice?: (draft: any) => void; }
+interface Props {
+  data: PurchaseOrder[];
+  loading: boolean;
+  onRefresh: () => void;
+  onConvertToInvoice?: (draft: any) => void;
+  supplierInvoices?: SupplierInvoice[];
+}
 
 const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
@@ -33,7 +39,7 @@ const statusOpts = [
   { label: 'Cancelada',  value: 'CANCELLED',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice }: Props) {
+export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice, supplierInvoices = [] }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -221,8 +227,19 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
 
   const handleConvertToInvoice = (order: Partial<PurchaseOrder>) => {
     if (!onConvertToInvoice) return;
+    const sourceOrderId = order.id;
+    const alreadyInvoiced = !!sourceOrderId && supplierInvoices.some((inv) => inv.purchaseOrderId === sourceOrderId);
+    if (alreadyInvoiced) {
+      toast.error('Esta orden de compra ya fue convertida en factura');
+      return;
+    }
+    if (String(order.status || '').toUpperCase() === 'RECEIVED') {
+      toast.error('Esta orden ya fue recibida y no puede volver a convertirse');
+      return;
+    }
     const draft = {
       supplierId: order.supplierId,
+      purchaseOrderId: order.id,
       date: new Date().toISOString(),
       dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
       currency: order.currency || 'NIO',
@@ -739,7 +756,16 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title="Convertir a Factura" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => handleConvertToInvoice(row)}><FileInput className="size-4" /></Button>
+              <Button
+                title="Convertir a Factura"
+                variant="ghost"
+                size="icon"
+                disabled={String(row.status || '').toUpperCase() === 'RECEIVED' || supplierInvoices.some((inv) => inv.purchaseOrderId === row.id)}
+                className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-50"
+                onClick={() => handleConvertToInvoice(row)}
+              >
+                <FileInput className="size-4" />
+              </Button>
               <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
               {canPerform('compras', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
