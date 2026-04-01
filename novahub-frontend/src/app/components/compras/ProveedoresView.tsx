@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown } from 'lucide-react';
+import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -152,6 +152,15 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
           actions={(row) => (
             <div className="flex gap-1">
               <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierForHistory(row)}><Eye className="size-4" /></Button>
+              <Button title="Recalcular Saldo" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={async () => {
+                try {
+                  const result = await suppliersService.recalculateBalance(row.id);
+                  toast.success(`Saldo recalculado: ${formatConvertedAmount(result.newBalance)}`);
+                  onRefresh();
+                } catch (e: any) {
+                  toast.error('Error al recalcular: ' + (e.response?.data?.message || e.message));
+                }
+              }}><RefreshCw className="size-4" /></Button>
               {canPerform('proveedores', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
               )}
