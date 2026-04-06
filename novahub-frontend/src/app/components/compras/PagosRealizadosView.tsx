@@ -18,18 +18,19 @@ interface Props {
   data: PaymentMade[];
   loading: boolean;
   onRefresh: () => void;
+  supplierInvoices?: SupplierInvoice[];
   draftPaymentFromInvoice?: Partial<PaymentMade> | null;
   onDraftConsumed?: () => void;
 }
 
 const methodOpts = [
-  { label: 'Transferencia', value: 'transfer' },
-  { label: 'Efectivo',      value: 'cash' },
-  { label: 'Cheque',        value: 'check' },
-  { label: 'Tarjeta',       value: 'card' },
+  { label: 'Transferencia', value: 'TRANSFER' },
+  { label: 'Efectivo',      value: 'CASH' },
+  { label: 'Cheque',        value: 'CHECK' },
+  { label: 'Tarjeta',       value: 'CARD' },
 ];
 
-export function PagosRealizadosView({ data, loading, onRefresh, draftPaymentFromInvoice, onDraftConsumed }: Props) {
+export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], draftPaymentFromInvoice, onDraftConsumed }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,13 +41,30 @@ export function PagosRealizadosView({ data, loading, onRefresh, draftPaymentFrom
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PaymentMade> | null>(null);
 
+  const normalizeMethod = (method?: string): 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER' => {
+    const normalized = String(method || 'TRANSFER').toUpperCase();
+    if (['CASH', 'TRANSFER', 'CHECK', 'CARD', 'OTHER'].includes(normalized)) {
+      return normalized as 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER';
+    }
+    return 'TRANSFER';
+  };
+
   useEffect(() => {
     suppliersService.getAll().then(res => {
       const list = Array.isArray(res) ? res : (res as any).data || [];
       setSuppliers(list);
     }).catch();
-    billsService.getAll().then(res => setBills(res.data || [])).catch();
+    billsService.getAll().then(res => {
+      const list = Array.isArray(res) ? res : (res as any).data || [];
+      setBills(list);
+    }).catch();
   }, []);
+
+  useEffect(() => {
+    if (supplierInvoices.length > 0) {
+      setBills(supplierInvoices);
+    }
+  }, [supplierInvoices]);
 
   useEffect(() => {
     if (draftPaymentFromInvoice) {
@@ -61,14 +79,14 @@ export function PagosRealizadosView({ data, loading, onRefresh, draftPaymentFrom
          setLocalDoc({
            supplierId: prefilled.supplierId || '',
            supplierInvoiceId: prefilled.supplierInvoiceId || '',
-           date: prefilled.date || new Date().toISOString(),
-           amount: Number(prefilled.amount || 0),
-           currency: displayCurrency,
-           exchangeRate: globalRate,
-           method: (prefilled.method as any) || 'transfer',
-           reference: prefilled.reference || `PAG-${Date.now().toString().slice(-5)}`,
-           notes: prefilled.notes || '',
-          });
+            date: prefilled.date || new Date().toISOString(),
+            amount: Number(prefilled.amount || 0),
+            currency: (prefilled.currency as any) || displayCurrency,
+            exchangeRate: prefilled.exchangeRate || globalRate,
+            method: normalizeMethod(prefilled.method as any),
+            reference: prefilled.reference || `PAG-${Date.now().toString().slice(-5)}`,
+            notes: prefilled.notes || '',
+           });
          if (draftPaymentFromInvoice && onDraftConsumed) onDraftConsumed();
        } else {
           const found = data.find(x => x.id === editingId);
@@ -79,14 +97,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, draftPaymentFrom
     }
   }, [editingId, data, globalRate, displayCurrency, draftPaymentFromInvoice, onDraftConsumed]);
 
-  useEffect(() => {
-    if (editingId === 'NEW') {
-      setLocalDoc((prev) => (prev ? { ...prev, currency: displayCurrency, exchangeRate: globalRate } : prev));
-    }
-  }, [displayCurrency, globalRate, editingId]);
-
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
-  const getMethodLabel = (method?: string) => methodOpts.find((opt) => opt.value === String(method || '').toLowerCase())?.label || method || '-';
+  const getMethodLabel = (method?: string) => methodOpts.find((opt) => opt.value === normalizeMethod(method))?.label || method || '-';
   const toExpensePayload = (payment: Partial<PaymentMade>, supplierName?: string) => ({
     number: payment.number || payment.reference || payment.id || `PAG-${Date.now().toString().slice(-5)}`,
     id: payment.id,
@@ -145,12 +157,67 @@ export function PagosRealizadosView({ data, loading, onRefresh, draftPaymentFrom
         </span>
       ) },
     { key: 'method',    header: 'Método',     width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: methodOpts,
-      render: (val) => { const o = methodOpts.find(x => x.value === (val||'').toLowerCase()); return <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{o?.label||val||'-'}</Badge>; } },
+      render: (val) => { const o = methodOpts.find(x => x.value === normalizeMethod(String(val || ''))); return <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{o?.label||val||'-'}</Badge>; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PaymentMade>) => {
-    try { await paymentsService.update(id as string, updates); toast.success('Pago actualizado'); onRefresh(); }
+    try {
+      const payload = { ...updates } as any;
+      if (payload.method) payload.method = normalizeMethod(payload.method);
+      await paymentsService.update(id as string, payload);
+      const updatedPayment = {
+        ...(data.find((p) => p.id === id) || {}),
+        ...payload,
+      } as Partial<PaymentMade>;
+      if (updatedPayment.supplierInvoiceId && Number(updatedPayment.amount || 0) > 0) {
+        await syncLinkedInvoiceStatus(updatedPayment, String(id));
+      }
+      toast.success('Pago actualizado');
+      onRefresh();
+    }
     catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
+  };
+
+  const syncLinkedInvoiceStatus = async (paymentDraft: Partial<PaymentMade>, paymentIdToUpsert?: string) => {
+    const invoiceId = String(paymentDraft.supplierInvoiceId || '');
+    if (!invoiceId) return;
+
+    const [invoiceResponse, paymentsResponse] = await Promise.all([
+      billsService.getById(invoiceId),
+      paymentsService.getAll(),
+    ]);
+    const invoice = (invoiceResponse as any)?.data || invoiceResponse;
+    const allPayments = ((paymentsResponse as any)?.data || []) as PaymentMade[];
+
+    const paymentsForInvoice = allPayments.filter((payment) => String(payment.supplierInvoiceId || '') === invoiceId);
+    const nextAmount = Number(paymentDraft.amount || 0);
+    const nextPaymentEntry = {
+      id: paymentIdToUpsert || `draft-${Date.now()}`,
+      supplierInvoiceId: invoiceId,
+      amount: nextAmount,
+    };
+
+    const mergedPayments = paymentIdToUpsert
+      ? (() => {
+          const replaced = paymentsForInvoice.map((payment) =>
+            String(payment.id) === String(paymentIdToUpsert) ? ({ ...payment, ...nextPaymentEntry } as any) : payment,
+          );
+          const exists = replaced.some((payment) => String(payment.id) === String(paymentIdToUpsert));
+          return exists ? replaced : [...replaced, nextPaymentEntry as any];
+        })()
+      : [...paymentsForInvoice, nextPaymentEntry as any];
+
+    const totalPaid = mergedPayments.reduce((acc, payment: any) => acc + Number(payment.amount || 0), 0);
+    const invoiceTotal = Number(invoice?.total || 0);
+    const nextAmountPaid = Math.min(invoiceTotal, totalPaid);
+    const nextBalance = Math.max(invoiceTotal - nextAmountPaid, 0);
+    const nextStatus = nextAmountPaid <= 0 ? 'PENDING' : nextBalance <= 0 ? 'PAID' : 'PARTIAL';
+
+    await billsService.update(invoiceId, {
+      amountPaid: nextAmountPaid,
+      balance: nextBalance,
+      status: nextStatus as any,
+    } as any);
   };
 
   const handleSaveDoc = async () => {
@@ -159,11 +226,33 @@ export function PagosRealizadosView({ data, loading, onRefresh, draftPaymentFrom
     if (!isSupplierActive(localDoc.supplierId)) return toast.error('No se pueden registrar pagos a proveedores inactivos');
     
     try {
+      const payload = {
+        ...localDoc,
+        method: normalizeMethod(localDoc.method as any),
+      } as any;
       if (editingId === 'NEW') {
-        await paymentsService.create(localDoc as any);
+        const created = await paymentsService.create(payload);
+        const createdPayment = (created as any)?.data || created;
+        if (payload.supplierInvoiceId) {
+          try {
+            await syncLinkedInvoiceStatus(
+              { ...payload, id: createdPayment?.id || createdPayment?.number },
+              String(createdPayment?.id || ''),
+            );
+          } catch (syncError: any) {
+            toast.warning(`Pago registrado, pero no se pudo actualizar estado de la factura: ${syncError?.message || 'Error de sincronización'}`);
+          }
+        }
         toast.success('Pago registrado exitosamente');
       } else {
-        await paymentsService.update(editingId!, localDoc as any);
+        await paymentsService.update(editingId!, payload);
+        if (payload.supplierInvoiceId) {
+          try {
+            await syncLinkedInvoiceStatus({ ...payload, id: editingId }, String(editingId));
+          } catch (syncError: any) {
+            toast.warning(`Pago guardado, pero no se pudo actualizar estado de la factura: ${syncError?.message || 'Error de sincronización'}`);
+          }
+        }
         toast.success('Pago guardado');
       }
       setEditingId(null);
@@ -173,7 +262,12 @@ export function PagosRealizadosView({ data, loading, onRefresh, draftPaymentFrom
     }
   };
 
-  const currentBills = bills.filter(b => b.supplierId === localDoc?.supplierId && ['PENDING', 'PARTIAL'].includes((b.status||'').toUpperCase()));
+  const currentBills = bills.filter((b) => {
+    if (!localDoc?.supplierId) return false;
+    const sameSupplier = String(b.supplierId || '') === String(localDoc.supplierId || '');
+    const isOpen = ['PENDING', 'PARTIAL'].includes(String(b.status || '').toUpperCase());
+    return sameSupplier && isOpen;
+  });
 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
@@ -249,7 +343,13 @@ export function PagosRealizadosView({ data, loading, onRefresh, draftPaymentFrom
                       value={localDoc.supplierInvoiceId || ''}
                       onChange={(val) => {
                           const b = currentBills.find(x => x.id === val);
-                          setLocalDoc({ ...localDoc, supplierInvoiceId: val, amount: b ? b.total : localDoc.amount });
+                          setLocalDoc({
+                            ...localDoc,
+                            supplierInvoiceId: val,
+                            amount: b ? b.total : localDoc.amount,
+                            currency: (b?.currency as any) || localDoc.currency || displayCurrency,
+                            exchangeRate: b?.exchangeRate || localDoc.exchangeRate || globalRate,
+                          });
                       }}
                       placeholder={localDoc.supplierId ? "Seleccionar factura abierta" : "Primero seleccione un proveedor"}
                       emptyMessage="No hay facturas abiertas para este proveedor."
@@ -269,7 +369,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, draftPaymentFrom
                     <p className="text-[10px] text-muted-foreground mb-1">Método de Pago</p>
                     <select 
                       disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
-                      value={localDoc.method || 'transfer'} 
+                      value={normalizeMethod(localDoc.method as any)} 
                       onChange={(e) => setLocalDoc({ ...localDoc, method: e.target.value as any })}
                       className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs uppercase"
                     >
@@ -310,12 +410,12 @@ export function PagosRealizadosView({ data, loading, onRefresh, draftPaymentFrom
                       <p className="text-[10px] text-muted-foreground mb-1">Moneda de Pago</p>
                         <select 
                           disabled
-                          value={displayCurrency}
+                          value={localDoc.currency || displayCurrency}
                           onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
                           className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
                         >
-                        <option value={displayCurrency}>{displayCurrency}</option>
-                       </select>
+                        <option value={localDoc.currency || displayCurrency}>{localDoc.currency || displayCurrency}</option>
+                        </select>
                     </div>
                    <div className="w-1/2 flex flex-col items-end">
                       <p className="text-[10px] text-muted-foreground mb-1">Monto de Salida</p>

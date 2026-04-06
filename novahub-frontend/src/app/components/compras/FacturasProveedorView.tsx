@@ -150,7 +150,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         amount,
         currency: (invoice.currency as any) || displayCurrency,
         exchangeRate: invoice.exchangeRate || globalRate,
-        method: 'transfer',
+        method: 'TRANSFER',
         reference: syncReference,
         notes: `Pago automático por factura ${invoice.number || invoice.id}`,
       } as any);
@@ -353,7 +353,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       amount: getBillPaymentAmount(localDoc),
       currency: (localDoc.currency as any) || displayCurrency,
       exchangeRate: localDoc.exchangeRate || globalRate,
-      method: 'transfer',
+      method: 'TRANSFER',
       reference: `PAG-${(localDoc.number || localDoc.id || '').toString().replace(/[^A-Za-z0-9-]/g, '').slice(0, 20)}`,
       notes: `Pago de factura proveedor ${localDoc.number || localDoc.id || ''}`.trim(),
     };
@@ -661,7 +661,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     amount: getBillPaymentAmount(row),
                     currency: row.currency || displayCurrency,
                     exchangeRate: row.exchangeRate || globalRate,
-                    method: 'transfer',
+                    method: 'TRANSFER',
                     reference: `PAG-${(row.number || row.id || '').toString().replace(/[^A-Za-z0-9-]/g, '').slice(0, 20)}`,
                     notes: `Pago de factura proveedor ${row.number || row.id || ''}`.trim(),
                   })}

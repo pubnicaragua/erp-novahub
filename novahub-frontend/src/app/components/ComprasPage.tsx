@@ -212,12 +212,13 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
                    )}
                    {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} data={data.facturasRec} />}
                    {section.id === 'pagos'         && (
-                     <PagosRealizadosView
-                       {...commonProps}
-                       data={data.pagos}
-                       draftPaymentFromInvoice={draftPaymentFromInvoice}
-                       onDraftConsumed={() => setDraftPaymentFromInvoice(null)}
-                     />
+                    <PagosRealizadosView
+                      {...commonProps}
+                      data={data.pagos}
+                      supplierInvoices={data.facturasProv}
+                      draftPaymentFromInvoice={draftPaymentFromInvoice}
+                      onDraftConsumed={() => setDraftPaymentFromInvoice(null)}
+                    />
                    )}
                    {section.id === 'creditos'      && <CreditosProveedorView {...commonProps} data={data.creditos} />}
                  </motion.div>
