@@ -210,6 +210,8 @@ export interface RecurringInvoice {
   exchangeRate?: number;
   baseTotal?: number;
   status: 'active' | 'paused' | 'expired' | 'cancelled';
+  sourceRecurringExpenseId?: string;
+  sourceRecurringExpenseRef?: string;
   items: RecurringInvoiceItem[];
   createdAt: string;
   updatedAt: string;
@@ -220,8 +222,10 @@ export type RecurringInvoiceStatus = 'active' | 'paused' | 'expired' | 'cancelle
 export interface RecurringInvoiceItem {
   id: string;
   recurringInvoiceId: string;
+  itemType?: 'product' | 'service' | 'PRODUCT' | 'SERVICE';
   productId?: string;
   description: string;
+  serviceName?: string;
   quantity: number;
   unitPrice: number;
   taxRate: number;
