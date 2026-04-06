@@ -28,10 +28,15 @@ interface EditingProduct {
   salePrice: number;
   costPrice: number;
   initialStock?: number;
+  initialAllocations?: Array<{
+    id: string;
+    warehouseId: string;
+    quantity: number;
+  }>;
   isNew?: boolean;
 }
 
-export function ProductosView({ products, categories, onRefresh }: ProductosViewProps) {
+export function ProductosView({ products, categories, warehouses = [], onRefresh }: ProductosViewProps) {
   const { formatAmount } = useCurrency();
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -71,6 +76,7 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
       salePrice: 0,
       costPrice: 0,
       initialStock: 0,
+      initialAllocations: [{ id: `alloc-${Date.now()}`, warehouseId: '', quantity: 0 }],
       isNew: true,
     };
     setEditingRows(new Map(editingRows.set(tempId, newProduct)));
@@ -107,6 +113,38 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
     }
   };
 
+  const updateInitialAllocation = (
+    productId: string,
+    allocationId: string,
+    patch: Partial<{ warehouseId: string; quantity: number }>,
+  ) => {
+    const product = editingRows.get(productId);
+    if (!product || !product.isNew) return;
+    const nextAllocations = (product.initialAllocations || []).map((item) =>
+      item.id === allocationId ? { ...item, ...patch } : item,
+    );
+    setEditingRows(new Map(editingRows.set(productId, { ...product, initialAllocations: nextAllocations })));
+  };
+
+  const addInitialAllocation = (productId: string) => {
+    const product = editingRows.get(productId);
+    if (!product || !product.isNew) return;
+    const next = [
+      ...(product.initialAllocations || []),
+      { id: `alloc-${Date.now()}-${(product.initialAllocations || []).length}`, warehouseId: '', quantity: 0 },
+    ];
+    setEditingRows(new Map(editingRows.set(productId, { ...product, initialAllocations: next })));
+  };
+
+  const removeInitialAllocation = (productId: string, allocationId: string) => {
+    const product = editingRows.get(productId);
+    if (!product || !product.isNew) return;
+    const current = product.initialAllocations || [];
+    if (current.length <= 1) return;
+    const next = current.filter((item) => item.id !== allocationId);
+    setEditingRows(new Map(editingRows.set(productId, { ...product, initialAllocations: next })));
+  };
+
   const handleSaveRow = async (id: string) => {
     const product = editingRows.get(id);
     if (!product) return;
@@ -119,14 +157,44 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
     setSavingIds(new Set(savingIds.add(id)));
     try {
       if (product.isNew) {
-        await inventoryService.createProduct({
+        const validAllocations = (product.initialAllocations || []).filter(
+          (item) => item.warehouseId && Number(item.quantity || 0) > 0,
+        );
+        const initialStock = validAllocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
+        const uniqueWarehouses = new Set(validAllocations.map((item) => item.warehouseId));
+
+        if (initialStock > 0 && warehouses.length === 0) {
+          toast.error('No hay bodegas registradas para asignar stock inicial');
+          return;
+        }
+        if (initialStock > 0 && uniqueWarehouses.size !== validAllocations.length) {
+          toast.error('No repitas la misma bodega en la distribución inicial');
+          return;
+        }
+
+        const createdResponse = await inventoryService.createProduct({
           code: product.code,
           name: product.name,
           categoryId: product.categoryId,
           salePrice: product.salePrice,
           costPrice: product.costPrice,
-          initialStock: product.initialStock || 0,
+          initialStock: 0,
         });
+        const created = (createdResponse as any)?.data || createdResponse;
+        const createdId = created?.id;
+        if (initialStock > 0 && createdId) {
+          await Promise.all(
+            validAllocations.map((item) =>
+              inventoryService.createMovement({
+                productId: createdId,
+                warehouseId: item.warehouseId,
+                type: 'IN',
+                quantity: Number(item.quantity || 0),
+                reference: `STOCK-INICIAL-${created.code || createdId}`,
+              }),
+            ),
+          );
+        }
         toast.success('Producto creado');
       } else {
         await inventoryService.updateProduct(id, {
@@ -239,17 +307,69 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
           </Select>
         </TableCell>
         <TableCell className="text-right">
-          {product.isNew ? (
-            <Input
-              type="number"
-              value={product.initialStock}
-              onChange={(e) => handleUpdateField(product.id, 'initialStock', parseInt(e.target.value) || 0)}
-              onKeyDown={(e) => handleKeyDown(e, product.id)}
-              className="h-8 text-xs text-right w-20"
-              placeholder="Stock"
-              disabled={isSaving}
-            />
-          ) : (
+          {product.isNew ? (() => {
+            const allocations = product.initialAllocations || [];
+            const totalAllocated = allocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
+            return (
+              <div className="space-y-2">
+                <div className="flex flex-col items-end gap-1.5">
+                  {allocations.map((alloc) => (
+                    <div key={alloc.id} className="flex items-center gap-1.5 bg-muted/30 rounded-lg px-2 py-1">
+                      <Select
+                        value={alloc.warehouseId || ''}
+                        onValueChange={(v) => updateInitialAllocation(product.id, alloc.id, { warehouseId: v })}
+                        disabled={isSaving}
+                      >
+                        <SelectTrigger className="h-7 text-xs min-w-[120px] border-none bg-transparent shadow-none px-1">
+                          <SelectValue placeholder="Bodega..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {warehouses.map((w: any) => (
+                            <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={alloc.quantity}
+                        onChange={(e) => updateInitialAllocation(product.id, alloc.id, { quantity: Math.max(0, parseInt(e.target.value) || 0) })}
+                        className="h-7 text-xs text-right w-16 border-none bg-transparent shadow-none"
+                        placeholder="0"
+                        disabled={isSaving}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-6 text-red-500/60 hover:text-red-500 hover:bg-red-500/10 rounded-md"
+                        onClick={() => removeInitialAllocation(product.id, alloc.id)}
+                        disabled={isSaving || allocations.length <= 1}
+                      >
+                        <Trash2 className="size-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[9px] uppercase tracking-wider text-muted-foreground hover:text-primary px-2"
+                    onClick={() => addInitialAllocation(product.id)}
+                    disabled={isSaving}
+                  >
+                    <Plus className="size-3 mr-1" />
+                    Bodega
+                  </Button>
+                  <Badge className={`text-[10px] tabular-nums ${totalAllocated > 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/20 text-muted-foreground'}`}>
+                    Total: {totalAllocated}
+                  </Badge>
+                </div>
+              </div>
+            );
+          })() : (
             <span className="text-xs text-muted-foreground">-</span>
           )}
         </TableCell>
