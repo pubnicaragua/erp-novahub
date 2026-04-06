@@ -4,8 +4,10 @@ import { Event } from '../../types';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Plus, Search, Calendar, CalendarCheck, CalendarDays, Users } from 'lucide-react';
+import { Plus, Search, CalendarDays, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 import { eventsService } from '../../services/actividades.service';
+import { incomeService, expensesService, accountsService } from '../../services/finanzas.service';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
@@ -18,32 +20,80 @@ interface EventosViewProps {
 
 export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [defaultAccountId, setDefaultAccountId] = useState<string>('');
+  const { formatAmount, currency } = useCurrency();
+
+  React.useEffect(() => {
+    accountsService.getAll().then((res: any) => {
+      const list = Array.isArray(res) ? res : res.data;
+      if (list && list.length > 0) setDefaultAccountId(list[0].id);
+    }).catch(e => console.error('Error fetching accounts', e));
+  }, []);
 
   const columns: ColumnDef<Event>[] = [
-    { key: 'title', header: 'Evento', width: '30%', editable: true },
-    { key: 'description', header: 'Descripción', width: '30%', editable: true },
+    { key: 'title', header: 'Título', width: '25%', editable: true },
     { key: 'location', header: 'Ubicación', width: '20%', editable: true },
-    { key: 'startDate', header: 'Fecha Inicio', width: '140px', editable: true, type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, yyyy HH:mm') : '-' },
-    { key: 'endDate', header: 'Fecha Fin', width: '140px', editable: true, type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, yyyy HH:mm') : '-' },
+    { key: 'startDate', header: 'Fecha Inicio', width: '130px', editable: true, type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
+    { key: 'endDate', header: 'Fecha Fin', width: '130px', editable: true, type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
+    { key: 'cost', header: 'Costo', width: '100px', editable: true, type: 'number', render: (val: any) => <span className="text-rose-500 font-bold">{val ? formatAmount(Number(val)) : formatAmount(0)}</span> },
+    { key: 'income', header: 'Ingreso', width: '100px', editable: true, type: 'number', render: (val: any) => <span className="text-emerald-500 font-bold">{val ? formatAmount(Number(val)) : formatAmount(0)}</span> },
+    { key: 'balance', header: 'Balance', width: '100px', render: (_: any, row: Event) => {
+        const balance = (Number(row.income) || 0) - (Number(row.cost) || 0);
+        return <span className={cn("font-black text-[11px] px-2 py-0.5 rounded-md", balance >= 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500")}>{formatAmount(balance)}</span>;
+      }
+    },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Event>) => {
-    try { await eventsService.update(id as string, updates); toast.success('Evento actualizado'); onRefresh(); }
-    catch { toast.error('Error al actualizar evento'); }
+    try { 
+      const event = data.find(e => e.id === id);
+      if (!event) return;
+
+      if (updates.cost !== undefined && updates.cost > 0) {
+        if (event.expenseId) {
+          await expensesService.update(event.expenseId, { amount: Number(updates.cost), currency });
+        } else if (defaultAccountId) {
+          const expense = await expensesService.create({ amount: Number(updates.cost), date: new Date().toISOString(), currency, category: 'OPERACIONES', description: `Gasto de evento: ${updates.title || event.title}`, accountId: defaultAccountId });
+          if(expense) updates.expenseId = expense.id;
+        } else {
+          toast.warning('No se pudo enviar Gasto a Finanzas: no tienes cuentas bancarias configuradas.');
+        }
+      }
+
+      if (updates.income !== undefined && updates.income > 0) {
+        if (event.incomeId) {
+          await incomeService.update(event.incomeId, { amount: Number(updates.income), currency });
+        } else if (defaultAccountId) {
+          const inc = await incomeService.create({ amount: Number(updates.income), date: new Date().toISOString(), currency, category: 'EVENTOS', description: `Ingreso de evento: ${updates.title || event.title}`, accountId: defaultAccountId });
+          if(inc) updates.incomeId = inc.id;
+        } else {
+          toast.warning('No se pudo enviar Ingreso a Finanzas: no tienes cuentas bancarias configuradas.');
+        }
+      }
+
+      await eventsService.update(id as string, updates); 
+      toast.success('Evento actualizado en Base de Datos'); 
+      onRefresh(); 
+    }
+    catch (e) { toast.error('Error de integración con Finanzas'); console.error(e); }
   };
 
   const handleAdd = async () => {
     try {
-      await eventsService.create({ title: 'Nuevo Evento', startDate: new Date().toISOString(), endDate: new Date(Date.now() + 3600000).toISOString() });
+      await eventsService.create({ title: 'Nuevo Evento', startDate: new Date().toISOString(), endDate: new Date(Date.now() + 3600000).toISOString(), cost: 0, income: 0 });
       toast.success('Evento creado'); onRefresh();
     } catch { toast.error('Error al crear evento'); }
   };
 
+  const totalIncome = data.reduce((acc, row) => acc + (Number(row.income) || 0), 0);
+  const totalCost = data.reduce((acc, row) => acc + (Number(row.cost) || 0), 0);
+  const totalBalance = totalIncome - totalCost;
+
   const kpis = [
-    { title: 'Total Eventos',   value: data.length,                                                                                                     icon: CalendarDays,  color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Próximos 7 Días', value: data.filter(e => new Date(e.startDate) > new Date() && new Date(e.startDate) < new Date(Date.now() + 7*86400000)).length, icon: Calendar,      color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
-    { title: 'Completados',     value: data.filter(e => new Date(e.endDate) < new Date()).length,                                                       icon: CalendarCheck, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Con Invitados',   value: data.filter(e => e.attendees && e.attendees.length > 0).length,                                                  icon: Users,         color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
+    { title: 'Total Eventos', value: data.length, icon: CalendarDays, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { title: 'Ingresos Totales', value: formatAmount(totalIncome), icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Costos Totales', value: formatAmount(totalCost), icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+    { title: 'Balance General', value: formatAmount(totalBalance), icon: DollarSign, color: totalBalance >= 0 ? 'text-emerald-500' : 'text-rose-500', bg: totalBalance >= 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10' },
   ];
 
   const filtered = data.filter(e => e.title?.toLowerCase().includes(searchTerm.toLowerCase()) || e.location?.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -66,7 +116,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
           <div><h2 className="text-xl font-black uppercase tracking-tight">Eventos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Calendario y reuniones</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Evento</Button>
+            <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Evento</Button>
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} onRowDelete={async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } }} />

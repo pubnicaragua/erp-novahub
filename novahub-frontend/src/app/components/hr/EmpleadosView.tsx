@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Upload } from 'lucide-react';
+import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Upload, Building2, Briefcase, Phone } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../ui/dialog';
+import { Label } from '../ui/label';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -17,15 +19,52 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
   const [editData, setEditData] = useState<any>({});
   const [newRows, setNewRows] = useState<any[]>([]);
 
+  const [showNewDeptModal, setShowNewDeptModal] = useState(false);
+  const [showNewPosModal, setShowNewPosModal] = useState(false);
+  const [newDeptName, setNewDeptName] = useState('');
+  const [newPosTitle, setNewPosTitle] = useState('');
+  const [newPosDeptId, setNewPosDeptId] = useState('');
+
   const filteredEmployees = employees.filter((emp: any) => {
-    const matchesSearch = emp.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.employeeNumber.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = !term ||
+      emp.firstName?.toLowerCase().includes(term) ||
+      emp.lastName?.toLowerCase().includes(term) ||
+      emp.email?.toLowerCase().includes(term) ||
+      emp.employeeNumber?.toLowerCase().includes(term) ||
+      emp.phone?.toLowerCase().includes(term) ||
+      emp.department?.name?.toLowerCase().includes(term) ||
+      emp.position?.title?.toLowerCase().includes(term);
     const matchesDept = filterDept === 'all' || emp.departmentId === filterDept;
     const matchesStatus = filterStatus === 'all' || emp.employmentStatus === filterStatus;
     return matchesSearch && matchesDept && matchesStatus;
   });
+
+  const handleCreateDepartment = async () => {
+    if (!newDeptName.trim()) { toast.error('Ingresa un nombre'); return; }
+    try {
+      const code = newDeptName.trim().replace(/\s+/g, '').substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 10000);
+      await hrService.createDepartment({ name: newDeptName.trim(), code });
+      toast.success('Departamento creado');
+      setNewDeptName('');
+      setShowNewDeptModal(false);
+      onRefresh();
+    } catch { toast.error('Error al crear departamento'); }
+  };
+
+  const handleCreatePosition = async () => {
+    if (!newPosTitle.trim()) { toast.error('Ingresa un título'); return; }
+    if (!newPosDeptId) { toast.error('Selecciona un departamento'); return; }
+    try {
+      const code = newPosTitle.trim().replace(/\s+/g, '').substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 10000);
+      await hrService.createPosition({ title: newPosTitle.trim(), departmentId: newPosDeptId, code });
+      toast.success('Puesto creado');
+      setNewPosTitle('');
+      setNewPosDeptId('');
+      setShowNewPosModal(false);
+      onRefresh();
+    } catch { toast.error('Error al crear puesto'); }
+  };
 
   const handleEdit = (emp: any) => {
     setEditingId(emp.id);
@@ -33,13 +72,48 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
   };
 
   const handleSave = async (id: string) => {
+    // Validación básica de campos
+    if (!editData.employeeNumber?.trim()) {
+      toast.error('El número de empleado es obligatorio');
+      return;
+    }
+
+    if (!editData.firstName?.trim() || !editData.lastName?.trim()) {
+      toast.error('El nombre y apellido son obligatorios');
+      return;
+    }
+
+    if (!editData.email?.trim()) {
+      toast.error('El correo electrónico es obligatorio');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(editData.email)) {
+      toast.error('El formato del correo electrónico no es válido');
+      return;
+    }
+
     try {
-      await hrService.updateEmployee(id, editData);
-      toast.success('Empleado actualizado');
+      // Sanitizar datos antes de enviar
+      const sanitizedData = {
+        ...editData,
+        employeeNumber: editData.employeeNumber.trim(),
+        firstName: editData.firstName.trim(),
+        lastName: editData.lastName.trim(),
+        email: editData.email.trim(),
+        phone: editData.phone?.trim() || null,
+        salary: isNaN(editData.salary) ? 0 : Number(editData.salary),
+        currency: editData.currency || 'NIO',
+      };
+
+      await hrService.updateEmployee(id, sanitizedData);
+      toast.success('Empleado actualizado correctamente');
       setEditingId(null);
       onRefresh();
-    } catch (error) {
-      toast.error('Error al actualizar empleado');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Error al actualizar empleado';
+      toast.error(Array.isArray(msg) ? msg[0] : msg);
     }
   };
 
@@ -67,6 +141,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
       positionId: positions[0]?.id || '',
       contractType: 'FULL_TIME',
       salary: 0,
+      currency: 'NIO',
       employmentStatus: 'ACTIVE',
     };
     setNewRows([...newRows, newRow]);
@@ -76,8 +151,25 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
     const row = newRows.find(r => r.tempId === tempId);
     if (!row) return;
 
-    if (!row.firstName || !row.lastName || !row.email) {
-      toast.error('Completa los campos requeridos');
+    // Validación básica de campos
+    if (!row.employeeNumber?.trim()) {
+      toast.error('El número de empleado es obligatorio');
+      return;
+    }
+
+    if (!row.firstName?.trim() || !row.lastName?.trim()) {
+      toast.error('El nombre y apellido son obligatorios');
+      return;
+    }
+
+    if (!row.email?.trim()) {
+      toast.error('El correo electrónico es obligatorio');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(row.email)) {
+      toast.error('El formato del correo electrónico no es válido');
       return;
     }
 
@@ -87,11 +179,23 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
     }
 
     try {
-      // Remove frontend-only fields before sending to API
-      const { tempId: _, employmentStatus, ...employeeData } = row;
-      const currency = displayCurrency === 'USD' ? 'USD' : 'NIO';
-      await hrService.createEmployee({ ...employeeData, currency });
-      toast.success('Empleado creado');
+      // Limpiar datos y asegurar tipos correctos
+      const employeeData = {
+        employeeNumber: row.employeeNumber.trim(),
+        firstName: row.firstName.trim(),
+        lastName: row.lastName.trim(),
+        email: row.email.trim(),
+        phone: row.phone?.trim() || null,
+        departmentId: row.departmentId,
+        positionId: row.positionId,
+        salary: isNaN(row.salary) ? 0 : Number(row.salary),
+        currency: row.currency || 'NIO',
+        hireDate: row.hireDate || new Date().toISOString().split('T')[0],
+        contractType: row.contractType || 'FULL_TIME',
+      };
+
+      await hrService.createEmployee(employeeData);
+      toast.success('Empleado creado correctamente');
       setNewRows(newRows.filter(r => r.tempId !== tempId));
       onRefresh();
     } catch (error: any) {
@@ -150,7 +254,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
           <Button variant="outline" size="sm" onClick={() => setViewMode(viewMode === 'table' ? 'cards' : 'table')}>
             {viewMode === 'table' ? <Grid className="size-4" /> : <List className="size-4" />}
           </Button>
-          <Button size="sm" onClick={handleAddRow} className="bg-indigo-600 hover:bg-indigo-700 !text-white">
+          <Button size="sm" onClick={handleAddRow} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
             <Plus className="size-4 mr-2" />
             Agregar Empleado
           </Button>
@@ -167,6 +271,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                   <th className="px-4 py-3 text-left text-xs font-semibold">Número</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold">Nombre</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold">Email</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold">Teléfono</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold">Departamento</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold">Puesto</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold">Salario</th>
@@ -211,44 +316,73 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                       />
                     </td>
                     <td className="px-4 py-2">
-                      <Select value={row.departmentId} onValueChange={(v) => updateNewRow(row.tempId, 'departmentId', v)}>
-                        <SelectTrigger className="h-8 text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {departments.map((dept: any) => (
-                            <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Input
+                        placeholder="Teléfono"
+                        value={row.phone}
+                        onChange={(e) => updateNewRow(row.tempId, 'phone', e.target.value)}
+                        className="h-8 text-sm"
+                      />
                     </td>
                     <td className="px-4 py-2">
-                      <Select value={row.positionId} onValueChange={(v) => updateNewRow(row.tempId, 'positionId', v)}>
-                        <SelectTrigger className="h-8 text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {positions.map((pos: any) => (
-                            <SelectItem key={pos.id} value={pos.id}>{pos.title}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-1.5 text-xs text-muted-foreground font-medium">
-                          {displayCurrency === 'USD' ? '$' : 'C$'}
-                        </span>
-                        <Input
-                          type="number"
-                          value={row.salary}
-                          onChange={(e) => updateNewRow(row.tempId, 'salary', parseFloat(e.target.value))}
-                          className="h-8 text-sm pl-7"
-                        />
+                      <div className="flex items-center gap-1">
+                        <Select value={row.departmentId} onValueChange={(v) => updateNewRow(row.tempId, 'departmentId', v)}>
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {departments.map((dept: any) => (
+                              <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={() => setShowNewDeptModal(true)} title="Crear departamento">
+                          <Plus className="size-3.5" />
+                        </Button>
                       </div>
                     </td>
                     <td className="px-4 py-2">
-                      <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-1 rounded">Nuevo</span>
+                      <div className="flex items-center gap-1">
+                        <Select value={row.positionId} onValueChange={(v) => updateNewRow(row.tempId, 'positionId', v)}>
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {positions.map((pos: any) => (
+                              <SelectItem key={pos.id} value={pos.id}>{pos.title}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={() => setShowNewPosModal(true)} title="Crear puesto">
+                          <Plus className="size-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="flex gap-1 items-center">
+                        <div className="relative flex-1">
+                          <span className="absolute left-2.5 top-1.5 text-xs text-muted-foreground font-medium">
+                            {row.currency === 'USD' ? '$' : 'C$'}
+                          </span>
+                          <Input
+                            type="number"
+                            value={row.salary}
+                            onChange={(e) => updateNewRow(row.tempId, 'salary', parseFloat(e.target.value))}
+                            className="h-8 text-sm pl-7 min-w-[100px]"
+                          />
+                        </div>
+                        <Select value={row.currency} onValueChange={(v) => updateNewRow(row.tempId, 'currency', v)}>
+                          <SelectTrigger className="h-8 w-16 text-[10px] font-bold">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="USD">USD</SelectItem>
+                            <SelectItem value="NIO">NIO</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded font-bold">Nuevo</span>
                     </td>
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
@@ -296,22 +430,44 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                         <span className="text-sm text-muted-foreground">{emp.email}</span>
                       )}
                     </td>
+                    <td className="px-4 py-2">
+                      <span className="text-sm text-muted-foreground">{emp.phone || '—'}</span>
+                    </td>
                     <td className="px-4 py-2 text-sm">{emp.department?.name}</td>
                     <td className="px-4 py-2 text-sm">{emp.position?.title}</td>
                     <td className="px-4 py-2">
                       {editingId === emp.id ? (
-                        <Input
-                          type="number"
-                          value={editData.salary}
-                          onChange={(e) => setEditData({ ...editData, salary: parseFloat(e.target.value) })}
-                          className="h-8 text-sm w-24"
-                        />
+                        <div className="flex gap-1 items-center">
+                          <div className="relative flex-1">
+                            <span className="absolute left-2 top-1.5 text-[10px] text-muted-foreground font-bold">
+                              {editData.currency === 'USD' ? '$' : 'C$'}
+                            </span>
+                            <Input
+                              type="number"
+                              value={editData.salary}
+                              onChange={(e) => setEditData({ ...editData, salary: parseFloat(e.target.value) })}
+                              className="h-8 text-sm pl-6 w-24"
+                            />
+                          </div>
+                          <Select value={editData.currency} onValueChange={(v) => setEditData({ ...editData, currency: v })}>
+                            <SelectTrigger className="h-8 w-16 text-[10px] font-bold">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="USD">USD</SelectItem>
+                              <SelectItem value="NIO">NIO</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       ) : (
-                        <span className="text-sm font-medium">{formatConvertedAmount(emp.salary, emp.currency)}</span>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-primary">{formatConvertedAmount(emp.salary, emp.currency)}</span>
+                          <span className="text-[9px] text-muted-foreground uppercase font-black">Original: {emp.currency}</span>
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-2">
-                      <span className={`text-xs px-2 py-1 rounded ${
+                      <span className={`text-[10px] px-2 py-1 rounded-lg font-black uppercase tracking-tighter ${
                         emp.employmentStatus === 'ACTIVE' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
                         emp.employmentStatus === 'INACTIVE' ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' :
                         'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
@@ -354,7 +510,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
       {viewMode === 'cards' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredEmployees.map((emp: any) => (
-            <div key={emp.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow dark:bg-slate-900/50">
+            <div key={emp.id} className="border border-border/40 rounded-2xl p-5 bg-gradient-to-br from-card to-muted/20 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 relative overflow-hidden group">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <div className="size-12 rounded-full bg-primary flex items-center justify-center text-white font-bold text-lg">
@@ -378,6 +534,12 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                   <span className="text-muted-foreground">Email:</span>
                   <span className="font-medium truncate ml-2">{emp.email}</span>
                 </div>
+                {emp.phone && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Teléfono:</span>
+                  <span className="font-medium">{emp.phone}</span>
+                </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Departamento:</span>
                   <span className="font-medium">{emp.department?.name}</span>
@@ -388,15 +550,18 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Salario:</span>
-                  <span className="font-bold text-primary">{formatConvertedAmount(emp.salary, emp.currency)}</span>
+                  <div className="flex flex-col items-end">
+                    <span className="font-bold text-primary">{formatConvertedAmount(emp.salary, emp.currency)}</span>
+                    <span className="text-[10px] text-muted-foreground uppercase font-medium">Contrato: {emp.currency}</span>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 mt-4 pt-3 border-t">
-                <Button size="sm" variant="outline" onClick={() => handleEdit(emp)} className="flex-1">
+              <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border/40 relative z-10">
+                <Button size="sm" variant="outline" onClick={() => handleEdit(emp)} className="flex-1 rounded-xl transition-all hover:bg-primary/10 hover:text-primary hover:border-primary/30">
                   <Edit2 className="size-3 mr-1" />
                   Editar
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleDelete(emp.id)} className="text-red-600">
+                <Button size="sm" variant="outline" onClick={() => handleDelete(emp.id)} className="text-red-600 rounded-xl hover:bg-red-500/10 hover:border-red-500/30 transition-all">
                   <Trash2 className="size-3" />
                 </Button>
               </div>
@@ -410,6 +575,57 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
           <p className="text-muted-foreground">No se encontraron empleados</p>
         </div>
       )}
+
+      {/* Modal: Crear Departamento */}
+      <Dialog open={showNewDeptModal} onOpenChange={setShowNewDeptModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Building2 className="size-5 text-primary" /> Nuevo Departamento</DialogTitle>
+            <DialogDescription>Crea un nuevo departamento para asignar empleados</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre del Departamento</Label>
+              <Input value={newDeptName} onChange={e => setNewDeptName(e.target.value)} placeholder="Ej: Marketing, Contabilidad..." className="rounded-xl" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewDeptModal(false)}>Cancelar</Button>
+            <Button onClick={handleCreateDepartment} className="bg-primary text-primary-foreground">Crear Departamento</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Crear Puesto */}
+      <Dialog open={showNewPosModal} onOpenChange={setShowNewPosModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Briefcase className="size-5 text-primary" /> Nuevo Puesto</DialogTitle>
+            <DialogDescription>Crea un nuevo puesto de trabajo</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Título del Puesto</Label>
+              <Input value={newPosTitle} onChange={e => setNewPosTitle(e.target.value)} placeholder="Ej: Gerente, Analista..." className="rounded-xl" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Departamento</Label>
+              <Select value={newPosDeptId} onValueChange={setNewPosDeptId}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Seleccionar departamento" /></SelectTrigger>
+                <SelectContent>
+                  {departments.map((dept: any) => (
+                    <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewPosModal(false)}>Cancelar</Button>
+            <Button onClick={handleCreatePosition} className="bg-primary text-primary-foreground">Crear Puesto</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package,
@@ -64,6 +64,7 @@ interface SidebarProps {
   isCollapsed?: boolean;
   onClose: () => void;
   onOverview: () => void;
+  onToggleCollapse?: () => void;
 }
 
 interface SubMenuItem {
@@ -206,6 +207,7 @@ const menuItems: MenuItem[] = [
     label: 'Recursos Humanos',
     icon: <Users className="size-5" />,
     submenu: [
+      { id: 'dashboard-hr', label: 'Dashboard', icon: <BarChart3 className="size-4" /> },
       { id: 'empleados', label: 'Empleados', icon: <Users className="size-4" /> },
       { id: 'nominas', label: 'Nóminas', icon: <DollarSign className="size-4" /> },
       { id: 'asistencia', label: 'Asistencia', icon: <CalendarClock className="size-4" /> },
@@ -213,12 +215,13 @@ const menuItems: MenuItem[] = [
       { id: 'evaluaciones', label: 'Desempeño', icon: <BarChart3 className="size-4" /> },
       { id: 'capacitaciones', label: 'Capacitación', icon: <FileCheck className="size-4" /> },
       { id: 'beneficios', label: 'Beneficios', icon: <Plus className="size-4" /> },
+      { id: 'config-nomina', label: 'Config Nómina', icon: <Settings className="size-4" /> },
     ]
   },
-  { 
-    id: 'actividades', 
-    label: 'Actividades', 
-    icon: <Activity className="size-5" />, 
+  {
+    id: 'actividades',
+    label: 'Actividades',
+    icon: <Activity className="size-5" />,
     section: 'Herramientas',
     submenu: [
       { id: 'tareas', label: 'Tareas', icon: <ListTodo className="size-4" /> },
@@ -228,9 +231,9 @@ const menuItems: MenuItem[] = [
     ]
   },
   { id: 'tickets', label: 'Tickets y Soporte', icon: <Headphones className="size-5" /> },
-  { 
-    id: 'documentos', 
-    label: 'Documentos', 
+  {
+    id: 'documentos',
+    label: 'Documentos',
     icon: <FolderOpen className="size-4" />,
     submenu: [
       { id: 'archivos', label: 'Archivos', icon: <HardDrive className="size-4" /> },
@@ -239,9 +242,9 @@ const menuItems: MenuItem[] = [
       { id: 'reportes', label: 'Reportes', icon: <BarChart3 className="size-4" /> }
     ]
   },
-  { 
-    id: 'notificaciones', 
-    label: 'Notificaciones', 
+  {
+    id: 'notificaciones',
+    label: 'Notificaciones',
     icon: <BellRing className="size-5" />,
     submenu: [
       { id: 'alertas', label: 'Alertas', icon: <AlertTriangle className="size-4" /> },
@@ -249,10 +252,10 @@ const menuItems: MenuItem[] = [
       { id: 'push', label: 'Push', icon: <Send className="size-4" /> }
     ]
   },
-  { 
-    id: 'reportes', 
-    label: 'Reportes', 
-    icon: <BarChart3 className="size-5" />, 
+  {
+    id: 'reportes',
+    label: 'Reportes',
+    icon: <BarChart3 className="size-5" />,
     section: 'Sistema',
     submenu: [
       { id: 'reportes-ventas', label: 'Ventas', icon: <ShoppingCart className="size-4" /> },
@@ -284,15 +287,23 @@ const platformMenuItems: MenuItem[] = [
   },
 ];
 
-export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview }: SidebarProps) {
+export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview, onToggleCollapse }: SidebarProps) {
   const { hasAccess, user } = useAuth();
   const { themeConfig } = useTheme();
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(['ventas', 'compras']));
 
+  useEffect(() => {
+    if (activeModule && activeModule !== 'overview') {
+      setExpandedMenus(prev => new Set(prev).add(activeModule));
+    }
+  }, [activeModule]);
+
   const activeMenuArray = user?.isPlatformAdmin ? platformMenuItems : menuItems;
 
   const toggleMenu = (id: string) => {
-    if (isCollapsed) return; // Disallow expanding submenus while collapsed, or you could auto-expand the sidebar
+    if (isCollapsed && onToggleCollapse) {
+      onToggleCollapse(); // Expand first
+    }
     setExpandedMenus(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -309,6 +320,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     }
     if (item.submenu) {
       toggleMenu(item.id);
+      onModuleChange(item.id as Module);
     } else {
       onModuleChange(item.id as Module);
       if (window.innerWidth < 1024) onClose();
@@ -466,7 +478,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                                     'hover:bg-sidebar-accent hover:text-sidebar-foreground',
                                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                                     activeModule === item.id && activeSubModule === subItem.id
-                                      ? 'bg-sidebar-primary/20 text-sidebar-foreground font-medium'
+                                      ? 'bg-primary text-primary-foreground font-medium shadow-sm'
                                       : 'text-sidebar-foreground/55'
                                   )}
                                 >

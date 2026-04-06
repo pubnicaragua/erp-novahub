@@ -98,7 +98,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
 
       {/* New Review Button */}
       <div className="flex justify-end">
-        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-indigo-600 hover:bg-indigo-700 !text-white">
+        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
           <Plus className="size-4 mr-2" />
           Nueva Evaluación
         </Button>
@@ -106,8 +106,8 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
 
       {/* New Review Form */}
       {showNewForm && (
-        <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
-          <h3 className="text-lg font-semibold mb-4">Nueva Evaluación de Desempeño</h3>
+        <div className="border border-primary/40 rounded-lg p-6 bg-primary/5">
+          <h3 className="text-lg font-semibold mb-4 text-primary">Nueva Evaluación de Desempeño</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium mb-1 block">Empleado</label>
@@ -126,11 +126,13 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
             <div>
               <label className="text-sm font-medium mb-1 block">Evaluador</label>
               <Combobox
-                options={employees.map((emp: any) => ({
-                  label: `${emp.firstName} ${emp.lastName}`,
-                  value: emp.id,
-                  description: emp.employeeNumber,
-                }))}
+                options={employees
+                  .filter((emp: any) => emp.id !== newReview.employeeId)
+                  .map((emp: any) => ({
+                    label: `${emp.firstName} ${emp.lastName}`,
+                    value: emp.id,
+                    description: emp.employeeNumber,
+                  }))}
                 value={newReview.reviewerId}
                 onChange={(v) => setNewReview({ ...newReview, reviewerId: v })}
                 placeholder="Buscar evaluador..."
@@ -205,7 +207,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
             </div>
           </div>
           <div className="flex items-center gap-2 mt-4">
-            <Button onClick={handleCreateReview} className="bg-green-600 hover:bg-green-700 text-white">
+            <Button onClick={handleCreateReview} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               Crear Evaluación
             </Button>
             <Button variant="outline" onClick={() => setShowNewForm(false)}>
@@ -221,7 +223,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
           <div key={review.id} className="border rounded-lg p-6 hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="size-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold">
+                <div className="size-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold">
                   {review.employee?.firstName?.[0]}{review.employee?.lastName?.[0]}
                 </div>
                 <div>

@@ -26,6 +26,25 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
     { key: 'title', header: 'Asunto', width: '30%', editable: true },
     { key: 'isRead', header: 'Estado', width: '100px', render: (val: any) => <Badge variant="outline" className={cn('text-[9px] uppercase border-none', val ? 'bg-muted/20 text-muted-foreground' : 'bg-blue-500/10 text-blue-500')}>{val ? 'Leído' : 'Nuevo'}</Badge> },
     { key: 'createdAt', header: 'Enviado', width: '150px', type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, HH:mm') : '-' },
+    {
+      key: 'actions', header: 'Acciones', width: '100px', render: (_val: any, row: any) => {
+        if (row.title === 'Nueva tarea asignada' || (row.content && String(row.content).startsWith('TAREA:'))) {
+          return (
+            <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold" onClick={() => window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'actividades', subModule: 'tareas' }}))}>
+               Ver Tarea
+            </Button>
+          );
+        }
+        if ((row.content && String(row.content).startsWith('RECORDATORIO:')) || (row.title && String(row.title).startsWith('Recordatorio:'))) {
+          return (
+            <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold text-amber-500 border-amber-500/30 hover:bg-amber-500/10" onClick={() => window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'actividades', subModule: 'recordatorios' }}))}>
+               Ver Recordatorio
+            </Button>
+          );
+        }
+        return null;
+      }
+    }
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Message>) => {

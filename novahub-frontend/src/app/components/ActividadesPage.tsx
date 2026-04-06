@@ -10,14 +10,17 @@ import { EventosView } from './actividades/EventosView';
 import { RecordatoriosView } from './actividades/RecordatoriosView';
 import { BitacoraView } from './actividades/BitacoraView';
 import { tasksService, eventsService, remindersService, activityLogsService } from '../services/actividades.service';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ActividadesPageProps {
   activeSubModule?: string;
+  onSubModuleChange?: (sub: string) => void;
 }
 
-export const ActividadesPage = ({ activeSubModule }: ActividadesPageProps) => {
+export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: ActividadesPageProps) => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'tareas');
-  const [data, setData] = useState({
+  const [data, setData] = useState<{ tareas: any[], eventos: any[], recordatorios: any[], bitacora: any[] }>({
     tareas: [],
     eventos: [],
     recordatorios: [],
@@ -34,7 +37,28 @@ export const ActividadesPage = ({ activeSubModule }: ActividadesPageProps) => {
         remindersService.getAll().catch(() => []),
         activityLogsService.getAll().catch(() => [])
       ]);
-      setData({ tareas, eventos, recordatorios, bitacora });
+      let fetchTareas = Array.isArray(tareas) ? tareas : (tareas as any).data || [];
+      let fetchRecordatorios = Array.isArray(recordatorios) ? recordatorios : (recordatorios as any).data || [];
+      const fetchEventos = Array.isArray(eventos) ? eventos : (eventos as any).data || [];
+      const fetchBitacora = Array.isArray(bitacora) ? bitacora : (bitacora as any).data || [];
+
+      // Filipter tareas y recordatorios segun el usuario
+      if (user && user.role !== 'admin' && !user.isPlatformAdmin) {
+         fetchTareas = fetchTareas.filter((t: any) => 
+            t.createdBy === user.id || t.assignments?.some((a: any) => a.userId === user.id)
+         );
+         fetchRecordatorios = fetchRecordatorios.filter((r: any) => {
+            if (r.scope === 'GLOBAL') return true;
+            if (r.scope === 'DEPARTMENT') { return true; } // Por ahora visibles
+            if (r.scope === 'PERSONAL') {
+               try { const uIds = JSON.parse(r.targetId); return uIds.includes(user.id); } 
+               catch { return r.targetId === user.id; }
+            }
+            return false;
+         });
+      }
+
+      setData({ tareas: fetchTareas, eventos: fetchEventos, recordatorios: fetchRecordatorios, bitacora: fetchBitacora });
     } catch (error) {
       console.error('Error fetching actividades:', error);
     } finally {
@@ -79,7 +103,10 @@ export const ActividadesPage = ({ activeSubModule }: ActividadesPageProps) => {
             </div>
           </div>
 
-          <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
+          <Tabs value={activeTab} className="w-full" onValueChange={(val) => {
+            setActiveTab(val);
+            if (onSubModuleChange) onSubModuleChange(val);
+          }}>
             <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
               {tabs.map((tab) => (
                 <TabsTrigger 

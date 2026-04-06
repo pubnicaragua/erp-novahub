@@ -916,9 +916,9 @@ export interface Document {
 }
 
 export interface Task { id: string; title: string; description?: string; status: TaskStatus; priority: Priority; dueDate?: string; assignedTo?: string; createdAt: string; updatedAt: string; }
-export interface Event { id: string; title: string; description?: string; startDate: string; endDate: string; location?: string; attendees?: string[]; createdAt: string; }
+export interface Event { id: string; title: string; description?: string; startDate: string; endDate: string; location?: string; attendees?: string[]; cost?: number; income?: number; expenseId?: string; incomeId?: string; createdAt: string; }
 export interface Reminder { id: string; title: string; description?: string; reminderDate: string; status: string; createdAt: string; }
-export interface ActivityLog { id: string; action: string; entity: string; entityId: string; userId: string; timestamp: string; details?: string; }
+export interface ActivityLog { id: string; action: string; entity: string; entityId: string; userId: string; timestamp: string; details?: string; activityId?: string; fileUrl?: string; fileName?: string; }
 
 export interface Contract { id: string; number: string; title: string; clientId: string; startDate: string; endDate: string; value: number; status: string; createdAt: string; }
 export interface LegalInvoice { id: string; number: string; type: string; amount: number; issueDate: string; dueDate: string; status: string; createdAt: string; }
