@@ -79,4 +79,10 @@ export const hrService = {
   getDashboardStats: () => api.get('/hr/dashboard/stats'),
   getHeadcountAnalytics: () => api.get('/hr/analytics/headcount'),
   getTurnoverRate: () => api.get('/hr/analytics/turnover'),
+
+  // ===== PAYROLL CONFIG =====
+  getPayrollConfigs: () => api.get('/hr/payroll-config'),
+  getActivePayrollConfig: () => api.get('/hr/payroll-config/active'),
+  createPayrollConfig: (data: any) => api.post('/hr/payroll-config', data),
+  updatePayrollConfig: (id: string, data: any) => api.patch(`/hr/payroll-config/${id}`, data),
 };

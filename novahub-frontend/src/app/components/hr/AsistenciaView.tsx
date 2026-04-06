@@ -80,8 +80,8 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
       </div>
 
       {/* Clock In/Out Panel */}
-      <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
-        <h3 className="text-lg font-semibold mb-4">Registrar Asistencia</h3>
+      <div className="border border-primary/40 rounded-lg p-6 bg-primary/5">
+        <h3 className="text-lg font-semibold mb-4 text-primary">Registrar Asistencia</h3>
         <div className="flex items-center gap-3">
           <div className="flex-1">
             <Combobox
@@ -96,12 +96,12 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
               emptyMessage="No se encontró el empleado"
             />
           </div>
-          <Button onClick={handleClockIn} className="bg-green-600 hover:bg-green-700 !text-white">
+          <Button onClick={handleClockIn} className="bg-primary hover:bg-primary/90 text-primary-foreground">
             <LogIn className="size-4 mr-2" />
             Entrada
           </Button>
-          <Button onClick={handleClockOut} className="bg-red-600 hover:bg-red-700 !text-white">
-            <LogOut className="size-4 mr-2" />
+          <Button onClick={handleClockOut} variant="outline" className="border-primary/50 text-foreground hover:bg-primary/10 hover:text-primary">
+            <LogOut className="size-4 mr-2 text-red-500" />
             Salida
           </Button>
         </div>

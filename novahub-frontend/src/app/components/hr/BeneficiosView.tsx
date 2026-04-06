@@ -28,7 +28,7 @@ const BENEFIT_TYPE_LABELS: Record<string, string> = {
   TRANSPORTATION: 'Transporte', FOOD: 'Alimentación', GYM: 'Gimnasio', OTHER: 'Otro',
 };
 
-const EMPTY_FORM = { name: '', description: '', type: 'OTHER', cost: '', isActive: true };
+const EMPTY_FORM = { name: '', description: '', type: 'OTHER', cost: '', isActive: true, employeeIds: [] as string[] };
 
 export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
@@ -69,7 +69,8 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
 
   const startEdit = (b: any) => {
     setEditingId(b.id);
-    setEditForm({ name: b.name, description: b.description || '', type: b.type, cost: b.cost ?? '', currency: b.currency || 'USD' });
+    const existingEmployeeIds = b.employeeBenefits ? b.employeeBenefits.map((eb: any) => eb.employeeId) : (b.assignments ? b.assignments.map((eb: any) => eb.employeeId) : []);
+    setEditForm({ name: b.name, description: b.description || '', type: b.type, cost: b.cost ?? '', currency: b.currency || 'USD', employeeIds: existingEmployeeIds });
   };
 
   const totalCost = benefits.reduce((sum: number, b: any) => sum + convertAmount(Number(b.cost) || 0, b.currency), 0);
@@ -86,7 +87,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
           </div>
         </div>
         {!addingNew && (
-          <Button onClick={() => { setAddingNew(true); setForm(EMPTY_FORM); }} className="rounded-xl gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 !text-white">
+          <Button onClick={() => { setAddingNew(true); setForm(EMPTY_FORM); }} className="rounded-xl gap-2 font-bold bg-primary hover:bg-primary/90 !text-primary-foreground">
             <Plus className="size-4" /> Nuevo Beneficio
           </Button>
         )}
@@ -96,7 +97,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
       <AnimatePresence>
         {addingNew && (
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-            <Card className="border-indigo-500/40 bg-indigo-500/5 shadow-lg">
+            <Card className="border-primary/40 bg-primary/5 shadow-lg">
               <CardContent className="p-5">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1">
@@ -123,7 +124,31 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción</label>
                     <Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Cobertura médica completa para empleado y familia" className="rounded-xl h-10" />
                   </div>
-                  <div className="flex items-end gap-2">
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empleados Asignados</label>
+                    <div className="border border-border/50 rounded-xl p-3 max-h-40 overflow-y-auto bg-background">
+                      {employees?.map((emp: any) => (
+                        <label key={emp.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-muted/30 px-2 rounded">
+                          <input 
+                            type="checkbox" 
+                            className="rounded border-input text-primary focus:ring-primary h-4 w-4"
+                            checked={form.employeeIds?.includes(emp.id) || false}
+                            onChange={(e) => {
+                              const isChecked = e.target.checked;
+                              setForm((prev: any) => ({
+                                ...prev,
+                                employeeIds: isChecked 
+                                  ? [...(prev.employeeIds || []), emp.id]
+                                  : (prev.employeeIds || []).filter((id: string) => id !== emp.id)
+                              }));
+                            }}
+                          />
+                          <span className="text-sm">{emp.firstName} {emp.lastName}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-end gap-2 md:col-span-2">
                     <Button onClick={handleCreate} className="flex-1 rounded-xl gap-2 font-bold"><Save className="size-4" /> Guardar</Button>
                     <Button variant="ghost" onClick={() => setAddingNew(false)} className="rounded-xl"><X className="size-4" /></Button>
                   </div>
@@ -144,7 +169,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
 
           return (
             <motion.div key={benefit.id} layout initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>
-              <Card className="border-border/50 hover:border-indigo-500/30 hover:shadow-md transition-all overflow-hidden">
+              <Card className="border-border/50 hover:border-primary/30 hover:shadow-md transition-all overflow-hidden">
                 {isEditing ? (
                   <CardContent className="p-4 space-y-3">
                     <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nombre" className="rounded-xl h-9 text-sm font-bold" />
@@ -161,7 +186,31 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                         <Input type="number" value={editForm.cost} onChange={e => setEditForm({ ...editForm, cost: e.target.value })} placeholder="Costo" className="rounded-xl h-9 text-sm pl-6" />
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empleados Asignados</label>
+                      <div className="border border-border/50 rounded-xl p-3 max-h-40 overflow-y-auto bg-background">
+                        {employees?.map((emp: any) => (
+                          <label key={emp.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-muted/30 px-2 rounded">
+                            <input 
+                              type="checkbox" 
+                              className="rounded border-input text-primary focus:ring-primary h-4 w-4"
+                              checked={editForm.employeeIds?.includes(emp.id) || false}
+                              onChange={(e) => {
+                                const isChecked = e.target.checked;
+                                setEditForm((prev: any) => ({
+                                  ...prev,
+                                  employeeIds: isChecked 
+                                    ? [...(prev.employeeIds || []), emp.id]
+                                    : (prev.employeeIds || []).filter((id: string) => id !== emp.id)
+                                }));
+                              }}
+                            />
+                            <span className="text-sm">{emp.firstName} {emp.lastName}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-2">
                       <Button size="sm" onClick={() => handleUpdate(benefit.id)} className="flex-1 rounded-xl gap-1 font-bold text-xs"><Save className="size-3" /> Guardar</Button>
                       <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="rounded-xl"><X className="size-3" /></Button>
                     </div>

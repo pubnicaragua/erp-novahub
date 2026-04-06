@@ -1,10 +1,14 @@
-import { useState } from 'react';
-import { DollarSign, Download, Calculator, CheckCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { AlertTriangle } from 'lucide-react';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
   const { convertAmount, formatConvertedAmount, displayCurrency } = useCurrency();
@@ -32,14 +36,20 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       const periodStart = new Date(today.getFullYear(), today.getMonth(), 1);
       const periodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
-      await hrService.bulkProcessPayroll({
+      const payload: any = {
         periodStart: periodStart.toISOString(),
         periodEnd: periodEnd.toISOString(),
-      });
-      toast.success('Nómina procesada exitosamente');
+      };
+      if (filterEmployee !== 'all') {
+        payload.employeeIds = [filterEmployee];
+      }
+
+      const result = await hrService.bulkProcessPayroll(payload);
+      toast.success(`Nómina procesada: ${result.count} registros creados`);
       onRefresh();
-    } catch (error) {
-      toast.error('Error al procesar nómina');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Error al procesar nómina';
+      toast.error(typeof msg === 'string' ? msg : msg[0] || 'Error al procesar nómina');
     }
   };
 
@@ -70,73 +80,98 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     }
   };
 
-  const handleExport = () => {
-    const csvContent = [
-      ['Empleado', 'Período Inicio', 'Período Fin', 'Salario Base', 'Bonos', 'Deducciones', 'Pago Bruto', 'Pago Neto', 'Estado'].join(','),
-      ...filteredPayrolls.map((p: any) => [
-        `"${p.employee?.firstName} ${p.employee?.lastName}"`,
-        new Date(p.periodStart).toLocaleDateString(),
-        new Date(p.periodEnd).toLocaleDateString(),
-        p.baseSalary,
-        p.bonuses || 0,
-        p.deductions || 0,
-        p.grossPay,
-        p.netPay,
-        p.status,
-      ].join(','))
-    ].join('\n');
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF() as any;
+      doc.text("Reporte de Nominas", 14, 15);
+      doc.setFontSize(10);
+      doc.text(`Generado: ${new Date().toLocaleDateString()}`, 14, 22);
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `nominas_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    toast.success('Archivo CSV descargado');
+      const tableData = filteredPayrolls.map((p: any) => {
+        const currency = p.employee?.currency || p.currency || 'USD';
+        return [
+          `${p.employee?.firstName} ${p.employee?.lastName}`,
+          `${new Date(p.periodStart).toLocaleDateString()} - ${new Date(p.periodEnd).toLocaleDateString()}`,
+          formatConvertedAmount(p.grossPay, currency),
+          formatConvertedAmount(p.netPay, currency),
+          formatConvertedAmount(p.costoTotalEmpresa || p.grossPay, currency),
+          p.status === 'PAID' ? 'Pagado' : p.status === 'PENDING' ? 'Pendiente' : p.status
+        ];
+      });
+
+      doc.autoTable({
+        startY: 28,
+        head: [['Empleado', 'Periodo', 'Bruto', 'Neto a Pagar', 'Costo Empresa', 'Estado']],
+        body: tableData,
+      });
+
+      doc.save(`nominas_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('Reporte PDF descargado');
+    } catch (e) {
+      toast.error('Error generando PDF');
+    }
   };
 
   const totalGross = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.grossPay || 0), p.employee?.currency || p.currency), 0);
   const totalNet = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.netPay || 0), p.employee?.currency || p.currency), 0);
   const totalTaxes = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.taxes || 0), p.employee?.currency || p.currency), 0);
+  const totalCostoEmpresa = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.costoTotalEmpresa || 0), p.employee?.currency || p.currency), 0);
   const pendingCount = filteredPayrolls.filter((p: any) => p.status === 'PENDING').length;
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+  const isOverdue = (p: any) => p.status === 'PENDING' && new Date(p.periodEnd) < new Date();
+  const overduePayrolls = filteredPayrolls.filter(isOverdue);
+  const overdueCount = overduePayrolls.length;
 
   return (
     <div className="space-y-4">
+      {/* Vencidas Alert */}
+      {overdueCount > 0 && (
+        <Alert variant="destructive" className="bg-red-500/10 border-red-500/20 text-red-600">
+          <AlertTriangle className="size-4" />
+          <AlertTitle className="font-black tracking-widest uppercase text-xs">Atención Requerida</AlertTitle>
+          <AlertDescription>
+            Existen {overdueCount} nóminas(s) con fechas de pago o periodos calculados vencidos. Puedes visualizarlas filtrando por "Pendiente".
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
+        <div className="border border-orange-500/20 rounded-xl p-4 bg-gradient-to-br from-orange-500/5 to-orange-500/10">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Total Bruto</p>
-              <h3 className="text-2xl font-bold text-green-700 dark:text-green-400">{formatConvertedAmount(totalGross, displayCurrency)}</h3>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Bruto (Costo Empresa)</p>
+              <h3 className="text-2xl font-black text-orange-600 dark:text-orange-400">{formatConvertedAmount(totalCostoEmpresa, displayCurrency)}</h3>
             </div>
-            <DollarSign className="size-8 text-green-500" />
+            <Building2 className="size-8 text-orange-500/40" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
+        <div className="border border-blue-500/20 rounded-xl p-4 bg-gradient-to-br from-blue-500/5 to-blue-500/10">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Total Neto</p>
-              <h3 className="text-2xl font-bold text-blue-700 dark:text-blue-400">{formatConvertedAmount(totalNet, displayCurrency)}</h3>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Neto (Recibido)</p>
+              <h3 className="text-2xl font-black text-blue-600 dark:text-blue-400">{formatConvertedAmount(totalNet, displayCurrency)}</h3>
             </div>
-            <DollarSign className="size-8 text-blue-500" />
+            <DollarSign className="size-8 text-blue-500/40" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20">
+        <div className="border border-primary/20 rounded-xl p-4 bg-gradient-to-br from-primary/5 to-primary/10">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Total Impuestos</p>
-              <h3 className="text-2xl font-bold text-orange-700 dark:text-orange-400">{formatConvertedAmount(totalTaxes, displayCurrency)}</h3>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Impuestos Empresa</p>
+              <h3 className="text-2xl font-black text-primary">{formatConvertedAmount(totalCostoEmpresa - totalGross, displayCurrency)}</h3>
             </div>
-            <DollarSign className="size-8 text-orange-500" />
+            <DollarSign className="size-8 text-primary/40" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20">
+        <div className={`border rounded-xl p-4 transition-colors ${overdueCount > 0 ? 'border-red-500/40 bg-gradient-to-br from-red-500/10 to-red-500/5' : 'border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-amber-500/10'}`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Pendientes</p>
-              <h3 className="text-3xl font-bold text-amber-700 dark:text-amber-400">{pendingCount}</h3>
+              <p className={`text-[10px] font-black uppercase tracking-widest ${overdueCount > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>Pendientes {overdueCount > 0 && '(Vencidas)'}</p>
+              <h3 className={`text-3xl font-black ${overdueCount > 0 ? 'text-red-600' : 'text-amber-700 dark:text-amber-400'}`}>{pendingCount}</h3>
             </div>
-            <CheckCircle className="size-8 text-amber-500" />
+            <CheckCircle className={`size-8 ${overdueCount > 0 ? 'text-red-500/40' : 'text-amber-500/40'}`} />
           </div>
         </div>
       </div>
@@ -164,17 +199,17 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport}>
+          <Button variant="outline" size="sm" onClick={handleExportPDF}>
             <Download className="size-4 mr-2" />
-            Exportar
+            Descargar PDF
           </Button>
           {pendingCount > 0 && (
-            <Button size="sm" onClick={handleMarkAllAsPaid} className="bg-emerald-600 hover:bg-emerald-700 !text-white">
+            <Button size="sm" onClick={handleMarkAllAsPaid} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
               <CheckCircle className="size-4 mr-2" />
               Pagar Todas ({pendingCount})
             </Button>
           )}
-          <Button size="sm" onClick={handleProcessPayroll} className="bg-green-600 hover:bg-green-700 !text-white">
+          <Button size="sm" onClick={handleProcessPayroll} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
             <Calculator className="size-4 mr-2" />
             Procesar Nómina
           </Button>
@@ -189,13 +224,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold">Empleado</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold">Período</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold">Salario Base</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold">Bonos</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold">H. Extra</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold">Deducciones</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold">Impuestos</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold">Pago Bruto</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold">Pago Neto</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold">Salario Bruto</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold">Neto a Pagar</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold">Costo Total Empresa</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold">Estado</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold">Acciones</th>
               </tr>
@@ -204,69 +235,104 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               {filteredPayrolls.map((payroll: any) => {
                 const currency = payroll.employee?.currency || 'USD';
                 return (
-                  <tr key={payroll.id} className="hover:bg-muted/50">
+                  <React.Fragment key={payroll.id}>
+                  <tr className="hover:bg-muted/50 cursor-pointer" onClick={() => setExpandedRow(expandedRow === payroll.id ? null : payroll.id)}>
                     <td className="px-4 py-3">
-                      <div>
-                        <p className="text-sm font-medium">
-                          {payroll.employee?.firstName} {payroll.employee?.lastName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {payroll.employee?.employeeNumber}
-                        </p>
+                      <div className="flex items-center gap-2">
+                        <div className="size-8 rounded-full bg-gradient-to-br from-primary/60 to-primary flex items-center justify-center text-primary-foreground text-xs font-bold">
+                          {payroll.employee?.firstName?.[0]}{payroll.employee?.lastName?.[0]}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">
+                            {payroll.employee?.firstName} {payroll.employee?.lastName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {payroll.employee?.employeeNumber}
+                          </p>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {new Date(payroll.periodStart).toLocaleDateString()} - {new Date(payroll.periodEnd).toLocaleDateString()}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm font-medium">
-                      {formatConvertedAmount(payroll.baseSalary, currency)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-green-600">
-                      +{formatConvertedAmount(payroll.bonuses || 0, currency)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-blue-600">
-                      +{formatConvertedAmount(payroll.overtime || 0, currency)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-red-600">
-                      -{formatConvertedAmount(payroll.deductions || 0, currency)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-orange-600">
-                      -{formatConvertedAmount(payroll.taxes || 0, currency)}
-                    </td>
                     <td className="px-4 py-3 text-right text-sm font-semibold">
                       {formatConvertedAmount(payroll.grossPay, currency)}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-green-700">
+                    <td className="px-4 py-3 text-right text-sm font-bold text-primary">
                       {formatConvertedAmount(payroll.netPay, currency)}
                     </td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-orange-600 dark:text-orange-400">
+                      {formatConvertedAmount(payroll.costoTotalEmpresa || payroll.grossPay, currency)}
+                    </td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-1 rounded ${
+                      <span className={`text-xs px-2 py-1 rounded-lg font-bold ${
                         payroll.status === 'PAID' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                        isOverdue(payroll) ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-500/20 shadow-sm shadow-red-500/20' :
                         payroll.status === 'PENDING' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
                         'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
                       }`}>
-                        {payroll.status === 'PAID' ? 'Pagado' : payroll.status === 'PENDING' ? 'Pendiente' : payroll.status}
+                        {payroll.status === 'PAID' ? 'Pagado' : isOverdue(payroll) ? 'Vencida' : payroll.status === 'PENDING' ? 'Pendiente' : payroll.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {payroll.status === 'PENDING' && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleMarkAsPaid(payroll.id)}
-                          className="h-7 px-3 text-xs text-green-600 hover:text-green-700 hover:bg-green-50 font-semibold"
-                        >
-                          <CheckCircle className="size-3.5 mr-1" />
-                          Pagar
+                      <div className="flex items-center justify-end gap-1">
+                        {payroll.status === 'PENDING' && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(payroll.id); }}
+                            className="h-7 px-3 text-xs text-primary hover:text-primary hover:bg-primary/10 font-semibold"
+                          >
+                            <CheckCircle className="size-3.5 mr-1" />
+                            Pagar
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); setExpandedRow(expandedRow === payroll.id ? null : payroll.id); }}>
+                          {expandedRow === payroll.id ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
                         </Button>
-                      )}
-                      {payroll.status === 'PAID' && payroll.paymentDate && (
-                        <span className="text-[10px] text-muted-foreground">
-                          {new Date(payroll.paymentDate).toLocaleDateString()}
-                        </span>
-                      )}
+                      </div>
                     </td>
                   </tr>
+                  {/* Expanded row with desglose */}
+                  {expandedRow === payroll.id && (
+                    <tr className="bg-muted/30">
+                      <td colSpan={7} className="px-4 py-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                          <div className="space-y-2">
+                            <p className="font-black uppercase tracking-widest text-red-500 text-[10px]">Deducciones Empleado</p>
+                            <div className="space-y-1">
+                              <div className="flex justify-between"><span className="text-muted-foreground">INSS Laboral ({payroll.snapshotInssLaboralPct || '—'}%)</span><span className="font-bold">-{formatConvertedAmount(payroll.inssLaboral || 0, currency)}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">IR ({payroll.snapshotIrPct || '—'}%)</span><span className="font-bold">-{formatConvertedAmount(payroll.ir || 0, currency)}</span></div>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <p className="font-black uppercase tracking-widest text-orange-500 text-[10px]">Aportes Patronales</p>
+                            <div className="space-y-1">
+                              <div className="flex justify-between"><span className="text-muted-foreground">INSS Patronal ({payroll.snapshotInssPatronalPct || '—'}%)</span><span className="font-bold">+{formatConvertedAmount(payroll.inssPatronal || 0, currency)}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">INATEC ({payroll.snapshotInatecPct || '—'}%)</span><span className="font-bold">+{formatConvertedAmount(payroll.inatec || 0, currency)}</span></div>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <p className="font-black uppercase tracking-widest text-blue-500 text-[10px]">Provisiones</p>
+                            <div className="space-y-1">
+                              <div className="flex justify-between"><span className="text-muted-foreground">Treceavo Mes ({payroll.snapshotTrecenoMesPct || '—'}%)</span><span className="font-bold">+{formatConvertedAmount(payroll.trecenoMes || 0, currency)}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Vacaciones ({payroll.snapshotVacacionesPct || '—'}%)</span><span className="font-bold">+{formatConvertedAmount(payroll.vacacionesProv || 0, currency)}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Indemnización ({payroll.snapshotIndemnizacionPct || '—'}%)</span><span className="font-bold">+{formatConvertedAmount(payroll.indemnizacion || 0, currency)}</span></div>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <p className="font-black uppercase tracking-widest text-muted-foreground text-[10px]">Desglose</p>
+                            <div className="space-y-1">
+                              <div className="flex justify-between"><span className="text-muted-foreground">Bonos</span><span className="font-bold text-green-600">+{formatConvertedAmount(payroll.bonuses || 0, currency)}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">H. Extra</span><span className="font-bold text-blue-600">+{formatConvertedAmount(payroll.overtime || 0, currency)}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Otras Deducc.</span><span className="font-bold text-red-600">-{formatConvertedAmount(payroll.deductions || 0, currency)}</span></div>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>

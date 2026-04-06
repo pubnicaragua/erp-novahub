@@ -44,6 +44,9 @@ function DashboardLayout() {
 
   const handleModuleChange = (module: Module, subModule?: string) => {
     if (hasAccess(module)) {
+      if (isCollapsed) {
+        handleToggleCollapse();
+      }
       setActiveModule(module);
       setActiveSubModule(subModule);
     }
@@ -59,6 +62,17 @@ function DashboardLayout() {
     setActiveModule('overview');
     setActiveSubModule(undefined);
   };
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (hasAccess(e.detail.module)) {
+        setActiveModule(e.detail.module);
+        setActiveSubModule(e.detail.subModule);
+      }
+    };
+    window.addEventListener('navigate-module', handler);
+    return () => window.removeEventListener('navigate-module', handler);
+  }, [hasAccess]);
 
   const renderContent = () => {
     if (activeModule === 'overview') {
@@ -84,10 +98,10 @@ function DashboardLayout() {
       case 'ventas': return <VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'compras': return <ComprasPage activeSubModule={activeSubModule} />;
       case 'finanzas': return <FinanzasPage activeSubModule={activeSubModule} />;
-      case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} />;
+      case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'clientes': return <ClientesPage />;
       case 'proveedores': return <ProveedoresPage />;
-      case 'actividades': return <ActividadesPage activeSubModule={activeSubModule} />;
+      case 'actividades': return <ActividadesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'tickets': return <TicketsPage />;
       case 'documentos': return <DocumentosPage activeSubModule={activeSubModule} />;
       case 'notificaciones': return <NotificacionesPage activeSubModule={activeSubModule} />;
@@ -111,6 +125,7 @@ function DashboardLayout() {
         isCollapsed={isCollapsed}
         onClose={() => setSidebarOpen(false)}
         onOverview={handleOverview}
+        onToggleCollapse={handleToggleCollapse}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar

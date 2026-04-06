@@ -19,6 +19,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     endDate: '',
     capacity: 20,
     cost: 0,
+    employeeIds: [] as string[],
   });
 
   const handleCreateTraining = async () => {
@@ -41,6 +42,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
         endDate: '',
         capacity: 20,
         cost: 0,
+        employeeIds: [],
       });
       onRefresh();
     } catch (error) {
@@ -87,7 +89,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
 
       {/* New Training Button */}
       <div className="flex justify-end">
-        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-indigo-600 hover:bg-indigo-700 !text-white">
+        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
           <Plus className="size-4 mr-2" />
           Nueva Capacitación
         </Button>
@@ -95,8 +97,8 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
 
       {/* New Training Form */}
       {showNewForm && (
-        <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
-          <h3 className="text-lg font-semibold mb-4">Nueva Capacitación</h3>
+        <div className="border border-primary/40 rounded-lg p-6 bg-primary/5">
+          <h3 className="text-lg font-semibold mb-4 text-primary">Nueva Capacitación</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
               <label className="text-sm font-medium mb-1 block">Título</label>
@@ -175,9 +177,33 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 />
               </div>
             </div>
+            <div className="md:col-span-2">
+              <label className="text-sm font-medium mb-1 block">Empleados Participantes</label>
+              <div className="border border-border/50 rounded-xl p-3 max-h-40 overflow-y-auto bg-background">
+                {employees?.map((emp: any) => (
+                  <label key={emp.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-muted/30 px-2 rounded">
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-input text-primary focus:ring-primary h-4 w-4"
+                      checked={newTraining.employeeIds.includes(emp.id)}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        setNewTraining(prev => ({
+                          ...prev,
+                          employeeIds: isChecked 
+                            ? [...prev.employeeIds, emp.id]
+                            : prev.employeeIds.filter(id => id !== emp.id)
+                        }));
+                      }}
+                    />
+                    <span className="text-sm">{emp.firstName} {emp.lastName}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-2 mt-4">
-            <Button onClick={handleCreateTraining} className="bg-green-600 hover:bg-green-700 text-white">
+            <Button onClick={handleCreateTraining} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               Crear Capacitación
             </Button>
             <Button variant="outline" onClick={() => setShowNewForm(false)}>
@@ -239,7 +265,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 </div>
                 <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all"
+                    className="h-full bg-primary transition-all"
                     style={{ width: `${Math.min(progress, 100)}%` }}
                   />
                 </div>
@@ -258,7 +284,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 <div className="pt-3 border-t mt-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Costo</span>
-                    <span className="font-bold text-indigo-600">{formatConvertedAmount(training.cost, training.currency)}</span>
+                    <span className="font-bold text-primary">{formatConvertedAmount(training.cost, training.currency)}</span>
                   </div>
                 </div>
               )}

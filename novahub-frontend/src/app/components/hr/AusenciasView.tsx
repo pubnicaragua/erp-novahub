@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileText, Plus, Check, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -12,11 +12,28 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const [newRequest, setNewRequest] = useState({
     employeeId: '',
     leaveType: 'VACATION',
+    leaveTypeCustom: '',
     startDate: '',
     endDate: '',
     days: 1,
     reason: '',
   });
+
+  useEffect(() => {
+    if (newRequest.startDate && newRequest.endDate) {
+      const start = new Date(newRequest.startDate);
+      const end = new Date(newRequest.endDate);
+      if (start <= end) {
+        let count = 0;
+        let cur = new Date(start);
+        while (cur <= end) {
+          if (cur.getDay() !== 0) count++; // 0 is Sunday
+          cur.setDate(cur.getDate() + 1);
+        }
+        setNewRequest(prev => ({ ...prev, days: count }));
+      }
+    }
+  }, [newRequest.startDate, newRequest.endDate]);
 
   const handleCreateRequest = async () => {
     if (!newRequest.employeeId || !newRequest.startDate || !newRequest.endDate) {
@@ -31,6 +48,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       setNewRequest({
         employeeId: '',
         leaveType: 'VACATION',
+        leaveTypeCustom: '',
         startDate: '',
         endDate: '',
         days: 1,
@@ -104,7 +122,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
 
       {/* New Request Button */}
       <div className="flex justify-end">
-        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-indigo-600 hover:bg-indigo-700 !text-white">
+        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
           <Plus className="size-4 mr-2" />
           Nueva Solicitud
         </Button>
@@ -112,8 +130,8 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
 
       {/* New Request Form */}
       {showNewForm && (
-        <div className="border rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
-          <h3 className="text-lg font-semibold mb-4">Nueva Solicitud de Ausencia</h3>
+        <div className="border border-primary/40 rounded-lg p-6 bg-primary/5">
+          <h3 className="text-lg font-semibold mb-4 text-primary">Nueva Solicitud de Ausencia</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium mb-1 block">Empleado</label>
@@ -146,6 +164,14 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                   <SelectItem value="OTHER">Otro</SelectItem>
                 </SelectContent>
               </Select>
+              {newRequest.leaveType === 'OTHER' && (
+                <Input 
+                  placeholder="Especifica el tipo de ausencia..."
+                  value={newRequest.leaveTypeCustom}
+                  onChange={e => setNewRequest({...newRequest, leaveTypeCustom: e.target.value})}
+                  className="mt-2 bg-background"
+                />
+              )}
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Fecha Inicio</label>
@@ -169,9 +195,10 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
               <label className="text-sm font-medium mb-1 block">Días</label>
               <Input
                 type="number"
+                disabled
                 value={newRequest.days}
                 onChange={(e) => setNewRequest({ ...newRequest, days: parseInt(e.target.value) })}
-                className="bg-background"
+                className="bg-background opacity-70"
               />
             </div>
             <div>
@@ -185,7 +212,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
             </div>
           </div>
           <div className="flex items-center gap-2 mt-4">
-            <Button onClick={handleCreateRequest} className="bg-green-600 hover:bg-green-700 text-white">
+            <Button onClick={handleCreateRequest} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               Crear Solicitud
             </Button>
             <Button variant="outline" onClick={() => setShowNewForm(false)}>
@@ -225,8 +252,8 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">
-                      {request.leaveType === 'VACATION' ? 'Vacaciones' : request.leaveType === 'SICK' ? 'Enfermedad' : request.leaveType === 'PERSONAL' ? 'Personal' : request.leaveType === 'MATERNITY' ? 'Maternidad' : request.leaveType === 'PATERNITY' ? 'Paternidad' : request.leaveType === 'UNPAID' ? 'Sin Goce' : request.leaveType === 'BEREAVEMENT' ? 'Duelo' : request.leaveType}
+                    <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                      {request.leaveType === 'VACATION' ? 'Vacaciones' : request.leaveType === 'SICK' ? 'Enfermedad' : request.leaveType === 'PERSONAL' ? 'Personal' : request.leaveType === 'MATERNITY' ? 'Maternidad' : request.leaveType === 'PATERNITY' ? 'Paternidad' : request.leaveType === 'UNPAID' ? 'Sin Goce' : request.leaveType === 'BEREAVEMENT' ? 'Duelo' : request.leaveTypeCustom || 'Otro'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm">

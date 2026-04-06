@@ -21,7 +21,7 @@ export interface ColumnDef<T> {
   header: string;
   width?: string;
   editable?: boolean;
-  type?: 'text' | 'number' | 'select' | 'date' | 'badge';
+  type?: 'text' | 'number' | 'select' | 'date' | 'datetime-local' | 'badge';
   options?: { label: string; value: string; color?: string }[];
   render?: (value: any, row: T) => React.ReactNode;
 }
@@ -311,6 +311,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                             ) : (
                               <Input
                                 ref={inputRef}
+                                type={col.type === 'datetime-local' ? 'datetime-local' : col.type === 'date' ? 'date' : col.type === 'number' ? 'number' : 'text'}
                                 value={editValue}
                                 onChange={(e) => setEditValue(e.target.value)}
                                 onBlur={() => handleSave(rowId, colKey)}

@@ -23,7 +23,12 @@ const createCrudService = <T>(endpoint: string) => ({
   }
 });
 
-export const tasksService = createCrudService<any>('/activities/tasks');
+export const tasksService = {
+  ...createCrudService<any>('/activities/tasks'),
+  complete: async (id: string, evidenceData: any) => {
+    return await api.post(`/activities/tasks/${id}/complete`, evidenceData);
+  }
+};
 export const eventsService = createCrudService<any>('/activities/events');
 export const remindersService = createCrudService<any>('/activities/reminders');
 export const activityLogsService = createCrudService<any>('/activities/logs');
