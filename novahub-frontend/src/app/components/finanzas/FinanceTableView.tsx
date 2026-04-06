@@ -55,6 +55,10 @@ export function FinanceTableView({
   const handleCellEdit = (id: string, key: string, value: any) => {
     const newData = localData.map(item => {
       if (item.id === id) {
+        if (item.isPayment) {
+          toast.error('No se puede editar un pago de factura desde este módulo');
+          return item;
+        }
         return { ...item, [key]: value, isDraft: true };
       }
       return item;
@@ -178,6 +182,10 @@ export function FinanceTableView({
                   <TableCell>
                     {savingIds.has(item.id) ? (
                       <div className="size-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                    ) : item.isPayment ? (
+                      <div className="size-4 rounded-full bg-emerald-500/20 flex items-center justify-center" title="Pago de Compras (Solo lectura)">
+                        <CheckCircle2 className="size-3 text-emerald-600" />
+                      </div>
                     ) : item.isDraft ? (
                       <span title="Borrador / Cambios pendientes">
                         <Edit3 className="size-4 text-orange-400" />
@@ -231,9 +239,10 @@ export function FinanceTableView({
                       <DropdownMenuContent align="end" className="w-40">
                         <DropdownMenuItem
                           className="gap-2 text-destructive focus:text-destructive"
-                          onClick={() => onDelete(item.id)}
+                          disabled={item.isPayment}
+                          onClick={() => !item.isPayment && onDelete(item.id)}
                         >
-                          <Trash2 className="size-4" /> Eliminar
+                          <Trash2 className="size-4" /> Eliminar {item.isPayment && '(Bloqueado)'}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft
+  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -15,6 +15,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { generateSupplierInvoicePDF } from '../../utils/pdfGenerator';
 
 interface Props { data: SupplierInvoice[]; loading: boolean; onRefresh: () => void; draftInvoiceFromOrder?: any; onDraftConsumed?: () => void; }
 
@@ -27,7 +28,7 @@ const statusOpts = [
 ];
 
 export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed }: Props) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -36,6 +37,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<SupplierInvoice> | null>(null);
+  const generateSupplierInvoiceNumber = () => `INV-${Date.now().toString().slice(-6)}`;
 
   useEffect(() => {
     suppliersService.getAll().then(res => {
@@ -46,7 +48,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   useEffect(() => {
     if (draftInvoiceFromOrder) {
-      setLocalDoc({ ...draftInvoiceFromOrder, _fromDraft: true });
+      setLocalDoc({ number: generateSupplierInvoiceNumber(), ...draftInvoiceFromOrder, _fromDraft: true });
       setEditingId('NEW');
       if (onDraftConsumed) onDraftConsumed();
     }
@@ -67,6 +69,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       currency: displayCurrency,
       exchangeRate: globalRate,
       status: 'PENDING',
+      number: generateSupplierInvoiceNumber(),
       items: [],
       subtotal: 0,
       taxAmount: 0,
@@ -75,10 +78,37 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     setEditingId('NEW');
   };
 
-  const filtered = data.filter(b =>
-    (b.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (b.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const filtered = data.filter((b) => {
+    if (!normalizedSearchTerm) return true;
+    const haystack = [
+      b.number,
+      b.supplier?.name,
+      b.supplier?.code,
+      b.supplier?.email,
+      b.supplier?.phone,
+      b.notes,
+      b.status,
+      b.date ? new Date(b.date).toLocaleDateString() : '',
+      b.dueDate ? new Date(b.dueDate).toLocaleDateString() : '',
+      String(b.total ?? ''),
+      String(b.amountPaid ?? ''),
+      String(b.balance ?? ''),
+      ...(b.items || []).map((item: any) => item.description),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(normalizedSearchTerm);
+  });
+
+  const isSupplierActive = (supplierId?: string) =>
+    !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
+  const isPayingStatus = (status?: string) => ['PAID', 'PARTIAL'].includes((status || '').toUpperCase());
+
+  const ensureFinanceExpenseForInvoice = async (_invoice: Partial<SupplierInvoice>) => {
+    return;
+  };
 
   const columns: ColumnDef<SupplierInvoice>[] = [
     { key: 'number',   header: 'Factura #',   width: '120px',
@@ -101,8 +131,29 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<SupplierInvoice>) => {
-    try { await billsService.update(id as string, updates); toast.success('Factura actualizada'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
+    const currentInvoice = data.find((x) => x.id === id);
+    const previousStatus = String(currentInvoice?.status || '').toUpperCase();
+    const statusToApply = (updates.status || currentInvoice?.status || '').toString();
+    if (isPayingStatus(statusToApply) && currentInvoice?.supplierId && !isSupplierActive(currentInvoice.supplierId)) {
+      toast.error('No se puede registrar pago en facturas de proveedores inactivos');
+      return;
+    }
+    try {
+      const updatedResponse = await billsService.update(id as string, updates);
+      const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
+      const nextStatus = String(updatedInvoice?.status || updates.status || previousStatus).toUpperCase();
+      if (!isPayingStatus(previousStatus) && isPayingStatus(nextStatus)) {
+        await ensureFinanceExpenseForInvoice({
+          ...(currentInvoice || {}),
+          ...(updatedInvoice || {}),
+          id: String(id),
+          status: nextStatus,
+        });
+      }
+      toast.success('Factura actualizada');
+      onRefresh();
+    }
+    catch { toast.error('Error al actualizar'); }
   };
 
   const handleDeleteConfirm = async () => {
@@ -126,6 +177,9 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
+    if (isPayingStatus(String(localDoc.status || '')) && !isSupplierActive(localDoc.supplierId)) {
+      return toast.error('No se puede registrar pago en facturas de proveedores inactivos');
+    }
     
     try {
       if (editingId === 'NEW') {
@@ -133,11 +187,19 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         delete payloadToSave._sourceOrderId;
         delete payloadToSave._fromDraft;
 
-        await billsService.create({
-          ...payloadToSave, 
-          // Defaulting number if empty for invoices since it comes from vendor usually
-          number: payloadToSave.number || `INV-${Date.now().toString().slice(-5)}`
+        if (payloadToSave.purchaseOrderId) {
+          const duplicateForOrder = data.some((inv) => inv.purchaseOrderId === payloadToSave.purchaseOrderId);
+          if (duplicateForOrder) {
+            return toast.error('Ya existe una factura para esta orden de compra');
+          }
+        }
+
+        const createdResponse = await billsService.create({
+          ...payloadToSave,
+          number: payloadToSave.number || generateSupplierInvoiceNumber(),
         });
+        const created = (createdResponse as any)?.data || createdResponse;
+        await ensureFinanceExpenseForInvoice(created);
         
         if ((localDoc as any)._sourceOrderId) {
           try {
@@ -148,12 +210,26 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         }
         
         toast.success('Factura creada exitosamente');
+        setEditingId(null);
+        setLocalDoc(null);
       } else {
-        await billsService.update(editingId!, localDoc as any);
+        const existingInvoice = data.find((x) => x.id === editingId);
+        const previousStatus = String(existingInvoice?.status || '').toUpperCase();
+        const updatedResponse = await billsService.update(editingId!, localDoc as any);
+        const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
+        const nextStatus = String(updatedInvoice?.status || localDoc.status || '').toUpperCase();
+        if (!isPayingStatus(previousStatus) && isPayingStatus(nextStatus)) {
+          await ensureFinanceExpenseForInvoice({
+            ...(existingInvoice || {}),
+            ...(updatedInvoice || {}),
+            id: editingId!,
+            status: nextStatus,
+          });
+        }
         toast.success('Factura guardada');
+        setLocalDoc((prev) => prev ? { ...prev } : prev);
+        setEditingId(editingId);
       }
-      setEditingId(null);
-      setLocalDoc(null);
       onRefresh();
     } catch (e: any) {
       toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
@@ -207,6 +283,20 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             </div>
           </div>
           <div className="flex items-center gap-3">
+             {!isNew && (
+               <Button
+                 variant="outline"
+                 className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
+                 onClick={() => generateSupplierInvoicePDF({
+                   invoice: localDoc,
+                   tenantName: user?.tenantName || 'Nova Hub',
+                   formatAmount: (amount: number, currency?: string, rate?: number) =>
+                     formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
+                 })}
+               >
+                 <Download className="size-3 mr-2" /> Descargar
+               </Button>
+             )}
              {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
@@ -227,13 +317,12 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="col-span-2">
-                  <p className="text-[10px] text-muted-foreground mb-1">Número de Factura Físico (Opcional)</p>
+                  <p className="text-[10px] text-muted-foreground mb-1">Número de Factura</p>
                   <Input 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled
                     value={localDoc.number || ''} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, number: e.target.value })} 
                     className="h-8 text-xs font-black uppercase" 
-                    placeholder="Ej. F-0294" 
+                    placeholder="Se genera automáticamente" 
                   />
                 </div>
                 <div className="col-span-2">

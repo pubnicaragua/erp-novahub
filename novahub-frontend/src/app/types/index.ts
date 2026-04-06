@@ -354,6 +354,7 @@ export interface PurchaseOrder {
   taxRate?: number;
   withholdingRate?: number;
   withholdingAmount?: number;
+  isService?: boolean;
   evidenceFileName?: string;
   evidenceFileType?: string;
   evidenceFileSize?: number;
