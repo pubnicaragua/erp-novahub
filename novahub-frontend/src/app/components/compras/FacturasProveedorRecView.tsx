@@ -107,10 +107,10 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
       const finalDoc = { ...localDoc, total: localDoc.total || (localDoc as any).amount || 0 };
       if (editingId === 'NEW') {
         await recurringSupplierInvoicesService.create(finalDoc as any);
-        toast.success('Configuración de factura recurrente creada');
+        toast.success('Factura recurrente creada');
       } else {
         await recurringSupplierInvoicesService.update(editingId!, finalDoc as any);
-        toast.success('Configuración guardada');
+        toast.success('Factura recurrente guardada');
       }
       setEditingId(null);
       onRefresh();
@@ -157,7 +157,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Config. Recurrente' : 'Editar Factura Recurrente'}</h2>
+              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Agregar Factura Recurrente' : 'Editar Factura Recurrente'}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Creación automática de facturas</p>
             </div>
           </div>
@@ -170,7 +170,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
              )}
             {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                Guardar Configuración
+                Guardar Factura Recurrente
               </Button>
             )}
           </div>
@@ -348,8 +348,8 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
           open={!!pendingDeleteId}
           onOpenChange={(open) => !open && setPendingDeleteId(null)}
           loading={deleteLoading}
-          title="Eliminar Configuración"
-          description="¿Estás seguro de eliminar esta configuración recurrente? No se generarán más facturas automáticamente."
+          title="Eliminar Factura Recurrente"
+          description="¿Estás seguro de eliminar esta factura recurrente? No se generarán más facturas automáticamente."
           onConfirm={async () => {
             if (!pendingDeleteId) return;
             setDeleteLoading(true);
@@ -375,7 +375,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
     }, 0);
   const kpis = [
     { title: 'Activas',         value: data.filter(r => ((r as any).status||'').toUpperCase()==='ACTIVE').length,  icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Total Config.',   value: data.length,                                                                  icon: RotateCcw,     color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
+    { title: 'Total Recurrentes', value: data.length,                                                                icon: RotateCcw,     color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     {
       title: `Est. Mensual (${displayCurrency})`,
       value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${monthly.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
@@ -404,7 +404,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('compras', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-purple-600 hover:bg-purple-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Config.</Button>
+              <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Agregar Factura Recurrente</Button>
             )}
           </div>
         </div>

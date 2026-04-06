@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2 } from 'lucide-react';
+import { Plus, Search, Eye, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Download } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -12,8 +12,15 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { generateExpensePDF } from '../../utils/pdfGenerator';
 
-interface Props { data: PaymentMade[]; loading: boolean; onRefresh: () => void; }
+interface Props {
+  data: PaymentMade[];
+  loading: boolean;
+  onRefresh: () => void;
+  draftPaymentFromInvoice?: Partial<PaymentMade> | null;
+  onDraftConsumed?: () => void;
+}
 
 const methodOpts = [
   { label: 'Transferencia', value: 'transfer' },
@@ -22,8 +29,8 @@ const methodOpts = [
   { label: 'Tarjeta',       value: 'card' },
 ];
 
-export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
-  const { canPerform } = useAuth();
+export function PagosRealizadosView({ data, loading, onRefresh, draftPaymentFromInvoice, onDraftConsumed }: Props) {
+  const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -42,38 +49,91 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
   }, []);
 
   useEffect(() => {
+    if (draftPaymentFromInvoice) {
+      setEditingId('NEW');
+    }
+  }, [draftPaymentFromInvoice]);
+
+  useEffect(() => {
     if (editingId) {
       if (editingId === 'NEW') {
+         const prefilled = draftPaymentFromInvoice || {};
          setLocalDoc({
-           supplierId: '',
-           supplierInvoiceId: '',
-           date: new Date().toISOString(),
-           amount: 0,
-            currency: displayCurrency,
+           supplierId: prefilled.supplierId || '',
+           supplierInvoiceId: prefilled.supplierInvoiceId || '',
+           date: prefilled.date || new Date().toISOString(),
+           amount: Number(prefilled.amount || 0),
+           currency: displayCurrency,
            exchangeRate: globalRate,
-           method: 'transfer',
-           reference: `PAG-${Date.now().toString().slice(-5)}`,
-           notes: '',
-         });
-      } else {
-         const found = data.find(x => x.id === editingId);
-         setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
-      }
+           method: (prefilled.method as any) || 'transfer',
+           reference: prefilled.reference || `PAG-${Date.now().toString().slice(-5)}`,
+           notes: prefilled.notes || '',
+          });
+         if (draftPaymentFromInvoice && onDraftConsumed) onDraftConsumed();
+       } else {
+          const found = data.find(x => x.id === editingId);
+          setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+       }
     } else {
       setLocalDoc(null);
     }
-  }, [editingId, data, globalRate]);
+  }, [editingId, data, globalRate, displayCurrency, draftPaymentFromInvoice, onDraftConsumed]);
 
-  const filtered = data.filter(p =>
-    (p.reference||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    if (editingId === 'NEW') {
+      setLocalDoc((prev) => (prev ? { ...prev, currency: displayCurrency, exchangeRate: globalRate } : prev));
+    }
+  }, [displayCurrency, globalRate, editingId]);
+
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const getMethodLabel = (method?: string) => methodOpts.find((opt) => opt.value === String(method || '').toLowerCase())?.label || method || '-';
+  const toExpensePayload = (payment: Partial<PaymentMade>, supplierName?: string) => ({
+    number: payment.number || payment.reference || payment.id || `PAG-${Date.now().toString().slice(-5)}`,
+    id: payment.id,
+    date: payment.date,
+    amount: Number(payment.amount || 0),
+    currency: payment.currency,
+    exchangeRate: payment.exchangeRate,
+    category: 'PAGO_PROVEEDOR',
+    description: payment.notes || `Pago a proveedor ${supplierName || '-'}`,
+    paidTo: supplierName || '-',
+    paymentSource: getMethodLabel(payment.method),
+    reference: payment.reference || '-',
+    status: 'PAID',
+  });
+
+  const filtered = data.filter((payment) => {
+    if (!normalizedSearchTerm) return true;
+    const linkedBill = bills.find((bill) => bill.id === payment.supplierInvoiceId);
+    const haystack = [
+      payment.reference,
+      payment.number,
+      payment.supplier?.name,
+      payment.supplier?.code,
+      payment.notes,
+      payment.date ? new Date(payment.date).toLocaleDateString() : '',
+      payment.amount,
+      Number(payment.amount || 0).toLocaleString(),
+      getMethodLabel(payment.method),
+      linkedBill?.number,
+      linkedBill?.status,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(normalizedSearchTerm);
+  });
 
   const isSupplierActive = (supplierId?: string) =>
     !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
 
   const columns: ColumnDef<PaymentMade>[] = [
     { key: 'reference', header: 'Referencia', width: '130px', editable: canPerform('compras', 'edit') },
+    { key: 'supplierInvoiceId', header: 'Factura #', width: '120px',
+      render: (val) => {
+        const invoice = bills.find((bill) => bill.id === val);
+        return <span className="text-xs font-bold text-primary">{invoice?.number || '-'}</span>;
+      } },
     { key: 'supplier',  header: 'Proveedor',
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'date',      header: 'Fecha',      width: '110px',
@@ -131,6 +191,20 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-3">
+             {!isNew && (
+                <Button
+                  variant="outline"
+                  className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
+                  onClick={() => generateExpensePDF({
+                    expense: toExpensePayload(localDoc, suppliers.find((s) => s.id === localDoc.supplierId)?.name),
+                    tenantName: user?.tenantName || 'Nova Hub',
+                    formatAmount: (amount: number, currency?: string, rate?: number) =>
+                      formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
+                  })}
+                >
+                  <Download className="size-3 mr-2" /> Descargar PDF
+                </Button>
+              )}
              {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={async () => {
@@ -235,15 +309,14 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
                    <div className="w-1/2">
                       <p className="text-[10px] text-muted-foreground mb-1">Moneda de Pago</p>
                         <select 
-                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
-                          value={localDoc.currency || 'NIO'} 
+                          disabled
+                          value={displayCurrency}
                           onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
                           className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
                         >
-                        <option value="NIO">NIO</option>
-                        <option value="USD">USD</option>
-                      </select>
-                   </div>
+                        <option value={displayCurrency}>{displayCurrency}</option>
+                       </select>
+                    </div>
                    <div className="w-1/2 flex flex-col items-end">
                       <p className="text-[10px] text-muted-foreground mb-1">Monto de Salida</p>
                       <Input 
@@ -306,9 +379,9 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
           <div><h2 className="text-xl font-black uppercase tracking-tight">Pagos Realizados</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Desembolsos a proveedores</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerform('compras', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Pago</Button>
-            )}
+             {canPerform('compras', 'create') && (
+               <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Pago</Button>
+             )}
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
@@ -324,9 +397,23 @@ export function PagosRealizadosView({ data, loading, onRefresh }: Props) {
               toast.error('Error al eliminar');
             }
           } : undefined}
-          actions={(row) => (
-             <div className="flex gap-1">
-              <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+           actions={(row) => (
+              <div className="flex gap-1">
+               <Button
+                 title="Descargar PDF"
+                 variant="ghost"
+                 size="icon"
+                 className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
+                 onClick={() => generateExpensePDF({
+                   expense: toExpensePayload(row, row.supplier?.name),
+                   tenantName: user?.tenantName || 'Nova Hub',
+                   formatAmount: (amount: number, currency?: string, rate?: number) =>
+                     formatConvertedAmount(Number(amount || 0), currency || row.currency, rate || row.exchangeRate),
+                 })}
+               >
+                 <Download className="size-4" />
+               </Button>
+               <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
               {canPerform('compras', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { await paymentsService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
               )}

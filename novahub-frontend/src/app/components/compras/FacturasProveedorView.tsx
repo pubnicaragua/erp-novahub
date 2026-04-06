@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { 
-  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download
+  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download, Banknote
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { billsService, suppliersService, purchaseOrdersService } from '../../services/compras.service';
+import { billsService, suppliersService, purchaseOrdersService, paymentsService, expensesService } from '../../services/compras.service';
 import type { SupplierInvoice, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
@@ -17,7 +17,14 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateSupplierInvoicePDF } from '../../utils/pdfGenerator';
 
-interface Props { data: SupplierInvoice[]; loading: boolean; onRefresh: () => void; draftInvoiceFromOrder?: any; onDraftConsumed?: () => void; }
+interface Props {
+  data: SupplierInvoice[];
+  loading: boolean;
+  onRefresh: () => void;
+  draftInvoiceFromOrder?: any;
+  onDraftConsumed?: () => void;
+  onRegisterPaymentFromInvoice?: (draft: any) => void;
+}
 
 const statusOpts = [
   { label: 'Pendiente',   value: 'PENDING',  color: 'bg-amber-500/10 text-amber-500' },
@@ -27,7 +34,7 @@ const statusOpts = [
   { label: 'Reembolsada', value: 'REFUNDED', color: 'bg-muted/30 text-muted-foreground/50' },
 ];
 
-export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed }: Props) {
+export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -106,8 +113,64 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
   const isPayingStatus = (status?: string) => ['PAID', 'PARTIAL'].includes((status || '').toUpperCase());
 
-  const ensureFinanceExpenseForInvoice = async (_invoice: Partial<SupplierInvoice>) => {
-    return;
+  const getBillPaymentAmount = (invoice: Partial<SupplierInvoice>) => {
+    const total = Number(invoice.total || 0);
+    const amountPaid = Number(invoice.amountPaid || 0);
+    const balance = Number(invoice.balance || 0);
+    if (amountPaid > 0) return amountPaid;
+    if (total > 0 && balance >= 0 && balance < total) return total - balance;
+    return total;
+  };
+
+  const ensureFinanceExpenseForInvoice = async (invoice: Partial<SupplierInvoice>) => {
+    const nextStatus = String(invoice.status || '').toUpperCase();
+    if (!['PAID', 'PARTIAL'].includes(nextStatus)) return;
+    if (!invoice.id || !invoice.supplierId) return;
+
+    const amount = getBillPaymentAmount(invoice);
+    if (amount <= 0) return;
+
+    const supplier = suppliers.find((s) => s.id === invoice.supplierId);
+    const syncReference = `AUTO-INV-${invoice.id}`;
+    const [paymentsResponse, expensesResponse] = await Promise.all([
+      paymentsService.getAll().catch(() => ({ data: [] as any[] })),
+      expensesService.getAll().catch(() => ({ data: [] as any[] })),
+    ]);
+    const existingPayments = (paymentsResponse as any)?.data || [];
+    const existingExpenses = (expensesResponse as any)?.data || [];
+
+    const paymentExists = existingPayments.some(
+      (payment: any) => payment.supplierInvoiceId === invoice.id || payment.reference === syncReference,
+    );
+    if (!paymentExists) {
+      await paymentsService.create({
+        supplierId: invoice.supplierId,
+        supplierInvoiceId: invoice.id,
+        date: invoice.date || new Date().toISOString(),
+        amount,
+        currency: (invoice.currency as any) || displayCurrency,
+        exchangeRate: invoice.exchangeRate || globalRate,
+        method: 'transfer',
+        reference: syncReference,
+        notes: `Pago automático por factura ${invoice.number || invoice.id}`,
+      } as any);
+    }
+
+    const expenseExists = existingExpenses.some((expense: any) => expense.reference === syncReference);
+    if (!expenseExists) {
+      await expensesService.create({
+        supplierId: invoice.supplierId,
+        date: invoice.date || new Date().toISOString(),
+        amount,
+        currency: (invoice.currency as any) || displayCurrency,
+        exchangeRate: invoice.exchangeRate || globalRate,
+        category: 'FACTURA_PROVEEDOR',
+        description: `Pago de factura proveedor ${invoice.number || invoice.id}`,
+        paidTo: supplier?.name || 'Proveedor',
+        reference: syncReference,
+        status: 'PAID',
+      } as any);
+    }
   };
 
   const columns: ColumnDef<SupplierInvoice>[] = [
@@ -143,12 +206,16 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
       const nextStatus = String(updatedInvoice?.status || updates.status || previousStatus).toUpperCase();
       if (!isPayingStatus(previousStatus) && isPayingStatus(nextStatus)) {
-        await ensureFinanceExpenseForInvoice({
-          ...(currentInvoice || {}),
-          ...(updatedInvoice || {}),
-          id: String(id),
-          status: nextStatus,
-        });
+        try {
+          await ensureFinanceExpenseForInvoice({
+            ...(currentInvoice || {}),
+            ...(updatedInvoice || {}),
+            id: String(id),
+            status: nextStatus,
+          });
+        } catch (syncError: any) {
+          toast.warning(`Factura actualizada, pero no se pudo sincronizar pago/finanzas: ${syncError?.message || 'Error de sincronización'}`);
+        }
       }
       toast.success('Factura actualizada');
       onRefresh();
@@ -199,7 +266,13 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           number: payloadToSave.number || generateSupplierInvoiceNumber(),
         });
         const created = (createdResponse as any)?.data || createdResponse;
-        await ensureFinanceExpenseForInvoice(created);
+        if (isPayingStatus(String(created?.status || localDoc.status || ''))) {
+          try {
+            await ensureFinanceExpenseForInvoice(created);
+          } catch (syncError: any) {
+            toast.warning(`Factura creada, pero no se pudo sincronizar pago/finanzas: ${syncError?.message || 'Error de sincronización'}`);
+          }
+        }
         
         if ((localDoc as any)._sourceOrderId) {
           try {
@@ -219,12 +292,16 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
         const nextStatus = String(updatedInvoice?.status || localDoc.status || '').toUpperCase();
         if (!isPayingStatus(previousStatus) && isPayingStatus(nextStatus)) {
-          await ensureFinanceExpenseForInvoice({
-            ...(existingInvoice || {}),
-            ...(updatedInvoice || {}),
-            id: editingId!,
-            status: nextStatus,
-          });
+          try {
+            await ensureFinanceExpenseForInvoice({
+              ...(existingInvoice || {}),
+              ...(updatedInvoice || {}),
+              id: editingId!,
+              status: nextStatus,
+            });
+          } catch (syncError: any) {
+            toast.warning(`Factura guardada, pero no se pudo sincronizar pago/finanzas: ${syncError?.message || 'Error de sincronización'}`);
+          }
         }
         toast.success('Factura guardada');
         setLocalDoc((prev) => prev ? { ...prev } : prev);
@@ -269,6 +346,17 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
+    const paymentDraft = {
+      supplierId: localDoc.supplierId || '',
+      supplierInvoiceId: localDoc.id || '',
+      date: new Date().toISOString(),
+      amount: getBillPaymentAmount(localDoc),
+      currency: (localDoc.currency as any) || displayCurrency,
+      exchangeRate: localDoc.exchangeRate || globalRate,
+      method: 'transfer',
+      reference: `PAG-${(localDoc.number || localDoc.id || '').toString().replace(/[^A-Za-z0-9-]/g, '').slice(0, 20)}`,
+      notes: `Pago de factura proveedor ${localDoc.number || localDoc.id || ''}`.trim(),
+    };
     
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
@@ -297,12 +385,21 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                  <Download className="size-3 mr-2" /> Descargar
                </Button>
              )}
-             {!isNew && canPerform('compras', 'delete') && (
+              {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
-             )}
+              )}
+              {!isNew && canPerform('compras', 'create') && onRegisterPaymentFromInvoice && (
+                <Button
+                  variant="outline"
+                  className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
+                  onClick={() => onRegisterPaymentFromInvoice(paymentDraft)}
+                >
+                  <Banknote className="size-3 mr-2" /> Registrar Pago
+                </Button>
+              )}
             {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Factura
@@ -551,6 +648,27 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           actions={(row) => (
             <div className="flex gap-1">
               <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              {canPerform('compras', 'create') && onRegisterPaymentFromInvoice && (
+                <Button
+                  title="Registrar Pago"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500"
+                  onClick={() => onRegisterPaymentFromInvoice({
+                    supplierId: row.supplierId,
+                    supplierInvoiceId: row.id,
+                    date: new Date().toISOString(),
+                    amount: getBillPaymentAmount(row),
+                    currency: row.currency || displayCurrency,
+                    exchangeRate: row.exchangeRate || globalRate,
+                    method: 'transfer',
+                    reference: `PAG-${(row.number || row.id || '').toString().replace(/[^A-Za-z0-9-]/g, '').slice(0, 20)}`,
+                    notes: `Pago de factura proveedor ${row.number || row.id || ''}`.trim(),
+                  })}
+                >
+                  <Banknote className="size-4" />
+                </Button>
+              )}
               {canPerform('compras', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
               )}

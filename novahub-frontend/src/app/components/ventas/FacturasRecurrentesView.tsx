@@ -99,7 +99,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const handleUpdate = async (id: string | number, updates: Partial<RecurringInvoice>) => {
     try {
       await recurringInvoicesService.update(id.toString(), updates);
-      toast.success('Suscripción actualizada');
+      toast.success('Factura recurrente actualizada');
       onRefresh();
     } catch (error) {
       toast.error('Error al actualizar');
@@ -253,7 +253,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           )} 
           onClick={() => canPerform('ventas', 'edit') && setEditingId(row.id)}
         >
-          Suscripción #{row.id.slice(0, 8)}
+          Factura #{row.id.slice(0, 8)}
         </span>
       )
     },
@@ -315,8 +315,8 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setIsCreating(false); setLocalDoc(null); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Agregar Factura Recurrente' : `Suscripción #${localDoc.id?.slice(0, 8)}`}</h2>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Configurar nueva suscripción' : 'Editar configuración'}</p>
+              <h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Agregar Factura Recurrente' : `Factura #${localDoc.id?.slice(0, 8)}`}</h2>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Configurar nueva factura recurrente' : 'Editar factura recurrente'}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -335,7 +335,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Configuración</p>
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Datos de Factura Recurrente</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
