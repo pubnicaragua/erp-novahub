@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 
 interface ProductosViewProps {
   products: any[];
@@ -36,12 +38,19 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [editingRows, setEditingRows] = useState<Map<string, EditingProduct>>(new Map());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryDescription, setNewCategoryDescription] = useState('');
+  const [creatingCategory, setCreatingCategory] = useState(false);
   const newRowRef = useRef<HTMLInputElement>(null);
 
   const filteredProducts = products.filter((p: any) => {
     const matchesSearch = !searchTerm || 
       p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.code?.toLowerCase().includes(searchTerm.toLowerCase());
+      p.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.category?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || p.categoryId === categoryFilter;
     return matchesSearch && matchesCategory;
   });
@@ -141,13 +150,41 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
   };
 
   const handleDeleteProduct = async (id: string) => {
-    if (!confirm('¿Eliminar este producto?')) return;
+    setPendingDeleteId(id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    setDeleteLoading(true);
     try {
-      await inventoryService.deleteProduct(id);
+      await inventoryService.deleteProduct(pendingDeleteId);
       toast.success('Producto eliminado');
+      setPendingDeleteId(null);
       onRefresh();
     } catch (e) {
       toast.error('Error al eliminar');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) return toast.error('El nombre de la categoría es requerido');
+    setCreatingCategory(true);
+    try {
+      await inventoryService.createCategory({
+        name: newCategoryName.trim(),
+        description: newCategoryDescription.trim() || undefined,
+      });
+      toast.success('Categoría creada');
+      setCategoryModalOpen(false);
+      setNewCategoryName('');
+      setNewCategoryDescription('');
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al crear categoría');
+    } finally {
+      setCreatingCategory(false);
     }
   };
 
@@ -237,6 +274,11 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
           />
         </TableCell>
         <TableCell className="text-right">
+          <Badge className={(product.salePrice - product.costPrice) >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}>
+            {formatAmount((product.salePrice || 0) - (product.costPrice || 0))}
+          </Badge>
+        </TableCell>
+        <TableCell className="text-right">
           <div className="flex items-center justify-end gap-1">
             <Button 
               variant="ghost" 
@@ -277,7 +319,7 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
             />
           </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-40 h-9">
+            <SelectTrigger className="w-[240px] max-w-[45vw] h-9">
               <SelectValue placeholder="Categoría" />
             </SelectTrigger>
             <SelectContent>
@@ -288,7 +330,16 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
             </SelectContent>
           </Select>
         </div>
-        {canPerform('inventario_productos', 'create') && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
+          onClick={() => setCategoryModalOpen(true)}
+        >
+          <Plus className="size-4 mr-2" />
+          Nueva Categoría
+        </Button>
+        {canPerform('inventario', 'create') && (
           <Button 
             size="sm" 
             className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
@@ -311,6 +362,7 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Venta</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Costo</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-32">Beneficio</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -323,7 +375,7 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
             {/* Existing products */}
             {filteredProducts.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                   <Package className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">No hay productos</p>
                   <p className="text-sm">Haz clic en "Agregar Producto" para comenzar</p>
@@ -341,7 +393,7 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
                   <TableRow 
                     key={product.id} 
                     className="group hover:bg-muted/30 cursor-pointer"
-                    onDoubleClick={() => canPerform('inventario_productos', 'edit') && handleEditRow(product)}
+                    onDoubleClick={() => canPerform('inventario', 'edit') && handleEditRow(product)}
                   >
                     <TableCell className="font-mono text-xs text-muted-foreground">{product.code}</TableCell>
                     <TableCell>
@@ -357,27 +409,32 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">{product.stock || 0}</TableCell>
                     <TableCell className="text-right font-medium tabular-nums">{formatAmount(product.salePrice || 0)}</TableCell>
-                    <TableCell className="text-right text-muted-foreground tabular-nums">{formatAmount(product.costPrice || 0)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1 transition-opacity">
-                        {canPerform('inventario_productos', 'edit') && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
+                     <TableCell className="text-right text-muted-foreground tabular-nums">{formatAmount(product.costPrice || 0)}</TableCell>
+                     <TableCell className="text-right font-black tabular-nums">
+                       <span className={(Number(product.salePrice || 0) - Number(product.costPrice || 0)) >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                         {formatAmount(Number(product.salePrice || 0) - Number(product.costPrice || 0))}
+                       </span>
+                     </TableCell>
+                     <TableCell className="text-right">
+                       <div className="flex items-center justify-end gap-1 transition-opacity">
+                         {canPerform('inventario', 'edit') && (
+                           <Button 
+                             variant="ghost" 
+                             size="icon" 
                             className="size-7"
                             onClick={() => handleEditRow(product)}
                           >
                             <Save className="size-3.5" />
                           </Button>
                         )}
-                        {canPerform('inventario_productos', 'delete') && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="size-7 text-red-600 hover:text-black hover:bg-red-500"
-                            onClick={() => handleDeleteProduct(product.id)}
-                          >
-                            <Trash2 className="size-3.5" />
+                         {canPerform('inventario', 'delete') && (
+                           <Button 
+                             variant="ghost" 
+                             size="icon" 
+                             className="size-7 text-red-600 hover:text-white hover:bg-red-500"
+                             onClick={() => handleDeleteProduct(product.id)}
+                           >
+                             <Trash2 className="size-3.5" />
                           </Button>
                         )}
                       </div>
@@ -395,6 +452,39 @@ export function ProductosView({ products, categories, onRefresh }: ProductosView
         <p>{filteredProducts.length} de {products.length} productos</p>
         <p className="text-[10px]">Doble clic en una fila para editar · Enter para guardar · Esc para cancelar</p>
       </div>
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="¿Eliminar producto?"
+        description="Esta acción eliminará el producto del inventario."
+        confirmLabel="Eliminar"
+        loading={deleteLoading}
+        onConfirm={handleConfirmDelete}
+      />
+      <Dialog open={categoryModalOpen} onOpenChange={setCategoryModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nueva categoría</DialogTitle>
+            <DialogDescription>Crea una categoría para usarla de inmediato en productos.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1">Nombre</p>
+              <Input value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="Ej. Electrónica" className="h-9 text-xs" />
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1">Descripción (opcional)</p>
+              <Input value={newCategoryDescription} onChange={(e) => setNewCategoryDescription(e.target.value)} placeholder="Descripción corta" className="h-9 text-xs" />
+            </div>
+          </div>
+          <DialogFooter className="mt-2">
+            <Button variant="outline" onClick={() => setCategoryModalOpen(false)}>Cancelar</Button>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleCreateCategory} disabled={creatingCategory}>
+              {creatingCategory ? 'Guardando...' : 'Guardar categoría'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

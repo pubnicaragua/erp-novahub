@@ -48,7 +48,7 @@ function DashboardLayout() {
         handleToggleCollapse();
       }
       setActiveModule(module);
-      setActiveSubModule(subModule);
+      setActiveSubModule(module === 'inventario' ? (subModule || 'dashboard') : subModule);
     }
   };
 
@@ -94,7 +94,7 @@ function DashboardLayout() {
     }
 
     switch (activeModule) {
-      case 'inventario': return <InventarioPage />;
+      case 'inventario': return <InventarioPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'ventas': return <VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'compras': return <ComprasPage activeSubModule={activeSubModule} />;
       case 'finanzas': return <FinanzasPage activeSubModule={activeSubModule} />;
