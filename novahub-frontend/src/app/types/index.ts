@@ -7,7 +7,7 @@
 export type EntityStatus = 'active' | 'inactive' | 'archived' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 export type DocumentStatus = 'draft' | 'sent' | 'approved' | 'rejected' | 'cancelled' | 'DRAFT' | 'SENT' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'refunded' | 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'REFUNDED';
-export type PaymentMethod = 'cash' | 'transfer' | 'check' | 'card' | 'other';
+export type PaymentMethod = 'cash' | 'transfer' | 'check' | 'card' | 'other' | 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER';
 export type Currency = 'USD' | 'EUR' | 'GTQ' | 'HNL' | 'NIO' | 'CRC' | 'PAB';
 
 export interface PaginatedResponse<T> {
@@ -210,6 +210,8 @@ export interface RecurringInvoice {
   exchangeRate?: number;
   baseTotal?: number;
   status: 'active' | 'paused' | 'expired' | 'cancelled';
+  sourceRecurringExpenseId?: string;
+  sourceRecurringExpenseRef?: string;
   items: RecurringInvoiceItem[];
   createdAt: string;
   updatedAt: string;
@@ -220,8 +222,10 @@ export type RecurringInvoiceStatus = 'active' | 'paused' | 'expired' | 'cancelle
 export interface RecurringInvoiceItem {
   id: string;
   recurringInvoiceId: string;
+  itemType?: 'product' | 'service' | 'PRODUCT' | 'SERVICE';
   productId?: string;
   description: string;
+  serviceName?: string;
   quantity: number;
   unitPrice: number;
   taxRate: number;

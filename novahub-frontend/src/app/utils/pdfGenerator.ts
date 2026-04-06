@@ -437,6 +437,111 @@ export const generatePurchaseOrderPDF = async ({
   doc.save(`${order.number || order.id || 'orden_compra'}.pdf`);
 };
 
+export const generateRecurringInvoicePDF = async ({
+  recurringInvoice,
+  tenantName,
+  formatAmount,
+}: {
+  recurringInvoice: any;
+  tenantName: string;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+}) => {
+  const doc = new jsPDF();
+  const primaryColor = [16, 185, 129] as [number, number, number];
+  const textColor = [51, 65, 85] as [number, number, number];
+
+  doc.setFontSize(20);
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(tenantName || 'Nova Hub', 14, 22);
+
+  doc.setFontSize(12);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Factura Recurrente', 14, 30);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`N°: ${recurringInvoice.number || recurringInvoice.id || 'N/A'}`, 196, 22, { align: 'right' });
+  doc.text(`Inicio: ${recurringInvoice.startDate ? new Date(recurringInvoice.startDate).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
+  doc.text(`Próxima: ${recurringInvoice.nextInvoiceDate ? new Date(recurringInvoice.nextInvoiceDate).toLocaleDateString() : 'N/A'}`, 196, 34, { align: 'right' });
+
+  const frequencyMap: Record<string, string> = {
+    WEEKLY: 'Semanal',
+    MONTHLY: 'Mensual',
+    QUARTERLY: 'Trimestral',
+    YEARLY: 'Anual',
+  };
+  const freqLabel = frequencyMap[String(recurringInvoice.frequency || '').toUpperCase()] || recurringInvoice.frequency || '-';
+
+  autoTable(doc, {
+    startY: 45,
+    head: [['Campo', 'Detalle']],
+    body: [
+      ['Cliente', recurringInvoice.customer?.name || '-'],
+      ['Frecuencia', freqLabel],
+      ['Estado', String(recurringInvoice.status || '-').toUpperCase()],
+      ['Moneda', recurringInvoice.currency || '-'],
+      ['Fin', recurringInvoice.endDate ? new Date(recurringInvoice.endDate).toLocaleDateString() : 'Sin fin'],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold' },
+    bodyStyles: { textColor },
+    columnStyles: { 0: { cellWidth: 50, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
+    styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak' },
+  });
+
+  const itemsRows = (recurringInvoice.items || []).map((item: any) => [
+    String(item.itemType || (item.productId ? 'PRODUCT' : 'SERVICE')).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto',
+    item.description || item.serviceName || '-',
+    Number(item.quantity || 0).toString(),
+    formatAmount(Number(item.unitPrice || 0), recurringInvoice.currency, recurringInvoice.exchangeRate),
+    formatAmount(Number(item.total || 0), recurringInvoice.currency, recurringInvoice.exchangeRate),
+  ]);
+
+  autoTable(doc, {
+    startY: ((doc as any).lastAutoTable?.finalY || 45) + 8,
+    head: [['Tipo', 'Concepto', 'Cant.', 'Precio U.', 'Total']],
+    body: itemsRows.length > 0 ? itemsRows : [['-', '-', '-', '-', '-']],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { textColor, fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 24, halign: 'left' },
+      1: { cellWidth: 'auto', halign: 'left' },
+      2: { cellWidth: 16, halign: 'right' },
+      3: { cellWidth: 30, halign: 'right' },
+      4: { cellWidth: 30, halign: 'right' },
+    },
+    styles: { cellPadding: 3, overflow: 'linebreak' },
+  });
+
+  const baseY = ((doc as any).lastAutoTable?.finalY || 140) + 10;
+  const labelX = 140;
+  const valueX = 196;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Subtotal:', labelX, baseY);
+  doc.text(formatAmount(Number(recurringInvoice.subtotal || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), valueX, baseY, { align: 'right' });
+  doc.text('Impuestos:', labelX, baseY + 7);
+  doc.text(formatAmount(Number(recurringInvoice.taxAmount || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), valueX, baseY + 7, { align: 'right' });
+
+  doc.setDrawColor(226, 232, 240);
+  doc.line(labelX, baseY + 12, valueX, baseY + 12);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.text('TOTAL CICLO:', labelX, baseY + 18);
+  doc.text(formatAmount(Number(recurringInvoice.total || 0), recurringInvoice.currency, recurringInvoice.exchangeRate), valueX, baseY + 18, { align: 'right' });
+
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'italic');
+  doc.text(`Generado por ${tenantName} - Módulo de Ventas`, 14, doc.internal.pageSize.height - 10);
+
+  doc.save(`${recurringInvoice.number || recurringInvoice.id || 'factura_recurrente'}.pdf`);
+};
+
 export const generateSupplierInvoicePDF = async ({
   invoice,
   tenantName,

@@ -81,6 +81,7 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
 
   const [activeSection, setActiveSection] = useState(normalize(activeSubModule));
   const [draftInvoiceFromOrder, setDraftInvoiceFromOrder] = useState<any>(null);
+  const [draftPaymentFromInvoice, setDraftPaymentFromInvoice] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ComprasData>({
     proveedores: [], gastos: [], gastosRec: [], ordenes: [],
@@ -90,6 +91,11 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
   const handleConvertToInvoice = (draft: any) => {
     setDraftInvoiceFromOrder(draft);
     setActiveSection('facturas-prov');
+  };
+
+  const handleRegisterPaymentFromInvoice = (draft: any) => {
+    setDraftPaymentFromInvoice(draft);
+    setActiveSection('pagos');
   };
 
   useEffect(() => {
@@ -195,9 +201,25 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
                    {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} data={data.gastosRec} />}
                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} data={data.ordenes} supplierInvoices={data.facturasProv} onConvertToInvoice={handleConvertToInvoice} />}
                    {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} data={data.recepciones} />}
-                   {section.id === 'facturas-prov' && <FacturasProveedorView {...commonProps} data={data.facturasProv} draftInvoiceFromOrder={draftInvoiceFromOrder} onDraftConsumed={() => setDraftInvoiceFromOrder(null)} />}
+                   {section.id === 'facturas-prov' && (
+                     <FacturasProveedorView
+                       {...commonProps}
+                       data={data.facturasProv}
+                       draftInvoiceFromOrder={draftInvoiceFromOrder}
+                       onDraftConsumed={() => setDraftInvoiceFromOrder(null)}
+                       onRegisterPaymentFromInvoice={handleRegisterPaymentFromInvoice}
+                     />
+                   )}
                    {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} data={data.facturasRec} />}
-                   {section.id === 'pagos'         && <PagosRealizadosView {...commonProps} data={data.pagos} />}
+                   {section.id === 'pagos'         && (
+                    <PagosRealizadosView
+                      {...commonProps}
+                      data={data.pagos}
+                      supplierInvoices={data.facturasProv}
+                      draftPaymentFromInvoice={draftPaymentFromInvoice}
+                      onDraftConsumed={() => setDraftPaymentFromInvoice(null)}
+                    />
+                   )}
                    {section.id === 'creditos'      && <CreditosProveedorView {...commonProps} data={data.creditos} />}
                  </motion.div>
                );
