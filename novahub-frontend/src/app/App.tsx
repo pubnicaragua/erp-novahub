@@ -97,7 +97,7 @@ function DashboardLayout() {
       case 'inventario': return <InventarioPage />;
       case 'ventas': return <VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'compras': return <ComprasPage activeSubModule={activeSubModule} />;
-      case 'finanzas': return <FinanzasPage activeSubModule={activeSubModule} />;
+      case 'finanzas': return <FinanzasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'clientes': return <ClientesPage />;
       case 'proveedores': return <ProveedoresPage />;

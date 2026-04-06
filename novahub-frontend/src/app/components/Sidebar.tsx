@@ -114,6 +114,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   ingresos: ['FINANCIAL_INCOMES'],
   egresos: ['FINANCIAL_EXPENSES'],
   'gastos-recurrentes-fin': ['FINANCIAL_EXPENSES_REC'],
+  'ingresos-recurrentes': ['FINANCIAL_INCOMES'],
   balance: ['FINANCIAL_BALANCE'],
   // Inventario
   productos: ['INVENTORY_PRODUCTS'],
@@ -196,9 +197,11 @@ const menuItems: MenuItem[] = [
     icon: <DollarSign className="size-5" />,
     section: 'Administracion',
     submenu: [
+      { id: 'dashboard-fin', label: 'Dashboard', icon: <BarChart3 className="size-4" /> },
       { id: 'ingresos', label: 'Ingresos', icon: <Receipt className="size-4" /> },
       { id: 'egresos', label: 'Gastos', icon: <Wallet className="size-4" /> },
       { id: 'gastos-recurrentes-fin', label: 'Gastos recurrentes', icon: <CalendarClock className="size-4" /> },
+      { id: 'ingresos-recurrentes', label: 'Ingresos recurrentes', icon: <RotateCcw className="size-4" /> },
       { id: 'balance', label: 'Balance General', icon: <BarChart3 className="size-4" /> },
     ]
   },
