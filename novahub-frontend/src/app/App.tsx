@@ -106,7 +106,7 @@ function DashboardLayout() {
       case 'documentos': return <DocumentosPage activeSubModule={activeSubModule} />;
       case 'notificaciones': return <NotificacionesPage activeSubModule={activeSubModule} />;
       case 'transferencias': return <TransferenciasPage />;
-      case 'reportes': return <ReportesPage activeSubModule={activeSubModule} />;
+      case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       case 'roles': return <ConfiguracionPage initialTab="roles" />;
       case 'configuracion': return <ConfiguracionPage />;
       case 'suscripciones': return <SuscripcionesPage />;

@@ -18,7 +18,7 @@ export const payrollService = {
 };
 
 export const timeOffService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<TimeOff>>('/hr/time-off', filters as any),
+  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<TimeOff>>('/hr/leave/requests', filters as any),
   getById: (id: string) => api.get<TimeOff>(`/hr/time-off/${id}`),
   create: (data: Partial<TimeOff>) => api.post<TimeOff>('/hr/time-off', data),
   approve: (id: string) => api.patch<TimeOff>(`/hr/time-off/${id}/approve`, {}),

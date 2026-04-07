@@ -85,9 +85,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
 
   const getRoleBadge = (role: string) => {
     switch (role?.toLowerCase()) {
-      case 'superadmin': return <Badge className="bg-purple-500/10 text-purple-500 border-purple-500/20 px-1 py-0 text-[10px]">SuperAdmin</Badge>;
-      case 'partner': return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20 px-1 py-0 text-[10px]">Partner</Badge>;
-      case 'admin': return <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-1 py-0 text-[10px]">Administrador</Badge>;
+      case 'superadmin': return <Badge className="bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">SuperAdmin</Badge>;
+      case 'partner': return <Badge className="bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Partner</Badge>;
+      case 'admin': return <Badge className="bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Administrador</Badge>;
       default: return <Badge variant="outline" className="px-1 py-0 text-[10px] capitalize">{role}</Badge>;
     }
   };
@@ -178,7 +178,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                 {unreadCount > 0 ? (
                   <>
                     <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-blue-500" />
+                      <span className="h-2 w-2 rounded-full bg-primary" />
                       <span className="font-medium text-sm">Tienes {unreadCount} {unreadCount === 1 ? 'notificación nueva' : 'notificaciones nuevas'}</span>
                     </div>
                     <span className="text-xs text-muted-foreground ml-4">Despliega el centro de notificaciones para revisar.</span>
@@ -195,7 +195,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-10 gap-3 px-2 ml-2 hover:bg-transparent focus-visible:ring-0" aria-label="Menú de usuario">
-              <Avatar className="size-9 rounded-full border border-border">
+              <Avatar className="size-9 rounded-full border-2 border-primary/30">
                 <AvatarImage src={user?.avatar} alt={user?.name} className="object-cover" />
                 <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                   {user?.name.split(' ').map(n => n[0]).join('').toUpperCase()}
@@ -203,7 +203,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               </Avatar>
               <div className="hidden flex-col items-start text-left lg:flex leading-tight">
                 <span className="font-semibold text-[14px] text-foreground">{user?.name}</span>
-                <span className="text-[12px] text-muted-foreground capitalize">
+                <span className="text-[12px] text-primary/80 font-medium capitalize">
                   {user?.role}
                 </span>
               </div>
@@ -218,16 +218,16 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onNavigate('configuracion')}>
-              <User className="mr-2 size-4" />
+              <User className="mr-2 size-4 text-primary" />
               <span>Mi Perfil</span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleSettings}>
-              <SettingsIcon className="mr-2 size-4" />
+              <SettingsIcon className="mr-2 size-4 text-primary" />
               <span>Configuración</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
-              <LogOut className="mr-2 size-4" />
+            <DropdownMenuItem onClick={handleLogout} className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400 focus:bg-red-500/10 transition-colors">
+              <LogOut className="mr-2 size-4 text-rose-500" />
               <span>Cerrar Sesión</span>
             </DropdownMenuItem>
           </DropdownMenuContent>

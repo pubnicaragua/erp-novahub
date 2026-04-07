@@ -32,7 +32,7 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
     { key: 'content', header: 'Mensaje', width: '40%', editable: true },
     { key: 'severity', header: 'Severidad', width: '120px', editable: true, type: 'select', options: severityOpts,
       render: (val: any) => { const o = severityOpts.find(x => x.value === (val||'').toUpperCase()); return <span className={cn('text-[10px] font-bold uppercase', o?.color||'text-muted-foreground')}>{o?.label||val}</span>; } },
-    { key: 'isRead', header: 'Leída', width: '100px', render: (val: any) => <Badge variant="outline" className={cn('text-[9px] uppercase border-none', val ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500')}>{val ? 'Sí' : 'No'}</Badge> },
+    { key: 'isRead', header: 'Leída', width: '100px', render: (val: any) => <Badge variant="outline" className={cn('text-[9px] uppercase border-none', val ? 'bg-primary/10 text-primary' : 'bg-rose-500/10 text-rose-500')}>{val ? 'Sí' : 'No'}</Badge> },
     { key: 'createdAt', header: 'Fecha', width: '150px', type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, HH:mm') : '-' },
   ];
 
@@ -52,7 +52,7 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
     { title: 'Total Alertas',   value: data.length,                                                              icon: AlertCircle,   color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Críticas',        value: data.filter(a => (a.severity||'').toUpperCase() === 'CRITICAL').length,    icon: AlertTriangle, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
     { title: 'No Leídas',       value: data.filter(a => !a.isRead).length,                                         icon: Info,          color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
-    { title: 'Leídas',          value: data.filter(a => a.isRead).length,                                          icon: Eye,           color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Leídas',          value: data.filter(a => a.isRead).length,                                          icon: Eye,           color: 'text-primary', bg: 'bg-primary/10' },
   ];
 
   const filtered = data.filter(a => a.title?.toLowerCase().includes(searchTerm.toLowerCase()) || a.content?.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -75,7 +75,7 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
           <div><h2 className="text-xl font-black uppercase tracking-tight">Alertas del Sistema</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Avisos y eventos críticos</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={handleAdd} className="bg-rose-600 hover:bg-rose-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Crear Alerta</Button>
+            <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Crear Alerta</Button>
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} onRowDelete={async (id) => { try { await alertsService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch { toast.error('Error'); } }} />

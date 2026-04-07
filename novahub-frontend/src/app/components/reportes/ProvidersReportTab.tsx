@@ -1,17 +1,19 @@
 import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import { ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { suppliersService, billsService, paymentsMadeService, purchaseOrdersService } from '../../services/compras.service';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Truck, CheckCircle2, TrendingUp, DollarSign, Package } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { Truck, Scale, TrendingUp, ShoppingBag, Package, Activity, Wallet, CreditCard, Users } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { cn } from '../ui/utils';
+import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 
-const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 function toDate(value: unknown): Date | null {
@@ -20,28 +22,51 @@ function toDate(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function isDateInRange(value: unknown, range: string): boolean {
-  const date = toDate(value);
-  if (!date) return false;
+function getRangeDates(range: string) {
   const now = new Date();
-  const startToday = new Date(now);
-  startToday.setHours(0, 0, 0, 0);
   const start = new Date(now);
+  const prevStart = new Date(now);
+  const prevEnd = new Date(now);
+
   switch (range) {
-    case 'hoy': return date >= startToday;
-    case 'ultima-semana': start.setDate(now.getDate() - 7); break;
-    case 'ultimo-mes': start.setMonth(now.getMonth() - 1); break;
-    case 'ultimo-trimestre': start.setMonth(now.getMonth() - 3); break;
-    case 'ultimo-año': start.setFullYear(now.getFullYear() - 1); break;
-    default: return true;
+    case 'hoy': 
+      start.setHours(0, 0, 0, 0); 
+      prevStart.setDate(now.getDate() - 1); prevStart.setHours(0, 0, 0, 0);
+      prevEnd.setDate(now.getDate() - 1); prevEnd.setHours(23, 59, 59, 999);
+      break;
+    case 'ultima-semana': 
+      start.setDate(now.getDate() - 7); 
+      prevStart.setDate(now.getDate() - 14);
+      prevEnd.setDate(now.getDate() - 7);
+      break;
+    case 'ultimo-mes': 
+      start.setMonth(now.getMonth() - 1); 
+      prevStart.setMonth(now.getMonth() - 2);
+      prevEnd.setMonth(now.getMonth() - 1);
+      break;
+    case 'ultimo-trimestre': 
+      start.setMonth(now.getMonth() - 3); 
+      prevStart.setMonth(now.getMonth() - 6);
+      prevEnd.setMonth(now.getMonth() - 3);
+      break;
+    case 'ultimo-año': 
+      start.setFullYear(now.getFullYear() - 1); 
+      prevStart.setFullYear(now.getFullYear() - 2);
+      prevEnd.setFullYear(now.getFullYear() - 1);
+      break;
+    default: return { start: new Date(0), prevStart: new Date(0), prevEnd: new Date(0) };
   }
   start.setHours(0, 0, 0, 0);
-  return date >= start;
+  prevStart.setHours(0, 0, 0, 0);
+  prevEnd.setHours(23, 59, 59, 999);
+  return { start, prevStart, prevEnd };
 }
 
 export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, convertAmount } = useCurrency();
+  const { displayCurrency, formatConvertedAmount, convertAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
+  const { user } = useAuth();
+  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   
   const [bills, setBills] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
@@ -49,14 +74,11 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const sym = displayCurrency === 'USD' ? '$' : 'C$ ';
-  const fmt = (n: number) => {
-    const converted = typeof convertAmount === 'function' ? convertAmount(n, 'NIO') : n;
-    return `${sym} ${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-  const fmtCompact = (n: number) => {
-    const converted = typeof convertAmount === 'function' ? convertAmount(n, 'NIO') : n;
-    return `${sym}${(converted / 1000).toFixed(1)}k`;
+  const fmtShort = (v: number) => {
+    const converted = convertAmount(v, 'NIO');
+    if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted/1000000).toFixed(1)}M`;
+    if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
+    return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
   useEffect(() => {
@@ -64,10 +86,10 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       setLoading(true);
       try {
         const [billRes, payRes, ordRes, suppRes] = await Promise.all([
-          billsService.getAll(),
-          paymentsMadeService.getAll(),
-          purchaseOrdersService.getAll(),
-          suppliersService.getAll()
+          billsService.getAll().catch(() => ({ data: [] })),
+          paymentsMadeService.getAll().catch(() => ({ data: [] })),
+          purchaseOrdersService.getAll().catch(() => ({ data: [] })),
+          suppliersService.getAll().catch(() => ({ data: [] }))
         ]);
         setBills(Array.isArray(billRes) ? billRes : billRes?.data || []);
         setPayments(Array.isArray(payRes) ? payRes : payRes?.data || []);
@@ -82,292 +104,619 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     fetch();
   }, []);
 
-  const fBills = useMemo(() => bills.filter(i => isDateInRange(i.date || i.createdAt, dateRange)), [bills, dateRange]);
-  const fPay = useMemo(() => payments.filter(p => isDateInRange(p.date || p.createdAt, dateRange)), [payments, dateRange]);
-  const fOrd = useMemo(() => orders.filter(o => isDateInRange(o.date || o.createdAt, dateRange)), [orders, dateRange]);
+  const { start: currentStart, prevStart, prevEnd } = useMemo(() => getRangeDates(dateRange), [dateRange]);
 
-  const totalPurchased = useMemo(() => fBills.reduce((a, c) => a + Number(c.total || 0), 0), [fBills]);
-  const totalPaid = useMemo(() => fPay.reduce((a, c) => a + Number(c.amount || 0), 0), [fPay]);
+  const fBills = useMemo(() => bills.filter(i => {
+    const d = toDate(i.date || i.createdAt);
+    return d && d >= currentStart;
+  }), [bills, currentStart]);
+
+  const pBills = useMemo(() => bills.filter(i => {
+    const d = toDate(i.date || i.createdAt);
+    return d && d >= prevStart && d <= prevEnd;
+  }), [bills, prevStart, prevEnd]);
+
+  const fPay = useMemo(() => payments.filter(p => {
+    const d = toDate(p.date || p.createdAt);
+    return d && d >= currentStart;
+  }), [payments, currentStart]);
+
+  const totalPurchased = useMemo(() => fBills.reduce((acc, b) => acc + (b.currency === 'USD' ? Number(b.total || 0) * (b.exchangeRate || exchangeRate) : Number(b.total || 0)), 0), [fBills, exchangeRate]);
+  const prevTotalPurchased = useMemo(() => pBills.reduce((acc, b) => acc + (b.currency === 'USD' ? Number(b.total || 0) * (b.exchangeRate || exchangeRate) : Number(b.total || 0)), 0), [pBills, exchangeRate]);
+  const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + (p.currency === 'USD' ? Number(p.amount || 0) * (p.exchangeRate || exchangeRate) : Number(p.amount || 0)), 0), [fPay, exchangeRate]);
   
-  // ── 4 KPIs ──
   const payRatio = totalPurchased > 0 ? (totalPaid / totalPurchased) * 100 : 0;
-  const avgCost = fBills.length > 0 ? totalPurchased / fBills.length : 0;
+  const avgPurchasePerSupp = suppliers.length > 0 ? (totalPurchased / suppliers.length) : 0;
 
-  // ── 4 Metrics ──
-  const pendingDebt = totalPurchased - totalPaid;
-  const ordersToReceive = fOrd.filter(o => o.status !== 'RECEIVED' && o.status !== 'CANCELLED').length;
-  const creditNotes = 0; // Requires credit notes service fetch or assume 0 for demo
-  const lateSuppliers = fBills.filter(b => b.status === 'OVERDUE').length;
+  const getTrendValue = (curr: number, prev: number) => {
+    if (prev === 0) return curr > 0 ? 100 : 0;
+    return ((curr - prev) / prev) * 100;
+  };
 
   // ── 2 Tops ──
   const topSuppliers = useMemo(() => {
     const map: Record<string, number> = {};
     fBills.forEach(b => {
-      const name = b.supplier?.name || b.vendorName || 'Proveedor Desconocido';
-      map[name] = (map[name] || 0) + Number(b.total || 0);
+      const name = b.supplier?.name || b.vendorName || 'Proveedor General';
+      const val = b.currency === 'USD' ? Number(b.total || 0) * (b.exchangeRate || exchangeRate) : Number(b.total || 0);
+      map[name] = (map[name] || 0) + val;
     });
-    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 10);
-  }, [fBills]);
+    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 5);
+  }, [fBills, exchangeRate]);
 
   const topProducts = useMemo(() => {
     const map: Record<string, { qty: number, total: number }> = {};
     fBills.forEach(b => {
       if (Array.isArray(b.items)) {
         b.items.forEach((item: any) => {
-          const name = item.product?.name || item.description || 'Item';
+          const name = item.product?.name || item.description || 'Insumo';
+          const val = b.currency === 'USD' ? Number(item.total || 0) * (b.exchangeRate || exchangeRate) : Number(item.total || 0);
           if (!map[name]) map[name] = { qty: 0, total: 0 };
           map[name].qty += Number(item.quantity || 1);
-          map[name].total += Number(item.total || 0);
+          map[name].total += val;
         });
       }
     });
-    return Object.entries(map).map(([name, v]) => ({ name, value: v.total, qty: v.qty })).sort((a,b) => b.value - a.value).slice(0, 10);
-  }, [fBills]);
+    return Object.entries(map).map(([name, v]) => ({ name, value: v.total, qty: v.qty })).sort((a,b) => b.value - a.value).slice(0, 5);
+  }, [fBills, exchangeRate]);
 
   // ── Charts ──
-  const monthlyTrend = useMemo(() => {
-    const now = new Date().getMonth();
-    return Array.from({ length: 6 }, (_, i) => {
-      const idx = (now - (5 - i) + 12) % 12;
-      const mBills = fBills.filter(x => toDate(x.date || x.createdAt)?.getMonth() === idx).reduce((a, x) => a + Number(x.total || 0), 0);
-      return { mes: MONTH_NAMES[idx], compras: mBills };
-    });
-  }, [fBills]);
-  
-  const ordersByStatus = useMemo(() => {
-    const map: Record<string, number> = {};
-    fOrd.forEach(o => { map[o.status] = (map[o.status] || 0) + 1; });
-    return Object.entries(map).map(([name, value], i) => ({ name, value, color: COLORS[i % COLORS.length] }));
-  }, [fOrd]);
+  const monthlyData = useMemo(() => {
+    const currentMonth = new Date().getMonth();
+    const data = [];
 
-  const purchasesByCategory = useMemo(() => {
-     // Faking categorizacion for suppliers (e.g. by supplier type or item type)
-     const types = ['Inventario', 'Equipamiento', 'Servicios', 'Otros'];
-     return types.map((t, i) => ({ name: t, value: totalPurchased * (0.4 - i*0.1), color: COLORS[i] }));
-  }, [totalPurchased]);
-
-  const creditDaysTrend = useMemo(() => {
-    return monthlyTrend.map(m => ({ mes: m.mes, dias: Math.floor(Math.random() * 15) + 15 }));
-  }, [monthlyTrend]);
+    for (let i = 5; i >= 0; i--) {
+      const monthIdx = (currentMonth - i + 12) % 12;
+      const mPurch = fBills.filter(bill => {
+        const d = new Date(bill.date || bill.createdAt);
+        return d.getMonth() === monthIdx;
+      }).reduce((acc: number, b: any) => acc + (b.currency === 'USD' ? Number(b.total || 0) * (b.exchangeRate || exchangeRate) : Number(b.total || 0)), 0);
+      
+      data.push({
+        mes: MONTH_NAMES[monthIdx],
+        compras: Math.round(mPurch),
+      });
+    }
+    return data;
+  }, [fBills, exchangeRate]);
 
   useImperativeHandle(ref, () => ({
     exportPDF: async () => {
-      toast.info("Generando PDF (Proveedores)...");
       try {
+        toast.info('Generando PDF (Proveedores)...');
         const doc = new jsPDF();
-        const primaryHex = themeConfig.colors.primary.startsWith('#') ? themeConfig.colors.primary : '#10b981';
-        let currentY = 20;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
+        const logoUrl = themeConfig.logo || '';
+        const primaryColor = themeConfig.colors.primary || '#10b981';
+        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
+        const rgbPrimary = primaryHex.startsWith('#')
+          ? [parseInt(primaryHex.slice(1, 3), 16), parseInt(primaryHex.slice(3, 5), 16), parseInt(primaryHex.slice(5, 7), 16)]
+          : [16, 185, 129];
+        const marginX = 14;
+        const contentWidth = pageWidth - marginX * 2;
+        let currentY = 15;
 
-        doc.setFontSize(18);
-        doc.text("Reporte de Proveedores", 14, currentY);
-        currentY += 10;
-        doc.setFontSize(10);
-        doc.text(`Generado: ${new Date().toLocaleDateString('es-NI')} | Moneda: ${displayCurrency}`, 14, currentY);
+        const checkPage = (needed: number) => {
+          if (currentY + needed > pageHeight - 15) {
+            doc.addPage();
+            currentY = 20;
+          }
+        };
+
+        if (logoUrl) {
+          const logoBase64 = await getBase64Image(logoUrl);
+          if (logoBase64) {
+            doc.addImage(logoBase64, 'PNG', (pageWidth - 30) / 2, currentY, 30, 30, undefined, 'FAST');
+            currentY += 35;
+          }
+        }
+
+        doc.setFontSize(22);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(rgbPrimary[0], rgbPrimary[1], rgbPrimary[2]);
+        doc.text(companyName, pageWidth / 2, currentY, { align: 'center' });
+        currentY += 8;
+
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(60, 60, 60);
+        doc.text('Reporte de Proveedores', pageWidth / 2, currentY, { align: 'center' });
+        currentY += 6;
+
+        const now = new Date();
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(120, 120, 120);
+        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        doc.text(`Generado: ${now.toLocaleDateString('es-NI')} ${now.toLocaleTimeString('es-NI')}  |  Moneda: ${currencyLabel}`,
+          pageWidth / 2,
+          currentY,
+          { align: 'center' },
+        );
+        currentY += 5;
+
+        doc.setDrawColor(rgbPrimary[0], rgbPrimary[1], rgbPrimary[2]);
+        doc.setLineWidth(0.8);
+        doc.line(marginX, currentY, pageWidth - marginX, currentY);
         currentY += 10;
 
-        const metrics = [
-          ['Total Comprado', fmt(totalPurchased)],
-          ['Total Pagado', fmt(totalPaid)],
-          ['Ratio de Pago (%)', `${payRatio.toFixed(1)}%`],
-          ['Costo de Adquisición Promedio', fmt(avgCost)],
-          ['Deuda Pendiente', fmt(pendingDebt)],
+        const kpis = [
+          { label: 'SUMINISTRO TOTAL', value: formatConvertedAmount(totalPurchased, 'NIO'), detail: `${suppliers.length} proveedores registrados`, color: [245, 158, 11] },
+          { label: 'LOGÍSTICA ACTIVA', value: orders.filter(o => o.status !== 'RECEIVED' && o.status !== 'CANCELLED').length.toString(), detail: 'Órdenes pendientes de entrega', color: [59, 130, 246] },
+          { label: 'CUENTAS POR PAGAR', value: formatConvertedAmount(totalPurchased - totalPaid, 'NIO'), detail: `${payRatio.toFixed(1)}% de deuda saldada`, color: [244, 63, 94] },
+          { label: 'FLUJO DE PAGO', value: formatConvertedAmount(totalPaid, 'NIO'), detail: 'Total liquidado con terceros', color: [16, 185, 129] },
         ];
-        
-        autoTable(doc, {
-          startY: currentY,
-          head: [['Métrica', 'Valor']],
-          body: metrics,
-          theme: 'grid',
-          headStyles: { fillColor: primaryHex as any }
-        });
 
-        doc.save(`Proveedores_${new Date().getTime()}.pdf`);
-        toast.success("PDF Exportado");
+        const cols = 4;
+        const boxW = (contentWidth - (cols - 1) * 4) / cols;
+        const boxH = 22;
+        checkPage(boxH + 5);
+        kpis.forEach((kpi, idx) => {
+          const x = marginX + idx * (boxW + 4);
+          doc.setFillColor(kpi.color[0], kpi.color[1], kpi.color[2]);
+          doc.roundedRect(x, currentY, boxW, boxH, 3, 3, 'F');
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(255, 255, 255);
+          doc.text(kpi.label, x + boxW / 2, currentY + 6, { align: 'center' });
+          doc.setFontSize(12);
+          doc.text(kpi.value, x + boxW / 2, currentY + 13, { align: 'center' });
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'normal');
+          doc.text(kpi.detail, x + boxW / 2, currentY + 18.5, { align: 'center' });
+        });
+        currentY += boxH + 10;
+
+        const exportIds = ['providers-monthly-chart', 'providers-efficiency-chart'];
+        const capture = async (elementId: string, height: number) => {
+          const el = document.getElementById(elementId);
+          if (!el) return;
+          checkPage(height + 15);
+          try {
+            const canvas = await html2canvas(el, {
+              scale: 2,
+              backgroundColor: '#ffffff',
+              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex),
+            });
+            doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
+            currentY += height + 5;
+          } catch {
+          }
+        };
+
+        await capture('providers-monthly-chart', 80);
+        await capture('providers-efficiency-chart', 70);
+
+        // ── Top Lists ──
+        const renderTop = (title: string, data: any[], isSupplier: boolean) => {
+          checkPage(40);
+          doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
+          doc.text(title, marginX, currentY); currentY += 7;
+          doc.setFillColor(isSupplier ? 245 : 59, isSupplier ? 158 : 130, isSupplier ? 11 : 246);
+          doc.roundedRect(marginX, currentY, contentWidth, 8, 1, 1, 'F');
+          doc.setFontSize(8); doc.setTextColor(255, 255, 255);
+          doc.text(isSupplier ? 'Socio' : 'Insumo', marginX + 3, currentY + 5.5);
+          doc.text('Detalle', marginX + 80, currentY + 5.5);
+          doc.text('Suma Total', marginX + 155, currentY + 5.5);
+          currentY += 10;
+          data.forEach((item, i) => {
+            checkPage(12);
+            if (i % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
+            doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
+            doc.text(item.name.substring(0, 40), marginX + 3, currentY + 4);
+            doc.text(isSupplier ? 'Clasificación Tier 1' : `${item.qty} unidades recibidas`, marginX + 80, currentY + 4);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(isSupplier ? 245 : 59, isSupplier ? 158 : 130, isSupplier ? 11 : 246);
+            doc.text(formatConvertedAmount(Number(item.value), 'NIO'), marginX + 155, currentY + 4);
+            currentY += 7;
+          });
+          currentY += 10;
+        };
+
+        renderTop('Socios Estratégicos (Volumen)', topSuppliers, true);
+        renderTop('Insumos con Mayor Gasto', topProducts, false);
+
+        const pageCount = (doc as any).internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+          doc.setPage(i);
+          doc.setFontSize(7);
+          doc.setTextColor(150);
+          doc.text(`${companyName} - Reporte Proveedores - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+        }
+
+        doc.save(`Reporte_Proveedores_${now.toISOString().split('T')[0]}.pdf`);
+        toast.success('PDF generado exitosamente');
       } catch (e) {
+        console.error(e);
         toast.error("Error exportando PDF");
       }
     },
     exportExcel: async () => {
-      toast.info("Generando Excel (Proveedores)...");
       try {
+        toast.info('Generando Excel (Proveedores)...');
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Proveedores');
-        const primaryHex = themeConfig.colors.primary.replace('#', '');
-        
-        ws.columns = [
-          { header: 'Métrica', key: 'metric', width: 30 },
-          { header: 'Valor', key: 'value', width: 25 },
+
+        const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
+        const logoUrl = themeConfig.logo || '';
+        const primaryColor = themeConfig.colors.primary || '#10b981';
+        const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : '10b981';
+        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
+        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+
+        ws.getColumn(1).width = 30;
+        ws.getColumn(2).width = 22;
+        ws.getColumn(3).width = 22;
+        ws.getColumn(4).width = 22;
+
+        let currentRow = 1;
+
+        if (logoUrl) {
+          const base64Logo = await getBase64Image(logoUrl);
+          if (base64Logo) {
+            const logoId = wb.addImage({ base64: base64Logo, extension: 'png' });
+            ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: 100, height: 100 } });
+            currentRow = 6;
+          }
+        }
+
+        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        const cName = ws.getCell(`A${currentRow}`);
+        cName.value = companyName;
+        cName.font = { size: 18, bold: true, color: { argb: `FF${hexColor}` } };
+        cName.alignment = { horizontal: 'center' };
+        currentRow++;
+
+        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        const cTitle = ws.getCell(`A${currentRow}`);
+        cTitle.value = 'Reporte de Proveedores';
+        cTitle.font = { size: 13, bold: true };
+        cTitle.alignment = { horizontal: 'center' };
+        currentRow++;
+
+        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        const cMeta = ws.getCell(`A${currentRow}`);
+        cMeta.value = `Moneda: ${currencyLabel} (${currencySymbol})  |  ${new Date().toLocaleDateString('es-NI')}`;
+        cMeta.font = { size: 10, italic: true, color: { argb: 'FF888888' } };
+        cMeta.alignment = { horizontal: 'center' };
+        currentRow += 2;
+
+        // ── KPIs ──
+        const kpiBoxes = [
+          { label: 'SUMINISTRO TOTAL', value: formatConvertedAmount(totalPurchased, 'NIO'), detail: `${suppliers.length} proveedores registrados`, bgColor: 'FFF59E0B' },
+          { label: 'LOGÍSTICA ACTIVA', value: orders.filter(o => o.status !== 'RECEIVED' && o.status !== 'CANCELLED').length.toString(), detail: 'Órdenes pendientes de entrega', bgColor: 'FF3B82F6' },
+          { label: 'CUENTAS POR PAGAR', value: formatConvertedAmount(totalPurchased - totalPaid, 'NIO'), detail: `${payRatio.toFixed(1)}% de deuda saldada`, bgColor: 'FFF43F5E' },
+          { label: 'FLUJO DE PAGO', value: formatConvertedAmount(totalPaid, 'NIO'), detail: 'Total liquidado con terceros', bgColor: 'FF10B981' },
         ];
 
-        ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF'} };
-        ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + primaryHex } };
+        ws.getRow(currentRow).height = 18;
+        kpiBoxes.forEach((kpi, idx) => {
+          const cell = ws.getCell(currentRow, idx + 1);
+          cell.value = kpi.label;
+          cell.font = { size: 8, bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        currentRow++;
+        ws.getRow(currentRow).height = 28;
+        kpiBoxes.forEach((kpi, idx) => {
+          const cell = ws.getCell(currentRow, idx + 1);
+          cell.value = kpi.value;
+          cell.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        currentRow++;
+        ws.getRow(currentRow).height = 16;
+        kpiBoxes.forEach((kpi, idx) => {
+          const cell = ws.getCell(currentRow, idx + 1);
+          cell.value = kpi.detail;
+          cell.font = { size: 8, color: { argb: 'FFFFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        currentRow += 2;
 
-        ws.addRow({ metric: 'Total Comprado', value: totalPurchased });
-        ws.addRow({ metric: 'Total Pagado', value: totalPaid });
-        ws.addRow({ metric: 'Ratio de Pago (%)', value: payRatio });
-        ws.addRow({ metric: 'Costo Promedio', value: avgCost });
-        ws.addRow({ metric: 'Deuda Pendiente', value: pendingDebt });
-        ws.addRow({ metric: 'Órdenes por Recibir', value: ordersToReceive });
+        const exportIds = ['providers-monthly-chart', 'providers-efficiency-chart'];
+        const captureForExcel = async (elementId: string, targetRow: number) => {
+          const el = document.getElementById(elementId);
+          if (!el) return targetRow;
+          try {
+            const canvas = await html2canvas(el, {
+              scale: 2,
+              backgroundColor: '#ffffff',
+              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex),
+            });
+            const imgId = wb.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });
+            ws.addImage(imgId, { tl: { col: 0, row: targetRow }, ext: { width: 720, height: 260 } });
+            return targetRow + 18;
+          } catch {
+            return targetRow;
+          }
+        };
 
-        const wsTops = wb.addWorksheet('Top Proveedores');
-        wsTops.columns = [
-          { header: 'Proveedor', key: 'name', width: 30 },
-          { header: 'Volumen', key: 'val', width: 20 },
-        ];
-        wsTops.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF'} };
-        wsTops.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + primaryHex } };
-        topSuppliers.forEach(c => wsTops.addRow({ name: c.name, val: c.value }));
+        let imgRow = currentRow + 2;
+        imgRow = await captureForExcel('providers-monthly-chart', imgRow);
+        imgRow = await captureForExcel('providers-efficiency-chart', imgRow);
 
-        const buffer = await wb.xlsx.writeBuffer();
-        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Proveedores_${new Date().getTime()}.xlsx`;
-        a.click();
-        toast.success("Excel Exportado");
+        while (ws.rowCount < imgRow) ws.addRow([]);
+        currentRow = ws.rowCount + 2;
+
+        const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
+
+        // ── Top 5 Proveedores (native table) ──
+        const topSupTitleRow = ws.addRow(['Socios Estratégicos (Volumen)', '', '', '']);
+        ws.mergeCells(`A${ws.rowCount}:D${ws.rowCount}`);
+        topSupTitleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FFF59E0B' } };
+        topSupTitleRow.getCell(1).alignment = { horizontal: 'center' };
+        ws.addRow([]);
+
+        const topSupHeader = ws.addRow(['#', 'Socio', 'Detalle', 'Suma Total']);
+        topSupHeader.eachCell((cell) => {
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF59E0B' } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
+        });
+
+        topSuppliers.forEach((item: any, idx) => {
+          const r = ws.addRow([
+            idx + 1,
+            item.name,
+            'Clasificación Tier 1',
+            Number(item.value),
+          ]);
+          r.getCell(1).alignment = { horizontal: 'center' };
+          r.getCell(1).font = { bold: true, color: { argb: 'FFF59E0B' } };
+          r.getCell(4).numFmt = `"${currencySymbol}" #,##0.00`;
+          r.getCell(4).font = { bold: true, color: { argb: 'FFF59E0B' } };
+          r.getCell(4).alignment = { horizontal: 'right' };
+          r.eachCell((cell) => {
+            cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
+            if (idx % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
+          });
+        });
+
+        ws.addRow([]); ws.addRow([]);
+
+        // ── Items Críticos ──
+        const topProdTitleRow = ws.addRow(['Insumos con Mayor Gasto', '', '', '']);
+        ws.mergeCells(`A${ws.rowCount}:D${ws.rowCount}`);
+        topProdTitleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF3B82F6' } };
+        topProdTitleRow.getCell(1).alignment = { horizontal: 'center' };
+        ws.addRow([]);
+
+        const topProdHeader = ws.addRow(['#', 'Insumo', 'Detalle', 'Suma Total']);
+        topProdHeader.eachCell((cell) => {
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
+        });
+
+        topProducts.forEach((item: any, idx) => {
+          const r = ws.addRow([
+            idx + 1,
+            item.name,
+            `${item.qty} unidades recibidas`,
+            Number(item.value),
+          ]);
+          r.getCell(1).alignment = { horizontal: 'center' };
+          r.getCell(1).font = { bold: true, color: { argb: 'FF3B82F6' } };
+          r.getCell(4).numFmt = `"${currencySymbol}" #,##0.00`;
+          r.getCell(4).font = { bold: true, color: { argb: 'FF3B82F6' } };
+          r.getCell(4).alignment = { horizontal: 'right' };
+          r.eachCell((cell) => {
+            cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
+            if (idx % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+          });
+        });
+
+        await downloadExcelWorkbook(wb, `Reporte_Proveedores_${new Date().toISOString().split('T')[0]}.xlsx`);
+        toast.success('Excel exportado exitosamente');
       } catch (e) {
+        console.error(e);
         toast.error("Error exportando Excel");
       }
     }
   }));
 
-  const tooltipStyle = { backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' };
-
-  if (loading) return <div className="h-64 flex items-center justify-center font-bold text-muted-foreground">Cargando datos de proveedores...</div>;
+  if (loading) {
+    return (
+      <div className="h-96 flex flex-col items-center justify-center gap-4 text-muted-foreground">
+        <Activity className="size-12 animate-pulse text-primary opacity-50" />
+        <p className="font-black uppercase tracking-widest text-[10px]">Auditando Cadena de Suministro...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
-      {/* 4 KPIs */}
-      <div className="grid gap-4 md:grid-cols-4">
-        {[
-          { label: 'Total Comprado', value: fmt(totalPurchased), c: 'text-orange-400', bg: 'bg-orange-500/10', icon: DollarSign },
-          { label: 'Total Pagado', value: fmt(totalPaid), c: 'text-green-400', bg: 'bg-green-500/10', icon: CheckCircle2 },
-          { label: 'Ratio de Pago', value: `${payRatio.toFixed(1)}%`, c: 'text-purple-400', bg: 'bg-purple-500/10', icon: TrendingUp },
-          { label: 'Costo Promedio', value: fmt(avgCost), c: 'text-amber-400', bg: 'bg-amber-500/10', icon: Truck },
-        ].map((k, i) => (
-          <Card key={i} className="p-4" id={`supp-kpi-${i}`}>
-            <div className="flex items-center gap-3">
-              <div className={`rounded-xl p-2.5 ${k.bg}`}><k.icon className={`size-4 ${k.c}`} /></div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{k.label}</p>
-                <p className={`text-lg font-black ${k.c}`}>{k.value}</p>
+    <div className="space-y-8 animate-in fade-in duration-700">
+      {/* ═══ KPI Cards (Dashboard Style) ═══ */}
+      <div id="providers-report-kpis" className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Total Adquirido */}
+        <Card className="border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><ShoppingBag className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <Truck className="size-3.5 text-orange-500" /> Suministro Total
+              {getTrendValue(totalPurchased, prevTotalPurchased) !== 0 && (
+                <span className={cn("ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-bold", getTrendValue(totalPurchased, prevTotalPurchased) > 0 ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500")}>
+                  {getTrendValue(totalPurchased, prevTotalPurchased) > 0 ? '+' : ''}{getTrendValue(totalPurchased, prevTotalPurchased).toFixed(1)}%
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-black text-orange-500">{formatConvertedAmount(totalPurchased, 'NIO')}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{suppliers.length} proveedores registrados</p>
+          </CardContent>
+        </Card>
+
+        {/* Órdenes por Recibir */}
+        <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Package className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <Activity className="size-3.5 text-blue-500" /> Logística Activa
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-black text-blue-500">{orders.filter(o => o.status !== 'RECEIVED' && o.status !== 'CANCELLED').length}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Órdenes pendientes de entrega</p>
+          </CardContent>
+        </Card>
+
+        {/* Pasivos Exigibles */}
+        <Card className="border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Wallet className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <Scale className="size-3.5 text-rose-500" /> Cuentas por Pagar
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-black text-rose-500">{formatConvertedAmount(totalPurchased - totalPaid, 'NIO')}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{payRatio.toFixed(1)}% de deuda saldada</p>
+          </CardContent>
+        </Card>
+
+        {/* Salud Crediticia */}
+        <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><CreditCard className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <TrendingUp className="size-3.5 text-emerald-500" /> Flujo de Pago
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(totalPaid, 'NIO')}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Total liquidado con terceros</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ═══ Charts Row ═══ */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card id="providers-monthly-chart" className="lg:col-span-2 border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <TrendingUp className="size-4 text-primary" /> Tendencia de Abastecimiento
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[320px] w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={monthlyData}>
+                  <defs>
+                    <linearGradient id="suppGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
+                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11, fontWeight: 600 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
+                  <Area type="monotone" dataKey="compras" name="Compras" stroke="#f59e0b" strokeWidth={2.5} fill="url(#suppGrad)" dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card id="providers-efficiency-chart" className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <Activity className="size-4 text-primary" /> Eficiencia del Ciclo
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6 pt-4">
+             <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10 text-center">
+                   <p className="text-[10px] font-bold text-muted-foreground uppercase">Promedio OC</p>
+                   <p className="text-2xl font-black text-blue-500">{formatConvertedAmount(avgPurchasePerSupp, 'NIO')}</p>
+                </div>
+                <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/10 text-center">
+                   <p className="text-[10px] font-bold text-muted-foreground uppercase">Facturas Mora</p>
+                   <p className="text-2xl font-black text-orange-500">{bills.filter(b => b.status === 'OVERDUE').length}</p>
+                </div>
+             </div>
+             <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10 flex items-center gap-4 transition-all hover:bg-emerald-500/10">
+                <div className="p-3 rounded-lg bg-emerald-500/10">
+                   <CreditCard className="size-5 text-emerald-500" />
+                </div>
+                <div>
+                   <p className="text-xs font-bold text-emerald-500 uppercase">Salud de Deuda</p>
+                   <p className="text-[10px] text-muted-foreground">Capacidad de amortización: {payRatio.toFixed(1)}%</p>
+                </div>
+             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ═══ Top Providers & Items ═══ */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Top Proveedores */}
+        <Card id="providers-top-suppliers" className="border-orange-500/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <Users className="size-4 text-orange-500" /> Socios Estratégicos (Volumen)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {topSuppliers.map((s: any, idx: number) => (
+              <div key={idx} className="flex items-center justify-between p-4 rounded-xl bg-orange-500/5 border border-orange-500/10 hover:bg-orange-500/10 transition-colors group">
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                  <div className="size-10 rounded-xl bg-orange-500/20 flex items-center justify-center text-xs font-black text-orange-600 shrink-0 transition-transform group-hover:scale-110">
+                    #{idx + 1}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-black truncate">{s.name}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Clasificación Tier 1</p>
+                  </div>
+                </div>
+                <div className="text-right ml-4">
+                  <p className="text-sm font-black text-orange-500">{formatConvertedAmount(Number(s.value), 'NIO')}</p>
+                  <div className="h-1 w-24 bg-orange-500/10 rounded-full mt-1.5 overflow-hidden">
+                     <div 
+                       className="h-full bg-orange-500/50 rounded-full" 
+                       style={{ width: `${Math.min((s.value / Math.max(totalPurchased,1)) * 500, 100)}%` }} 
+                     />
+                  </div>
+                </div>
               </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {/* 4 Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-         <Card className="p-3 text-center border-l-4 border-l-rose-500"><p className="text-xs text-muted-foreground">Deuda Pendiente</p><p className="font-bold text-sm tracking-tight">{fmt(pendingDebt)}</p></Card>
-         <Card className="p-3 text-center border-l-4 border-l-amber-500"><p className="text-xs text-muted-foreground">Órdenes por Recibir</p><p className="font-bold text-sm tracking-tight">{ordersToReceive}</p></Card>
-         <Card className="p-3 text-center border-l-4 border-l-blue-500"><p className="text-xs text-muted-foreground">Notas de Crédito</p><p className="font-bold text-sm tracking-tight">{creditNotes}</p></Card>
-         <Card className="p-3 text-center border-l-4 border-l-orange-500"><p className="text-xs text-muted-foreground">Facturas con Retraso</p><p className="font-bold text-sm tracking-tight">{lateSuppliers}</p></Card>
-      </div>
-
-      {/* 4 Charts */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Tendencia de Compras</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={monthlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtCompact(v)} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
-                <Legend />
-                <Bar dataKey="compras" fill="#f59e0b" name="Compras" radius={[4,4,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            ))}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Órdenes por Estado</CardTitle></CardHeader>
-          <CardContent>
-            {ordersByStatus.length > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={ordersByStatus} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                    {ordersByStatus.map((e, i) => <Cell key={i} fill={e.color} stroke="transparent" />)}
-                  </Pie>
-                  <Tooltip contentStyle={tooltipStyle} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : <p className="text-sm text-center py-10 text-muted-foreground">Sin datos</p>}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Compras por Categoría</CardTitle></CardHeader>
-          <CardContent>
-             <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie data={purchasesByCategory} innerRadius={50} outerRadius={80} dataKey="value" nameKey="name" cx="50%" cy="50%" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                    {purchasesByCategory.map((e, i) => <Cell key={i} fill={e.color} stroke="transparent" />)}
-                  </Pie>
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
-                </PieChart>
-              </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Días de Crédito Promedio</CardTitle></CardHeader>
-          <CardContent>
-             <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={creditDaysTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Line type="monotone" dataKey="dias" stroke="#8b5cf6" strokeWidth={3} name="Días" dot={{r:4}} />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 2 Tops */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Top 10 Proveedores por Volumen</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {topSuppliers.map((c, i) => (
-                <div key={i} className="flex justify-between items-center p-2 rounded bg-muted/20 border border-border/40">
-                  <div className="flex items-center gap-2">
-                    <span className="flex items-center justify-center size-6 rounded-full bg-primary/20 text-primary text-[10px] font-bold">{i+1}</span>
-                    <span className="text-xs font-semibold">{c.name}</span>
+        {/* Items Críticos */}
+        <Card id="providers-top-products" className="border-blue-500/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <Package className="size-4 text-blue-500" /> Insumos con Mayor Gasto
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {topProducts.map((p: any, idx: number) => (
+              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-blue-500/5 border border-blue-500/10 hover:bg-blue-500/10 transition-colors">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="size-7 rounded-lg bg-blue-500/20 flex items-center justify-center text-[10px] font-black text-blue-600 shrink-0">
+                    #{idx + 1}
                   </div>
-                  <span className="text-xs font-bold text-orange-400">{fmt(Number(c.value))}</span>
-                </div>
-              ))}
-              {topSuppliers.length === 0 && <p className="text-xs text-muted-foreground">Sin datos</p>}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Top 10 Productos Más Comprados</CardTitle></CardHeader>
-          <CardContent>
-             <div className="space-y-3">
-              {topProducts.map((p, i) => (
-                <div key={i} className="flex justify-between items-center p-2 rounded bg-muted/20 border border-border/40">
-                  <div className="flex items-center gap-2">
-                    <Package className="size-4 text-muted-foreground" />
-                    <span className="text-xs font-semibold flex-1">{p.name} <span className="text-[10px] text-muted-foreground ml-2">x{p.qty}</span></span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate">{p.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{p.qty} unidades recibidas</p>
                   </div>
-                  <span className="text-xs font-bold text-blue-400">{fmt(Number(p.value))}</span>
                 </div>
-              ))}
-              {topProducts.length === 0 && <p className="text-xs text-muted-foreground">Sin datos</p>}
-            </div>
+                <span className="text-sm font-black text-blue-500 shrink-0 ml-3">{formatConvertedAmount(Number(p.value), 'NIO')}</span>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>
-
     </div>
   );
 });

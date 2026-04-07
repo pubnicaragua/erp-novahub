@@ -27,7 +27,7 @@ import { inventoryService } from '../services/inventario.service';
 import { motion, AnimatePresence } from 'motion/react';
 
 const INVENTORY_SECTIONS = [
-  { id: 'dashboard',       label: 'Dashboard',       icon: BarChart3, requiredModules: [] as string[] },
+  { id: 'dashboard',       label: 'Dashboard',       icon: BarChart3, requiredModules: ['INVENTORY_PRODUCTS', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS', 'INVENTORY_ADJUSTMENTS', 'INVENTORY_MOVEMENTS'] },
   { id: 'productos',       label: 'Productos',       icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
   { id: 'almacenes',       label: 'Almacenes',       icon: Warehouse, requiredModules: ['INVENTORY_WAREHOUSES'] },
   { id: 'transferencias',  label: 'Transferencias',  icon: Truck,     requiredModules: ['INVENTORY_TRANSFERS'] },
@@ -182,7 +182,7 @@ export function InventarioPage() {
         <div className="mt-4 min-h-[600px]">
           {loading ? (
             <div className="flex items-center justify-center h-96">
-              <div className="size-10 border-4 border-muted border-t-[#05602b] rounded-full animate-spin" />
+              <div className="size-10 border-4 border-muted border-t-primary rounded-full animate-spin" />
             </div>
           ) : (
             <>

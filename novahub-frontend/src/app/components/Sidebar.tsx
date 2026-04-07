@@ -101,6 +101,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'pagos-realizados': ['PURCHASES_PAYMENTS'],
   'creditos-proveedor': ['PURCHASES_RETURNS'],
   // Recursos Humanos
+  'dashboard-hr': ['HR_DASHBOARD'],
   empleados: ['HR_EMPLOYEES'],
   nominas: ['HR_PAYROLL'],
   asistencia: ['HR_ATTENDANCE'],
@@ -108,11 +109,13 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   evaluaciones: ['HR_PERFORMANCE'],
   capacitaciones: ['HR_TRAINING'],
   beneficios: ['HR_BENEFITS'],
+  'config-nomina': ['HR_PAYROLL_CONFIG'],
   // Finanzas
+  'dashboard-fin': ['FINANCIAL_DASHBOARD'],
   ingresos: ['FINANCIAL_INCOMES'],
   egresos: ['FINANCIAL_EXPENSES'],
   'gastos-recurrentes-fin': ['FINANCIAL_EXPENSES_REC'],
-  'ingresos-recurrentes': ['FINANCIAL_INCOMES'],
+  'ingresos-recurrentes': ['FINANCIAL_INCOMES_REC'],
   balance: ['FINANCIAL_BALANCE'],
   // Inventario
   productos: ['INVENTORY_PRODUCTS'],
@@ -126,19 +129,23 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   push: ['NOTIFICATIONS_PUSH'],
   // Documentos
   archivos: ['DOCUMENTS_FILES'],
-  carpetas: ['DOCUMENTS_FOLDERS'],
   contratos: ['DOCUMENTS_CONTRACTS'],
+  'doc-facturas': ['DOCUMENTS_INVOICES'],
+  'doc-reportes': ['DOCUMENTS_REPORTS'],
   // Actividades
   tareas: ['ACTIVITIES_TASKS'],
-  calendario: ['ACTIVITIES_CALENDAR'],
-  reuniones: ['ACTIVITIES_MEETINGS'],
+  eventos: ['ACTIVITIES_EVENTS'],
+  recordatorios: ['ACTIVITIES_REMINDERS'],
+  bitacora: ['ACTIVITIES_LOGS'],
+  // Reportes
   'reportes-ventas': ['REPORTS_SALES'],
+  'reportes-compras': ['REPORTS_PURCHASES'],
   'reportes-financieros': ['REPORTS_FINANCIAL'],
   'reportes-inventario': ['REPORTS_INVENTORY'],
-  'reportes-clientes': ['REPORTS_SALES'],
-  'reportes-proveedores': ['REPORTS_FINANCIAL'],
-  'reportes-suscripciones': ['REPORTS_FINANCIAL'],
-  'reportes-rrhh': ['HR_EMPLOYEES', 'HR_PAYROLL'],
+  'reportes-clientes': ['REPORTS_CLIENTS'],
+  'reportes-proveedores': ['REPORTS_PROVIDERS'],
+  'reportes-suscripciones': ['REPORTS_SUBSCRIPTIONS'],
+  'reportes-rrhh': ['REPORTS_HR'],
 };
 
 const menuItems: MenuItem[] = [
@@ -242,8 +249,8 @@ const menuItems: MenuItem[] = [
     submenu: [
       { id: 'archivos', label: 'Archivos', icon: <HardDrive className="size-4" /> },
       { id: 'contratos', label: 'Contratos', icon: <Scale className="size-4" /> },
-      { id: 'facturas', label: 'Facturas Legales', icon: <FileText className="size-4" /> },
-      { id: 'reportes', label: 'Reportes', icon: <BarChart3 className="size-4" /> }
+      { id: 'doc-facturas', label: 'Facturas Legales', icon: <FileText className="size-4" /> },
+      { id: 'doc-reportes', label: 'Reportes', icon: <BarChart3 className="size-4" /> }
     ]
   },
   {
@@ -390,7 +397,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
               {!isCollapsed && (
                 <div className="flex flex-col items-start leading-none overflow-hidden">
                   <span className="text-sm font-black tracking-tight text-sidebar-foreground truncate max-w-[130px]">
-                    Nova<span className="text-emerald-500">Hub</span>
+                    Nova<span className="text-primary">Hub</span>
                   </span>
                   <span className="text-[10px] text-sidebar-foreground/50 tracking-widest uppercase mt-0.5 truncate max-w-[130px]">
                     {themeConfig.tenantName || 'ERP Platform'}
@@ -511,8 +518,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
           {/* User Info Footer */}
           <div className="border-t border-sidebar-border p-3">
-            <div className={cn("flex items-center gap-3 rounded-xl bg-[#111111] border border-border", isCollapsed ? "p-1.5 justify-center" : "px-3 py-3")}>
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#048833] text-sm font-bold text-white shadow-sm">
+            <div className={cn("flex items-center gap-3 rounded-xl bg-sidebar-accent border border-sidebar-border/50", isCollapsed ? "p-1.5 justify-center" : "px-3 py-3")}>
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-sm">
                 {user?.name.charAt(0)}
               </div>
               {!isCollapsed && (

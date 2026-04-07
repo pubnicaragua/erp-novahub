@@ -147,10 +147,8 @@ const colorPresets: ColorPreset[] = [
 ];
 
 function generateThemeFromColor(hex: string, sidebarHex: string, accentHex: string): BrandColors {
-  const [r, g, b] = hexToRgb(hex);
-  // Generate foreground based on lightness
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  const fgColor = brightness > 0.5 ? '#000000' : '#ffffff';
+  // Always use white foreground on primary for readability on colored buttons
+  const fgColor = '#ffffff';
   const [sr, sg, sb] = hexToRgb(sidebarHex);
   const sBrightness = (sr * 299 + sg * 587 + sb * 114) / 1000;
   const sFgColor = sBrightness > 0.5 ? '#1a1a1a' : '#f5f5f5';
@@ -338,9 +336,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setSidebarHex(preset.sidebar);
     setAccentHex(preset.accent);
 
-    const [r, g, b] = hexToRgb(preset.primary);
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    setPrimaryFgHex(brightness > 0.5 ? '#000000' : '#ffffff');
+    // Always use white text on primary buttons
+    setPrimaryFgHex('#ffffff');
     setSidebarFgHex('#f5f5f5');
     setActivePreset(preset.name);
   }, []);

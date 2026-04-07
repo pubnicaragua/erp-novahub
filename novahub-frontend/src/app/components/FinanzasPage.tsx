@@ -367,40 +367,22 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
       {/* Main Navigation Tabs — matches RH pattern with primary theme colors */}
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
         <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar">
-          <TabsTrigger value="dashboard" className={tabTriggerClass}>
-            <BarChart3 className="size-4" />
-            <span>Dashboard</span>
-          </TabsTrigger>
-          {hasAccess('FINANCIAL_INCOMES') && (
-          <TabsTrigger value="ingresos" className={tabTriggerClass}>
-            <TrendingUp className="size-4" />
-            <span>Ingresos</span>
-          </TabsTrigger>
-          )}
-          {hasAccess('FINANCIAL_EXPENSES') && (
-          <TabsTrigger value="gastos" className={tabTriggerClass}>
-            <TrendingDown className="size-4" />
-            <span>Gastos</span>
-          </TabsTrigger>
-          )}
-          {hasAccess('FINANCIAL_EXPENSES_REC') && (
-          <TabsTrigger value="gastos-rec" className={tabTriggerClass}>
-            <CalendarClock className="size-4" />
-            <span>Gastos Rec.</span>
-          </TabsTrigger>
-          )}
-          {hasAccess('FINANCIAL_INCOMES') && (
-          <TabsTrigger value="ingresos-rec" className={tabTriggerClass}>
-            <RotateCcw className="size-4" />
-            <span>Ingresos Rec.</span>
-          </TabsTrigger>
-          )}
-          {hasAccess('FINANCIAL_BALANCE') && (
-          <TabsTrigger value="balance" className={tabTriggerClass}>
-            <Landmark className="size-4" />
-            <span>Balance</span>
-          </TabsTrigger>
-          )}
+          {[
+            { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'FINANCIAL_DASHBOARD' },
+            { id: 'ingresos', label: 'Ingresos', icon: TrendingUp, module: 'FINANCIAL_INCOMES' },
+            { id: 'gastos', label: 'Gastos', icon: TrendingDown, module: 'FINANCIAL_EXPENSES' },
+            { id: 'gastos-rec', label: 'Gastos Rec.', icon: CalendarClock, module: 'FINANCIAL_EXPENSES_REC' },
+            { id: 'ingresos-rec', label: 'Ingresos Rec.', icon: RotateCcw, module: 'FINANCIAL_INCOMES_REC' },
+            { id: 'balance', label: 'Balance', icon: Landmark, module: 'FINANCIAL_BALANCE' }
+          ].map((tab) => {
+            if (!hasAccess(tab.module)) return null;
+            return (
+              <TabsTrigger key={tab.id} value={tab.id} className={tabTriggerClass}>
+                <tab.icon className="size-4" />
+                <span>{tab.label}</span>
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
         <motion.div

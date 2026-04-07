@@ -167,83 +167,30 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: Recu
       {/* Main Navigation Tabs - Estilo Compras (Píldoras Flexibles y con Scroll) */}
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
         <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar">
-          <TabsTrigger 
-            value="dashboard" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-          >
-            <BarChart3 className="size-4" />
-            <span>Dashboard</span>
-          </TabsTrigger>
-          {(!user?.enabledModules || user.enabledModules.includes('HR_EMPLOYEES')) && (
-          <TabsTrigger 
-            value="empleados" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-          >
-            <Users className="size-4" />
-            <span>Empleados</span>
-          </TabsTrigger>
-          )}
-          {(!user?.enabledModules || user.enabledModules.includes('HR_PAYROLL')) && (
-          <TabsTrigger 
-            value="nominas" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-          >
-            <DollarSign className="size-4" />
-            <span>Nóminas</span>
-          </TabsTrigger>
-          )}
-          {(!user?.enabledModules || user.enabledModules.includes('HR_ATTENDANCE')) && (
-          <TabsTrigger 
-            value="asistencia" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-          >
-            <UserCheck className="size-4" />
-            <span>Asistencia</span>
-          </TabsTrigger>
-          )}
-          {(!user?.enabledModules || user.enabledModules.includes('HR_LEAVES')) && (
-          <TabsTrigger 
-            value="ausencias" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-          >
-            <Calendar className="size-4" />
-            <span>Vacaciones</span>
-          </TabsTrigger>
-          )}
-          {(!user?.enabledModules || user.enabledModules.includes('HR_PERFORMANCE')) && (
-          <TabsTrigger 
-            value="evaluaciones" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-          >
-            <Award className="size-4" />
-            <span>Desempeño</span>
-          </TabsTrigger>
-          )}
-          {(!user?.enabledModules || user.enabledModules.includes('HR_TRAINING')) && (
-          <TabsTrigger 
-            value="capacitaciones" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-          >
-            <GraduationCap className="size-4" />
-            <span>Formación</span>
-          </TabsTrigger>
-          )}
-          {(!user?.enabledModules || user.enabledModules.includes('HR_BENEFITS')) && (
-          <TabsTrigger 
-            value="beneficios" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-          >
-            <HandHeart className="size-4" />
-            <span>Beneficios</span>
-          </TabsTrigger>
-          )}
-          <TabsTrigger 
-            value="config-nomina" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-          >
-            <Settings2 className="size-4" />
-            <span>Config</span>
-          </TabsTrigger>
+          {[
+            { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'HR_DASHBOARD' },
+            { id: 'empleados', label: 'Empleados', icon: Users, module: 'HR_EMPLOYEES' },
+            { id: 'nominas', label: 'Nóminas', icon: DollarSign, module: 'HR_PAYROLL' },
+            { id: 'asistencia', label: 'Asistencia', icon: UserCheck, module: 'HR_ATTENDANCE' },
+            { id: 'ausencias', label: 'Vacaciones', icon: Calendar, module: 'HR_LEAVES' },
+            { id: 'evaluaciones', label: 'Desempeño', icon: Award, module: 'HR_PERFORMANCE' },
+            { id: 'capacitaciones', label: 'Formación', icon: GraduationCap, module: 'HR_TRAINING' },
+            { id: 'beneficios', label: 'Beneficios', icon: HandHeart, module: 'HR_BENEFITS' },
+            { id: 'config-nomina', label: 'Config', icon: Settings2, module: 'HR_PAYROLL_CONFIG' }
+          ].map((tab) => {
+            const hasAccess = !user?.enabledModules || user.enabledModules.includes(tab.module);
+            if (!hasAccess) return null;
+            return (
+              <TabsTrigger 
+                key={tab.id}
+                value={tab.id} 
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
+              >
+                <tab.icon className="size-4" />
+                <span>{tab.label}</span>
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
         <motion.div

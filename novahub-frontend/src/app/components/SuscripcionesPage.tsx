@@ -512,11 +512,11 @@ export function SuscripcionesPage() {
       >
         <div>
           <h1 className="text-4xl font-black tracking-tighter text-foreground flex items-center gap-3 uppercase italic">
-            <Zap className="size-10 text-emerald-500 fill-emerald-500/20" />
-            Control <span className="text-emerald-500">Nova</span>Hub
+            <Zap className="size-10 text-primary fill-primary/20" />
+            Control <span className="text-primary">Nova</span>Hub
           </h1>
           <div className="flex items-center gap-2 mt-2">
-            <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+            <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
               Tenancy Master Console
             </Badge>
             <span className="text-muted-foreground text-xs font-medium">
@@ -528,7 +528,7 @@ export function SuscripcionesPage() {
         <div className="flex items-center gap-3">
           <Dialog open={isTenantDialogOpen} onOpenChange={setIsTenantDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2 shadow-xl shadow-emerald-900/40 px-8 h-12 rounded-2xl transition-all hover:scale-105 active:scale-95 font-bold">
+              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 shadow-xl shadow-primary/40 px-8 h-12 rounded-2xl transition-all hover:scale-105 active:scale-95 font-bold">
                 <Plus className="size-5" /> Registrar Empresa
               </Button>
             </DialogTrigger>
@@ -654,7 +654,7 @@ export function SuscripcionesPage() {
               </div>
               <DialogFooter className="gap-3">
                 <Button variant="outline" className="border-border/50 rounded-xl h-11" onClick={() => { setIsTenantDialogOpen(false); setSelectedTenant(null); resetTenantForm(); }}>Cancelar</Button>
-                <Button className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl h-11 px-8 font-bold" onClick={selectedTenant ? handleUpdateTenant : handleCreateTenant}>
+                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-11 px-8 font-bold" onClick={selectedTenant ? handleUpdateTenant : handleCreateTenant}>
                   {selectedTenant ? 'Guardar Cambios' : 'Crear Entidad'}
                 </Button>
               </DialogFooter>
@@ -666,7 +666,7 @@ export function SuscripcionesPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Empresas Activas', value: (tenants || []).length, icon: Building2, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-          { label: 'Servicios Habilitados', value: (tenants || []).reduce((acc, t) => acc + (t.subscriptions?.length || 0), 0), icon: Zap, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+          { label: 'Servicios Habilitados', value: (tenants || []).reduce((acc, t) => acc + (t.subscriptions?.length || 0), 0), icon: Zap, color: 'text-primary', bg: 'bg-primary/10' },
           { label: 'Pendientes Revisión', value: (requests || []).filter(r => r.status === 'PENDING').length, icon: Clock, color: 'text-orange-500', bg: 'bg-orange-500/10' },
           { label: 'Crecimiento Mes', value: '+12%', icon: TrendingUp, color: 'text-purple-500', bg: 'bg-purple-500/10' },
         ].map((stat, i) => (
@@ -745,10 +745,10 @@ export function SuscripcionesPage() {
 
       <Tabs defaultValue="active" className="w-full">
         <TabsList className="grid w-full grid-cols-2 lg:w-[400px] bg-muted/20 border border-border/50 p-1 h-12">
-          <TabsTrigger value="active" className="text-muted-foreground hover:text-foreground hover:bg-muted/40 data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-black tracking-widest gap-2">
+          <TabsTrigger value="active" className="text-muted-foreground hover:text-foreground hover:bg-muted/40 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground uppercase text-[10px] font-black tracking-widest gap-2">
             <Building2 className="size-4" /> Gestión Empresas
           </TabsTrigger>
-          <TabsTrigger value="requests" className="text-muted-foreground hover:text-foreground hover:bg-muted/40 data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-black tracking-widest gap-2">
+          <TabsTrigger value="requests" className="text-muted-foreground hover:text-foreground hover:bg-muted/40 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground uppercase text-[10px] font-black tracking-widest gap-2">
             <Clock className="size-4" /> Solicitudes
             {requests.filter(r => r.status === 'PENDING').length > 0 && (
               <Badge className="bg-rose-500 text-[10px] size-5 p-0 flex items-center justify-center rounded-full ml-1 animate-pulse border-none">
@@ -799,7 +799,7 @@ export function SuscripcionesPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 rounded-xl" onClick={() => openEditTenant(tenant)}>
+                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-xl" onClick={() => openEditTenant(tenant)}>
                           <Edit2 className="size-5" />
                         </Button>
                         <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10 rounded-xl" onClick={async () => { 
@@ -847,11 +847,11 @@ export function SuscripcionesPage() {
                                         className={cn(
                                           "flex-1 flex items-center justify-between px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-tight transition-all",
                                           visualIsActive 
-                                            ? "bg-emerald-500 text-white border-emerald-400/50 shadow-lg shadow-emerald-500/10" 
+                                            ? "bg-primary text-primary-foreground border-primary/50 shadow-lg shadow-primary/10" 
                                             : isPending
                                               ? "bg-amber-500/20 text-amber-600 dark:text-amber-500 border-amber-500/30 animate-pulse"
                                               : isPartial 
-                                                ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                                ? "bg-primary/20 text-primary border-primary/30"
                                                 : "bg-muted/50 text-muted-foreground/60 border-border/50 hover:border-primary/30 hover:text-foreground/80"
                                         )}
                                       >
@@ -861,7 +861,7 @@ export function SuscripcionesPage() {
                                             handleToggleModule(tenant.id, mod.id, isActive);
                                           }
                                         }}>
-                                          <mod.icon className={cn("size-3.5", visualIsActive ? "text-white" : isPartial ? "text-emerald-500" : "text-muted-foreground/50")} />
+                                          <mod.icon className={cn("size-3.5", visualIsActive ? "text-primary-foreground" : isPartial ? "text-primary" : "text-muted-foreground/50")} />
                                           {mod.label}
                                           {visualIsActive && !hasSubmodules && <Check className="size-3 ml-1" />}
                                           {isPending && !hasSubmodules && <Clock className="size-3 ml-1" />}
@@ -874,9 +874,9 @@ export function SuscripcionesPage() {
                                             }}>
                                               <div className={cn(
                                                 "flex items-center justify-center p-1 rounded-md transition-all",
-                                                visualIsActive ? "bg-white/20 hover:bg-white/30 text-white" : "bg-muted dark:bg-black/40 hover:bg-emerald-500 hover:text-white border border-border/50"
+                                                visualIsActive ? "bg-white/20 hover:bg-white/30 text-primary-foreground" : "bg-muted dark:bg-black/40 hover:bg-primary hover:text-primary-foreground border border-border/50"
                                               )} title={visualIsActive ? "Desactivar Todo" : "Activar Todo"}>
-                                                <Zap className={cn("size-3", isPartial && !visualIsActive ? "text-emerald-500 group-hover:text-white" : "")} />
+                                                <Zap className={cn("size-3", isPartial && !visualIsActive ? "text-primary group-hover:text-primary-foreground" : "")} />
                                               </div>
                                             </div>
                                           )}
@@ -900,7 +900,7 @@ export function SuscripcionesPage() {
                                               className={cn(
                                                 "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-tight transition-all",
                                                 subIsActive 
-                                                  ? "bg-emerald-500/80 text-white border-emerald-400/40" 
+                                                  ? "bg-primary/80 text-primary-foreground border-primary/40" 
                                                   : subIsPending
                                                     ? "bg-amber-500/15 text-amber-600 dark:text-amber-500 border-amber-500/20 animate-pulse"
                                                     : "bg-muted/30 text-muted-foreground/50 border-border/30 hover:border-primary/20 hover:text-foreground/70"
@@ -967,7 +967,7 @@ export function SuscripcionesPage() {
                        {user?.isPlatformAdmin && req.status === 'PENDING' && (
                         <>
                           <Button variant="outline" size="sm" onClick={() => handleReject(req.id)} className="bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500 hover:text-white uppercase text-[10px] font-black px-4">Rechazar</Button>
-                          <Button size="sm" onClick={() => handleApprove(req.id)} className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 uppercase text-[10px] font-black px-4">Aprobar</Button>
+                          <Button size="sm" onClick={() => handleApprove(req.id)} className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 uppercase text-[10px] font-black px-4">Aprobar</Button>
                         </>
                        )}
                     </div>
@@ -1018,7 +1018,7 @@ export function SuscripcionesPage() {
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto border-border/50">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
-              <Building2 className="size-6 text-emerald-500" />
+              <Building2 className="size-6 text-primary" />
               Detalles: {tenantDetails?.name}
             </DialogTitle>
           </DialogHeader>
