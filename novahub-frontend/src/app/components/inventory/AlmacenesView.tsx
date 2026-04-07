@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Warehouse, MapPin, Plus, Trash2, Save, X, Check, Box, Edit2 } from 'lucide-react';
+import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2 } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface AlmacenesViewProps {
   warehouses: any[];
@@ -33,6 +34,8 @@ const WAREHOUSE_TYPES = [
 export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [editingRows, setEditingRows] = useState<Map<string, EditingWarehouse>>(new Map());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const handleAddNewRow = () => {
     const tempId = `new-${Date.now()}`;
@@ -111,13 +114,21 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   };
 
   const handleDeleteWarehouse = async (id: string) => {
-    if (!confirm('¿Eliminar este almacén?')) return;
+    setPendingDeleteId(id);
+  };
+
+  const handleConfirmDeleteWarehouse = async () => {
+    if (!pendingDeleteId) return;
+    setDeleteLoading(true);
     try {
-      await inventoryService.deleteWarehouse(id);
+      await inventoryService.deleteWarehouse(pendingDeleteId);
       toast.success('Almacén eliminado');
+      setPendingDeleteId(null);
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al eliminar');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -223,8 +234,10 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     <Card className="p-4 border bg-card rounded-xl">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="font-black text-lg uppercase tracking-tight italic">Almacenes</h3>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{warehouses.length} almacenes configurados</p>
+          <h3 className="font-black text-lg uppercase tracking-tight italic">Almacenes y Sucursales</h3>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+            {warehouses.length} ubicaciones · {warehouses.filter((w: any) => String(w.type || '').toUpperCase() === 'STORE').length} sucursales
+          </p>
         </div>
         <Button 
           size="sm" 
@@ -232,7 +245,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           onClick={handleAddNewRow}
         >
           <Plus className="size-4" />
-          Agregar Almacén
+          Agregar Almacén/Sucursal
         </Button>
       </div>
 
@@ -242,8 +255,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <TableRow className="bg-muted/50 border-b border-border/50">
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Nombre</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Ubicación</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Tipo</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Almacén Padre</TableHead>
+               <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Tipo</TableHead>
+               <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Ubicación Padre</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
@@ -304,7 +317,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="size-7 text-red-600 hover:text-black hover:bg-red-500"
+                          className="size-7 text-red-600 hover:text-white hover:bg-red-500"
                           onClick={() => handleDeleteWarehouse(wh.id)}
                         >
                           <Trash2 className="size-3.5" />
@@ -322,6 +335,15 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
         Doble clic en una fila para editar · Enter para guardar · Esc para cancelar
       </div>
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="¿Eliminar almacén?"
+        description="Esta acción eliminará el almacén seleccionado."
+        confirmLabel="Eliminar"
+        loading={deleteLoading}
+        onConfirm={handleConfirmDeleteWarehouse}
+      />
     </Card>
   );
 }

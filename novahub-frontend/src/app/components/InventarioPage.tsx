@@ -6,9 +6,7 @@ import {
   Truck, 
   Scale, 
   History, 
-  Download,
-  Plus,
-  RefreshCw
+  Download
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -24,7 +22,7 @@ import { ControlStockView } from './inventory/ControlStockView';
 import { MovimientosView } from './inventory/MovimientosView';
 
 import { inventoryService } from '../services/inventario.service';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 
 const INVENTORY_SECTIONS = [
   { id: 'dashboard',       label: 'Dashboard',       icon: BarChart3, requiredModules: ['INVENTORY_PRODUCTS', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS', 'INVENTORY_ADJUSTMENTS', 'INVENTORY_MOVEMENTS'] },
@@ -35,7 +33,12 @@ const INVENTORY_SECTIONS = [
   { id: 'movimientos',     label: 'Movimientos',     icon: History,   requiredModules: ['INVENTORY_MOVEMENTS'] },
 ];
 
-export function InventarioPage() {
+interface InventarioPageProps {
+  activeSubModule?: string;
+  onSubModuleChange?: (subModule?: string) => void;
+}
+
+export function InventarioPage({ activeSubModule, onSubModuleChange }: InventarioPageProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,8 +52,7 @@ export function InventarioPage() {
     series: [],
     movements: []
   });
-
-  const [activeTab, setActiveTab] = useState('productos');
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   const fetchData = useCallback(async (showRefresh = false) => {
     try {
@@ -100,6 +102,12 @@ export function InventarioPage() {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (!activeSubModule) return;
+    const exists = INVENTORY_SECTIONS.some((section) => section.id === activeSubModule);
+    if (exists) setActiveTab(activeSubModule);
+  }, [activeSubModule]);
+
   const handleExportData = async () => {
     try {
       const csvContent = [
@@ -139,7 +147,7 @@ export function InventarioPage() {
             </h1>
             <div className="flex items-center gap-2 mt-2">
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                {data.products.length} productos · {data.warehouses.length} almacenes
+                {data.products.length} productos · {data.warehouses.length} almacenes · {data.warehouses.filter((w: any) => String(w.type || '').toUpperCase() === 'STORE').length} sucursales
               </Badge>
             </div>
           </div>
@@ -159,7 +167,14 @@ export function InventarioPage() {
       </div>
 
       {/* Main Navigation Tabs */}
-      <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
+      <Tabs
+        value={activeTab}
+        className="w-full"
+        onValueChange={(nextTab) => {
+          setActiveTab(nextTab);
+          if (onSubModuleChange) onSubModuleChange(nextTab);
+        }}
+      >
         <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40">
           {INVENTORY_SECTIONS.map((section) => {
             const hasAccess = section.requiredModules.length === 0 || !user?.enabledModules
@@ -211,6 +226,8 @@ export function InventarioPage() {
                     products={data.products} 
                     categories={data.categories}
                     warehouses={data.warehouses}
+                    series={data.series}
+                    movements={data.movements}
                     onRefresh={() => fetchData(true)}
                   />
                 </motion.div>
@@ -237,6 +254,7 @@ export function InventarioPage() {
                     transfers={data.transfers}
                     warehouses={data.warehouses}
                     products={data.products}
+                    series={data.series}
                     onRefresh={() => fetchData(true)}
                   />
                 </motion.div>
@@ -251,6 +269,7 @@ export function InventarioPage() {
                     adjustments={data.adjustments}
                     warehouses={data.warehouses}
                     products={data.products}
+                    series={data.series}
                     onRefresh={() => fetchData(true)}
                   />
                 </motion.div>

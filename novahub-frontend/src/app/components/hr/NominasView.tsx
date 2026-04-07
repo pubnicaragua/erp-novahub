@@ -44,7 +44,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         payload.employeeIds = [filterEmployee];
       }
 
-      const result = await hrService.bulkProcessPayroll(payload);
+      const result: any = await hrService.bulkProcessPayroll(payload);
       toast.success(`Nómina procesada: ${result.count} registros creados`);
       onRefresh();
     } catch (error: any) {

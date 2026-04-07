@@ -13,6 +13,7 @@ import { cn } from '../ui/utils';
 import type { Invoice, Customer, Product } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -24,6 +25,8 @@ interface FacturasViewProps {
   onRefresh: () => void;
   customers?: Customer[];
   products?: Product[];
+  series?: any[];
+  warehouses?: any[];
   invoiceDraft?: any;
   onClearInvoiceDraft?: () => void;
 }
@@ -47,7 +50,7 @@ const editableStatusOptions = [
   { label: 'Cancelada', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function FacturasView({ data, loading, onRefresh, customers = [], products = [], invoiceDraft, onClearInvoiceDraft }: FacturasViewProps) {
+export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], invoiceDraft, onClearInvoiceDraft }: FacturasViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -58,6 +61,28 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
   const [isCreating, setIsCreating] = useState(false);
+
+  const isSerialTracked = (product: any) =>
+    Boolean(
+      product?.trackSerialNumbers ||
+      product?.serialTracking ||
+      product?.serialNumberTracking ||
+      String(product?.trackingType || '').toUpperCase() === 'SERIAL',
+    );
+
+  const getAvailableSeriesForItem = (item: any) => {
+    if (!item?.productId) return [];
+    return series.filter((s: any) => {
+      const sameProduct = s.productId === item.productId || s.product?.id === item.productId;
+      if (!sameProduct) return false;
+      if (item.warehouseId) {
+        const serialWh = s.warehouseId || s.warehouse?.id;
+        if (serialWh && serialWh !== item.warehouseId) return false;
+      }
+      const status = String(s.status || 'AVAILABLE').toUpperCase();
+      return ['AVAILABLE', 'IN_STOCK', 'ACTIVE', ''].includes(status);
+    });
+  };
 
   // Helper para mostrar la fecha sin desfase de zona horaria (UTC-local)
   const formatDateSafe = (dateStr: string) => {
@@ -190,6 +215,51 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error('Agrega al menos un producto');
       return;
     }
+    const serialRows = (localDoc.items || []).filter((item: any) => {
+      const p = products.find((x: any) => x.id === item.productId);
+      return isSerialTracked(p);
+    });
+    const seenSerials = new Set<string>();
+    for (const row of serialRows) {
+      if (!row.warehouseId) {
+        toast.error('Selecciona almacén origen para cada producto serializado');
+        return;
+      }
+      const serialNumbers = (row.serialNumbers || []).map((n: string) => String(n || '').trim()).filter(Boolean);
+      const unique = new Set(serialNumbers);
+      if (serialNumbers.length !== unique.size) {
+        toast.error('Hay IMEI repetidos en la misma línea');
+        return;
+      }
+      if (Number(row.quantity || 0) !== serialNumbers.length) {
+        toast.error('La cantidad debe coincidir con los IMEI seleccionados');
+        return;
+      }
+      const available = getAvailableSeriesForItem(row).map((s: any) => String(s.number || '').trim());
+      for (const serial of serialNumbers) {
+        if (seenSerials.has(serial)) {
+          toast.error(`El IMEI ${serial} está repetido en más de una línea`);
+          return;
+        }
+        seenSerials.add(serial);
+        if (available.length > 0 && !available.includes(serial)) {
+          toast.error(`El IMEI ${serial} no está disponible para el producto/almacén seleccionado`);
+          return;
+        }
+      }
+    }
+
+    const serialNotes = serialRows.length > 0
+      ? `\n[SERIALES]\n${serialRows.map((row: any) => {
+          const prod = products.find((p: any) => p.id === row.productId);
+          const wh = warehouses.find((w: any) => w.id === row.warehouseId);
+          return `${prod?.code || row.productId} (${wh?.name || 'Sin almacén'}): ${(row.serialNumbers || []).join(', ')}`;
+        }).join('\n')}`
+      : '';
+
+    const baseNotes = String(localDoc.notes || '').split('\n[SERIALES]\n')[0];
+    const finalNotes = `${baseNotes}${serialNotes}`.trim();
+
     try {
       if (isCreating) {
         await invoicesService.create({
@@ -213,7 +283,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           discountAmount: Number(localDoc.discountAmount || 0),
           total: Number(localDoc.total || 0),
           status: emitir ? 'PENDING' : 'DRAFT',
-          notes: localDoc.notes,
+          notes: finalNotes,
           salesOrderId: localDoc.salesOrderId || undefined,
         } as any);
         toast.success(emitir ? 'Factura emitida exitosamente' : 'Factura guardada como borrador');
@@ -221,6 +291,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         await handleUpdate(localDoc.id, {
           ...localDoc,
           items: localDoc.items,
+          notes: finalNotes,
           status: emitir ? 'PENDING' : localDoc.status,
         });
       }
@@ -461,7 +532,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0, productId: null }];
+                  const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: '', serialNumbers: [] }];
                   setLocalDoc({ ...localDoc, items: newItems });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                   <Plus className="size-3 mr-2" /> Agregar Item
@@ -485,7 +556,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       onChange={(val) => {
                         const newItems = [...(localDoc.items || [])];
                         const selectedProd = products.find(p => p.id === val);
-                        newItems[idx] = { ...newItems[idx], productId: val };
+                        newItems[idx] = { ...newItems[idx], productId: val, warehouseId: '', serialNumbers: [] };
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
                           newItems[idx].unitPrice = Number(selectedProd.price || 0);
@@ -521,6 +592,54 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         })()}
                       </div>
                     )}
+                    {item.productId && isSerialTracked(products.find(x => x.id === item.productId)) && (
+                      <div className="mt-2 space-y-2 rounded-md border border-border/50 p-2 bg-muted/10">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <div>
+                            <p className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Almacén origen</p>
+                            <Select
+                              value={item.warehouseId || ''}
+                              onValueChange={(val) => {
+                                const newItems = [...(localDoc.items || [])];
+                                newItems[idx] = { ...newItems[idx], warehouseId: val, serialNumbers: [] };
+                                setLocalDoc({ ...localDoc, items: newItems });
+                              }}
+                            >
+                              <SelectTrigger className="h-8 text-[10px]"><SelectValue placeholder="Seleccionar almacén" /></SelectTrigger>
+                              <SelectContent>
+                                {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <p className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">IMEI/Series (uno por línea)</p>
+                            <textarea
+                              value={(item.serialNumbers || []).join('\n')}
+                              onChange={(e) => {
+                                const serialNumbers = e.target.value
+                                  .split('\n')
+                                  .map((n) => n.trim())
+                                  .filter(Boolean);
+                                const newItems = [...(localDoc.items || [])];
+                                newItems[idx] = {
+                                  ...newItems[idx],
+                                  serialNumbers,
+                                  quantity: serialNumbers.length > 0 ? serialNumbers.length : Number(newItems[idx].quantity || 1),
+                                  total: (serialNumbers.length > 0 ? serialNumbers.length : Number(newItems[idx].quantity || 1)) * Number(newItems[idx].unitPrice || 0),
+                                };
+                                const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
+                                setLocalDoc({ ...localDoc, items: newItems, ...calc });
+                              }}
+                              className="w-full h-20 rounded-md border border-input bg-background px-2 py-1 text-[10px] font-mono"
+                              placeholder="Pega o escanea IMEI..."
+                            />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          Disponibles: {getAvailableSeriesForItem(item).length} · Seleccionados: {(item.serialNumbers || []).length}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div className="col-span-2">
                     <Input type="number" min="0" max={Number(products.find(x => x.id === item.productId)?.stock || 1000000)} value={Number(item.quantity) || ''} placeholder="0"
@@ -540,7 +659,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
                           handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
                         }
-                      }} className="h-8 text-xs text-right" />
+                      }} className="h-8 text-xs text-right" disabled={item.productId && isSerialTracked(products.find(x => x.id === item.productId))} />
                   </div>
                   <div className="col-span-2">
                     <Input type="number" min="0" value={Number(item.unitPrice) || ''} placeholder="0"

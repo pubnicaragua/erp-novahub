@@ -37,7 +37,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
         }
         if ((row.content && String(row.content).startsWith('RECORDATORIO:')) || (row.title && String(row.title).startsWith('Recordatorio:'))) {
           return (
-            <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold text-amber-500 border-amber-500/30 hover:bg-amber-500/10" onClick={() => window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'actividades', subModule: 'recordatorios' }}))}>
+            <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold text-primary border-primary/30 hover:bg-primary/10" onClick={() => window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'actividades', subModule: 'recordatorios' }}))}>
                Ver Recordatorio
             </Button>
           );

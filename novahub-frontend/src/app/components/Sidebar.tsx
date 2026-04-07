@@ -118,6 +118,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'ingresos-recurrentes': ['FINANCIAL_INCOMES_REC'],
   balance: ['FINANCIAL_BALANCE'],
   // Inventario
+  dashboard: [],
   productos: ['INVENTORY_PRODUCTS'],
   almacenes: ['INVENTORY_WAREHOUSES'],
   transferencias: ['INVENTORY_TRANSFERS'],
@@ -192,6 +193,7 @@ const menuItems: MenuItem[] = [
     label: 'Inventario',
     icon: <Package className="size-5" />,
     submenu: [
+      { id: 'dashboard', label: 'Dashboard', icon: <BarChart3 className="size-4" /> },
       { id: 'productos', label: 'Productos', icon: <Package className="size-4" /> },
       { id: 'almacenes', label: 'Almacenes', icon: <Archive className="size-4" /> },
       { id: 'transferencias', label: 'Transferencias', icon: <Truck className="size-4" /> },

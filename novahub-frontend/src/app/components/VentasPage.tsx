@@ -81,6 +81,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
     devoluciones: [] as SalesReturn[],
     notasCredito: [] as CreditNote[],
     productos: [] as Product[],
+    series: [] as any[],
+    warehouses: [] as any[],
   });
   const [loading, setLoading] = useState(true);
 
@@ -91,7 +93,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [cus, est, ord, inv, pay, rec, ret, cn, prod] = await Promise.all([
+      const [cus, est, ord, inv, pay, rec, ret, cn, prod, series, warehouses] = await Promise.all([
         customersService.getAll(),
         estimatesService.getAll(),
         salesOrdersService.getAll(),
@@ -100,7 +102,9 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
         recurringInvoicesService.getAll(),
         salesReturnsService.getAll(),
         creditNotesService.getAll(),
-        inventoryService.getProducts()
+        inventoryService.getProducts(),
+        inventoryService.getSeries(),
+        inventoryService.getWarehouses(),
       ]);
       
       const toArr = (r: any) => Array.isArray(r) ? r : (r?.data || []);
@@ -114,6 +118,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
         devoluciones: toArr(ret),
         notasCredito: toArr(cn),
         productos: toArr(prod),
+        series: toArr(series),
+        warehouses: toArr(warehouses),
       });
     } catch (error) {
       console.error('Error fetching sales data:', error);
@@ -224,6 +230,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
                   onRefresh={fetchData} 
                   customers={data.clientes} 
                   products={data.productos} 
+                  series={data.series}
+                  warehouses={data.warehouses}
                   invoiceDraft={invoiceDraft}
                   onClearInvoiceDraft={() => setInvoiceDraft(null)}
                 />
