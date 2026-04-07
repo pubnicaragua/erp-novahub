@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
@@ -12,10 +10,8 @@ import {
   Award,
   GraduationCap,
   UserCheck,
-  Download,
   BarChart3,
   HandHeart,
-  Building2,
   Settings2,
 } from 'lucide-react';
 import { hrService } from '../services/hr.service';
@@ -143,32 +139,6 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: Recu
     fetchData();
   }, [fetchData]);
 
-  const handleExportData = async () => {
-    try {
-      const response = await hrService.exportEmployees();
-      const csvContent = [
-        ['Número', 'Nombre', 'Email', 'Departamento', 'Puesto', 'Salario', 'Estado'].join(','),
-        ...data.employees.map((e: any) => [
-          e.employeeNumber,
-          `"${e.firstName} ${e.lastName}"`,
-          e.email,
-          e.department?.name || '',
-          e.position?.title || '',
-          e.salary,
-          e.employmentStatus,
-        ].join(','))
-      ].join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `empleados_${new Date().toISOString().split('T')[0]}.csv`;
-      link.click();
-      toast.success('Archivo CSV descargado');
-    } catch (error) {
-      toast.error('Error al exportar datos');
-    }
-  };
 
   return (
     <div className="space-y-6 p-4 md:p-8 pb-20 max-w-[1920px] mx-auto">
@@ -191,17 +161,6 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: Recu
               {data.employees.length} empleados · {data.departments.length} departamentos
             </span>
           </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            onClick={handleExportData}
-            className="rounded-xl gap-2 font-bold hover:border-primary/50 hover:bg-primary/5 transition-all"
-          >
-            <Download className="size-4" />
-            Exportar
-          </Button>
         </div>
       </motion.div>
 

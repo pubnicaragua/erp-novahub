@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package,
+  ShoppingCart,
   ChevronDown,
   BarChart3,
-  ShoppingCart,
-  ArrowLeftRight,
-  Shield,
   Settings,
   X,
   ShoppingBag,
@@ -114,6 +112,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   ingresos: ['FINANCIAL_INCOMES'],
   egresos: ['FINANCIAL_EXPENSES'],
   'gastos-recurrentes-fin': ['FINANCIAL_EXPENSES_REC'],
+  'ingresos-recurrentes': ['FINANCIAL_INCOMES'],
   balance: ['FINANCIAL_BALANCE'],
   // Inventario
   dashboard: [],
@@ -134,10 +133,13 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   tareas: ['ACTIVITIES_TASKS'],
   calendario: ['ACTIVITIES_CALENDAR'],
   reuniones: ['ACTIVITIES_MEETINGS'],
-  // Reportes
   'reportes-ventas': ['REPORTS_SALES'],
   'reportes-financieros': ['REPORTS_FINANCIAL'],
   'reportes-inventario': ['REPORTS_INVENTORY'],
+  'reportes-clientes': ['REPORTS_SALES'],
+  'reportes-proveedores': ['REPORTS_FINANCIAL'],
+  'reportes-suscripciones': ['REPORTS_FINANCIAL'],
+  'reportes-rrhh': ['HR_EMPLOYEES', 'HR_PAYROLL'],
 };
 
 const menuItems: MenuItem[] = [
@@ -198,9 +200,11 @@ const menuItems: MenuItem[] = [
     icon: <DollarSign className="size-5" />,
     section: 'Administracion',
     submenu: [
+      { id: 'dashboard-fin', label: 'Dashboard', icon: <BarChart3 className="size-4" /> },
       { id: 'ingresos', label: 'Ingresos', icon: <Receipt className="size-4" /> },
       { id: 'egresos', label: 'Gastos', icon: <Wallet className="size-4" /> },
       { id: 'gastos-recurrentes-fin', label: 'Gastos recurrentes', icon: <CalendarClock className="size-4" /> },
+      { id: 'ingresos-recurrentes', label: 'Ingresos recurrentes', icon: <RotateCcw className="size-4" /> },
       { id: 'balance', label: 'Balance General', icon: <BarChart3 className="size-4" /> },
     ]
   },
@@ -261,8 +265,13 @@ const menuItems: MenuItem[] = [
     section: 'Sistema',
     submenu: [
       { id: 'reportes-ventas', label: 'Ventas', icon: <ShoppingCart className="size-4" /> },
+      { id: 'reportes-compras', label: 'Compras', icon: <ShoppingCart className="size-4" /> },
       { id: 'reportes-financieros', label: 'Financiero', icon: <DollarSign className="size-4" /> },
-      { id: 'reportes-inventario', label: 'Inventario', icon: <Package className="size-4" /> }
+      { id: 'reportes-inventario', label: 'Inventario', icon: <Package className="size-4" /> },
+      { id: 'reportes-clientes', label: 'Clientes', icon: <Users className="size-4" /> },
+      { id: 'reportes-proveedores', label: 'Proveedores', icon: <Truck className="size-4" /> },
+      { id: 'reportes-rrhh', label: 'Recursos Humanos', icon: <Users className="size-4" /> },
+      { id: 'reportes-suscripciones', label: 'Suscripciones', icon: <Layers className="size-4" /> },
     ]
   },
   { id: 'suscripciones', label: 'Mi Suscripción', icon: <Zap className="size-5" />, section: 'Sistema' },

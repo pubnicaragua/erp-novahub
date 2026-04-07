@@ -34,6 +34,13 @@ export const recurringExpensesService = {
   delete: (id: string) => api.delete<void>(`/financials/recurring-expenses/${id}`),
 };
 
+export const recurringIncomesService = {
+  getAll: (filters?: ApiFilters) => api.get<any[]>('/financials/recurring-incomes', filters as any),
+  create: (data: any) => api.post<any>('/financials/recurring-incomes', data),
+  update: (id: string, data: any) => api.patch<any>(`/financials/recurring-incomes/${id}`, data),
+  delete: (id: string) => api.delete<void>(`/financials/recurring-incomes/${id}`),
+};
+
 export const journalEntriesService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<JournalEntry>>('/financials/journals', filters as any),
   getById: (id: string) => api.get<JournalEntry>(`/financials/journals/${id}`),

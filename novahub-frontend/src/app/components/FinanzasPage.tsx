@@ -1,15 +1,14 @@
 import { useState, useEffect } from 'react';
 import { 
   DollarSign, TrendingUp, TrendingDown, BarChart3, 
-  CalendarClock, Landmark, Download
+  CalendarClock, Landmark, RotateCcw
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
-import { Button } from './ui/button';
 import { FinanceDashboardView } from './finanzas/FinanceDashboardView';
 import { FinanceTableView } from './finanzas/FinanceTableView';
 import { FinanceBalanceView } from './finanzas/FinanceBalanceView';
-import { accountsService, incomeService, expensesService, recurringExpensesService } from '../services/finanzas.service';
+import { accountsService, incomeService, expensesService, recurringExpensesService, recurringIncomesService } from '../services/finanzas.service';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -17,25 +16,31 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
+  onSubModuleChange?: (subModule?: string) => void;
 }
 
-export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
+export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPageProps) {
   const { user } = useAuth();
   const { displayCurrency, exchangeRate: globalRate, convertAmount } = useCurrency();
 
   const hasAccess = (moduleId: string) => !user?.enabledModules || user.enabledModules.includes(moduleId);
-  const tabMap: Record<string, string> = { 
+
+  // Map sidebar submodule IDs to tab values
+  const subModuleToTab: Record<string, string> = { 
+    'dashboard-fin': 'dashboard',
     'ingresos': 'ingresos', 
     'egresos': 'gastos', 
-    'gastos-recurrentes': 'gastos-rec', 
     'gastos-recurrentes-fin': 'gastos-rec', 
+    'gastos-recurrentes': 'gastos-rec', 
+    'ingresos-recurrentes': 'ingresos-rec',
     'balance': 'balance' 
   };
   
-  const [activeTab, setActiveTab] = useState(() => activeSubModule ? (tabMap[activeSubModule] || 'dashboard') : 'dashboard');
+  const [activeTab, setActiveTab] = useState(() => activeSubModule ? (subModuleToTab[activeSubModule] || 'dashboard') : 'dashboard');
   const [incomes, setIncomes] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<any[]>([]);
+  const [recurringIncomes, setRecurringIncomes] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -95,35 +100,50 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
     return createdAccount;
   };
 
+  // Sync tab when activeSubModule changes from sidebar
+  useEffect(() => {
+    if (activeSubModule && subModuleToTab[activeSubModule]) {
+      if (activeTab !== subModuleToTab[activeSubModule]) {
+        setActiveTab(subModuleToTab[activeSubModule]);
+      }
+    }
+  }, [activeSubModule, activeTab]);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    // Find the reverse mapping to update sidebar
+    const subModule = Object.keys(subModuleToTab).find(key => subModuleToTab[key] === value) || value;
+    if (onSubModuleChange) {
+      onSubModuleChange(subModule);
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
 
-  useEffect(() => {
-    if (activeSubModule) {
-      setActiveTab(tabMap[activeSubModule] || 'dashboard');
-    }
-  }, [activeSubModule]);
-
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [incRes, expRes, rexpRes, accRes] = await Promise.allSettled([
+      const [incRes, expRes, rexpRes, accRes, rincRes] = await Promise.allSettled([
         incomeService.getAll(),
         expensesService.getAll(),
         recurringExpensesService.getAll(),
         accountsService.getAll(),
+        recurringIncomesService.getAll(),
       ]);
 
       const incomesData = incRes.status === 'fulfilled' ? normalizeListResponse(incRes.value) : [];
       const expensesData = expRes.status === 'fulfilled' ? normalizeListResponse(expRes.value) : [];
       const recurringData = rexpRes.status === 'fulfilled' ? normalizeListResponse(rexpRes.value) : [];
       const accountsData = accRes.status === 'fulfilled' ? normalizeListResponse(accRes.value) : [];
+      const recurringIncomesData = rincRes.status === 'fulfilled' ? normalizeListResponse(rincRes.value) : [];
 
       setIncomes(incomesData);
       setExpenses(expensesData);
       setRecurringExpenses(recurringData);
       setAccounts(accountsData);
+      setRecurringIncomes(recurringIncomesData);
 
       if ([incRes, expRes, rexpRes, accRes].every((res) => res.status === 'rejected')) {
         toast.error('Error al cargar datos financieros');
@@ -143,26 +163,50 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
 
   const INCOME_COLUMNS = [
     { key: 'number', label: 'No. Recibo', type: 'text' as const, editable: false },
+    { key: 'createdAt', label: 'Fecha Reg.', type: 'datetime' as const, editable: false },
     { key: 'source', label: 'Origen', type: 'text' as const, editable: true },
+    { key: 'category', label: 'Categoría', type: 'select' as const, editable: true },
     { key: 'amount', label: 'Monto', type: 'currency' as const, editable: true },
-    { key: 'date', label: 'Fecha', type: 'date' as const, editable: true },
     { key: 'notes', label: 'Notas', type: 'text' as const, editable: true },
   ];
 
   const EXPENSE_COLUMNS = [
-    { key: 'number', label: 'No. Gasto', type: 'text' as const, editable: false },
-    { key: 'description', label: 'Descripción', type: 'text' as const, editable: true },
-    { key: 'category', label: 'Categoría', type: 'select' as const, editable: true },
+    { key: 'number', label: 'Numero de gastos', type: 'text' as const, editable: false },
+    { key: 'createdAt', label: 'Fecha de registro', type: 'datetime' as const, editable: false },
+    { key: 'source', label: 'origen', type: 'text' as const, editable: true },
+    { key: 'description', label: 'Descripcion', type: 'text' as const, editable: true },
     { key: 'amount', label: 'Monto', type: 'currency' as const, editable: true },
-    { key: 'date', label: 'Fecha', type: 'date' as const, editable: true },
+    { key: 'category', label: 'Categoria', type: 'select' as const, editable: true },
   ];
 
   const RECURRING_COLUMNS = [
-    { key: 'description', label: 'Descripción', type: 'text' as const, editable: true },
-    { key: 'frequency', label: 'Frecuencia', type: 'select' as const, editable: true },
-    { key: 'amount', label: 'Monto', type: 'currency' as const, editable: true },
-    { key: 'category', label: 'Categoría', type: 'select' as const, editable: true },
-    { key: 'status', label: 'Estado', type: 'select' as const, editable: true },
+    { key: 'createdAt', label: 'fecha registro', type: 'datetime' as const, editable: false },
+    { key: 'source', label: 'origen', type: 'text' as const, editable: true },
+    { key: 'description', label: 'descripcion', type: 'text' as const, editable: true },
+    { key: 'frequency', label: 'frecuencia', type: 'select' as const, editable: true, options: [
+      { value: 'DAILY', label: 'Diario' }, { value: 'WEEKLY', label: 'Semanal' }, { value: 'BIWEEKLY', label: 'Quincenal' },
+      { value: 'MONTHLY', label: 'Mensual' }, { value: 'QUARTERLY', label: 'Trimestral' }, { value: 'SEMIANNUAL', label: 'Semestral' }, { value: 'YEARLY', label: 'Anual' },
+    ] },
+    { key: 'amount', label: 'monto', type: 'currency' as const, editable: true },
+    { key: 'category', label: 'categoria', type: 'select' as const, editable: true },
+    { key: 'status', label: 'estado', type: 'select' as const, editable: true, options: [
+      { value: 'ACTIVE', label: 'Activo' }, { value: 'PAUSED', label: 'Inactivo' },
+    ] },
+  ];
+
+  const RECURRING_INCOME_COLUMNS = [
+    { key: 'createdAt', label: 'fecha registro', type: 'datetime' as const, editable: false },
+    { key: 'source', label: 'origen', type: 'text' as const, editable: true },
+    { key: 'description', label: 'descripcion', type: 'text' as const, editable: true },
+    { key: 'frequency', label: 'frecuencia', type: 'select' as const, editable: true, options: [
+      { value: 'DAILY', label: 'Diario' }, { value: 'WEEKLY', label: 'Semanal' }, { value: 'BIWEEKLY', label: 'Quincenal' },
+      { value: 'MONTHLY', label: 'Mensual' }, { value: 'QUARTERLY', label: 'Trimestral' }, { value: 'SEMIANNUAL', label: 'Semestral' }, { value: 'YEARLY', label: 'Anual' },
+    ] },
+    { key: 'amount', label: 'monto', type: 'currency' as const, editable: true },
+    { key: 'category', label: 'categoria', type: 'select' as const, editable: true },
+    { key: 'status', label: 'estado', type: 'select' as const, editable: true, options: [
+      { value: 'ACTIVE', label: 'Activo' }, { value: 'PAUSED', label: 'Inactivo' },
+    ] },
   ];
 
   const handleUpdateIncome = async (id: string, updates: any) => {
@@ -184,6 +228,11 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
     setRecurringExpenses(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
   };
 
+  const handleUpdateRecurringIncome = async (id: string, updates: any) => {
+    await recurringIncomesService.update(id, updates);
+    setRecurringIncomes(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+  };
+
   const handleAddIncome = async () => {
     try {
       const defaultAccount = await ensureDefaultAccount('INCOME');
@@ -193,6 +242,7 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
         amount: 0,
         date: new Date().toISOString(),
         accountId: defaultAccount.id,
+        category: 'OTROS',
         currency: 'NIO' as any,
         exchangeRate: globalRate,
         notes: '',
@@ -211,6 +261,7 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
 
       const newItem = {
         description: 'Nuevo Gasto',
+        source: 'Manual',
         category: 'OTROS',
         amount: 0,
         date: new Date().toISOString(),
@@ -233,6 +284,7 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
 
       const newItem = {
         description: 'Nuevo Gasto Recurrente',
+        source: 'Manual',
         frequency: 'monthly' as const,
         amount: 0,
         startDate: new Date().toISOString(),
@@ -244,9 +296,43 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
       };
       const res = await recurringExpensesService.create(newItem);
       setRecurringExpenses([res, ...recurringExpenses]);
-      toast.success('Nueva fila de gasto recurrente añadida');
+      // Also refresh expenses since createRecurringExpense auto-generates first expense
+      try {
+        const expRes = await expensesService.getAll();
+        setExpenses(normalizeListResponse(expRes));
+      } catch {}
+      toast.success('Nuevo gasto recurrente añadido (primer gasto generado automáticamente)');
     } catch (error) {
       toast.error('Error al crear gasto recurrente');
+    }
+  };
+
+  const handleAddRecurringIncome = async () => {
+    try {
+      const defaultAccount = await ensureDefaultAccount('INCOME');
+
+      const newItem = {
+        source: 'Nuevo Ingreso Recurrente',
+        description: '',
+        frequency: 'monthly' as const,
+        amount: 0,
+        startDate: new Date().toISOString(),
+        accountId: defaultAccount.id,
+        status: 'active' as const,
+        category: 'OTROS',
+        currency: 'NIO' as any,
+        exchangeRate: globalRate,
+      };
+      const res = await recurringIncomesService.create(newItem);
+      setRecurringIncomes([res, ...recurringIncomes]);
+      // Also refresh incomes since createRecurringIncome auto-generates first income
+      try {
+        const incRes = await incomeService.getAll();
+        setIncomes(normalizeListResponse(incRes));
+      } catch {}
+      toast.success('Nuevo ingreso recurrente añadido (primer ingreso generado automáticamente)');
+    } catch (error) {
+      toast.error('Error al crear ingreso recurrente');
     }
   };
 
@@ -254,103 +340,84 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
   const totalExpense = expenses.reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
   const balanceSymbol = displayCurrency === 'USD' ? '$' : 'C$';
 
+  // Shared tab trigger class matching RH pattern — uses primary theme color
+  const tabTriggerClass = "flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all";
+
   return (
     <div className="space-y-4 p-4 md:p-6 pb-20 max-w-[1800px] mx-auto">
-      {/* Header - Inventario Style */}
+      {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-emerald-500/10 rounded-xl">
-            <DollarSign className="size-9 text-emerald-500" />
+          <div className="p-3 bg-primary/10 rounded-xl">
+            <DollarSign className="size-9 text-primary" />
           </div>
           <div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-              Finanzas <span className="text-emerald-500">Empresariales</span>
+              Finanzas <span className="text-primary">Empresariales</span>
             </h1>
             <div className="flex items-center gap-2 mt-2">
-              <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+              <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
                 {incomes.length} ingresos · {expenses.length} gastos · Balance: {balanceSymbol}{(totalIncome - totalExpense).toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </Badge>
             </div>
           </div>
         </div>
-        
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm"
-            className="rounded-xl font-bold"
-            onClick={() => {
-              const csvContent = [
-                ['Tipo', 'Descripción', 'Monto', 'Fecha'].join(','),
-                ...incomes.map(i => ['Ingreso', i.description || i.source || '', i.amount, i.date].join(',')),
-                ...expenses.map(e => ['Gasto', e.description || '', e.amount, e.date].join(','))
-              ].join('\n');
-              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-              const link = document.createElement('a');
-              link.href = URL.createObjectURL(blob);
-              link.download = `finanzas_${new Date().toISOString().split('T')[0]}.csv`;
-              link.click();
-              toast.success('Reporte financiero exportado');
-            }}
-          >
-            <Download className="size-4 mr-2" />
-            Exportar CSV
-          </Button>
-        </div>
       </div>
 
-      {/* Main Navigation Tabs - Inventario Style */}
-      <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
-        <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-border/40">
-          <TabsTrigger value="dashboard" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-emerald-600 data-[state=active]:to-emerald-700
-              data-[state=active]:text-white data-[state=active]:shadow-lg transition-all">
+      {/* Main Navigation Tabs — matches RH pattern with primary theme colors */}
+      <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
+        <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar">
+          <TabsTrigger value="dashboard" className={tabTriggerClass}>
             <BarChart3 className="size-4" />
-            <span className="hidden sm:inline">Dashboard</span>
+            <span>Dashboard</span>
           </TabsTrigger>
           {hasAccess('FINANCIAL_INCOMES') && (
-          <TabsTrigger value="ingresos" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-green-600 data-[state=active]:to-green-700
-              data-[state=active]:text-white data-[state=active]:shadow-lg transition-all">
+          <TabsTrigger value="ingresos" className={tabTriggerClass}>
             <TrendingUp className="size-4" />
-            <span className="hidden sm:inline">Ingresos</span>
+            <span>Ingresos</span>
           </TabsTrigger>
           )}
           {hasAccess('FINANCIAL_EXPENSES') && (
-          <TabsTrigger value="gastos" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-red-600 data-[state=active]:to-red-700
-              data-[state=active]:text-white data-[state=active]:shadow-lg transition-all">
+          <TabsTrigger value="gastos" className={tabTriggerClass}>
             <TrendingDown className="size-4" />
-            <span className="hidden sm:inline">Gastos</span>
+            <span>Gastos</span>
           </TabsTrigger>
           )}
           {hasAccess('FINANCIAL_EXPENSES_REC') && (
-          <TabsTrigger value="gastos-rec" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-purple-600 data-[state=active]:to-purple-700
-              data-[state=active]:text-white data-[state=active]:shadow-lg transition-all">
+          <TabsTrigger value="gastos-rec" className={tabTriggerClass}>
             <CalendarClock className="size-4" />
-            <span className="hidden sm:inline">Recurrentes</span>
+            <span>Gastos Rec.</span>
+          </TabsTrigger>
+          )}
+          {hasAccess('FINANCIAL_INCOMES') && (
+          <TabsTrigger value="ingresos-rec" className={tabTriggerClass}>
+            <RotateCcw className="size-4" />
+            <span>Ingresos Rec.</span>
           </TabsTrigger>
           )}
           {hasAccess('FINANCIAL_BALANCE') && (
-          <TabsTrigger value="balance" 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-              data-[state=active]:bg-gradient-to-br data-[state=active]:from-blue-600 data-[state=active]:to-blue-700
-              data-[state=active]:text-white data-[state=active]:shadow-lg transition-all">
+          <TabsTrigger value="balance" className={tabTriggerClass}>
             <Landmark className="size-4" />
-            <span className="hidden sm:inline">Balance</span>
+            <span>Balance</span>
           </TabsTrigger>
           )}
         </TabsList>
 
-        <div className="mt-4 min-h-[600px]">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mt-4 min-h-[600px]"
+        >
           {loading ? (
             <div className="flex items-center justify-center h-96">
-              <div className="size-10 border-4 border-muted border-t-emerald-600 rounded-full animate-spin" />
+              <div className="flex flex-col items-center gap-4">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary to-primary/60 blur-xl opacity-50 rounded-full" />
+                  <div className="relative size-16 border-4 border-muted border-t-primary rounded-full animate-spin" />
+                </div>
+                <p className="text-sm font-bold text-muted-foreground tracking-wide">Cargando datos financieros...</p>
+              </div>
             </div>
           ) : (
             <>
@@ -434,18 +501,40 @@ export function FinanzasPage({ activeSubModule }: FinanzasPageProps) {
                 </motion.div>
               </TabsContent>
 
+              <TabsContent value="ingresos-rec" className="m-0" asChild>
+                <motion.div 
+                  initial={{ opacity: 0, y: 16 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <FinanceTableView 
+                    title="Configuración de Ingresos Recurrentes"
+                    data={recurringIncomes}
+                    columns={RECURRING_INCOME_COLUMNS}
+                    onUpdate={handleUpdateRecurringIncome}
+                    onAdd={handleAddRecurringIncome}
+                    onDelete={async (id) => {
+                      await recurringIncomesService.delete(id);
+                      setRecurringIncomes(prev => prev.filter(r => r.id !== id));
+                      toast.success('Ingreso recurrente eliminado');
+                    }}
+                    loading={loading}
+                  />
+                </motion.div>
+              </TabsContent>
+
               <TabsContent value="balance" className="m-0" asChild>
                 <motion.div 
                   initial={{ opacity: 0, y: 16 }} 
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                 >
-                  <FinanceBalanceView />
+                  <FinanceBalanceView incomes={incomes} expenses={expenses} recurringIncomes={recurringIncomes} recurringExpenses={recurringExpenses} />
                 </motion.div>
               </TabsContent>
             </>
           )}
-        </div>
+        </motion.div>
       </Tabs>
     </div>
   );
