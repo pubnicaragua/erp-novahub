@@ -14,6 +14,7 @@ interface ControlStockViewProps {
   adjustments: any[];
   warehouses: any[];
   products: any[];
+  series?: any[];
   onRefresh: () => void;
 }
 
@@ -31,9 +32,10 @@ const REASON_OPTIONS = [
   { value: 'OTHER', label: 'Otro' },
 ];
 
-export function ControlStockView({ adjustments, warehouses, products, onRefresh }: ControlStockViewProps) {
+export function ControlStockView({ adjustments, warehouses, products, series = [], onRefresh }: ControlStockViewProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [isReceptionOpen, setIsReceptionOpen] = useState(false);
+  const [isSerialAdjustOpen, setIsSerialAdjustOpen] = useState(false);
   const [newAdjustment, setNewAdjustment] = useState({ warehouseId: '', reason: 'DISCREPANCY', productId: '', currentStock: 0, actualStock: 0 });
   const [newReception, setNewReception] = useState({
     productId: '',
@@ -46,6 +48,13 @@ export function ControlStockView({ adjustments, warehouses, products, onRefresh 
   ]);
   const [saving, setSaving] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [serialAdjustment, setSerialAdjustment] = useState({
+    action: 'ADD',
+    productId: '',
+    warehouseId: '',
+    serialNumber: '',
+    notes: '',
+  });
 
   const totalAllocated = useMemo(
     () => allocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0),
@@ -59,6 +68,24 @@ export function ControlStockView({ adjustments, warehouses, products, onRefresh 
         .map((line) => line.trim())
         .filter(Boolean),
     [newReception.imeiText],
+  );
+
+  const isSerialTracked = (product: any) =>
+    Boolean(
+      product?.trackSerialNumbers ||
+      product?.serialTracking ||
+      product?.serialNumberTracking ||
+      String(product?.trackingType || '').toUpperCase() === 'SERIAL',
+    );
+
+  const selectedReceptionProduct = useMemo(
+    () => products.find((p: any) => p.id === newReception.productId),
+    [products, newReception.productId],
+  );
+
+  const existingSeriesNumbers = useMemo(
+    () => new Set(series.map((s: any) => String(s.number || '').trim()).filter(Boolean)),
+    [series],
   );
 
   const handleCreateAdjustment = async () => {
@@ -144,6 +171,22 @@ export function ControlStockView({ adjustments, warehouses, products, onRefresh 
       return toast.error('La cantidad de IMEI/series debe coincidir con la cantidad total recibida');
     }
 
+    const normalizedImeis = imeiList.map((n) => n.trim()).filter(Boolean);
+    const uniqueInputImeis = new Set(normalizedImeis);
+    if (normalizedImeis.length !== uniqueInputImeis.size) {
+      return toast.error('No repitas IMEI/series en la misma recepción');
+    }
+
+    const serialRequired = isSerialTracked(selectedReceptionProduct);
+    if (serialRequired && normalizedImeis.length !== Number(newReception.totalQuantity || 0)) {
+      return toast.error('Este producto requiere IMEI/series por cada unidad recibida');
+    }
+
+    const repeatedExisting = normalizedImeis.find((num) => existingSeriesNumbers.has(num));
+    if (repeatedExisting) {
+      return toast.error(`El IMEI/serie ${repeatedExisting} ya existe en inventario`);
+    }
+
     setSaving(true);
     const reference = `REC-${Date.now().toString().slice(-8)}`;
 
@@ -160,9 +203,9 @@ export function ControlStockView({ adjustments, warehouses, products, onRefresh 
         ),
       );
 
-      if (imeiList.length > 0) {
+      if (normalizedImeis.length > 0) {
         await Promise.all(
-          imeiList.map((seriesNumber) =>
+          normalizedImeis.map((seriesNumber) =>
             inventoryService.createSeries({
               productId: newReception.productId,
               number: seriesNumber,
@@ -177,6 +220,67 @@ export function ControlStockView({ adjustments, warehouses, products, onRefresh 
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al registrar recepción');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSerialAdjustment = async () => {
+    const serial = serialAdjustment.serialNumber.trim();
+    if (!serial || !serialAdjustment.productId || !serialAdjustment.warehouseId) {
+      toast.error('Completa producto, almacén e IMEI/serie');
+      return;
+    }
+
+    const exists = series.find(
+      (s: any) =>
+        String(s.number || '').trim() === serial &&
+        (s.productId === serialAdjustment.productId || s.product?.id === serialAdjustment.productId),
+    );
+
+    if (serialAdjustment.action === 'ADD' && exists) {
+      toast.error('Ese IMEI/serie ya existe para el producto seleccionado');
+      return;
+    }
+    if (serialAdjustment.action === 'REMOVE' && !exists) {
+      toast.error('No se encontró ese IMEI/serie para removerlo');
+      return;
+    }
+
+    setSaving(true);
+    const reference = `AJUSTE-IMEI-${Date.now().toString().slice(-8)}${serialAdjustment.notes ? ` - ${serialAdjustment.notes}` : ''}`;
+    try {
+      if (serialAdjustment.action === 'ADD') {
+        await inventoryService.createSeries({
+          productId: serialAdjustment.productId,
+          number: serial,
+        });
+        await inventoryService.createMovement({
+          productId: serialAdjustment.productId,
+          warehouseId: serialAdjustment.warehouseId,
+          type: 'IN',
+          quantity: 1,
+          reference: `${reference} [${serial}]`,
+        });
+      } else {
+        if (exists?.id) {
+          await inventoryService.deleteSeries(exists.id);
+        }
+        await inventoryService.createMovement({
+          productId: serialAdjustment.productId,
+          warehouseId: serialAdjustment.warehouseId,
+          type: 'OUT',
+          quantity: 1,
+          reference: `${reference} [${serial}]`,
+        });
+      }
+
+      toast.success(serialAdjustment.action === 'ADD' ? 'IMEI/serie agregado' : 'IMEI/serie ajustado');
+      setIsSerialAdjustOpen(false);
+      setSerialAdjustment({ action: 'ADD', productId: '', warehouseId: '', serialNumber: '', notes: '' });
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e.message || 'Error al ajustar IMEI/serie');
     } finally {
       setSaving(false);
     }
@@ -198,6 +302,14 @@ export function ControlStockView({ adjustments, warehouses, products, onRefresh 
           <p className="text-sm text-muted-foreground">{adjustments.length} ajustes registrados</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
+            onClick={() => setIsSerialAdjustOpen(true)}
+          >
+            IMEI / Series
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -332,6 +444,79 @@ export function ControlStockView({ adjustments, warehouses, products, onRefresh 
       <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
         Los ajustes en borrador deben ser aprobados para aplicar cambios al stock
       </div>
+
+      <Dialog open={isSerialAdjustOpen} onOpenChange={setIsSerialAdjustOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Ajustar IMEI / Series</DialogTitle>
+            <DialogDescription>
+              Alta o baja puntual de IMEI con movimiento auditado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-1">Acción</p>
+                <Select value={serialAdjustment.action} onValueChange={(v) => setSerialAdjustment({ ...serialAdjustment, action: v })}>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ADD">Agregar</SelectItem>
+                    <SelectItem value="REMOVE">Remover</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="md:col-span-2">
+                <p className="text-[10px] text-muted-foreground mb-1">Producto</p>
+                <Select value={serialAdjustment.productId} onValueChange={(v) => setSerialAdjustment({ ...serialAdjustment, productId: v })}>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Seleccionar producto" /></SelectTrigger>
+                  <SelectContent>
+                    {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code} - {p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-1">Almacén</p>
+                <Select value={serialAdjustment.warehouseId} onValueChange={(v) => setSerialAdjustment({ ...serialAdjustment, warehouseId: v })}>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Seleccionar almacén" /></SelectTrigger>
+                  <SelectContent>
+                    {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-1">IMEI / Serie</p>
+                <Input
+                  value={serialAdjustment.serialNumber}
+                  onChange={(e) => setSerialAdjustment({ ...serialAdjustment, serialNumber: e.target.value })}
+                  className="h-9 text-xs font-mono"
+                  placeholder="Ej. 356938035643809"
+                />
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1">Nota (opcional)</p>
+              <Input
+                value={serialAdjustment.notes}
+                onChange={(e) => setSerialAdjustment({ ...serialAdjustment, notes: e.target.value })}
+                className="h-9 text-xs"
+                placeholder="Motivo del ajuste"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSerialAdjustOpen(false)}>Cancelar</Button>
+            <Button
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              onClick={handleSerialAdjustment}
+              disabled={saving}
+            >
+              {saving ? 'Guardando...' : 'Guardar ajuste'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isReceptionOpen} onOpenChange={setIsReceptionOpen}>
         <DialogContent className="sm:max-w-2xl">

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { Search, Plus, Trash2, Save, X, Check, Package } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
@@ -17,6 +17,8 @@ interface ProductosViewProps {
   products: any[];
   categories: any[];
   warehouses?: any[];
+  series?: any[];
+  movements?: any[];
   onRefresh: () => void;
 }
 
@@ -27,6 +29,7 @@ interface EditingProduct {
   categoryId: string;
   salePrice: number;
   costPrice: number;
+  trackSerialNumbers?: boolean;
   initialStock?: number;
   initialAllocations?: Array<{
     id: string;
@@ -36,7 +39,7 @@ interface EditingProduct {
   isNew?: boolean;
 }
 
-export function ProductosView({ products, categories, warehouses = [], onRefresh }: ProductosViewProps) {
+export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh }: ProductosViewProps) {
   const { formatAmount } = useCurrency();
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,6 +49,7 @@ export function ProductosView({ products, categories, warehouses = [], onRefresh
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [productDetail, setProductDetail] = useState<any | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDescription, setNewCategoryDescription] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
@@ -75,6 +79,7 @@ export function ProductosView({ products, categories, warehouses = [], onRefresh
       categoryId: categories[0]?.id || '',
       salePrice: 0,
       costPrice: 0,
+      trackSerialNumbers: false,
       initialStock: 0,
       initialAllocations: [{ id: `alloc-${Date.now()}`, warehouseId: '', quantity: 0 }],
       isNew: true,
@@ -91,6 +96,12 @@ export function ProductosView({ products, categories, warehouses = [], onRefresh
       categoryId: product.categoryId || '',
       salePrice: Number(product.salePrice) || 0,
       costPrice: Number(product.costPrice) || 0,
+      trackSerialNumbers: Boolean(
+        product.trackSerialNumbers ||
+        product.serialTracking ||
+        product.serialNumberTracking ||
+        String(product.trackingType || '').toUpperCase() === 'SERIAL',
+      ),
     };
     setEditingRows(new Map(editingRows.set(product.id, editProduct)));
   };
@@ -178,22 +189,43 @@ export function ProductosView({ products, categories, warehouses = [], onRefresh
           categoryId: product.categoryId,
           salePrice: product.salePrice,
           costPrice: product.costPrice,
+          trackSerialNumbers: Boolean(product.trackSerialNumbers),
           initialStock: 0,
         });
         const created = (createdResponse as any)?.data || createdResponse;
         const createdId = created?.id;
         if (initialStock > 0 && createdId) {
-          await Promise.all(
-            validAllocations.map((item) =>
-              inventoryService.createMovement({
-                productId: createdId,
-                warehouseId: item.warehouseId,
-                type: 'IN',
-                quantity: Number(item.quantity || 0),
-                reference: `STOCK-INICIAL-${created.code || createdId}`,
-              }),
-            ),
-          );
+          try {
+            const productDetailResp = await inventoryService.getProduct(createdId);
+            const fullProduct = (productDetailResp as any)?.data || productDetailResp;
+            const variantId = fullProduct?.variants?.[0]?.id;
+
+            if (variantId) {
+              await Promise.all(
+                validAllocations.map(async (item) => {
+                  await inventoryService.updateStockLevel({
+                    productId: createdId,
+                    warehouseId: item.warehouseId,
+                    variantId: variantId,
+                    quantity: Number(item.quantity || 0),
+                    minStock: 0,
+                  });
+
+                  await inventoryService.createMovement({
+                    productId: createdId,
+                    warehouseId: item.warehouseId,
+                    variantId: variantId,
+                    type: 'IN',
+                    quantity: Number(item.quantity || 0),
+                    reference: `STOCK-INICIAL-${created.code || createdId}`,
+                  });
+                })
+              );
+            }
+          } catch (err) {
+            console.error('Error allocating initial stock', err);
+            toast.error('Producto creado, pero hubo un error al asignar el stock');
+          }
         }
         toast.success('Producto creado');
       } else {
@@ -203,6 +235,7 @@ export function ProductosView({ products, categories, warehouses = [], onRefresh
           categoryId: product.categoryId,
           salePrice: product.salePrice,
           costPrice: product.costPrice,
+          trackSerialNumbers: Boolean(product.trackSerialNumbers),
         });
         toast.success('Producto actualizado');
       }
@@ -265,6 +298,57 @@ export function ProductosView({ products, categories, warehouses = [], onRefresh
     }
   };
 
+  const stockByWarehouse = useMemo(() => {
+    if (!productDetail) return [];
+    const stockLevels = Array.isArray(productDetail.stockLevels) ? productDetail.stockLevels : [];
+
+    if (stockLevels.length > 0) {
+      return stockLevels
+        .map((level: any) => {
+          const warehouseId = level.warehouseId || level.warehouse?.id;
+          const warehouseName =
+            level.warehouse?.name ||
+            warehouses.find((w: any) => w.id === warehouseId)?.name ||
+            'Sin bodega';
+          return {
+            warehouseId,
+            warehouseName,
+            quantity: Number(level.quantity || 0),
+          };
+        })
+        .sort((a: any, b: any) => b.quantity - a.quantity);
+    }
+
+    const summary = new Map<string, number>();
+    movements
+      .filter((move: any) => move.productId === productDetail.id || move.product?.id === productDetail.id)
+      .forEach((move: any) => {
+        const warehouseId = move.warehouseId || move.warehouse?.id || 'unknown';
+        const qty = Number(move.quantity || 0);
+        const delta = move.type === 'OUT' ? -qty : qty;
+        summary.set(warehouseId, Number(summary.get(warehouseId) || 0) + delta);
+      });
+
+    return Array.from(summary.entries())
+      .map(([warehouseId, quantity]) => ({
+        warehouseId,
+        warehouseName:
+          warehouses.find((w: any) => w.id === warehouseId)?.name ||
+          'Sin bodega',
+        quantity,
+      }))
+      .sort((a, b) => b.quantity - a.quantity);
+  }, [productDetail, warehouses, movements]);
+
+  const productSeries = useMemo(() => {
+    if (!productDetail) return [];
+    return series.filter(
+      (item: any) =>
+        item.productId === productDetail.id ||
+        item.product?.id === productDetail.id,
+    );
+  }, [productDetail, series]);
+
   const renderEditableRow = (product: EditingProduct) => {
     const isSaving = savingIds.has(product.id);
     return (
@@ -281,14 +365,26 @@ export function ProductosView({ products, categories, warehouses = [], onRefresh
           />
         </TableCell>
         <TableCell>
-          <Input
-            value={product.name}
-            onChange={(e) => handleUpdateField(product.id, 'name', e.target.value)}
-            onKeyDown={(e) => handleKeyDown(e, product.id)}
-            placeholder="Nombre del producto"
-            className="h-8 text-xs"
-            disabled={isSaving}
-          />
+          <div className="space-y-1.5">
+            <Input
+              value={product.name}
+              onChange={(e) => handleUpdateField(product.id, 'name', e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, product.id)}
+              placeholder="Nombre del producto"
+              className="h-8 text-xs"
+              disabled={isSaving}
+            />
+            <Button
+              type="button"
+              variant={product.trackSerialNumbers ? 'default' : 'outline'}
+              size="sm"
+              className={`h-6 text-[9px] uppercase tracking-wider px-2 ${product.trackSerialNumbers ? 'bg-primary text-primary-foreground' : ''}`}
+              onClick={() => handleUpdateField(product.id, 'trackSerialNumbers', !product.trackSerialNumbers)}
+              disabled={isSaving}
+            >
+              IMEI {product.trackSerialNumbers ? 'Activado' : 'Desactivado'}
+            </Button>
+          </div>
         </TableCell>
         <TableCell>
           <Select 
@@ -509,16 +605,33 @@ export function ProductosView({ products, categories, warehouses = [], onRefresh
                 }
                 
                 const status = getStockStatus(product.stock || 0);
-                return (
-                  <TableRow 
-                    key={product.id} 
-                    className="group hover:bg-muted/30 cursor-pointer"
-                    onDoubleClick={() => canPerform('inventario', 'edit') && handleEditRow(product)}
-                  >
+                 return (
+                   <TableRow 
+                     key={product.id} 
+                     className="group hover:bg-muted/30 cursor-pointer"
+                     onDoubleClick={() => canPerform('inventario', 'edit') && handleEditRow(product)}
+                    >
                     <TableCell className="font-mono text-xs text-muted-foreground">{product.code}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{product.name}</span>
+                        <button
+                          type="button"
+                          className="font-medium text-sm hover:text-primary underline-offset-2 hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProductDetail(product);
+                          }}
+                        >
+                          {product.name}
+                        </button>
+                        {Boolean(
+                          product.trackSerialNumbers ||
+                          product.serialTracking ||
+                          product.serialNumberTracking ||
+                          String(product.trackingType || '').toUpperCase() === 'SERIAL',
+                        ) && (
+                          <Badge variant="outline" className="text-[9px] font-black">IMEI</Badge>
+                        )}
                         {status.label !== 'OK' && (
                           <Badge className={`${status.color} text-[10px] px-1.5 py-0`}>{status.label}</Badge>
                         )}
@@ -538,24 +651,30 @@ export function ProductosView({ products, categories, warehouses = [], onRefresh
                      <TableCell className="text-right">
                        <div className="flex items-center justify-end gap-1 transition-opacity">
                          {canPerform('inventario', 'edit') && (
-                           <Button 
-                             variant="ghost" 
-                             size="icon" 
-                            className="size-7"
-                            onClick={() => handleEditRow(product)}
-                          >
-                            <Save className="size-3.5" />
-                          </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                             className="size-7"
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               handleEditRow(product);
+                             }}
+                           >
+                             <Save className="size-3.5" />
+                           </Button>
                         )}
                          {canPerform('inventario', 'delete') && (
-                           <Button 
-                             variant="ghost" 
-                             size="icon" 
-                             className="size-7 text-red-600 hover:text-white hover:bg-red-500"
-                             onClick={() => handleDeleteProduct(product.id)}
-                           >
-                             <Trash2 className="size-3.5" />
-                          </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="size-7 text-red-600 hover:text-white hover:bg-red-500"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteProduct(product.id);
+                              }}
+                            >
+                              <Trash2 className="size-3.5" />
+                           </Button>
                         )}
                       </div>
                     </TableCell>
@@ -570,7 +689,7 @@ export function ProductosView({ products, categories, warehouses = [], onRefresh
       {/* Footer */}
       <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
         <p>{filteredProducts.length} de {products.length} productos</p>
-        <p className="text-[10px]">Doble clic en una fila para editar · Enter para guardar · Esc para cancelar</p>
+        <p className="text-[10px]">Clic en nombre para detalle · Doble clic para editar · Enter para guardar · Esc para cancelar</p>
       </div>
       <ConfirmDialog
         open={pendingDeleteId !== null}
@@ -603,6 +722,88 @@ export function ProductosView({ products, categories, warehouses = [], onRefresh
               {creatingCategory ? 'Guardando...' : 'Guardar categoría'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={productDetail !== null} onOpenChange={(open) => !open && setProductDetail(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Detalle del producto</DialogTitle>
+            <DialogDescription>
+              {productDetail?.name || '-'} · {productDetail?.code || '-'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {productDetail && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Card className="p-3">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Stock total</p>
+                  <p className="text-lg font-black">{Number(productDetail.stock || 0)}</p>
+                </Card>
+                <Card className="p-3">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Categoría</p>
+                  <p className="text-sm font-bold">{productDetail.category?.name || '-'}</p>
+                </Card>
+                <Card className="p-3">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Venta</p>
+                  <p className="text-sm font-bold">{formatAmount(Number(productDetail.salePrice || 0))}</p>
+                </Card>
+                <Card className="p-3">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Costo</p>
+                  <p className="text-sm font-bold">{formatAmount(Number(productDetail.costPrice || 0))}</p>
+                </Card>
+              </div>
+
+              <Card className="p-3 border rounded-xl">
+                <p className="font-semibold mb-2">Stock por almacén</p>
+                {stockByWarehouse.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Sin movimientos o stock detallado por almacén.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {stockByWarehouse.map((item: any) => (
+                      <div key={`${item.warehouseId}-${item.warehouseName}`} className="flex items-center justify-between text-sm">
+                        <span>{item.warehouseName}</span>
+                        <Badge variant="outline" className="font-mono">{Number(item.quantity || 0)}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              <Card className="p-3 border rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold">IMEI / Números de serie</p>
+                  <Badge variant="outline">{productSeries.length}</Badge>
+                </div>
+                {productSeries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Aún no hay series para este producto. Se agregan en Ajustes de inventario &gt; Registrar Recepción.
+                  </p>
+                ) : (
+                  <div className="max-h-44 overflow-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-[10px] uppercase tracking-widest">Serie/IMEI</TableHead>
+                          <TableHead className="text-[10px] uppercase tracking-widest">Estado</TableHead>
+                          <TableHead className="text-[10px] uppercase tracking-widest">Almacén</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {productSeries.map((item: any) => (
+                          <TableRow key={item.id || item.number}>
+                            <TableCell className="font-mono text-xs">{item.number || '-'}</TableCell>
+                            <TableCell className="text-xs">{item.status || 'AVAILABLE'}</TableCell>
+                            <TableCell className="text-xs">{item.warehouse?.name || warehouses.find((w: any) => w.id === item.warehouseId)?.name || '-'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </Card>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </Card>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Truck, ArrowRight, Search, Plus, Check, X, Package } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -6,6 +6,8 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Checkbox } from '../ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 
@@ -13,6 +15,7 @@ interface TransferenciasViewProps {
   transfers: any[];
   warehouses: any[];
   products: any[];
+  series?: any[];
   onRefresh: () => void;
 }
 
@@ -23,9 +26,11 @@ const STATUS_OPTIONS = [
   { value: 'CANCELLED', label: 'Cancelada', color: 'bg-red-500/10 text-red-600' },
 ];
 
-export function TransferenciasView({ transfers, warehouses, products, onRefresh }: TransferenciasViewProps) {
+export function TransferenciasView({ transfers, warehouses, products, series = [], onRefresh }: TransferenciasViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [serialPickerOpen, setSerialPickerOpen] = useState(false);
+  const [serialSearch, setSerialSearch] = useState('');
   const [newTransfer, setNewTransfer] = useState({ 
     fromId: '', 
     toId: '', 
@@ -35,6 +40,40 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
   });
   const [saving, setSaving] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [selectedSerials, setSelectedSerials] = useState<string[]>([]);
+
+  const selectedProduct = useMemo(
+    () => products.find((p: any) => p.id === newTransfer.productId),
+    [products, newTransfer.productId],
+  );
+
+  const isSerialTracked = (product: any) =>
+    Boolean(
+      product?.trackSerialNumbers ||
+      product?.serialTracking ||
+      product?.serialNumberTracking ||
+      String(product?.trackingType || '').toUpperCase() === 'SERIAL',
+    );
+
+  const availableSerials = useMemo(() => {
+    if (!newTransfer.productId) return [];
+    return series
+      .filter((s: any) => {
+        const sameProduct = s.productId === newTransfer.productId || s.product?.id === newTransfer.productId;
+        if (!sameProduct) return false;
+        const status = String(s.status || 'AVAILABLE').toUpperCase();
+        const allowedStatus = ['AVAILABLE', 'IN_STOCK', 'ACTIVE', ''];
+        if (!allowedStatus.includes(status)) return false;
+        if (!newTransfer.fromId) return true;
+        const serialWarehouseId = s.warehouseId || s.warehouse?.id;
+        return !serialWarehouseId || serialWarehouseId === newTransfer.fromId;
+      })
+      .map((s: any) => ({
+        id: s.id || s.number,
+        number: s.number,
+        warehouseName: s.warehouse?.name || '',
+      }));
+  }, [series, newTransfer.productId, newTransfer.fromId]);
 
   const filteredTransfers = transfers.filter(t => 
     !searchTerm || 
@@ -54,6 +93,15 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
     }
     
     const product = products.find((p: any) => p.id === newTransfer.productId);
+    const serialRequired = isSerialTracked(product);
+    if (serialRequired && selectedSerials.length === 0) {
+      toast.error('Selecciona los IMEI/series a transferir');
+      return;
+    }
+    if (serialRequired && selectedSerials.length > 0 && selectedSerials.length !== Number(newTransfer.quantity || 0)) {
+      toast.error('La cantidad debe coincidir con los IMEI seleccionados');
+      return;
+    }
     // Use the first variant of the product, or the product's default variant
     const variantId = product?.variants?.[0]?.id || product?.id;
     
@@ -67,10 +115,12 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
       await inventoryService.createTransfer({
         fromId: newTransfer.fromId,
         toId: newTransfer.toId,
-        items: [{ variantId, quantity: newTransfer.quantity }]
-      });
+        items: [{ variantId, quantity: serialRequired ? selectedSerials.length : newTransfer.quantity }],
+      } as any);
       toast.success('Transferencia creada');
       setIsCreating(false);
+      setSelectedSerials([]);
+      setSerialSearch('');
       setNewTransfer({ 
         fromId: '', 
         toId: '', 
@@ -142,7 +192,7 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
               <TableRow className="bg-blue-500/5">
                 <TableCell className="text-xs text-muted-foreground">Auto</TableCell>
                 <TableCell>
-                  <Select value={newTransfer.fromId} onValueChange={(v) => setNewTransfer({...newTransfer, fromId: v})}>
+                  <Select value={newTransfer.fromId} onValueChange={(v) => { setNewTransfer({...newTransfer, fromId: v}); setSelectedSerials([]); }}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Origen" /></SelectTrigger>
                     <SelectContent>
                       {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
@@ -160,7 +210,7 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-2 items-center">
-                    <Select value={newTransfer.productId} onValueChange={(v) => setNewTransfer({...newTransfer, productId: v})}>
+                    <Select value={newTransfer.productId} onValueChange={(v) => { setNewTransfer({...newTransfer, productId: v}); setSelectedSerials([]); }}>
                       <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Prod" /></SelectTrigger>
                       <SelectContent>
                         {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code}</SelectItem>)}
@@ -168,11 +218,22 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
                     </Select>
                     <Input 
                       type="number" 
-                      value={newTransfer.quantity} 
+                      value={isSerialTracked(selectedProduct) ? selectedSerials.length : newTransfer.quantity} 
                       onChange={(e) => setNewTransfer({...newTransfer, quantity: parseInt(e.target.value) || 1})}
                       className="h-8 text-xs w-16"
                       min={1}
+                      disabled={isSerialTracked(selectedProduct)}
                     />
+                    {isSerialTracked(selectedProduct) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-[10px] uppercase tracking-wider"
+                        onClick={() => setSerialPickerOpen(true)}
+                      >
+                        IMEI ({selectedSerials.length})
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell>
@@ -240,6 +301,65 @@ export function TransferenciasView({ transfers, warehouses, products, onRefresh 
       <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
         {filteredTransfers.length} transferencias
       </div>
+      <Dialog open={serialPickerOpen} onOpenChange={setSerialPickerOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Seleccionar IMEI / Series</DialogTitle>
+            <DialogDescription>
+              Selecciona los IMEI disponibles del almacén origen para la transferencia.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={serialSearch}
+              onChange={(e) => setSerialSearch(e.target.value)}
+              placeholder="Buscar IMEI..."
+              className="h-9 text-xs"
+            />
+            <div className="max-h-72 overflow-auto rounded-md border p-2 space-y-1">
+              {availableSerials
+                .filter((item) => !serialSearch || String(item.number || '').toLowerCase().includes(serialSearch.toLowerCase()))
+                .map((item) => {
+                  const checked = selectedSerials.includes(item.number);
+                  return (
+                    <label key={item.id} className="flex items-center justify-between gap-2 rounded px-2 py-1.5 hover:bg-muted/40 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) => {
+                            if (v) setSelectedSerials((prev) => [...new Set([...prev, item.number])]);
+                            else setSelectedSerials((prev) => prev.filter((n) => n !== item.number));
+                          }}
+                        />
+                        <span className="text-xs font-mono">{item.number}</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">{item.warehouseName || '-'}</span>
+                    </label>
+                  );
+                })}
+              {availableSerials.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-3">No hay seriales disponibles para este producto.</p>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Seleccionados</span>
+              <Badge variant="outline">{selectedSerials.length}</Badge>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSerialPickerOpen(false)}>Cerrar</Button>
+            <Button
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              onClick={() => {
+                setNewTransfer((prev) => ({ ...prev, quantity: selectedSerials.length || 1 }));
+                setSerialPickerOpen(false);
+              }}
+            >
+              Confirmar selección
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

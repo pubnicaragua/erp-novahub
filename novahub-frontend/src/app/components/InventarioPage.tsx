@@ -226,6 +226,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
                     products={data.products} 
                     categories={data.categories}
                     warehouses={data.warehouses}
+                    series={data.series}
+                    movements={data.movements}
                     onRefresh={() => fetchData(true)}
                   />
                 </motion.div>
@@ -252,6 +254,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
                     transfers={data.transfers}
                     warehouses={data.warehouses}
                     products={data.products}
+                    series={data.series}
                     onRefresh={() => fetchData(true)}
                   />
                 </motion.div>
@@ -266,6 +269,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
                     adjustments={data.adjustments}
                     warehouses={data.warehouses}
                     products={data.products}
+                    series={data.series}
                     onRefresh={() => fetchData(true)}
                   />
                 </motion.div>
