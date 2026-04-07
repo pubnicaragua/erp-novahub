@@ -37,7 +37,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
         }
         if ((row.content && String(row.content).startsWith('RECORDATORIO:')) || (row.title && String(row.title).startsWith('Recordatorio:'))) {
           return (
-            <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold text-amber-500 border-amber-500/30 hover:bg-amber-500/10" onClick={() => window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'actividades', subModule: 'recordatorios' }}))}>
+            <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold text-primary border-primary/30 hover:bg-primary/10" onClick={() => window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'actividades', subModule: 'recordatorios' }}))}>
                Ver Recordatorio
             </Button>
           );
@@ -86,7 +86,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
           <div><h2 className="text-xl font-black uppercase tracking-tight">Mensajes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Comunicación interna</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Mensaje</Button>
+            <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Mensaje</Button>
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} onRowDelete={async (id) => { try { await messagesService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch { toast.error('Error'); } }} />

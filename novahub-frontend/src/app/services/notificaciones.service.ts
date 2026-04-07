@@ -26,3 +26,9 @@ const createCrudService = <T>(endpoint: string) => ({
 export const alertsService = createCrudService<any>('/notifications/alerts');
 export const messagesService = createCrudService<any>('/notifications/messages');
 export const pushNotificationsService = createCrudService<any>('/notifications/push');
+
+export const notificationsCatalogService = {
+  getCatalog: () => api.get<any>('/notifications/catalog'),
+  seedPhase: (phaseId: 'fase-1-alertas' | 'fase-2-mensajes' | 'fase-3-push') =>
+    api.post<any>(`/notifications/phases/${phaseId}/seed`, {}),
+};

@@ -1,20 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { Card } from './ui/card';
-import { Button } from './ui/button';
 import { Bell, AlertTriangle, MessageSquare, Send } from 'lucide-react';
 import { cn } from './ui/utils';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { Button } from './ui/button';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertasView } from './notificaciones/AlertasView';
 import { MensajesView } from './notificaciones/MensajesView';
 import { PushView } from './notificaciones/PushView';
-import { alertsService, messagesService, pushNotificationsService } from '../services/notificaciones.service';
+import { alertsService, messagesService, notificationsCatalogService, pushNotificationsService } from '../services/notificaciones.service';
+import { toast } from 'sonner';
 
 interface NotificacionesPageProps {
   activeSubModule?: string;
+  onSubModuleChange?: (sub: string) => void;
 }
 
-export const NotificacionesPage = ({ activeSubModule }: NotificacionesPageProps) => {
+export const NotificacionesPage = ({ activeSubModule, onSubModuleChange }: NotificacionesPageProps) => {
+  const tabs = [
+    { id: 'alertas', label: 'Alertas', icon: AlertTriangle },
+    { id: 'mensajes', label: 'Mensajes', icon: MessageSquare },
+    { id: 'push', label: 'Push', icon: Send }
+  ];
+  const tabIds = tabs.map(tab => tab.id);
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'alertas');
   const [data, setData] = useState<{ alertas: any[], mensajes: any[], push: any[] }>({
     alertas: [],
@@ -22,6 +29,7 @@ export const NotificacionesPage = ({ activeSubModule }: NotificacionesPageProps)
     push: []
   });
   const [loading, setLoading] = useState(true);
+  const [seedingPhase, setSeedingPhase] = useState<string | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -45,15 +53,23 @@ export const NotificacionesPage = ({ activeSubModule }: NotificacionesPageProps)
 
   useEffect(() => {
     if (activeSubModule) {
-      setActiveTab(activeSubModule);
+      const nextTab = tabIds.includes(activeSubModule) ? activeSubModule : 'alertas';
+      setActiveTab(nextTab);
     }
   }, [activeSubModule]);
 
-  const tabs = [
-    { id: 'alertas', label: 'Alertas', icon: AlertTriangle, color: 'text-rose-500' },
-    { id: 'mensajes', label: 'Mensajes', icon: MessageSquare, color: 'text-blue-500' },
-    { id: 'push', label: 'Push', icon: Send, color: 'text-emerald-500' }
-  ];
+  const handleSeedPhase = async (phaseId: 'fase-1-alertas' | 'fase-2-mensajes' | 'fase-3-push') => {
+    try {
+      setSeedingPhase(phaseId);
+      const result = await notificationsCatalogService.seedPhase(phaseId);
+      toast.success(`Fase cargada: ${result.created} nuevas, ${result.skipped} existentes`);
+      await fetchData();
+    } catch {
+      toast.error('No se pudo cargar la fase de notificaciones');
+    } finally {
+      setSeedingPhase(null);
+    }
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -73,9 +89,45 @@ export const NotificacionesPage = ({ activeSubModule }: NotificacionesPageProps)
                 </p>
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-[10px] font-black uppercase tracking-wider"
+                disabled={seedingPhase === 'fase-1-alertas'}
+                onClick={() => handleSeedPhase('fase-1-alertas')}
+              >
+                Fase 1 · Alertas
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-[10px] font-black uppercase tracking-wider"
+                disabled={seedingPhase === 'fase-2-mensajes'}
+                onClick={() => handleSeedPhase('fase-2-mensajes')}
+              >
+                Fase 2 · Mensajes
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-[10px] font-black uppercase tracking-wider"
+                disabled={seedingPhase === 'fase-3-push'}
+                onClick={() => handleSeedPhase('fase-3-push')}
+              >
+                Fase 3 · Push
+              </Button>
+            </div>
           </div>
 
-          <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
+          <Tabs
+            value={activeTab}
+            className="w-full"
+            onValueChange={(value) => {
+              setActiveTab(value);
+              if (onSubModuleChange) onSubModuleChange(value);
+            }}
+          >
             <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
               {tabs.map((tab) => (
                 <TabsTrigger 
@@ -85,7 +137,7 @@ export const NotificacionesPage = ({ activeSubModule }: NotificacionesPageProps)
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
                     data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
                 >
-                  <tab.icon className={cn("size-4", activeTab === tab.id ? "" : tab.color)} />
+                  <tab.icon className={cn("size-4", activeTab === tab.id ? "" : "text-muted-foreground/70")} />
                   <span className="hidden sm:inline">{tab.label}</span>
                 </TabsTrigger>
               ))}
