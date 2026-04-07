@@ -681,6 +681,7 @@ export interface Product {
   taxRate: number;
   stock: number;
   minStock: number;
+  trackSerialNumbers?: boolean;
   status: EntityStatus;
   createdAt: string;
   updatedAt: string;
