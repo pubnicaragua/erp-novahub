@@ -223,7 +223,7 @@ const createUserObject = (apiPayload: any): User => {
     id: apiUser.id,
     name: apiUser.name,
     email: apiUser.email,
-    avatar: apiUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(apiUser.name)}&background=10b981&color=fff`,
+    avatar: apiUser.avatar,
     role,
     tenantId: apiUser.clientTenantId,
     tenantName: apiUser.clientTenant?.name || 'Nova Hub',

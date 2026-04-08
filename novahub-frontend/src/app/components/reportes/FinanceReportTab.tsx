@@ -1,19 +1,18 @@
 import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, AreaChart, Area } from 'recharts';
 import { incomeService, expensesService } from '../../services/finanzas.service';
-import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/export-utils';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { DollarSign, CheckCircle2, AlertTriangle, TrendingUp, TrendingDown, Activity, Wallet, Percent } from 'lucide-react';
+import { Percent, ArrowUpRight, ArrowDownRight, Activity, Scale, BarChart3 } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { cn } from '../ui/utils';
 
-const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 function toDate(value: unknown): Date | null {
@@ -22,42 +21,61 @@ function toDate(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function isDateInRange(value: unknown, range: string): boolean {
-  const date = toDate(value);
-  if (!date) return false;
+function getRangeDates(range: string) {
   const now = new Date();
-  const startToday = new Date(now);
-  startToday.setHours(0, 0, 0, 0);
   const start = new Date(now);
+  const prevStart = new Date(now);
+  const prevEnd = new Date(now);
+
   switch (range) {
-    case 'hoy': return date >= startToday;
-    case 'ultima-semana': start.setDate(now.getDate() - 7); break;
-    case 'ultimo-mes': start.setMonth(now.getMonth() - 1); break;
-    case 'ultimo-trimestre': start.setMonth(now.getMonth() - 3); break;
-    case 'ultimo-año': start.setFullYear(now.getFullYear() - 1); break;
-    default: return true;
+    case 'hoy': 
+      start.setHours(0, 0, 0, 0); 
+      prevStart.setDate(now.getDate() - 1); prevStart.setHours(0, 0, 0, 0);
+      prevEnd.setDate(now.getDate() - 1); prevEnd.setHours(23, 59, 59, 999);
+      break;
+    case 'ultima-semana': 
+      start.setDate(now.getDate() - 7); 
+      prevStart.setDate(now.getDate() - 14);
+      prevEnd.setDate(now.getDate() - 7);
+      break;
+    case 'ultimo-mes': 
+      start.setMonth(now.getMonth() - 1); 
+      prevStart.setMonth(now.getMonth() - 2);
+      prevEnd.setMonth(now.getMonth() - 1);
+      break;
+    case 'ultimo-trimestre': 
+      start.setMonth(now.getMonth() - 3); 
+      prevStart.setMonth(now.getMonth() - 6);
+      prevEnd.setMonth(now.getMonth() - 3);
+      break;
+    case 'ultimo-año': 
+      start.setFullYear(now.getFullYear() - 1); 
+      prevStart.setFullYear(now.getFullYear() - 2);
+      prevEnd.setFullYear(now.getFullYear() - 1);
+      break;
+    default: return { start: new Date(0), prevStart: new Date(0), prevEnd: new Date(0) };
   }
   start.setHours(0, 0, 0, 0);
-  return date >= start;
+  prevStart.setHours(0, 0, 0, 0);
+  prevEnd.setHours(23, 59, 59, 999);
+  return { start, prevStart, prevEnd };
 }
 
 export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, convertAmount } = useCurrency();
+  const { displayCurrency, formatConvertedAmount, convertAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { user } = useAuth();
+  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   
   const [incomes, setIncomes] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const sym = displayCurrency === 'USD' ? '$' : 'C$ ';
-  const fmt = (n: number) => {
-    const converted = typeof convertAmount === 'function' ? convertAmount(n, 'NIO') : n;
-    return `${sym} ${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-  const fmtCompact = (n: number) => {
-    const converted = typeof convertAmount === 'function' ? convertAmount(n, 'NIO') : n;
-    return `${sym}${(converted / 1000).toFixed(1)}k`;
+  const fmtShort = (v: number) => {
+    const converted = convertAmount(v, 'NIO');
+    if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted/1000000).toFixed(1)}M`;
+    if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
+    return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
   useEffect(() => {
@@ -76,272 +94,883 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
     fetch();
   }, []);
 
-  const fInc = useMemo(() => incomes.filter(i => isDateInRange(i.date || i.createdAt, dateRange)), [incomes, dateRange]);
-  const fExp = useMemo(() => expenses.filter(e => isDateInRange(e.date || e.createdAt, dateRange)), [expenses, dateRange]);
+  const { start: currentStart, prevStart, prevEnd } = useMemo(() => getRangeDates(dateRange), [dateRange]);
 
-  const totalInc = useMemo(() => fInc.reduce((a, c) => a + Number(c.amount || 0), 0), [fInc]);
-  const totalExp = useMemo(() => fExp.reduce((a, c) => a + Number(c.amount || 0), 0), [fExp]);
+  const fInc = useMemo(() => incomes.filter(i => {
+    const d = toDate(i.date || i.createdAt);
+    return d && d >= currentStart;
+  }), [incomes, currentStart]);
+
+  const fExp = useMemo(() => expenses.filter(e => {
+    const d = toDate(e.date || e.createdAt);
+    return d && d >= currentStart;
+  }), [expenses, currentStart]);
+
+  const pInc = useMemo(() => incomes.filter(i => {
+    const d = toDate(i.date || i.createdAt);
+    return d && d >= prevStart && d <= prevEnd;
+  }), [incomes, prevStart, prevEnd]);
+
+  const pExp = useMemo(() => expenses.filter(e => {
+    const d = toDate(e.date || e.createdAt);
+    return d && d >= prevStart && d <= prevEnd;
+  }), [expenses, prevStart, prevEnd]);
+
+  const totalInc = useMemo(() => fInc.reduce((acc, i) => acc + (i.currency === 'USD' ? Number(i.amount || 0) * (i.exchangeRate || exchangeRate) : Number(i.amount || 0)), 0), [fInc, exchangeRate]);
+  const totalExp = useMemo(() => fExp.reduce((acc, e) => acc + (e.currency === 'USD' ? Number(e.amount || 0) * (e.exchangeRate || exchangeRate) : Number(e.amount || 0)), 0), [fExp, exchangeRate]);
   
-  // ── 4 KPIs ──
-  const cashFlow = totalInc - totalExp;
-  const ebitda = cashFlow + (totalExp * 0.05); // Proxy: add 5% "depreciation" 
-  const breakEven = totalExp > 0 ? totalExp : 0; 
-  const roi = totalExp > 0 ? ((cashFlow / totalExp) * 100) : 0;
+  const prevTotalInc = useMemo(() => pInc.reduce((acc, i) => acc + (i.currency === 'USD' ? Number(i.amount || 0) * (i.exchangeRate || exchangeRate) : Number(i.amount || 0)), 0), [pInc, exchangeRate]);
+  const prevTotalExp = useMemo(() => pExp.reduce((acc, e) => acc + (e.currency === 'USD' ? Number(e.amount || 0) * (e.exchangeRate || exchangeRate) : Number(e.amount || 0)), 0), [pExp, exchangeRate]);
 
-  // ── 4 Metrics ──
-  // Proxy metrics for demonstration
-  const pendingTaxes = totalInc * 0.15; // 15% provision
-  const adminExp = fExp.filter(e => String(e.category || '').toLowerCase().includes('admin')).reduce((a, c) => a + Number(c.amount || 0), 0);
-  const operExp = totalExp - adminExp;
-  const debtIndex = totalInc > 0 ? (totalExp / totalInc) * 100 : 0;
-  const liquidityRatio = totalExp > 0 ? (totalInc / totalExp).toFixed(2) : '0.00';
+  const getTrendValue = (curr: number, prev: number) => {
+    if (prev === 0) return curr > 0 ? 100 : 0;
+    return ((curr - prev) / prev) * 100;
+  };
+
+  const netUtility = totalInc - totalExp;
+  const margin = totalInc > 0 ? ((netUtility / totalInc) * 100) : 0;
 
   // ── 2 Tops ──
-  const topExpenses = [...fExp].sort((a,b) => Number(b.amount || 0) - Number(a.amount || 0)).slice(0, 5);
-  const topIncomes = [...fInc].sort((a,b) => Number(b.amount || 0) - Number(a.amount || 0)).slice(0, 5);
+  const topExpenses = useMemo(() => 
+    [...fExp]
+      .sort((a, b) => {
+        const valA = a.currency === 'USD' ? Number(a.amount || 0) * (a.exchangeRate || exchangeRate) : Number(a.amount || 0);
+        const valB = b.currency === 'USD' ? Number(b.amount || 0) * (b.exchangeRate || exchangeRate) : Number(b.amount || 0);
+        return valB - valA;
+      })
+      .slice(0, 5),
+    [fExp, exchangeRate]
+  );
+  const topIncomes = useMemo(() => 
+    [...fInc]
+      .sort((a, b) => {
+        const valA = a.currency === 'USD' ? Number(a.amount || 0) * (a.exchangeRate || exchangeRate) : Number(a.amount || 0);
+        const valB = b.currency === 'USD' ? Number(b.amount || 0) * (b.exchangeRate || exchangeRate) : Number(b.amount || 0);
+        return valB - valA;
+      })
+      .slice(0, 5),
+    [fInc, exchangeRate]
+  );
 
   // ── Charts ──
-  const monthlyTrend = useMemo(() => {
-    const now = new Date().getMonth();
-    return Array.from({ length: 6 }, (_, i) => {
-      const idx = (now - (5 - i) + 12) % 12;
-      const mInc = fInc.filter(x => toDate(x.date || x.createdAt)?.getMonth() === idx).reduce((a, x) => a + Number(x.amount || 0), 0);
-      const mExp = fExp.filter(x => toDate(x.date || x.createdAt)?.getMonth() === idx).reduce((a, x) => a + Number(x.amount || 0), 0);
-      return { mes: MONTH_NAMES[idx], ingresos: mInc, gastos: mExp, utilidad: mInc - mExp };
+  const monthlyData = useMemo(() => {
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    const data = [];
+
+    for (let i = 5; i >= 0; i--) {
+      const monthIdx = (currentMonth - i + 12) % 12;
+      const year = currentMonth - i < 0 ? currentYear - 1 : currentYear;
+      
+      const mInc = fInc.filter(inc => {
+        const d = new Date(inc.date || inc.createdAt);
+        return d.getMonth() === monthIdx && d.getFullYear() === year;
+      }).reduce((acc: number, i: any) => acc + (i.currency === 'USD' ? Number(i.amount || 0) * (i.exchangeRate || exchangeRate) : Number(i.amount || 0)), 0);
+      
+      const mExp = fExp.filter(exp => {
+        const d = new Date(exp.date || exp.createdAt);
+        return d.getMonth() === monthIdx && d.getFullYear() === year;
+      }).reduce((acc: number, e: any) => acc + (e.currency === 'USD' ? Number(e.amount || 0) * (e.exchangeRate || exchangeRate) : Number(e.amount || 0)), 0);
+      
+      data.push({
+        mes: MONTH_NAMES[monthIdx],
+        ingresos: Math.round(mInc),
+        gastos: Math.round(mExp),
+        balance: Math.round(mInc - mExp),
+      });
+    }
+    return data;
+  }, [fInc, fExp, exchangeRate]);
+
+  const balanceTrend = useMemo(() => {
+    let cumulative = 0;
+    return monthlyData.map(d => {
+      cumulative += d.balance;
+      return { mes: d.mes, balance: cumulative };
     });
-  }, [fInc, fExp]);
+  }, [monthlyData]);
 
-  const expByCategory = useMemo(() => {
-    const map: Record<string, number> = {};
-    fExp.forEach(e => { const k = e.category || 'Otros'; map[k] = (map[k] || 0) + Number(e.amount || 0); });
-    return Object.entries(map).map(([name, value], i) => ({ name, value, color: COLORS[i % COLORS.length] }));
-  }, [fExp]);
+  const getBase64Image = async (url: string) => {
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      return null;
+    }
+  };
 
-  const radarData = [
-    { subject: 'Liquidez', A: Math.min(Number(liquidityRatio)*50, 100), fullMark: 100 },
-    { subject: 'Rentabilidad', A: Math.min(Math.max(roi,0), 100), fullMark: 100 },
-    { subject: 'Eficiencia', A: 100 - Math.min(debtIndex, 100), fullMark: 100 },
-    { subject: 'EBITDA', A: Math.min((ebitda/Math.max(totalInc,1))*100, 100), fullMark: 100 },
-    { subject: 'Margen', A: Math.min((cashFlow/Math.max(totalInc,1))*100, 100), fullMark: 100 },
-  ];
+  const sanitizeHtml2CanvasOklch = (_elementId: string, clonedDoc: Document, primaryHex: string) => {
+    // 1) Inject a global style that overrides ALL CSS custom properties with safe hex values
+    const styleTag = clonedDoc.createElement('style');
+    styleTag.innerHTML = `
+      :root, *, *::before, *::after {
+        --background: #ffffff !important;
+        --foreground: #333333 !important;
+        --card: #ffffff !important;
+        --card-foreground: #333333 !important;
+        --popover: #ffffff !important;
+        --popover-foreground: #333333 !important;
+        --primary: ${primaryHex} !important;
+        --primary-foreground: #ffffff !important;
+        --secondary: #f3f4f6 !important;
+        --secondary-foreground: #333333 !important;
+        --muted: #f3f4f6 !important;
+        --muted-foreground: #6b7280 !important;
+        --accent: #f3f4f6 !important;
+        --accent-foreground: #333333 !important;
+        --destructive: #ef4444 !important;
+        --destructive-foreground: #ffffff !important;
+        --border: #e5e7eb !important;
+        --input: #e5e7eb !important;
+        --ring: ${primaryHex} !important;
+        --chart-1: #10b981 !important;
+        --chart-2: #ef4444 !important;
+        --chart-3: #6366f1 !important;
+        --chart-4: #f59e0b !important;
+        --chart-5: #ec4899 !important;
+        --sidebar-background: #ffffff !important;
+        --sidebar-foreground: #333333 !important;
+        --sidebar-primary: ${primaryHex} !important;
+        --sidebar-primary-foreground: #ffffff !important;
+        --sidebar-accent: #f3f4f6 !important;
+        --sidebar-accent-foreground: #333333 !important;
+        --sidebar-border: #e5e7eb !important;
+        --sidebar-ring: ${primaryHex} !important;
+      }
+    `;
+    clonedDoc.head.appendChild(styleTag);
+
+    const hasUnsupported = (s: string | null | undefined) => s ? /oklch\(|oklab\(|color\(|lch\(|lab\(/i.test(s) : false;
+
+    // 2) Walk each export container and fix all child elements
+    const walkAndFix = (origRoot: Element | null, clonedRoot: Element | null) => {
+      if (!origRoot || !clonedRoot) return;
+      const origList = [origRoot, ...Array.from(origRoot.querySelectorAll('*'))];
+      const clonedList = [clonedRoot, ...Array.from(clonedRoot.querySelectorAll('*'))];
+
+      for (let i = 0; i < Math.min(origList.length, clonedList.length); i++) {
+        const origEl = origList[i] as HTMLElement;
+        const cloneEl = clonedList[i] as HTMLElement;
+        if (!origEl || !cloneEl) continue;
+
+        try {
+          const comp = window.getComputedStyle(origEl);
+
+          // Determine safe color based on classes
+          let safeColor = '#333333';
+          const cls = origEl.className?.toString?.() || '';
+          if (cls.includes('text-primary')) safeColor = primaryHex;
+          else if (cls.includes('text-emerald')) safeColor = '#10b981';
+          else if (cls.includes('text-rose')) safeColor = '#f43f5e';
+          else if (cls.includes('text-purple')) safeColor = '#a855f7';
+          else if (cls.includes('text-green')) safeColor = '#22c55e';
+          else if (cls.includes('text-red')) safeColor = '#ef4444';
+          else if (cls.includes('text-blue')) safeColor = '#3b82f6';
+          else if (cls.includes('text-amber') || cls.includes('text-orange')) safeColor = '#f59e0b';
+
+          // Fix color
+          if (hasUnsupported(comp.color)) {
+            cloneEl.style.setProperty('color', safeColor, 'important');
+          }
+          // Fix background-color
+          if (hasUnsupported(comp.backgroundColor)) {
+            let bg = 'transparent';
+            if (cls.includes('bg-primary')) bg = primaryHex;
+            else if (cls.includes('bg-emerald')) bg = '#10b981';
+            else if (cls.includes('bg-rose')) bg = '#f43f5e';
+            else if (cls.includes('bg-muted')) bg = '#f3f4f6';
+            else if (cls.includes('bg-card') || cls.includes('bg-background')) bg = '#ffffff';
+            else if (cls.includes('bg-secondary') || cls.includes('bg-accent')) bg = '#f3f4f6';
+            cloneEl.style.setProperty('background-color', bg, 'important');
+          }
+          // Fix border-color
+          if (hasUnsupported(comp.borderColor)) {
+            cloneEl.style.setProperty('border-color', '#e5e7eb', 'important');
+          }
+          // Fix outline-color
+          if (hasUnsupported(comp.outlineColor)) {
+            cloneEl.style.setProperty('outline-color', '#e5e7eb', 'important');
+          }
+          // Fix background-image (gradients can contain oklch)
+          if (hasUnsupported(comp.backgroundImage)) {
+            cloneEl.style.setProperty('background-image', 'none', 'important');
+          }
+          // Fix box-shadow / text-shadow
+          if (hasUnsupported(comp.boxShadow)) {
+            cloneEl.style.setProperty('box-shadow', 'none', 'important');
+          }
+          if (hasUnsupported((comp as any).textDecorationColor)) {
+            cloneEl.style.setProperty('text-decoration-color', safeColor, 'important');
+          }
+
+          // Fix SVG attributes
+          const tagName = cloneEl.tagName?.toLowerCase?.() || '';
+          if (tagName === 'svg' || cloneEl.closest?.('svg') || ['path','rect','circle','line','polygon','polyline','g','text','tspan'].includes(tagName)) {
+            const fill = cloneEl.getAttribute('fill');
+            const stroke = cloneEl.getAttribute('stroke');
+            const stopColor = cloneEl.getAttribute('stop-color');
+
+            if (fill && (hasUnsupported(fill) || fill.includes('var('))) {
+              if (cls.includes('recharts-bar-rectangle') || cls.includes('recharts-pie-sector')) {
+                // Keep the explicit fill from <Cell> or <Bar> - it should already be a hex
+              } else {
+                cloneEl.setAttribute('fill', '#9ca3af');
+              }
+            }
+            if (stroke && (hasUnsupported(stroke) || stroke.includes('var('))) {
+              cloneEl.setAttribute('stroke', '#e5e7eb');
+            }
+            if (stopColor && (hasUnsupported(stopColor) || stopColor.includes('var('))) {
+              cloneEl.setAttribute('stop-color', primaryHex);
+            }
+          }
+
+          // Fix any inline style values that might contain oklch
+          if (cloneEl.style) {
+            for (let j = 0; j < cloneEl.style.length; j++) {
+              const prop = cloneEl.style[j];
+              const val = cloneEl.style.getPropertyValue(prop);
+              if (hasUnsupported(val)) {
+                if (prop.includes('color') || prop === 'fill' || prop === 'stroke') {
+                  cloneEl.style.setProperty(prop, safeColor, 'important');
+                } else if (prop.includes('background')) {
+                  cloneEl.style.setProperty(prop, '#ffffff', 'important');
+                } else if (prop.includes('border') || prop.includes('outline')) {
+                  cloneEl.style.setProperty(prop, '#e5e7eb', 'important');
+                } else if (prop.includes('shadow')) {
+                  cloneEl.style.setProperty(prop, 'none', 'important');
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // ignore errors on individual elements
+        }
+      }
+    };
+
+    // Fix all export containers
+    ['finance-report-kpis', 'finance-monthly-chart', 'finance-trend-chart', 'finance-top-incomes', 'finance-top-expenses'].forEach(id => {
+      walkAndFix(document.getElementById(id), clonedDoc.getElementById(id));
+    });
+
+    // Also do a broader pass on the entire body for any stray oklch in stylesheets
+    try {
+      const sheets = clonedDoc.styleSheets;
+      for (let s = 0; s < sheets.length; s++) {
+        try {
+          const rules = sheets[s].cssRules;
+          for (let r = 0; r < rules.length; r++) {
+            const rule = rules[r] as CSSStyleRule;
+            if (rule.cssText && hasUnsupported(rule.cssText)) {
+              let newCss = rule.cssText.replace(/oklch\([^)]*\)/gi, '#9ca3af').replace(/oklab\([^)]*\)/gi, '#9ca3af');
+              try {
+                sheets[s].deleteRule(r);
+                sheets[s].insertRule(newCss, r);
+              } catch (e2) {}
+            }
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+  };
 
   useImperativeHandle(ref, () => ({
     exportPDF: async () => {
-      // Basic PDF Export strategy
-      toast.info("Generando PDF (Finanzas)...");
       try {
+        toast.info("Generando PDF financiero, por favor espere...");
         const doc = new jsPDF();
-        const primaryHex = themeConfig.colors.primary.startsWith('#') ? themeConfig.colors.primary : '#10b981';
-        let currentY = 20;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
+        const logoUrl = themeConfig.logo || '';
+        const primaryColor = themeConfig.colors.primary || '#10b981';
+        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
+        const rgbPrimary = primaryHex.startsWith('#') 
+          ? [parseInt(primaryHex.slice(1,3), 16), parseInt(primaryHex.slice(3,5), 16), parseInt(primaryHex.slice(5,7), 16)]
+          : [16, 185, 129];
+        const marginX = 14;
+        const contentWidth = pageWidth - marginX * 2;
+        let currentY = 15;
 
-        doc.setFontSize(18);
-        doc.text("Reporte Financiero", 14, currentY);
-        currentY += 10;
-        doc.setFontSize(10);
-        doc.text(`Generado: ${new Date().toLocaleDateString('es-NI')} | Moneda: ${displayCurrency}`, 14, currentY);
-        currentY += 10;
+        const checkPage = (needed: number) => {
+          if (currentY + needed > pageHeight - 15) { doc.addPage(); currentY = 20; }
+        };
 
-        // Metrics Table
-        const metrics = [
-          ['Total Ingresos', fmt(totalInc)],
-          ['Total Gastos', fmt(totalExp)],
-          ['Flujo de Caja Neto', fmt(cashFlow)],
-          ['EBITDA', fmt(ebitda)],
-          ['Punto de Equilibrio', fmt(breakEven)],
-          ['ROI', `${roi.toFixed(1)}%`]
-        ];
+        if (logoUrl) {
+          const logoBase64 = await getBase64Image(logoUrl);
+          if (logoBase64) {
+            doc.addImage(logoBase64, 'PNG', (pageWidth - 30) / 2, currentY, 30, 30, undefined, 'FAST');
+            currentY += 35;
+          }
+        }
+
+        doc.setFontSize(22);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(rgbPrimary[0], rgbPrimary[1], rgbPrimary[2]);
+        doc.text(companyName, pageWidth / 2, currentY, { align: 'center' });
+        currentY += 8;
+
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(60, 60, 60);
+        doc.text(`Reporte Financiero de Negocio`, pageWidth / 2, currentY, { align: 'center' });
+        currentY += 6;
         
-        autoTable(doc, {
-          startY: currentY,
-          head: [['Métrica', 'Valor']],
-          body: metrics,
-          theme: 'grid',
-          headStyles: { fillColor: primaryHex as any }
-        });
+        const now = new Date();
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(120, 120, 120);
+        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        doc.text(`Generado: ${now.toLocaleDateString('es-NI')} ${now.toLocaleTimeString('es-NI')}  |  Moneda: ${currencyLabel}`, pageWidth / 2, currentY, { align: 'center' });
+        currentY += 5;
 
-        doc.save(`Finanzas_${new Date().getTime()}.pdf`);
-        toast.success("PDF Exportado");
+        doc.setDrawColor(rgbPrimary[0], rgbPrimary[1], rgbPrimary[2]);
+        doc.setLineWidth(0.8);
+        doc.line(marginX, currentY, pageWidth - marginX, currentY);
+        currentY += 10;
+
+        // ── KPIs as native text boxes (Row 1) ──
+        const kpis = [
+          { label: 'INGRESOS', value: formatConvertedAmount(totalInc, 'NIO'), detail: `${fInc.length} transacciones`, color: [16, 185, 129] },
+          { label: 'GASTOS', value: formatConvertedAmount(totalExp, 'NIO'), detail: `${fExp.length} transacciones`, color: [244, 63, 94] },
+          { label: 'UTILIDAD NETA', value: formatConvertedAmount(netUtility, 'NIO'), detail: 'Ingresos - Gastos', color: netUtility >= 0 ? [16, 185, 129] : [244, 63, 94] },
+          { label: 'MARGEN', value: `${margin.toFixed(1)}%`, detail: margin >= 20 ? 'Saludable' : margin >= 0 ? 'Bajo' : 'Negativo', color: [99, 102, 241] },
+        ];
+
+        const cols = 4;
+        const boxW = (contentWidth - (cols - 1) * 4) / cols;
+        const boxH = 22;
+        checkPage(boxH + 5);
+        kpis.forEach((kpi, idx) => {
+          const x = marginX + idx * (boxW + 4);
+          doc.setFillColor(kpi.color[0], kpi.color[1], kpi.color[2]);
+          doc.roundedRect(x, currentY, boxW, boxH, 3, 3, 'F');
+          doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+          doc.text(kpi.label, x + boxW / 2, currentY + 6, { align: 'center' });
+          doc.setFontSize(12); doc.text(kpi.value, x + boxW / 2, currentY + 13, { align: 'center' });
+          doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+          doc.text(kpi.detail, x + boxW / 2, currentY + 18.5, { align: 'center' });
+        });
+        currentY += boxH + 10;
+
+        // ── Monthly Chart as image ──
+        const chart1 = document.getElementById('finance-monthly-chart');
+        if (chart1) {
+          checkPage(95);
+          try {
+            const canvas = await html2canvas(chart1, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch('finance-monthly-chart', clonedDoc, primaryHex) });
+            doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, 80, undefined, 'FAST');
+            currentY += 85;
+          } catch (imgErr) {
+            console.warn('Monthly chart image failed', imgErr);
+          }
+        }
+
+        // ── Trend Chart as image ──
+        const chart2 = document.getElementById('finance-trend-chart');
+        if (chart2) {
+          checkPage(95);
+          try {
+            const canvas = await html2canvas(chart2, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch('finance-trend-chart', clonedDoc, primaryHex) });
+            doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, 80, undefined, 'FAST');
+            currentY += 85;
+          } catch (imgErr) {
+            console.warn('Trend chart image failed', imgErr);
+          }
+        }
+
+        // ── Top Lists ──
+        const renderTop = (title: string, data: any[], isIncome: boolean) => {
+          checkPage(50);
+          doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
+          doc.text(title, marginX, currentY); currentY += 7;
+          doc.setFillColor(isIncome ? 16 : 244, isIncome ? 185 : 63, isIncome ? 129 : 94);
+          doc.roundedRect(marginX, currentY, contentWidth, 8, 1, 1, 'F');
+          doc.setFontSize(8); doc.setTextColor(255, 255, 255);
+          doc.text('Concepto', marginX + 3, currentY + 5.5);
+          doc.text('Categoría', marginX + 80, currentY + 5.5);
+          doc.text('Fecha', marginX + 120, currentY + 5.5);
+          doc.text('Monto', marginX + 155, currentY + 5.5);
+          currentY += 10;
+          data.forEach((item, i) => {
+            checkPage(8);
+            if (i % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
+            doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
+            const amt = formatConvertedAmount(Number(item.amount), item.currency, item.exchangeRate);
+            doc.text((item.source || item.description || (isIncome ? 'Ingreso' : 'Gasto')).substring(0, 40), marginX + 3, currentY + 4);
+            doc.text((item.category || 'Sin cat.').substring(0, 20), marginX + 80, currentY + 4);
+            doc.text(new Date(item.date || item.createdAt).toLocaleDateString('es-NI'), marginX + 120, currentY + 4);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(isIncome ? 16 : 244, isIncome ? 185 : 63, isIncome ? 129 : 94);
+            doc.text(amt, marginX + 155, currentY + 4);
+            currentY += 7;
+          });
+          currentY += 10;
+        };
+
+        renderTop('Top 5 Ingresos', topIncomes, true);
+        renderTop('Top 5 Gastos', topExpenses, false);
+
+        // ── Footer ──
+        const pageCount = (doc as any).internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+          doc.setPage(i);
+          doc.setFontSize(7);
+          doc.setTextColor(150);
+          doc.text(`${companyName} - Reporte Financiero - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+        }
+
+        doc.save(`Reporte_Finanzas_${now.toISOString().split('T')[0]}.pdf`);
+        toast.success("PDF generado exitosamente");
       } catch (e) {
-        toast.error("Error exportando PDF");
+        console.error(e);
+        toast.error("Error al generar PDF");
       }
     },
     exportExcel: async () => {
-      toast.info("Generando Excel (Finanzas)...");
       try {
+        toast.info("Generando Excel financiero...");
         const wb = new ExcelJS.Workbook();
-        const ws = wb.addWorksheet('Finanzas');
-        const primaryHex = themeConfig.colors.primary.replace('#', '');
-        
-        ws.columns = [
-          { header: 'Métrica', key: 'metric', width: 30 },
-          { header: 'Valor', key: 'value', width: 25 },
+        const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
+        const logoUrl = themeConfig.logo || '';
+        const primaryColor = themeConfig.colors.primary || '#10b981';
+        const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : '10b981';
+        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
+        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
+
+        // ═══ Sheet 1: Reporte Financiero ═══
+        const ws = wb.addWorksheet('Reporte Financiero');
+        ws.getColumn(1).width = 8;
+        ws.getColumn(2).width = 35;
+        ws.getColumn(3).width = 20;
+        ws.getColumn(4).width = 20;
+        ws.getColumn(5).width = 22;
+
+        let currentRow = 1;
+
+        // Logo
+        if (logoUrl) {
+          const base64Logo = await getBase64Image(logoUrl);
+          if (base64Logo) {
+            const logoId = wb.addImage({ base64: base64Logo, extension: 'png' });
+            ws.addImage(logoId, { tl: { col: 1.5, row: 0 }, ext: { width: 100, height: 100 } });
+            currentRow = 6;
+          }
+        }
+
+        // Header text
+        ws.mergeCells(`A${currentRow}:E${currentRow}`);
+        const cellName = ws.getCell(`A${currentRow}`);
+        cellName.value = companyName;
+        cellName.font = { size: 18, bold: true, color: { argb: `FF${hexColor}` } };
+        cellName.alignment = { horizontal: 'center' };
+        currentRow++;
+
+        ws.mergeCells(`A${currentRow}:E${currentRow}`);
+        const cellTitle = ws.getCell(`A${currentRow}`);
+        cellTitle.value = 'Reporte Financiero de Negocio';
+        cellTitle.font = { size: 13, bold: true };
+        cellTitle.alignment = { horizontal: 'center' };
+        currentRow++;
+
+        ws.mergeCells(`A${currentRow}:E${currentRow}`);
+        const cellCurrency = ws.getCell(`A${currentRow}`);
+        cellCurrency.value = `Moneda: ${currencyLabel} (${currencySymbol})  |  ${new Date().toLocaleDateString('es-NI')}`;
+        cellCurrency.font = { size: 10, italic: true, color: { argb: 'FF888888' } };
+        cellCurrency.alignment = { horizontal: 'center' };
+        currentRow += 2;
+
+        // ── KPI boxes (only the 4 that appear on screen) ──
+        const kpiBoxes = [
+          { label: 'INGRESOS', value: formatConvertedAmount(totalInc, 'NIO'), detail: `${fInc.length} transacciones`, bgColor: 'FF10B981' },
+          { label: 'GASTOS', value: formatConvertedAmount(totalExp, 'NIO'), detail: `${fExp.length} transacciones`, bgColor: 'FFF43F5E' },
+          { label: 'UTILIDAD NETA', value: formatConvertedAmount(netUtility, 'NIO'), detail: 'Ingresos - Gastos', bgColor: netUtility >= 0 ? 'FF10B981' : 'FFF43F5E' },
+          { label: 'MARGEN', value: `${margin.toFixed(1)}%`, detail: margin >= 20 ? 'Saludable' : margin >= 0 ? 'Bajo' : 'Negativo', bgColor: 'FF6366F1' },
         ];
 
-        ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF'} };
-        ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + primaryHex } };
+        // Label row
+        ws.getRow(currentRow).height = 18;
+        kpiBoxes.forEach((kpi, idx) => {
+          const cell = ws.getCell(currentRow, idx + 1);
+          cell.value = kpi.label;
+          cell.font = { size: 8, bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        currentRow++;
+        // Value row
+        ws.getRow(currentRow).height = 28;
+        kpiBoxes.forEach((kpi, idx) => {
+          const cell = ws.getCell(currentRow, idx + 1);
+          cell.value = kpi.value;
+          cell.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        currentRow++;
+        // Detail row
+        ws.getRow(currentRow).height = 16;
+        kpiBoxes.forEach((kpi, idx) => {
+          const cell = ws.getCell(currentRow, idx + 1);
+          cell.value = kpi.detail;
+          cell.font = { size: 8, color: { argb: 'FFFFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        currentRow += 2;
 
-        ws.addRow({ metric: 'Total Ingresos', value: totalInc });
-        ws.addRow({ metric: 'Total Gastos', value: totalExp });
-        ws.addRow({ metric: 'Flujo de Caja Neto', value: cashFlow });
-        ws.addRow({ metric: 'EBITDA Proyectado', value: ebitda });
-        ws.addRow({ metric: 'Punto de Equilibrio', value: breakEven });
-        ws.addRow({ metric: 'ROI (%)', value: roi });
-        ws.addRow({ metric: 'Ratio de Liquidez', value: liquidityRatio });
-        ws.addRow({ metric: 'Impuestos Provisionados', value: pendingTaxes });
+        // ── Capture charts as images (only charts, not tops) ──
+        const captureAndEmbed = async (elementId: string, imgWidthPx: number = 700) => {
+          const el = document.getElementById(elementId);
+          if (!el) return;
+          try {
+            const canvas = await html2canvas(el, {
+              scale: 2,
+              backgroundColor: '#ffffff',
+              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(elementId, clonedDoc, primaryHex),
+            });
+            const imgData = canvas.toDataURL('image/png');
+            const imgId = wb.addImage({ base64: imgData, extension: 'png' });
+            const imgHeight = (canvas.height * imgWidthPx) / canvas.width;
+            ws.addImage(imgId, {
+              tl: { col: 0, row: currentRow },
+              ext: { width: imgWidthPx, height: imgHeight },
+            });
+            currentRow += Math.ceil(imgHeight / 18) + 2;
+          } catch (e) {
+            console.warn(`Image capture failed for #${elementId}`, e);
+          }
+        };
+
+
+        await captureAndEmbed('finance-monthly-chart', 700);
+        await captureAndEmbed('finance-trend-chart', 700);
+
+        // ═══ Sheet 2: Métricas ═══
+        const wsMetrics = wb.addWorksheet('Métricas');
+        wsMetrics.getColumn(1).width = 35;
+        wsMetrics.getColumn(2).width = 25;
+        wsMetrics.getColumn(3).width = 25;
+
+        const mHeader = wsMetrics.addRow(['Métrica', 'Valor', 'Detalle']);
+        mHeader.eachCell((cell) => {
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${hexColor}` } };
+          cell.alignment = { horizontal: 'center' };
+          cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
+        });
+
+        const addMetricRow = (label: string, value: string, detail: string, colorArgb: string) => {
+          const r = wsMetrics.addRow([label, value, detail]);
+          r.getCell(1).font = { bold: true, size: 11 };
+          r.getCell(2).font = { bold: true, size: 12, color: { argb: colorArgb } };
+          r.getCell(2).alignment = { horizontal: 'right' };
+          r.getCell(3).font = { size: 9, italic: true, color: { argb: 'FF888888' } };
+          r.eachCell((cell) => { cell.border = { bottom: thinBorder }; });
+        };
+
+        addMetricRow('Total Ingresos', formatConvertedAmount(totalInc, 'NIO'), `${fInc.length} registros`, 'FF10B981');
+        addMetricRow('Total Gastos', formatConvertedAmount(totalExp, 'NIO'), `${fExp.length} registros`, 'FFEF4444');
+        addMetricRow('Utilidad Neta', formatConvertedAmount(netUtility, 'NIO'), `Margen: ${margin.toFixed(1)}%`, netUtility >= 0 ? 'FF10B981' : 'FFEF4444');
+
+        // ═══ Tops (debajo de las gráficas en la misma hoja) ═══
+        // Primero llenamos filas vacías para bajar hasta donde terminaron las imágenes
+        while (ws.rowCount < currentRow) {
+          ws.addRow([]);
+        }
+        ws.addRow([]); // Fila extra de espacio
+
+        // ── Top 5 Ingresos (native table) ──
+        const topIncTitleRow = ws.addRow(['Top 5 Ingresos', '', '', '', '']);
+        ws.mergeCells(`A${ws.rowCount}:E${ws.rowCount}`);
+        topIncTitleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF10B981' } };
+        topIncTitleRow.getCell(1).alignment = { horizontal: 'center' };
+        ws.addRow([]);
+
+        const topIncHeader = ws.addRow(['#', 'Concepto', 'Categoría', 'Fecha', 'Monto']);
+        topIncHeader.eachCell((cell) => {
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
+        });
+
+        topIncomes.forEach((item, idx) => {
+          const r = ws.addRow([
+            idx + 1,
+            item.source || item.description || 'Ingreso',
+            item.category || 'Sin cat.',
+            new Date(item.date || item.createdAt).toLocaleDateString('es-NI'),
+            Number(item.amount),
+          ]);
+          r.getCell(1).alignment = { horizontal: 'center' };
+          r.getCell(1).font = { bold: true, color: { argb: 'FF10B981' } };
+          r.getCell(5).numFmt = `"${currencySymbol}" #,##0.00`;
+          r.getCell(5).font = { bold: true, color: { argb: 'FF10B981' } };
+          r.getCell(5).alignment = { horizontal: 'right' };
+          r.eachCell((cell) => {
+            cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
+            if (idx % 2 === 0) {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+            }
+          });
+        });
+
+        ws.addRow([]);
+        ws.addRow([]);
+
+        // ── Top 5 Gastos (native table) ──
+        const topExpTitleRow = ws.addRow(['Top 5 Gastos', '', '', '', '']);
+        ws.mergeCells(`A${ws.rowCount}:E${ws.rowCount}`);
+        topExpTitleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FFF43F5E' } };
+        topExpTitleRow.getCell(1).alignment = { horizontal: 'center' };
+        ws.addRow([]);
+
+        const topExpHeader = ws.addRow(['#', 'Concepto', 'Categoría', 'Fecha', 'Monto']);
+        topExpHeader.eachCell((cell) => {
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF43F5E' } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
+        });
+
+        topExpenses.forEach((item, idx) => {
+          const r = ws.addRow([
+            idx + 1,
+            item.description || 'Gasto',
+            item.category || 'Sin cat.',
+            new Date(item.date || item.createdAt).toLocaleDateString('es-NI'),
+            Number(item.amount),
+          ]);
+          r.getCell(1).alignment = { horizontal: 'center' };
+          r.getCell(1).font = { bold: true, color: { argb: 'FFF43F5E' } };
+          r.getCell(5).numFmt = `"${currencySymbol}" #,##0.00`;
+          r.getCell(5).font = { bold: true, color: { argb: 'FFF43F5E' } };
+          r.getCell(5).alignment = { horizontal: 'right' };
+          r.eachCell((cell) => {
+            cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
+            if (idx % 2 === 0) {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF1F2' } };
+            }
+          });
+        });
 
         const buffer = await wb.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Finanzas_${new Date().getTime()}.xlsx`;
-        a.click();
-        toast.success("Excel Exportado");
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `Finanzas_${new Date().toISOString().split('T')[0]}.xlsx`;
+        link.click();
+        toast.success("Excel generado exitosamente");
       } catch (e) {
-        toast.error("Error exportando Excel");
+        console.error(e);
+        toast.error("Error al generar Excel");
       }
     }
   }));
 
-  const tooltipStyle = { backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' };
-
   if (loading) {
-    return <div className="h-64 flex items-center justify-center font-bold text-muted-foreground">Cargando datos financieros...</div>;
+    return (
+      <div className="h-96 flex flex-col items-center justify-center gap-4 text-muted-foreground">
+        <Activity className="size-12 animate-pulse text-primary opacity-50" />
+        <p className="font-black uppercase tracking-widest text-[10px]">Analizando Inteligencia Financiera...</p>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
-      {/* 4 KPIs */}
-      <div className="grid gap-4 md:grid-cols-4">
-        {[
-          { label: 'Flujo de Caja Neto', value: fmt(cashFlow), c: cashFlow >= 0 ? 'text-green-400' : 'text-red-400', bg: cashFlow >= 0 ? 'bg-green-500/10' : 'bg-red-500/10', icon: DollarSign },
-          { label: 'EBITDA Proyectado', value: fmt(ebitda), c: 'text-blue-400', bg: 'bg-blue-500/10', icon: Activity },
-          { label: 'Punto de Equilibrio', value: fmt(breakEven), c: 'text-purple-400', bg: 'bg-purple-500/10', icon: Wallet },
-          { label: 'ROI del periodo', value: `${roi.toFixed(1)}%`, c: 'text-amber-400', bg: 'bg-amber-500/10', icon: Percent },
-        ].map((k, i) => (
-          <Card key={i} className="p-4" id={`fin-kpi-${i}`}>
-            <div className="flex items-center gap-3">
-              <div className={`rounded-xl p-2.5 ${k.bg}`}><k.icon className={`size-4 ${k.c}`} /></div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{k.label}</p>
-                <p className={`text-lg font-black ${k.c}`}>{k.value}</p>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {/* 4 Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-         <Card className="p-3 text-center border-l-4 border-l-emerald-500"><p className="text-xs text-muted-foreground">Ratio Liquidez</p><p className="font-bold text-sm tracking-tight">{liquidityRatio}x</p></Card>
-         <Card className="p-3 text-center border-l-4 border-l-rose-500"><p className="text-xs text-muted-foreground">Índice Endeud.</p><p className="font-bold text-sm tracking-tight">{debtIndex.toFixed(1)}%</p></Card>
-         <Card className="p-3 text-center border-l-4 border-l-blue-500"><p className="text-xs text-muted-foreground">Gto Admin vs Oper</p><p className="font-bold text-sm tracking-tight">{fmt(adminExp)} / {fmt(operExp)}</p></Card>
-         <Card className="p-3 text-center border-l-4 border-l-orange-500"><p className="text-xs text-muted-foreground">Imp. Provisionados</p><p className="font-bold text-sm tracking-tight">{fmt(pendingTaxes)}</p></Card>
-      </div>
-
-      {/* 4 Charts */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card id="fin-chart-1">
-          <CardHeader><CardTitle className="text-sm">Ingreso vs Gasto (Mensual)</CardTitle></CardHeader>
+    <div className="space-y-8 animate-in fade-in duration-700">
+      {/* ═══ KPI Cards ═══ */}
+      <div id="finance-report-kpis" className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Total Ingresos */}
+        <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><ArrowUpRight className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <ArrowUpRight className="size-3.5 text-emerald-500" /> Ingresos
+              {getTrendValue(totalInc, prevTotalInc) !== 0 && (
+                <span className={cn("ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-bold", getTrendValue(totalInc, prevTotalInc) > 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500")}>
+                  {getTrendValue(totalInc, prevTotalInc) > 0 ? '+' : ''}{getTrendValue(totalInc, prevTotalInc).toFixed(1)}%
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={monthlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtCompact(v)} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
-                <Legend />
-                <Bar dataKey="ingresos" stackId="a" fill="#10b981" name="Ingresos" />
-                <Bar dataKey="gastos" stackId="a" fill="#ef4444" name="Gastos" />
-              </BarChart>
-            </ResponsiveContainer>
+            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(totalInc, 'NIO')}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{fInc.length} transacciones</p>
           </CardContent>
         </Card>
 
-        <Card id="fin-chart-2">
-          <CardHeader><CardTitle className="text-sm">Utilidad Mensual (Trend)</CardTitle></CardHeader>
+        {/* Total Gastos */}
+        <Card className="border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><ArrowDownRight className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <ArrowDownRight className="size-3.5 text-rose-500" /> Gastos
+              {getTrendValue(totalExp, prevTotalExp) !== 0 && (
+                <span className={cn("ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-bold", getTrendValue(totalExp, prevTotalExp) > 0 ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500")}>
+                  {getTrendValue(totalExp, prevTotalExp) > 0 ? '+' : ''}{getTrendValue(totalExp, prevTotalExp).toFixed(1)}%
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={monthlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtCompact(v)} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
-                <defs>
-                  <linearGradient id="colorUtil" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <Area type="monotone" dataKey="utilidad" stroke="#3b82f6" fillOpacity={1} fill="url(#colorUtil)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            <p className="text-xl font-black text-rose-500">{formatConvertedAmount(totalExp, 'NIO')}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{fExp.length} transacciones</p>
           </CardContent>
         </Card>
 
-        <Card id="fin-chart-3">
-          <CardHeader><CardTitle className="text-sm">Gastos por Categoría</CardTitle></CardHeader>
+        {/* Utilidad Neta */}
+        <Card className={cn("relative overflow-hidden group hover:shadow-lg transition-all", netUtility >= 0 ? "border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent" : "border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent")}>
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Scale className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <Scale className="size-3.5" /> Utilidad Neta
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            {expByCategory.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie data={expByCategory} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                    {expByCategory.map((e, i) => <Cell key={i} fill={e.color} stroke="transparent" />)}
-                  </Pie>
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
-                </PieChart>
+            <p className={cn("text-xl font-black", netUtility >= 0 ? "text-emerald-500" : "text-rose-500")}>
+              {formatConvertedAmount(netUtility, 'NIO')}
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Ingresos - Gastos</p>
+          </CardContent>
+        </Card>
+
+        {/* Margen */}
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Percent className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <Percent className="size-3.5 text-primary" /> Margen
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-black text-primary">{margin.toFixed(1)}%</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{margin >= 20 ? 'Saludable' : margin >= 0 ? 'Bajo' : 'Negativo'}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ═══ Charts Row ═══ */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card id="finance-monthly-chart" className="lg:col-span-2 border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <BarChart3 className="size-4 text-primary" /> Ingresos vs Gastos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[320px] w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData} barGap={6}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
+                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11, fontWeight: 600 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                    contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                  />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 700 }} />
+                  <Bar dataKey="ingresos" name="Ingresos" fill="#10b981" radius={[6, 6, 0, 0]}>
+                    <LabelList dataKey="ingresos" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 9, fill: '#10b981', fontWeight: 700 }} />
+                  </Bar>
+                  <Bar dataKey="gastos" name="Gastos" fill="#ef4444" radius={[6, 6, 0, 0]}>
+                    <LabelList dataKey="gastos" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 9, fill: '#ef4444', fontWeight: 700 }} />
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
-            ) : <p className="text-sm text-center py-10 text-muted-foreground">Sin gastos para mostrar</p>}
-          </CardContent>
-        </Card>
-
-        <Card id="fin-chart-4">
-          <CardHeader><CardTitle className="text-sm">Balance de Cuentas (Radar)</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <RadarChart cx="50%" cy="50%" outerRadius={80} data={radarData}>
-                <PolarGrid stroke="hsl(var(--border))" />
-                <PolarAngleAxis dataKey="subject" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
-                <Radar name="Scoring" dataKey="A" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.4} />
-                <Tooltip contentStyle={tooltipStyle} />
-              </RadarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 2 Tops */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Top 5 Gastos Más Caros</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {topExpenses.map((e, i) => (
-                <div key={e.id || i} className="flex justify-between items-center p-2 rounded bg-muted/20 border border-border/40">
-                  <span className="text-xs font-semibold">{e.description || e.category}</span>
-                  <span className="text-xs font-bold text-red-400">{fmt(Number(e.amount))}</span>
-                </div>
-              ))}
-              {topExpenses.length === 0 && <p className="text-xs text-muted-foreground">Sin datos</p>}
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Top 5 Ingresos Más Altos</CardTitle></CardHeader>
+
+        <Card id="finance-trend-chart" className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <Activity className="size-4 text-primary" /> Balance Acumulado
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {topIncomes.map((inc, i) => (
-                <div key={inc.id || i} className="flex justify-between items-center p-2 rounded bg-muted/20 border border-border/40">
-                  <span className="text-xs font-semibold">{inc.description || inc.category}</span>
-                  <span className="text-xs font-bold text-emerald-400">{fmt(Number(inc.amount))}</span>
-                </div>
-              ))}
-              {topIncomes.length === 0 && <p className="text-xs text-muted-foreground">Sin datos</p>}
+            <div className="h-[320px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={balanceTrend}>
+                  <defs>
+                    <linearGradient id="balanceGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
+                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={v => fmtShort(v)} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
+                  <Area type="monotone" dataKey="balance" stroke="#10b981" strokeWidth={2.5} fill="url(#balanceGrad)" dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* ═══ Top Items ═══ */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Top Ingresos */}
+        <Card id="finance-top-incomes" className="border-emerald-500/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <ArrowUpRight className="size-4 text-emerald-500" /> Top 5 Ingresos
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {topIncomes.map((inc: any, idx: number) => (
+              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 transition-colors">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="size-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-[10px] font-black text-emerald-600 shrink-0">
+                    #{idx + 1}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate">{inc.source || inc.description || 'Ingreso'}</p>
+                    <p className="text-[10px] text-muted-foreground">{inc.category || 'Sin cat.'} · {new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI')}</p>
+                  </div>
+                </div>
+                <span className="text-sm font-black text-emerald-500 shrink-0 ml-3">+{formatConvertedAmount(Number(inc.amount), inc.currency, inc.exchangeRate)}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Top Gastos */}
+        <Card id="finance-top-expenses" className="border-rose-500/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <ArrowDownRight className="size-4 text-rose-500" /> Top 5 Gastos
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {topExpenses.map((exp: any, idx: number) => (
+              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-rose-500/5 border border-rose-500/10 hover:bg-rose-500/10 transition-colors">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="size-7 rounded-lg bg-rose-500/20 flex items-center justify-center text-[10px] font-black text-rose-600 shrink-0">
+                    #{idx + 1}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate">{exp.description || 'Gasto'}</p>
+                    <p className="text-[10px] text-muted-foreground">{exp.category || 'Sin cat.'} · {new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI')}</p>
+                  </div>
+                </div>
+                <span className="text-sm font-black text-rose-500 shrink-0 ml-3">-{formatConvertedAmount(Number(exp.amount), exp.currency, exp.exchangeRate)}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 });

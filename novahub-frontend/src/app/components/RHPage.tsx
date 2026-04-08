@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { employeesService, payrollService, timeOffService } from '../services/rh.service';
 import type { Employee, Payroll, TimeOff, PaginatedResponse } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 interface RHPageProps {
   activeSubModule?: string;
@@ -28,6 +29,7 @@ const statusColors: Record<string, string> = {
 };
 
 export function RHPage({ activeSubModule }: RHPageProps) {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const tabMap: Record<string, string> = { 'empleados': 'empleados', 'planillas': 'planillas', 'vacaciones': 'vacaciones' };
   const [activeTab, setActiveTab] = useState(() => activeSubModule ? (tabMap[activeSubModule] || 'empleados') : 'empleados');
@@ -263,9 +265,17 @@ export function RHPage({ activeSubModule }: RHPageProps) {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-muted/30 p-1.5 pb-2 rounded-lg border border-border/50 overflow-x-auto">
           <TabsList className="bg-transparent border-none flex-nowrap shrink-0 justify-start w-full h-auto px-1 py-1 gap-1">
-            <TabsTrigger value="empleados"><UserCircle className="mr-1.5 size-3.5" />Empleados</TabsTrigger>
-            <TabsTrigger value="planillas"><FileSpreadsheet className="mr-1.5 size-3.5" />Planillas</TabsTrigger>
-            <TabsTrigger value="vacaciones"><CalendarClock className="mr-1.5 size-3.5" />Vacaciones</TabsTrigger>
+            {[
+              { id: 'empleados', label: 'Empleados', icon: UserCircle, module: 'HR_EMPLOYEES' },
+              { id: 'planillas', label: 'Planillas', icon: FileSpreadsheet, module: 'HR_PAYROLL' },
+              { id: 'vacaciones', label: 'Vacaciones', icon: CalendarClock, module: 'HR_LEAVES' },
+            ].map((tab) => {
+              const hasAccess = !user?.enabledModules || user.enabledModules.includes(tab.module);
+              if (!hasAccess) return null;
+              return (
+                <TabsTrigger key={tab.id} value={tab.id}><tab.icon className="mr-1.5 size-3.5" />{tab.label}</TabsTrigger>
+              );
+            })}
           </TabsList>
           <div className="flex gap-2">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input placeholder="Buscar..." className="pl-9 w-60 h-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>

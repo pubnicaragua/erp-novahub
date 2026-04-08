@@ -1,19 +1,18 @@
 import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
+import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar, LabelList } from 'recharts';
 import { invoicesService, paymentsService, customersService } from '../../services/ventas.service';
 import { inventoryService } from '../../services/inventario.service';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useAuth } from '../../contexts/AuthContext';
-import { DollarSign, CheckCircle2, TrendingUp, Target, ShoppingCart, Users, Package } from 'lucide-react';
+import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, PieChart as PieChartIcon, Users } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { cn } from '../ui/utils';
 
-const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 function toDate(value: unknown): Date | null {
@@ -22,28 +21,50 @@ function toDate(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function isDateInRange(value: unknown, range: string): boolean {
-  const date = toDate(value);
-  if (!date) return false;
+function getRangeDates(range: string) {
   const now = new Date();
-  const startToday = new Date(now);
-  startToday.setHours(0, 0, 0, 0);
   const start = new Date(now);
+  const prevStart = new Date(now);
+  const prevEnd = new Date(now);
+
   switch (range) {
-    case 'hoy': return date >= startToday;
-    case 'ultima-semana': start.setDate(now.getDate() - 7); break;
-    case 'ultimo-mes': start.setMonth(now.getMonth() - 1); break;
-    case 'ultimo-trimestre': start.setMonth(now.getMonth() - 3); break;
-    case 'ultimo-año': start.setFullYear(now.getFullYear() - 1); break;
-    default: return true;
+    case 'hoy': 
+      start.setHours(0, 0, 0, 0); 
+      prevStart.setDate(now.getDate() - 1); prevStart.setHours(0, 0, 0, 0);
+      prevEnd.setDate(now.getDate() - 1); prevEnd.setHours(23, 59, 59, 999);
+      break;
+    case 'ultima-semana': 
+      start.setDate(now.getDate() - 7); 
+      prevStart.setDate(now.getDate() - 14);
+      prevEnd.setDate(now.getDate() - 7);
+      break;
+    case 'ultimo-mes': 
+      start.setMonth(now.getMonth() - 1); 
+      prevStart.setMonth(now.getMonth() - 2);
+      prevEnd.setMonth(now.getMonth() - 1);
+      break;
+    case 'ultimo-trimestre': 
+      start.setMonth(now.getMonth() - 3); 
+      prevStart.setMonth(now.getMonth() - 6);
+      prevEnd.setMonth(now.getMonth() - 3);
+      break;
+    case 'ultimo-año': 
+      start.setFullYear(now.getFullYear() - 1); 
+      prevStart.setFullYear(now.getFullYear() - 2);
+      prevEnd.setFullYear(now.getFullYear() - 1);
+      break;
+    default: return { start: new Date(0), prevStart: new Date(0), prevEnd: new Date(0) };
   }
   start.setHours(0, 0, 0, 0);
-  return date >= start;
+  prevStart.setHours(0, 0, 0, 0);
+  prevEnd.setHours(23, 59, 59, 999);
+  return { start, prevStart, prevEnd };
 }
 
 export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, convertAmount } = useCurrency();
+  const { displayCurrency, formatConvertedAmount, convertAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
+  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   
   const [invoices, setInvoices] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
@@ -51,14 +72,11 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const sym = displayCurrency === 'USD' ? '$' : 'C$ ';
-  const fmt = (n: number) => {
-    const converted = typeof convertAmount === 'function' ? convertAmount(n, 'NIO') : n;
-    return `${sym} ${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-  const fmtCompact = (n: number) => {
-    const converted = typeof convertAmount === 'function' ? convertAmount(n, 'NIO') : n;
-    return `${sym}${(converted / 1000).toFixed(1)}k`;
+  const fmtShort = (v: number) => {
+    const converted = convertAmount(v, 'NIO');
+    if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted/1000000).toFixed(1)}M`;
+    if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
+    return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
   useEffect(() => {
@@ -66,10 +84,10 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
       setLoading(true);
       try {
         const [invRes, payRes, cusRes, prodRes] = await Promise.all([
-          invoicesService.getAll(),
-          paymentsService.getAll(),
-          customersService.getAll(),
-          inventoryService.getProducts()
+          invoicesService.getAll().catch(() => ({ data: [] })),
+          paymentsService.getAll().catch(() => ({ data: [] })),
+          customersService.getAll().catch(() => ({ data: [] })),
+          inventoryService.getProducts().catch(() => ({ data: [] }))
         ]);
         setInvoices(Array.isArray(invRes) ? invRes : invRes?.data || []);
         setPayments(Array.isArray(payRes) ? payRes : payRes?.data || []);
@@ -84,287 +102,711 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     fetch();
   }, []);
 
-  const fInv = useMemo(() => invoices.filter(i => isDateInRange(i.date || i.createdAt, dateRange)), [invoices, dateRange]);
-  const fPay = useMemo(() => payments.filter(p => isDateInRange(p.date || p.createdAt, dateRange)), [payments, dateRange]);
-  const fCus = useMemo(() => customers.filter(c => isDateInRange(c.createdAt, dateRange)), [customers, dateRange]);
+  const { start: currentStart, prevStart, prevEnd } = useMemo(() => getRangeDates(dateRange), [dateRange]);
 
-  const totalBilled = useMemo(() => fInv.reduce((a, c) => a + Number(c.total || 0), 0), [fInv]);
-  const totalPaid = useMemo(() => fPay.reduce((a, c) => a + Number(c.amount || 0), 0), [fPay]);
-  const totalCost = useMemo(() => fInv.reduce((a, c) => a + Number(c.totalCost || c.total * 0.4 || 0), 0), [fInv]); // Proxy cost 40% if undefined
+  const fInv = useMemo(() => invoices.filter(i => {
+    const d = toDate(i.date || i.createdAt);
+    return d && d >= currentStart;
+  }), [invoices, currentStart]);
+
+  const pInv = useMemo(() => invoices.filter(i => {
+    const d = toDate(i.date || i.createdAt);
+    return d && d >= prevStart && d <= prevEnd;
+  }), [invoices, prevStart, prevEnd]);
+
+  const fPay = useMemo(() => payments.filter(i => {
+    const d = toDate(i.date || i.createdAt);
+    return d && d >= currentStart;
+  }), [payments, currentStart]);
+
+  const totalBilled = useMemo(() => fInv.reduce((acc, i) => acc + (i.currency === 'USD' ? Number(i.total || 0) * (i.exchangeRate || exchangeRate) : Number(i.total || 0)), 0), [fInv, exchangeRate]);
+  const prevTotalBilled = useMemo(() => pInv.reduce((acc, i) => acc + (i.currency === 'USD' ? Number(i.total || 0) * (i.exchangeRate || exchangeRate) : Number(i.total || 0)), 0), [pInv, exchangeRate]);
   
-  // ── 4 KPIs ──
+  const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + (p.currency === 'USD' ? Number(p.amount || 0) * (p.exchangeRate || exchangeRate) : Number(p.amount || 0)), 0), [fPay, exchangeRate]);
+  const totalCost = useMemo(() => fInv.reduce((acc, i) => {
+    const cost = Number(i.totalCost || Number(i.total || 0) * 0.4);
+    return acc + (i.currency === 'USD' ? cost * (i.exchangeRate || exchangeRate) : cost);
+  }, 0), [fInv, exchangeRate]); 
+  
   const grossMargin = totalBilled > 0 ? ((totalBilled - totalCost) / totalBilled) * 100 : 0;
   const avgTicket = fInv.length > 0 ? totalBilled / fInv.length : 0;
-
-  // ── 4 Metrics ──
-  const overdueInvoices = fInv.filter(i => i.status === 'OVERDUE').length;
-  const avgCollectionDays = 14; // Default proxy, requires complex diff logic between inv and pay
-  const discountPct = fInv.length > 0 ? (fInv.filter(i => Number(i.discount) > 0).length / fInv.length) * 100 : 0;
-  const newCustomers = fCus.length;
+  
+  const getTrendValue = (curr: number, prev: number) => {
+    if (prev === 0) return curr > 0 ? 100 : 0;
+    return ((curr - prev) / prev) * 100;
+  };
 
   // ── 2 Tops ──
   const topCustomers = useMemo(() => {
     const map: Record<string, number> = {};
     fInv.forEach(inv => {
       const name = inv.customer?.name || inv.customerName || 'Consumidor Final';
-      map[name] = (map[name] || 0) + Number(inv.total || 0);
+      const val = inv.currency === 'USD' ? Number(inv.total || 0) * (inv.exchangeRate || exchangeRate) : Number(inv.total || 0);
+      map[name] = (map[name] || 0) + val;
     });
-    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 10);
-  }, [fInv]);
+    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 5);
+  }, [fInv, exchangeRate]);
 
   const topProducts = useMemo(() => {
     return [...products].map(p => {
       const price = Number(p.salePrice || 0);
       const cost = Number(p.costPrice || price * 0.4);
       return { name: p.name, margin: price - cost };
-    }).sort((a,b) => b.margin - a.margin).slice(0, 10);
+    }).sort((a,b) => b.margin - a.margin).slice(0, 5);
   }, [products]);
 
   // ── Charts ──
-  const monthlyTrend = useMemo(() => {
-    const now = new Date().getMonth();
-    return Array.from({ length: 6 }, (_, i) => {
-      const idx = (now - (5 - i) + 12) % 12;
-      const mBilled = fInv.filter(x => toDate(x.date || x.createdAt)?.getMonth() === idx).reduce((a, x) => a + Number(x.total || 0), 0);
-      const mPaid = fPay.filter(x => toDate(x.date || x.createdAt)?.getMonth() === idx).reduce((a, x) => a + Number(x.amount || 0), 0);
-      return { mes: MONTH_NAMES[idx], facturado: mBilled, cobrado: mPaid };
-    });
-  }, [fInv, fPay]);
-  
-  // Funnel proxy with horizontal bars
-  const funnelData = [
-    { step: 'Cotizaciones', count: Math.ceil(fInv.length * 2.5) },
-    { step: 'Órdenes', count: Math.ceil(fInv.length * 1.5) },
-    { step: 'Facturas Emitidas', count: fInv.length },
-    { step: 'Facturas Pagadas', count: fInv.filter(i => i.status === 'PAID').length },
-  ];
+  const monthlyData = useMemo(() => {
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    const data = [];
 
-  const channelData = [
-    { name: 'Directo', value: totalBilled * 0.6, color: COLORS[0] },
-    { name: 'Online', value: totalBilled * 0.3, color: COLORS[1] },
-    { name: 'Distribuidores', value: totalBilled * 0.1, color: COLORS[2] },
-  ];
+    for (let i = 5; i >= 0; i--) {
+      const monthIdx = (currentMonth - i + 12) % 12;
+      const year = currentMonth - i < 0 ? currentYear - 1 : currentYear;
+      
+      const mBilled = fInv.filter(inv => {
+        const d = new Date(inv.date || inv.createdAt);
+        return d.getMonth() === monthIdx && d.getFullYear() === year;
+      }).reduce((acc: number, i: any) => acc + (i.currency === 'USD' ? Number(i.total || 0) * (i.exchangeRate || exchangeRate) : Number(i.total || 0)), 0);
+      
+      const mPaid = fPay.filter(pay => {
+        const d = new Date(pay.date || pay.createdAt);
+        return d.getMonth() === monthIdx && d.getFullYear() === year;
+      }).reduce((acc: number, p: any) => acc + (p.currency === 'USD' ? Number(p.amount || 0) * (p.exchangeRate || exchangeRate) : Number(p.amount || 0)), 0);
+      
+      data.push({
+        mes: MONTH_NAMES[monthIdx],
+        facturado: Math.round(mBilled),
+        cobrado: Math.round(mPaid),
+      });
+    }
+    return data;
+  }, [fInv, fPay, exchangeRate]);
+
+  const salesTrend = useMemo(() => {
+    let cumulative = 0;
+    return monthlyData.map(d => {
+      cumulative += d.facturado;
+      return { mes: d.mes, ventas: cumulative };
+    });
+  }, [monthlyData]);
+
+  const getBase64Image = async (url: string) => {
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const sanitizeHtml2CanvasOklch = (_elementId: string, clonedDoc: Document, primaryHex: string) => {
+    const styleTag = clonedDoc.createElement('style');
+    styleTag.innerHTML = `
+      :root, *, *::before, *::after {
+        --background: #ffffff !important;
+        --foreground: #333333 !important;
+        --card: #ffffff !important;
+        --card-foreground: #333333 !important;
+        --popover: #ffffff !important;
+        --popover-foreground: #333333 !important;
+        --primary: ${primaryHex} !important;
+        --primary-foreground: #ffffff !important;
+        --secondary: #f3f4f6 !important;
+        --secondary-foreground: #333333 !important;
+        --muted: #f3f4f6 !important;
+        --muted-foreground: #6b7280 !important;
+        --accent: #f3f4f6 !important;
+        --accent-foreground: #333333 !important;
+        --destructive: #ef4444 !important;
+        --destructive-foreground: #ffffff !important;
+        --border: #e5e7eb !important;
+        --input: #e5e7eb !important;
+        --ring: ${primaryHex} !important;
+        --chart-1: #10b981 !important;
+        --chart-2: #ef4444 !important;
+        --chart-3: #6366f1 !important;
+        --chart-4: #f59e0b !important;
+        --chart-5: #ec4899 !important;
+        --sidebar-background: #ffffff !important;
+        --sidebar-foreground: #333333 !important;
+        --sidebar-primary: ${primaryHex} !important;
+        --sidebar-primary-foreground: #ffffff !important;
+        --sidebar-accent: #f3f4f6 !important;
+        --sidebar-accent-foreground: #333333 !important;
+        --sidebar-border: #e5e7eb !important;
+        --sidebar-ring: ${primaryHex} !important;
+      }
+    `;
+    clonedDoc.head.appendChild(styleTag);
+    const hasUnsupported = (s: string | null | undefined) => s ? /oklch\(|oklab\(|color\(|lch\(|lab\(/i.test(s) : false;
+    const walkAndFix = (origRoot: Element | null, clonedRoot: Element | null) => {
+      if (!origRoot || !clonedRoot) return;
+      const origList = [origRoot, ...Array.from(origRoot.querySelectorAll('*'))];
+      const clonedList = [clonedRoot, ...Array.from(clonedRoot.querySelectorAll('*'))];
+      for (let i = 0; i < Math.min(origList.length, clonedList.length); i++) {
+        const origEl = origList[i] as HTMLElement;
+        const cloneEl = clonedList[i] as HTMLElement;
+        if (!origEl || !cloneEl) continue;
+        try {
+          const comp = window.getComputedStyle(origEl);
+          let safeColor = '#333333';
+          const cls = origEl.className?.toString?.() || '';
+          if (cls.includes('text-primary')) safeColor = primaryHex;
+          else if (cls.includes('text-emerald') || cls.includes('text-green')) safeColor = '#10b981';
+          else if (cls.includes('text-rose') || cls.includes('text-red')) safeColor = '#f43f5e';
+          else if (cls.includes('text-blue')) safeColor = '#3b82f6';
+          else if (cls.includes('text-amber') || cls.includes('text-orange')) safeColor = '#f59e0b';
+          else if (cls.includes('text-purple')) safeColor = '#a855f7';
+
+          if (hasUnsupported(comp.color)) cloneEl.style.setProperty('color', safeColor, 'important');
+          if (hasUnsupported(comp.backgroundColor)) {
+            let bg = 'transparent';
+            if (cls.includes('bg-primary')) bg = primaryHex;
+            else if (cls.includes('bg-emerald')) bg = '#10b981';
+            else if (cls.includes('bg-rose')) bg = '#f43f5e';
+            else if (cls.includes('bg-blue')) bg = '#3b82f6';
+            else if (cls.includes('bg-amber')) bg = '#f59e0b';
+            else if (cls.includes('bg-purple')) bg = '#a855f7';
+            else if (cls.includes('bg-muted')) bg = '#f3f4f6';
+            else if (cls.includes('bg-card') || cls.includes('bg-background')) bg = '#ffffff';
+            else if (cls.includes('bg-secondary') || cls.includes('bg-accent')) bg = '#f3f4f6';
+            cloneEl.style.setProperty('background-color', bg, 'important');
+          }
+          if (hasUnsupported(comp.borderColor)) cloneEl.style.setProperty('border-color', '#e5e7eb', 'important');
+          if (hasUnsupported(comp.backgroundImage)) cloneEl.style.setProperty('background-image', 'none', 'important');
+          if (hasUnsupported(comp.boxShadow)) cloneEl.style.setProperty('box-shadow', 'none', 'important');
+          
+          if (hasUnsupported((comp as any).textDecorationColor)) {
+            cloneEl.style.setProperty('text-decoration-color', safeColor, 'important');
+          }
+
+          const tagName = cloneEl.tagName?.toLowerCase?.() || '';
+          if (tagName === 'svg' || cloneEl.closest?.('svg') || ['path','rect','circle','line','polygon','polyline','g','text','tspan'].includes(tagName)) {
+            const fill = cloneEl.getAttribute('fill');
+            const stroke = cloneEl.getAttribute('stroke');
+            const stopColor = cloneEl.getAttribute('stop-color');
+            if (fill && (hasUnsupported(fill) || fill.includes('var('))) {
+              if (!cls.includes('recharts-bar-rectangle') && !cls.includes('recharts-pie-sector')) {
+                cloneEl.setAttribute('fill', '#9ca3af');
+              }
+            }
+            if (stroke && (hasUnsupported(stroke) || stroke.includes('var('))) {
+              cloneEl.setAttribute('stroke', '#e5e7eb');
+            }
+            if (stopColor && (hasUnsupported(stopColor) || stopColor.includes('var('))) {
+              cloneEl.setAttribute('stop-color', primaryHex);
+            }
+          }
+
+          if (cloneEl.style) {
+            for (let j = 0; j < cloneEl.style.length; j++) {
+              const prop = cloneEl.style[j];
+              const val = cloneEl.style.getPropertyValue(prop);
+              if (hasUnsupported(val)) {
+                if (prop.includes('color') || prop === 'fill' || prop === 'stroke') {
+                  cloneEl.style.setProperty(prop, safeColor, 'important');
+                } else if (prop.includes('background')) {
+                  cloneEl.style.setProperty(prop, '#ffffff', 'important');
+                } else if (prop.includes('border') || prop.includes('outline')) {
+                  cloneEl.style.setProperty(prop, '#e5e7eb', 'important');
+                } else if (prop.includes('shadow')) {
+                  cloneEl.style.setProperty(prop, 'none', 'important');
+                }
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    };
+
+    const ids = ['sales-report-kpis', 'sales-chart-bar', 'sales-chart-pie', 'sales-chart-trend', 'sales-health-card'];
+    ids.forEach(id => walkAndFix(document.getElementById(id), clonedDoc.getElementById(id)));
+
+    try {
+      const sheets = clonedDoc.styleSheets;
+      for (let s = 0; s < sheets.length; s++) {
+        try {
+          const rules = sheets[s].cssRules;
+          for (let r = 0; r < rules.length; r++) {
+            const rule = rules[r] as CSSStyleRule;
+            if (rule.cssText && hasUnsupported(rule.cssText)) {
+              let newCss = rule.cssText.replace(/oklch\([^)]*\)/gi, '#9ca3af').replace(/oklab\([^)]*\)/gi, '#9ca3af');
+              try { sheets[s].deleteRule(r); sheets[s].insertRule(newCss, r); } catch (e2) {}
+            }
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+  };
 
   useImperativeHandle(ref, () => ({
     exportPDF: async () => {
-      toast.info("Generando PDF (Ventas)...");
       try {
+        toast.info("Generando PDF (Ventas), por favor espere...");
         const doc = new jsPDF();
-        const primaryHex = themeConfig.colors.primary.startsWith('#') ? themeConfig.colors.primary : '#10b981';
-        let currentY = 20;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const companyName = themeConfig.tenantName || 'Mi Empresa';
+        const logoUrl = themeConfig.logo || '';
+        const primaryColor = themeConfig.colors.primary || '#10b981';
+        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
+        const rgbPrimary = primaryHex.startsWith('#') ? [parseInt(primaryHex.slice(1,3), 16), parseInt(primaryHex.slice(3,5), 16), parseInt(primaryHex.slice(5,7), 16)] : [16, 185, 129];
+        const marginX = 14;
+        const contentWidth = pageWidth - marginX * 2;
+        let currentY = 15;
 
-        doc.setFontSize(18);
-        doc.text("Reporte de Ventas", 14, currentY);
-        currentY += 10;
-        doc.setFontSize(10);
-        doc.text(`Generado: ${new Date().toLocaleDateString('es-NI')} | Moneda: ${displayCurrency}`, 14, currentY);
-        currentY += 10;
+        const checkPage = (needed: number) => { if (currentY + needed > pageHeight - 15) { doc.addPage(); currentY = 20; } };
 
-        const metrics = [
-          ['Facturación Total', fmt(totalBilled)],
-          ['Total Cobrado', fmt(totalPaid)],
-          ['Margen Bruto (%)', `${grossMargin.toFixed(1)}%`],
-          ['Ticket Promedio', fmt(avgTicket)],
-          ['Nuevos Clientes (Período)', newCustomers.toString()],
-        ];
+        if (logoUrl) {
+          const logoBase64 = await getBase64Image(logoUrl);
+          if (logoBase64) { doc.addImage(logoBase64, 'PNG', (pageWidth - 30) / 2, currentY, 30, 30, undefined, 'FAST'); currentY += 35; }
+        }
+
+        doc.setFontSize(22); doc.setFont('helvetica', 'bold'); doc.setTextColor(rgbPrimary[0], rgbPrimary[1], rgbPrimary[2]);
+        doc.text(companyName, pageWidth / 2, currentY, { align: 'center' }); currentY += 8;
+        doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
+        doc.text(`Reporte de Ventas`, pageWidth / 2, currentY, { align: 'center' }); currentY += 6;
         
-        autoTable(doc, {
-          startY: currentY,
-          head: [['Métrica', 'Valor']],
-          body: metrics,
-          theme: 'grid',
-          headStyles: { fillColor: primaryHex as any }
-        });
+        const now = new Date();
+        doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 120);
+        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        doc.text(`Generado: ${now.toLocaleDateString('es-NI')} ${now.toLocaleTimeString('es-NI')}  |  Moneda: ${currencyLabel}`, pageWidth / 2, currentY, { align: 'center' });
+        currentY += 5;
 
-        doc.save(`Ventas_${new Date().getTime()}.pdf`);
-        toast.success("PDF Exportado");
-      } catch (e) {
-        toast.error("Error exportando PDF");
-      }
+        doc.setDrawColor(rgbPrimary[0], rgbPrimary[1], rgbPrimary[2]); doc.setLineWidth(0.8);
+        doc.line(marginX, currentY, pageWidth - marginX, currentY); currentY += 10;
+
+        const kpis = [
+          { label: 'FACTURACIÓN', value: formatConvertedAmount(totalBilled, 'NIO'), detail: `${fInv.length} facturas`, color: [16, 185, 129] },
+          { label: 'COBRANZA', value: formatConvertedAmount(totalPaid, 'NIO'), detail: `${((totalPaid / Math.max(totalBilled, 1)) * 100).toFixed(1)}% del fact.`, color: [59, 130, 246] },
+          { label: 'MARGEN BRUTO', value: `${grossMargin.toFixed(1)}%`, detail: 'Basado en costos', color: [168, 85, 247] },
+          { label: 'TICKET PROM.', value: formatConvertedAmount(avgTicket, 'NIO'), detail: 'Valor medio', color: [245, 158, 11] },
+        ];
+
+        const cols = 4; const boxW = (contentWidth - (cols - 1) * 4) / cols; const boxH = 22;
+        checkPage(boxH + 5);
+        kpis.forEach((kpi, idx) => {
+          const x = marginX + idx * (boxW + 4);
+          doc.setFillColor(kpi.color[0], kpi.color[1], kpi.color[2]);
+          doc.roundedRect(x, currentY, boxW, boxH, 3, 3, 'F');
+          doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+          doc.text(kpi.label, x + boxW / 2, currentY + 6, { align: 'center' });
+          doc.setFontSize(12); doc.text(kpi.value, x + boxW / 2, currentY + 13, { align: 'center' });
+          doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+          doc.text(kpi.detail, x + boxW / 2, currentY + 18.5, { align: 'center' });
+        });
+        currentY += boxH + 10;
+
+        const charts = ['sales-chart-bar', 'sales-chart-pie', 'sales-chart-trend', 'sales-health-card'];
+        for (const chartId of charts) {
+          const el = document.getElementById(chartId);
+          if (el) {
+            checkPage(95);
+            try {
+              const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(chartId, clonedDoc, primaryHex) });
+              doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, 80, undefined, 'FAST');
+              currentY += 85;
+            } catch (imgErr) { console.warn(`${chartId} failed`, imgErr); }
+          }
+        }
+
+        const renderTop = (title: string, data: any[], colorRGB: number[], isMargin: boolean) => {
+          checkPage(40);
+          doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
+          doc.text(title, marginX, currentY); currentY += 7;
+          doc.setFillColor(colorRGB[0], colorRGB[1], colorRGB[2]);
+          doc.roundedRect(marginX, currentY, contentWidth, 8, 1, 1, 'F');
+          doc.setFontSize(8); doc.setTextColor(255, 255, 255);
+          doc.text('Concepto / Nombre', marginX + 3, currentY + 5.5);
+          doc.text('Valor', marginX + 130, currentY + 5.5);
+          currentY += 10;
+          data.forEach((item, i) => {
+            checkPage(8);
+            if (i % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
+            doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
+            doc.text((item.name || 'Sin especificar').substring(0, 50), marginX + 3, currentY + 4);
+            doc.setFont('helvetica', 'bold'); doc.setTextColor(colorRGB[0], colorRGB[1], colorRGB[2]);
+            const valStr = isMargin ? formatConvertedAmount(Number(item.margin || 0), 'NIO') : formatConvertedAmount(Number(item.value || 0), 'NIO');
+            doc.text(valStr, marginX + 130, currentY + 4);
+            currentY += 7;
+          });
+          currentY += 10;
+        };
+
+        renderTop('Top 5 Clientes', topCustomers, [59, 130, 246], false);
+        renderTop('Top 5 Productos (Márgenes)', topProducts, [168, 85, 247], true);
+
+        const pageCount = (doc as any).internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+          doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150);
+          doc.text(`${companyName} - Reporte de Ventas - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+        }
+
+        doc.save(`Reporte_Ventas_${now.toISOString().split('T')[0]}.pdf`);
+        toast.success("PDF generado exitosamente");
+      } catch (e) { console.error(e); toast.error("Error al generar PDF"); }
     },
     exportExcel: async () => {
-      toast.info("Generando Excel (Ventas)...");
       try {
+        toast.info("Generando Excel (Ventas)...");
         const wb = new ExcelJS.Workbook();
-        const ws = wb.addWorksheet('Ventas');
-        const primaryHex = themeConfig.colors.primary.replace('#', '');
-        
-        ws.columns = [
-          { header: 'Métrica', key: 'metric', width: 30 },
-          { header: 'Valor', key: 'value', width: 25 },
+        const companyName = themeConfig.tenantName || 'Mi Empresa';
+        const logoUrl = themeConfig.logo || '';
+        const primaryHex = (themeConfig.colors.primary || '#10b981').replace('#', '');
+        const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
+        const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
+
+        const ws = wb.addWorksheet('Reporte de Ventas');
+        ws.getColumn(1).width = 8; ws.getColumn(2).width = 35; ws.getColumn(3).width = 25; ws.getColumn(4).width = 25;
+
+        let currentRow = 1;
+
+        if (logoUrl) {
+          const base64Logo = await getBase64Image(logoUrl);
+          if (base64Logo) {
+            const logoId = wb.addImage({ base64: base64Logo, extension: 'png' });
+            ws.addImage(logoId, { tl: { col: 1.5, row: 0 }, ext: { width: 100, height: 100 } });
+            currentRow = 6;
+          }
+        }
+
+        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        const cellName = ws.getCell(`A${currentRow}`); cellName.value = companyName;
+        cellName.font = { size: 18, bold: true, color: { argb: `FF${primaryHex}` } }; cellName.alignment = { horizontal: 'center' }; currentRow++;
+
+        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        const cellTitle = ws.getCell(`A${currentRow}`); cellTitle.value = 'Reporte de Ventas';
+        cellTitle.font = { size: 13, bold: true }; cellTitle.alignment = { horizontal: 'center' }; currentRow++;
+
+        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        const cellCurrency = ws.getCell(`A${currentRow}`);
+        cellCurrency.value = `Moneda: ${currencyLabel} (${currencySymbol})  |  ${new Date().toLocaleDateString('es-NI')}`;
+        cellCurrency.font = { size: 10, italic: true, color: { argb: 'FF888888' } }; cellCurrency.alignment = { horizontal: 'center' }; currentRow += 2;
+
+        const kpis = [
+          { label: 'FACTURACIÓN', value: formatConvertedAmount(totalBilled, 'NIO'), detail: `${fInv.length} fact.`, bgColor: 'FF10B981' },
+          { label: 'COBRANZA', value: formatConvertedAmount(totalPaid, 'NIO'), detail: `${((totalPaid / Math.max(totalBilled, 1)) * 100).toFixed(1)}%`, bgColor: 'FF3B82F6' },
+          { label: 'MARGEN BRUTO', value: `${grossMargin.toFixed(1)}%`, detail: 'Costos est.', bgColor: 'FFA855F7' },
+          { label: 'TICKET PROM.', value: formatConvertedAmount(avgTicket, 'NIO'), detail: 'Medio', bgColor: 'FFF59E0B' },
         ];
 
-        ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF'} };
-        ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + primaryHex } };
+        ws.getRow(currentRow).height = 18;
+        kpis.forEach((kpi, idx) => {
+          const cell = ws.getCell(currentRow, idx + 1);
+          cell.value = kpi.label; cell.font = { size: 8, bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } }; cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }); currentRow++;
+        ws.getRow(currentRow).height = 28;
+        kpis.forEach((kpi, idx) => {
+          const cell = ws.getCell(currentRow, idx + 1);
+          cell.value = kpi.value; cell.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } }; cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }); currentRow++;
+        ws.getRow(currentRow).height = 16;
+        kpis.forEach((kpi, idx) => {
+          const cell = ws.getCell(currentRow, idx + 1);
+          cell.value = kpi.detail; cell.font = { size: 8, color: { argb: 'FFFFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } }; cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }); currentRow += 2;
 
-        ws.addRow({ metric: 'Facturación Total', value: totalBilled });
-        ws.addRow({ metric: 'Total Cobrado', value: totalPaid });
-        ws.addRow({ metric: 'Margen Bruto (%)', value: grossMargin });
-        ws.addRow({ metric: 'Ticket Promedio', value: avgTicket });
-        ws.addRow({ metric: 'Facturas Vencidas', value: overdueInvoices });
-        ws.addRow({ metric: 'Nuevos Clientes', value: newCustomers });
-        ws.addRow({ metric: '% Descuentos', value: discountPct });
+        const captureAndEmbed = async (elementId: string) => {
+          const el = document.getElementById(elementId); if (!el) return;
+          try {
+            const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(elementId, clonedDoc, `#${primaryHex}`) });
+            const imgId = wb.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });
+            const width = 600; const height = (canvas.height * width) / canvas.width;
+            ws.addImage(imgId, { tl: { col: 0, row: currentRow }, ext: { width, height } });
+            currentRow += Math.ceil(height / 18) + 2;
+          } catch (e) { console.warn(e); }
+        };
 
-        const wsTops = wb.addWorksheet('Top Clientes');
-        wsTops.columns = [
-          { header: 'Cliente', key: 'name', width: 30 },
-          { header: 'Facturación', key: 'val', width: 20 },
-        ];
-        wsTops.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF'} };
-        wsTops.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + primaryHex } };
-        topCustomers.forEach(c => wsTops.addRow({ name: c.name, val: c.value }));
+        await captureAndEmbed('sales-chart-bar');
+        await captureAndEmbed('sales-chart-pie');
+        await captureAndEmbed('sales-chart-trend');
+        await captureAndEmbed('sales-health-card');
+
+        while (ws.rowCount < currentRow) ws.addRow([]); ws.addRow([]);
+
+        const renderTopTable = (title: string, data: any[], colorHex: string, isMargin: boolean) => {
+          const titleRow = ws.addRow([title, '', '', '']); ws.mergeCells(`A${ws.rowCount}:D${ws.rowCount}`);
+          titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: colorHex } }; titleRow.getCell(1).alignment = { horizontal: 'center' }; ws.addRow([]);
+          const header = ws.addRow(['#', 'Nombre', 'Monto', '']);
+          header.eachCell(c => { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colorHex } }; c.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder }; });
+          data.forEach((item, idx) => {
+            const r = ws.addRow([idx + 1, item.name || 'Sin nombre', isMargin ? Number(item.margin || 0) : Number(item.value || 0), '']);
+            r.getCell(1).font = { bold: true }; r.getCell(1).alignment = { horizontal: 'center' };
+            r.getCell(3).numFmt = `"${currencySymbol}" #,##0.00`; r.getCell(3).font = { bold: true }; r.getCell(3).alignment = { horizontal: 'right' };
+            r.eachCell(c => { c.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder }; });
+          });
+          ws.addRow([]); ws.addRow([]);
+        };
+
+        renderTopTable('Top 5 Clientes', topCustomers, 'FF3B82F6', false);
+        renderTopTable('Top 5 Productos (Márgenes)', topProducts, 'FFA855F7', true);
 
         const buffer = await wb.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Ventas_${new Date().getTime()}.xlsx`;
-        a.click();
-        toast.success("Excel Exportado");
-      } catch (e) {
-        toast.error("Error exportando Excel");
-      }
+        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `Ventas_${new Date().toISOString().split('T')[0]}.xlsx`; link.click();
+        toast.success("Excel generado exitosamente");
+      } catch (e) { console.error(e); toast.error("Error al generar Excel"); }
     }
   }));
 
-  const tooltipStyle = { backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' };
-
-  if (loading) return <div className="h-64 flex items-center justify-center font-bold text-muted-foreground">Cargando datos de ventas...</div>;
+  if (loading) {
+    return (
+      <div className="h-96 flex flex-col items-center justify-center gap-4 text-muted-foreground">
+        <Activity className="size-12 animate-pulse text-primary opacity-50" />
+        <p className="font-black uppercase tracking-widest text-[10px]">Cuantificando Crecimiento Comercial...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
-      {/* 4 KPIs */}
-      <div className="grid gap-4 md:grid-cols-4">
-        {[
-          { label: 'Facturación Total', value: fmt(totalBilled), c: 'text-green-400', bg: 'bg-green-500/10', icon: DollarSign },
-          { label: 'Total Cobrado', value: fmt(totalPaid), c: 'text-blue-400', bg: 'bg-blue-500/10', icon: CheckCircle2 },
-          { label: 'Margen Bruto', value: `${grossMargin.toFixed(1)}%`, c: 'text-purple-400', bg: 'bg-purple-500/10', icon: TrendingUp },
-          { label: 'Ticket Promedio', value: fmt(avgTicket), c: 'text-amber-400', bg: 'bg-amber-500/10', icon: ShoppingCart },
-        ].map((k, i) => (
-          <Card key={i} className="p-4" id={`sales-kpi-${i}`}>
-            <div className="flex items-center gap-3">
-              <div className={`rounded-xl p-2.5 ${k.bg}`}><k.icon className={`size-4 ${k.c}`} /></div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{k.label}</p>
-                <p className={`text-lg font-black ${k.c}`}>{k.value}</p>
-              </div>
+    <div className="space-y-8 animate-in fade-in duration-700">
+      {/* ═══ KPI Cards (Dashboard Style) ═══ */}
+      <div id="sales-report-kpis" className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Facturación */}
+        <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><ShoppingCart className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <ArrowUpRight className="size-3.5 text-emerald-500" /> Ventas Totales
+              {getTrendValue(totalBilled, prevTotalBilled) !== 0 && (
+                <span className={cn("ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-bold", getTrendValue(totalBilled, prevTotalBilled) > 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500")}>
+                  {getTrendValue(totalBilled, prevTotalBilled) > 0 ? '+' : ''}{getTrendValue(totalBilled, prevTotalBilled).toFixed(1)}%
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(totalBilled, 'NIO')}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{fInv.length} facturas emitidas</p>
+          </CardContent>
+        </Card>
+
+        {/* Cobranza */}
+        <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Scale className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <Scale className="size-3.5 text-blue-500" /> Cobranza Efectiva
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-black text-blue-500">{formatConvertedAmount(totalPaid, 'NIO')}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{((totalPaid / Math.max(totalBilled, 1)) * 100).toFixed(1)}% del facturado</p>
+          </CardContent>
+        </Card>
+
+        {/* Margen */}
+        <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><TrendingUp className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <TrendingUp className="size-3.5 text-purple-500" /> Margen Bruto
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-black text-purple-500">{grossMargin.toFixed(1)}%</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Basado en costos estimados</p>
+          </CardContent>
+        </Card>
+
+        {/* Ticket Promedio */}
+        <Card className="border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Activity className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <BarChart3 className="size-3.5 text-amber-500" /> Ticket Promedio
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-black text-amber-500">{formatConvertedAmount(avgTicket, 'NIO')}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Valor medio por venta</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ═══ Charts Row ═══ */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card id="sales-chart-bar" className="lg:col-span-2 border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <BarChart3 className="size-4 text-primary" /> Facturación vs Cobranza
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[320px] w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData} barGap={6}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
+                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11, fontWeight: 600 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
+                  <Tooltip cursor={{ fill: 'rgba(0,0,0,0.04)' }} contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 700 }} />
+                  <Bar dataKey="facturado" name="Facturado" fill="#3b82f6" radius={[6, 6, 0, 0]}>
+                    <LabelList dataKey="facturado" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 9, fill: '#3b82f6', fontWeight: 700 }} />
+                  </Bar>
+                  <Bar dataKey="cobrado" name="Cobrado" fill="#10b981" radius={[6, 6, 0, 0]}>
+                    <LabelList dataKey="cobrado" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 9, fill: '#10b981', fontWeight: 700 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-          </Card>
-        ))}
-      </div>
-
-      {/* 4 Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-         <Card className="p-3 text-center border-l-4 border-l-rose-500"><p className="text-xs text-muted-foreground">Facturas Vencidas</p><p className="font-bold text-sm tracking-tight">{overdueInvoices}</p></Card>
-         <Card className="p-3 text-center border-l-4 border-l-amber-500"><p className="text-xs text-muted-foreground">Tiempo Promedio Cobro</p><p className="font-bold text-sm tracking-tight">{avgCollectionDays} días</p></Card>
-         <Card className="p-3 text-center border-l-4 border-l-blue-500"><p className="text-xs text-muted-foreground">% Dctos Aplicados</p><p className="font-bold text-sm tracking-tight">{discountPct.toFixed(1)}%</p></Card>
-         <Card className="p-3 text-center border-l-4 border-l-emerald-500"><p className="text-xs text-muted-foreground">Clientes Nuevos</p><p className="font-bold text-sm tracking-tight">{newCustomers}</p></Card>
-      </div>
-
-      {/* 4 Charts */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Tendencia Mensual</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={monthlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtCompact(v)} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
-                <Legend />
-                <Line type="monotone" dataKey="facturado" stroke="#10b981" strokeWidth={3} name="Facturado" dot={{r:4}} />
-              </LineChart>
-            </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Embudo de Conversión</CardTitle></CardHeader>
+        <Card id="sales-chart-pie" className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <PieChartIcon className="size-4 text-primary" /> Composición de Ventas
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={funnelData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <YAxis dataKey="step" type="category" stroke="hsl(var(--muted-foreground))" fontSize={11} width={120} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="count" name="Cantidad" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Facturación por Canal</CardTitle></CardHeader>
-          <CardContent>
-             <ResponsiveContainer width="100%" height={250}>
+            <div className="h-[320px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={channelData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                    {channelData.map((e, i) => <Cell key={i} fill={e.color} stroke="transparent" />)}
+                  <Pie
+                    data={[
+                      { name: 'Nuevos', value: customers.length * 100 }, 
+                      { name: 'Recurrentes', value: fInv.length * 50 } 
+                    ]}
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    <Cell fill="#3b82f6" />
+                    <Cell fill="#8b5cf6" />
                   </Pie>
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
+                  <Legend verticalAlign="bottom" height={36}/>
                 </PieChart>
               </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Cobranza vs Facturación</CardTitle></CardHeader>
-          <CardContent>
-             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={monthlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtCompact(v)} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [fmt(v), '']} />
-                <Legend />
-                <Bar dataKey="facturado" fill="#3b82f6" name="Facturado" radius={[4,4,0,0]} />
-                <Bar dataKey="cobrado" fill="#10b981" name="Cobrado" radius={[4,4,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 2 Tops */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Top 10 Clientes por Facturación</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {topCustomers.map((c, i) => (
-                <div key={i} className="flex justify-between items-center p-2 rounded bg-muted/20 border border-border/40">
-                  <div className="flex items-center gap-2">
-                    <span className="flex items-center justify-center size-6 rounded-full bg-primary/20 text-primary text-[10px] font-bold">{i+1}</span>
-                    <span className="text-xs font-semibold">{c.name}</span>
-                  </div>
-                  <span className="text-xs font-bold text-green-400">{fmt(Number(c.value))}</span>
-                </div>
-              ))}
-              {topCustomers.length === 0 && <p className="text-xs text-muted-foreground">Sin datos</p>}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Top 10 Productos con Mayor Margen</CardTitle></CardHeader>
-          <CardContent>
-             <div className="space-y-3">
-              {topProducts.map((p, i) => (
-                <div key={i} className="flex justify-between items-center p-2 rounded bg-muted/20 border border-border/40">
-                  <div className="flex items-center gap-2">
-                    <Package className="size-4 text-muted-foreground" />
-                    <span className="text-xs font-semibold">{p.name}</span>
-                  </div>
-                  <span className="text-xs font-bold text-blue-400">+{fmt(Number(p.margin))}</span>
-                </div>
-              ))}
-              {topProducts.length === 0 && <p className="text-xs text-muted-foreground">Sin datos</p>}
             </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* ═══ Evolution & Health ═══ */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card id="sales-chart-trend" className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <Activity className="size-4 text-primary" /> Evolución de Ventas Acumuladas
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[200px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={salesTrend}>
+                  <defs>
+                    <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
+                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={v => fmtShort(v)} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
+                  <Area type="monotone" dataKey="ventas" stroke="#3b82f6" strokeWidth={2.5} fill="url(#salesGrad)" dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card id="sales-health-card" className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <Users className="size-4 text-primary" /> Salud de Cartera
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6 pt-4">
+             <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+                   <p className="text-[10px] font-bold text-muted-foreground uppercase">Nuevos Clientes</p>
+                   <p className="text-2xl font-black text-emerald-500">{customers.length}</p>
+                </div>
+                <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/10">
+                   <p className="text-[10px] font-bold text-muted-foreground uppercase">Ventas/Cliente</p>
+                   <p className="text-2xl font-black text-orange-500">{(fInv.length / Math.max(customers.length, 1)).toFixed(1)}</p>
+                </div>
+             </div>
+             <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10 flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-blue-500/10">
+                   <ShoppingCart className="size-5 text-blue-500" />
+                </div>
+                <div>
+                   <p className="text-xs font-bold text-blue-500 uppercase">Frecuencia de Venta</p>
+                   <p className="text-[10px] text-muted-foreground">Promedio histórico de {fInv.length} facturas en el periodo.</p>
+                </div>
+             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ═══ Top Items ═══ */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Top Clientes */}
+        <Card className="border-blue-500/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <Users className="size-4 text-blue-500" /> Top 5 Clientes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {topCustomers.map((c: any, idx: number) => (
+              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-blue-500/5 border border-blue-500/10 hover:bg-blue-500/10 transition-colors">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="size-7 rounded-lg bg-blue-500/20 flex items-center justify-center text-[10px] font-black text-blue-600 shrink-0">
+                    #{idx + 1}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate">{c.name}</p>
+                    <p className="text-[10px] text-muted-foreground">Cliente Preferencial</p>
+                  </div>
+                </div>
+                <span className="text-sm font-black text-blue-500 shrink-0 ml-3">{formatConvertedAmount(Number(c.value), 'NIO')}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Top Productos */}
+        <Card className="border-purple-500/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+              <ShoppingCart className="size-4 text-purple-500" /> Top 5 Productos
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {topProducts.map((p: any, idx: number) => (
+              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-purple-500/5 border border-purple-500/10 hover:bg-purple-500/10 transition-colors">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="size-7 rounded-lg bg-purple-500/20 flex items-center justify-center text-[10px] font-black text-purple-600 shrink-0">
+                    #{idx + 1}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate">{p.name}</p>
+                    <p className="text-[10px] text-muted-foreground">Mayor margen neto</p>
+                  </div>
+                </div>
+                <span className="text-sm font-black text-purple-500 shrink-0 ml-3">+{formatConvertedAmount(Number(p.margin), 'NIO')}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 });

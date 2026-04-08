@@ -77,10 +77,10 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
   }, [activeSubModule]);
 
   const tabs = [
-    { id: 'tareas', label: 'Tareas', icon: ListTodo, color: 'text-blue-500' },
-    { id: 'eventos', label: 'Eventos', icon: CalendarDays, color: 'text-emerald-500' },
-    { id: 'recordatorios', label: 'Recordatorios', icon: Bell, color: 'text-amber-500' },
-    { id: 'bitacora', label: 'Bitácora', icon: Database, color: 'text-rose-500' }
+    { id: 'tareas', label: 'Tareas', icon: ListTodo, color: 'text-blue-500', module: 'ACTIVITIES_TASKS' },
+    { id: 'eventos', label: 'Eventos', icon: CalendarDays, color: 'text-emerald-500', module: 'ACTIVITIES_EVENTS' },
+    { id: 'recordatorios', label: 'Recordatorios', icon: Bell, color: 'text-amber-500', module: 'ACTIVITIES_REMINDERS' },
+    { id: 'bitacora', label: 'Bitácora', icon: Database, color: 'text-rose-500', module: 'ACTIVITIES_LOGS' }
   ];
 
   return (
@@ -108,7 +108,10 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
             if (onSubModuleChange) onSubModuleChange(val);
           }}>
             <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
-              {tabs.map((tab) => (
+              {tabs.map((tab) => {
+                const hasAccess = !user?.enabledModules || user.enabledModules.includes(tab.module);
+                if (!hasAccess) return null;
+                return (
                 <TabsTrigger 
                   key={tab.id} 
                   value={tab.id}
@@ -119,7 +122,8 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                   <tab.icon className={cn("size-4", activeTab === tab.id ? "" : tab.color)} />
                   <span className="hidden sm:inline">{tab.label}</span>
                 </TabsTrigger>
-              ))}
+                );
+              })}
             </TabsList>
             
             <AnimatePresence mode="wait">

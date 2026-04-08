@@ -10,14 +10,16 @@ import { FacturasLegalesView } from './documentos/FacturasLegalesView';
 import { ReportesView } from './documentos/ReportesView';
 import { ArchivosView } from './documentos/ArchivosView';
 import { contractsService, legalInvoicesService, reportsService, filesService } from '../services/documentos.service';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DocumentosPageProps {
   activeSubModule?: string;
 }
 
 export const DocumentosPage = ({ activeSubModule }: DocumentosPageProps) => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'archivos');
-  const [data, setData] = useState({
+  const [data, setData] = useState<any>({
     contratos: [],
     facturas: [],
     reportes: [],
@@ -53,10 +55,10 @@ export const DocumentosPage = ({ activeSubModule }: DocumentosPageProps) => {
   }, [activeSubModule]);
 
   const tabs = [
-    { id: 'archivos', label: 'Archivos', icon: HardDrive, color: 'text-blue-500' },
-    { id: 'contratos', label: 'Contratos', icon: Scale, color: 'text-emerald-500' },
-    { id: 'facturas', label: 'Facturas Legales', icon: FileText, color: 'text-amber-500' },
-    { id: 'reportes', label: 'Reportes', icon: FileBarChart, color: 'text-purple-500' }
+    { id: 'archivos', label: 'Archivos', icon: HardDrive, color: 'text-blue-500', module: 'DOCUMENTS_FILES' },
+    { id: 'contratos', label: 'Contratos', icon: Scale, color: 'text-emerald-500', module: 'DOCUMENTS_CONTRACTS' },
+    { id: 'facturas', label: 'Facturas Legales', icon: FileText, color: 'text-amber-500', module: 'DOCUMENTS_INVOICES' },
+    { id: 'reportes', label: 'Reportes', icon: FileBarChart, color: 'text-purple-500', module: 'DOCUMENTS_REPORTS' }
   ];
 
   return (
@@ -81,7 +83,10 @@ export const DocumentosPage = ({ activeSubModule }: DocumentosPageProps) => {
 
           <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
             <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
-              {tabs.map((tab) => (
+              {tabs.map((tab) => {
+                const hasAccess = !user?.enabledModules || user.enabledModules.includes(tab.module);
+                if (!hasAccess) return null;
+                return (
                 <TabsTrigger 
                   key={tab.id} 
                   value={tab.id}
@@ -92,7 +97,8 @@ export const DocumentosPage = ({ activeSubModule }: DocumentosPageProps) => {
                   <tab.icon className={cn("size-4", activeTab === tab.id ? "" : tab.color)} />
                   <span className="hidden sm:inline">{tab.label}</span>
                 </TabsTrigger>
-              ))}
+                );
+              })}
             </TabsList>
             
             <AnimatePresence mode="wait">

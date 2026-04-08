@@ -214,7 +214,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 
                 <div className="flex flex-col items-end gap-2">
                   <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Estado de Cuenta</p>
-                  <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 font-black">AL DÍA</Badge>
+                  <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 font-black">AL DÍA</Badge>
                 </div>
               </div>
             </CardContent>
@@ -238,18 +238,18 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               return (
                 <Card key={mod.id} className={cn(
                   "relative overflow-hidden transition-all duration-300 border-border/50 flex flex-col group",
-                  isMainActive ? "bg-emerald-500/5 border-emerald-500/20 shadow-md shadow-emerald-500/5" : "bg-card hover:border-primary/30"
+                  isMainActive ? "bg-primary/5 border-primary/20 shadow-md shadow-primary/5" : "bg-card hover:border-primary/30"
                 )}>
                   <CardContent className="p-6 flex-1 flex flex-col">
                     <div className="flex justify-between items-start mb-4">
                       <div className={cn(
                         "p-3 rounded-xl transition-colors",
-                        isMainActive ? "bg-emerald-500/20 text-emerald-500" : isPartial ? "bg-emerald-500/10 text-emerald-500/70" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+                        isMainActive ? "bg-primary/20 text-primary" : isPartial ? "bg-primary/10 text-primary/70" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
                       )}>
                         <Icon className="size-6" />
                       </div>
                       {isMainActive ? (
-                        <Badge className="bg-emerald-500 text-white border-none font-bold uppercase text-[10px] px-2 py-0.5">
+                        <Badge className="bg-primary text-primary-foreground border-none font-bold uppercase text-[10px] px-2 py-0.5">
                           <Check className="size-3 mr-1" /> Activo
                         </Badge>
                       ) : isMainPending ? (
@@ -257,7 +257,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                           <Clock className="size-3 mr-1" /> Pendiente
                         </Badge>
                       ) : isPartial ? (
-                        <Badge className="bg-emerald-500/10 text-emerald-500/70 border-emerald-500/20 font-bold uppercase text-[10px]">
+                        <Badge className="bg-primary/10 text-primary/70 border-primary/20 font-bold uppercase text-[10px]">
                           {activeSubmodulesCount} Activos
                         </Badge>
                       ) : null}
@@ -276,7 +276,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                           return (
                             <div key={sub.id} className="flex items-center justify-between group/sub">
                               <div className="flex items-center gap-2">
-                                <div className={cn("size-1.5 rounded-full", subActive ? "bg-emerald-500" : "bg-muted-foreground/30")} />
+                                <div className={cn("size-1.5 rounded-full", subActive ? "bg-primary" : "bg-muted-foreground/30")} />
                                 <span className={cn("text-xs font-medium", subActive ? "text-foreground" : "text-muted-foreground")}>
                                   {sub.label}
                                 </span>
