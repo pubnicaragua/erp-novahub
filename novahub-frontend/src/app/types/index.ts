@@ -559,6 +559,8 @@ export interface Income {
   category: string;
   description: string;
   reference?: string;
+  source?: string;
+  notes?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -588,6 +590,8 @@ export interface Expense {
   evidenceFileSize?: number;
   evidenceFileUrl?: string;
   reference?: string;
+  source?: string;
+  notes?: string;
   status: ExpenseStatus;
   createdAt: string;
   updatedAt: string;
@@ -613,6 +617,8 @@ export interface RecurringExpense {
   baseAmount?: number;
   category: string;
   description: string;
+  source?: string;
+  notes?: string;
   status: RecurringExpenseStatus;
   createdAt: string;
   updatedAt: string;
@@ -917,7 +923,7 @@ export interface Document {
 }
 
 export interface Task { id: string; title: string; description?: string; status: TaskStatus; priority: Priority; dueDate?: string; assignedTo?: string; createdAt: string; updatedAt: string; }
-export interface Event { id: string; title: string; description?: string; startDate: string; endDate: string; location?: string; attendees?: string[]; cost?: number; income?: number; expenseId?: string; incomeId?: string; createdAt: string; }
+export interface Event { id: string; title: string; description?: string; startDate: string; endDate: string; location?: string; attendees?: string[]; cost?: number; income?: number; currency?: string; expenseId?: string; incomeId?: string; createdAt: string; }
 export interface Reminder { id: string; title: string; description?: string; reminderDate: string; status: string; createdAt: string; }
 export interface ActivityLog { id: string; action: string; entity: string; entityId: string; userId: string; timestamp: string; details?: string; activityId?: string; fileUrl?: string; fileName?: string; }
 

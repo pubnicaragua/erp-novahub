@@ -73,7 +73,10 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
     setEditForm({ name: b.name, description: b.description || '', type: b.type, cost: b.cost ?? '', currency: b.currency || 'USD', employeeIds: existingEmployeeIds });
   };
 
-  const totalCost = benefits.reduce((sum: number, b: any) => sum + convertAmount(Number(b.cost) || 0, b.currency), 0);
+  const totalCost = benefits.reduce((sum: number, b: any) => {
+    const count = b.employeeBenefits?.length || b.assignments?.length || 0;
+    return sum + convertAmount((Number(b.cost) || 0) * count, b.currency || 'USD');
+  }, 0);
 
   return (
     <div className="space-y-6">
@@ -162,7 +165,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
       {/* Benefits Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {benefits.map((benefit: any) => {
-          const assignedCount = benefit._count?.benefitAssignments ?? benefit.assignments?.length ?? 0;
+          const assignedCount = benefit.employeeBenefits?.length ?? benefit.assignments?.length ?? benefit._count?.benefitAssignments ?? 0;
           const typeColor = BENEFIT_TYPE_COLORS[benefit.type] || BENEFIT_TYPE_COLORS.OTHER;
           const typeLabel = BENEFIT_TYPE_LABELS[benefit.type] || benefit.type;
           const isEditing = editingId === benefit.id;

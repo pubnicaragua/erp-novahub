@@ -165,18 +165,20 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
     { key: 'number', label: 'No. Recibo', type: 'text' as const, editable: false },
     { key: 'createdAt', label: 'Fecha Reg.', type: 'datetime' as const, editable: false },
     { key: 'source', label: 'Origen', type: 'text' as const, editable: true },
+    { key: 'description', label: 'Descripción', type: 'text' as const, editable: true },
     { key: 'category', label: 'Categoría', type: 'select' as const, editable: true },
     { key: 'amount', label: 'Monto', type: 'currency' as const, editable: true },
     { key: 'notes', label: 'Notas', type: 'text' as const, editable: true },
   ];
 
   const EXPENSE_COLUMNS = [
-    { key: 'number', label: 'Numero de gastos', type: 'text' as const, editable: false },
-    { key: 'createdAt', label: 'Fecha de registro', type: 'datetime' as const, editable: false },
-    { key: 'source', label: 'origen', type: 'text' as const, editable: true },
-    { key: 'description', label: 'Descripcion', type: 'text' as const, editable: true },
+    { key: 'number', label: 'No. Gasto', type: 'text' as const, editable: false },
+    { key: 'createdAt', label: 'Fecha Reg.', type: 'datetime' as const, editable: false },
+    { key: 'source', label: 'Origen', type: 'text' as const, editable: true },
+    { key: 'description', label: 'Descripción', type: 'text' as const, editable: true },
+    { key: 'category', label: 'Categoría', type: 'select' as const, editable: true },
     { key: 'amount', label: 'Monto', type: 'currency' as const, editable: true },
-    { key: 'category', label: 'Categoria', type: 'select' as const, editable: true },
+    { key: 'notes', label: 'Notas', type: 'text' as const, editable: true },
   ];
 
   const RECURRING_COLUMNS = [
@@ -239,6 +241,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
 
       const newItem = {
         source: 'Nuevo Ingreso',
+        description: '',
         amount: 0,
         date: new Date().toISOString(),
         accountId: defaultAccount.id,
@@ -260,8 +263,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
       const defaultAccount = await ensureDefaultAccount('EXPENSE');
 
       const newItem = {
-        description: 'Nuevo Gasto',
         source: 'Manual',
+        description: 'Nuevo Gasto',
         category: 'OTROS',
         amount: 0,
         date: new Date().toISOString(),
@@ -269,6 +272,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
         currency: 'NIO' as any,
         exchangeRate: globalRate,
         status: 'PENDING' as any,
+        notes: '',
       };
       const res = await expensesService.create(newItem);
       setExpenses([res, ...expenses]);

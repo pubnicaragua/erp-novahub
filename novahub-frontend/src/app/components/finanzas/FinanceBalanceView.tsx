@@ -423,31 +423,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
       });
       currentY += boxH + 5;
 
-      // Second row of detail KPIs
-      const kpis2: { label: string; value: string; detail: string; color: number[] }[] = [
-        { label: 'Prom. Ingreso', value: fmtNum(fIncomes.length > 0 ? totalIncome / fIncomes.length : 0), detail: 'por transacción', color: [16, 185, 129] },
-        { label: 'Prom. Gasto', value: fmtNum(fExpenses.length > 0 ? totalExpense / fExpenses.length : 0), detail: 'por transacción', color: [239, 68, 68] },
-        { label: 'Ing. Recurrente/ciclo', value: fmtNum(totalRecInc), detail: `${recIncActive.length} fuentes`, color: [59, 130, 246] },
-        { label: 'Gto. Recurrente/ciclo', value: fmtNum(totalRecExp), detail: `${recExpActive.length} compromisos`, color: [249, 115, 22] },
-      ];
-      checkPage(boxH + 5);
-      kpis2.forEach((kpi, idx) => {
-        const x = marginX + idx * (boxW + 4);
-        doc.setFillColor(kpi.color[0], kpi.color[1], kpi.color[2]);
-        doc.roundedRect(x, currentY, boxW, boxH, 3, 3, 'F');
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(255, 255, 255);
-        doc.text(kpi.label.toUpperCase(), x + boxW / 2, currentY + 6, { align: 'center' });
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text(kpi.value, x + boxW / 2, currentY + 13, { align: 'center' });
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(255, 255, 255);
-        doc.text(kpi.detail, x + boxW / 2, currentY + 18.5, { align: 'center' });
-      });
-      currentY += boxH + 10;
+
 
       // ── Monthly Chart as image ──
       const chartEl1 = document.getElementById('balance-monthly-chart');
@@ -618,6 +594,55 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         currentY += 12;
       }
 
+      // ── Últimas Transacciones (PDF) ──
+      if ((viewType === 'general' || viewType === 'solo-ingresos' || viewType === 'solo-gastos') && (lastIncomes.length > 0 || lastExpenses.length > 0)) {
+        checkPage(40);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(60, 60, 60);
+        doc.text('Últimas Transacciones', marginX, currentY);
+        currentY += 6;
+
+        if ((viewType === 'general' || viewType === 'solo-ingresos') && lastIncomes.length > 0) {
+          doc.setFontSize(9);
+          doc.setTextColor(16, 185, 129);
+          doc.text('Últimos Ingresos', marginX, currentY);
+          currentY += 4;
+          lastIncomes.forEach((inc:any) => {
+            checkPage(6);
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(60, 60, 60);
+            doc.text(`${new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI')} - ${(inc.source || inc.notes || 'Ingreso').substring(0, 45)}`, marginX, currentY);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(16, 185, 129);
+            doc.text(`+${fmtNum(cv(inc))}`, marginX + contentWidth - 5, currentY, { align: 'right' });
+            currentY += 5;
+          });
+          currentY += 4;
+        }
+
+        if ((viewType === 'general' || viewType === 'solo-gastos') && lastExpenses.length > 0) {
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(244, 63, 94);
+          doc.text('Últimos Gastos', marginX, currentY);
+          currentY += 4;
+          lastExpenses.forEach((exp:any) => {
+            checkPage(6);
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(60, 60, 60);
+            doc.text(`${new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI')} - ${(exp.description || 'Gasto').substring(0, 45)}`, marginX, currentY);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(244, 63, 94);
+            doc.text(`-${fmtNum(cv(exp))}`, marginX + contentWidth - 5, currentY, { align: 'right' });
+            currentY += 5;
+          });
+          currentY += 4;
+        }
+      }
+
       doc.save(`Balance_General_${now.toISOString().split('T')[0]}.pdf`);
       toast.success("PDF exportado exitosamente");
     } catch(e) {
@@ -637,50 +662,49 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
       const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
       const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
 
-      // ═══ Sheet 1: Reporte Visual (images like PDF) ═══
-      const ws = wb.addWorksheet('Reporte Visual');
-      // Wide columns to fit images
-      ws.getColumn(1).width = 20;
-      ws.getColumn(2).width = 20;
-      ws.getColumn(3).width = 20;
-      ws.getColumn(4).width = 20;
-      ws.getColumn(5).width = 20;
+      const ws = wb.addWorksheet('Balance General');
+      // Set column widths for a unified 4-column layout
+      ws.getColumn(1).width = 25;
+      ws.getColumn(2).width = 25;
+      ws.getColumn(3).width = 25;
+      ws.getColumn(4).width = 25;
 
       let currentRow = 1;
 
-      // Logo
+      // ── Logo ──
       if (logoUrl) {
          const base64Logo = await getBase64Image(logoUrl);
          if (base64Logo) {
             const logoId = wb.addImage({ base64: base64Logo, extension: 'png' });
-            ws.addImage(logoId, { tl: { col: 1.5, row: 0 }, ext: { width: 100, height: 100 } });
+            ws.addImage(logoId, { tl: { col: 1.5, row: 0 }, ext: { width: 80, height: 80 } });
             currentRow = 6;
          }
       }
 
-      // Header text
-      ws.mergeCells(`A${currentRow}:E${currentRow}`);
+      // ── Encabezado ──
+      ws.mergeCells(`A${currentRow}:D${currentRow}`);
       const cellName = ws.getCell(`A${currentRow}`);
       cellName.value = companyName;
-      cellName.font = { size: 18, bold: true, color: { argb: `FF${hexColor}` } };
+      cellName.font = { size: 16, bold: true, color: { argb: `FF${hexColor}` } };
       cellName.alignment = { horizontal: 'center' };
       currentRow++;
 
-      ws.mergeCells(`A${currentRow}:E${currentRow}`);
+      ws.mergeCells(`A${currentRow}:D${currentRow}`);
       const cellTitle = ws.getCell(`A${currentRow}`);
       cellTitle.value = `Balance General - ${viewType.toUpperCase()}`;
       cellTitle.font = { size: 13, bold: true };
       cellTitle.alignment = { horizontal: 'center' };
       currentRow++;
 
-      ws.mergeCells(`A${currentRow}:E${currentRow}`);
+      ws.mergeCells(`A${currentRow}:D${currentRow}`);
       const cellCurrency = ws.getCell(`A${currentRow}`);
-      cellCurrency.value = `Moneda: ${currencyLabel} (${sym})  |  ${new Date().toLocaleDateString('es-NI')}`;
+      const now = new Date();
+      cellCurrency.value = `Generado: ${now.toLocaleDateString('es-NI')} ${now.toLocaleTimeString('es-NI')}  |  Moneda: ${currencyLabel}`;
       cellCurrency.font = { size: 10, italic: true, color: { argb: 'FF888888' } };
       cellCurrency.alignment = { horizontal: 'center' };
       currentRow += 2;
 
-      // ── KPI boxes (native Excel, always ALL 8 metrics like PDF) ──
+      // ── KPIs ──
       const kpiBoxes: { label: string; value: string; detail: string; bgColor: string }[] = [
         { label: 'TOTAL INGRESOS', value: fmtNum(totalIncome), detail: `${fIncomes.length} registros`, bgColor: 'FF10B981' },
         { label: 'TOTAL GASTOS', value: fmtNum(totalExpense), detail: `${fExpenses.length} registros`, bgColor: 'FFF43F5E' },
@@ -688,16 +712,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         { label: 'RECURRENTES ACTIVOS', value: `+${fmtNum(totalRecInc)} / -${fmtNum(totalRecExp)}`, detail: `${recIncActive.length} ing. · ${recExpActive.length} gto.`, bgColor: 'FFA855F7' },
       ];
 
-      const kpiBoxes2: { label: string; value: string; detail: string; bgColor: string }[] = [
-        { label: 'PROM. INGRESO', value: fmtNum(fIncomes.length > 0 ? totalIncome / fIncomes.length : 0), detail: 'por transacción', bgColor: 'FF10B981' },
-        { label: 'PROM. GASTO', value: fmtNum(fExpenses.length > 0 ? totalExpense / fExpenses.length : 0), detail: 'por transacción', bgColor: 'FFEF4444' },
-        { label: 'ING. RECURRENTE/CICLO', value: fmtNum(totalRecInc), detail: `${recIncActive.length} fuentes`, bgColor: 'FF3B82F6' },
-        { label: 'GTO. RECURRENTE/CICLO', value: fmtNum(totalRecExp), detail: `${recExpActive.length} compromisos`, bgColor: 'FFF97316' },
-      ];
-
-      // Render KPI row helper
       const renderKpiBoxRow = (boxes: typeof kpiBoxes) => {
-        // Label row
         ws.getRow(currentRow).height = 18;
         boxes.forEach((kpi, idx) => {
           const cell = ws.getCell(currentRow, idx + 1);
@@ -705,10 +720,9 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
           cell.font = { size: 8, bold: true, color: { argb: 'FFFFFFFF' } };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } };
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
-          cell.border = { top: { style: 'thin', color: { argb: kpi.bgColor } }, left: { style: 'thin', color: { argb: 'FFFFFFFF' } } };
+          cell.border = { top: { style: 'thin', color: { argb: kpi.bgColor } }, left: { style: 'thin', color: { argb: 'FFFFFFFF' } }, right: { style: 'thin', color: { argb: 'FFFFFFFF' } } };
         });
         currentRow++;
-        // Value row
         ws.getRow(currentRow).height = 28;
         boxes.forEach((kpi, idx) => {
           const cell = ws.getCell(currentRow, idx + 1);
@@ -716,10 +730,9 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
           cell.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } };
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
-          cell.border = { left: { style: 'thin', color: { argb: 'FFFFFFFF' } } };
+          cell.border = { left: { style: 'thin', color: { argb: 'FFFFFFFF' } }, right: { style: 'thin', color: { argb: 'FFFFFFFF' } } };
         });
         currentRow++;
-        // Detail row
         ws.getRow(currentRow).height = 16;
         boxes.forEach((kpi, idx) => {
           const cell = ws.getCell(currentRow, idx + 1);
@@ -727,20 +740,16 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
           cell.font = { size: 8, color: { argb: 'FFFFFFFF' } };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: kpi.bgColor } };
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
-          cell.border = { bottom: { style: 'thin', color: { argb: kpi.bgColor } }, left: { style: 'thin', color: { argb: 'FFFFFFFF' } } };
+          cell.border = { bottom: { style: 'thin', color: { argb: kpi.bgColor } }, left: { style: 'thin', color: { argb: 'FFFFFFFF' } }, right: { style: 'thin', color: { argb: 'FFFFFFFF' } } };
         });
         currentRow++;
       };
 
-      // KPI Row 1
       renderKpiBoxRow(kpiBoxes);
-      currentRow++; // spacing
-      // KPI Row 2
-      renderKpiBoxRow(kpiBoxes2);
-      currentRow += 2; // spacing
+      currentRow += 2;
 
-      // Helper to capture a DOM element and embed it as image
-      const captureAndEmbed = async (elementId: string, imgWidthPx: number = 700) => {
+      // ── Gráfico Mensual ──
+      const captureAndEmbed = async (elementId: string, imgWidthPx: number) => {
         const el = document.getElementById(elementId);
         if (!el) return;
         try {
@@ -752,125 +761,188 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
           const imgData = canvas.toDataURL('image/png');
           const imgId = wb.addImage({ base64: imgData, extension: 'png' });
           const imgHeight = (canvas.height * imgWidthPx) / canvas.width;
-          ws.addImage(imgId, {
-            tl: { col: 0, row: currentRow },
-            ext: { width: imgWidthPx, height: imgHeight },
-          });
+          ws.addImage(imgId, { tl: { col: 0, row: currentRow }, ext: { width: imgWidthPx, height: imgHeight } });
           currentRow += Math.ceil(imgHeight / 18) + 2;
         } catch (e) {
           console.warn(`Image capture failed for #${elementId}`, e);
         }
       };
 
-      // Capture KPIs + charts + other visual sections as images
-      await captureAndEmbed('balance-kpis', 700);
       await captureAndEmbed('balance-monthly-chart', 700);
-      await captureAndEmbed('balance-category-section', 700);
-      await captureAndEmbed('balance-health-section', 700);
-      await captureAndEmbed('balance-transactions-section', 700);
+      await captureAndEmbed('balance-category-chart', 700);
 
-      // ═══ Sheet 2: Métricas (data) ═══
-      const wsMetrics = wb.addWorksheet('Métricas');
-      wsMetrics.getColumn(1).width = 35;
-      wsMetrics.getColumn(2).width = 25;
-      wsMetrics.getColumn(3).width = 25;
-
-      const mHeader = wsMetrics.addRow(['Métrica', 'Valor', 'Detalle']);
-      mHeader.eachCell((cell) => {
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${hexColor}` } };
-        cell.alignment = { horizontal: 'center' };
-      });
-
-      const addMetricRow = (label: string, value: string, detail: string, colorArgb: string) => {
-        const r = wsMetrics.addRow([label, value, detail]);
-        r.getCell(1).font = { bold: true, size: 11 };
-        r.getCell(2).font = { bold: true, size: 12, color: { argb: colorArgb } };
-        r.getCell(2).alignment = { horizontal: 'right' };
-        r.getCell(3).font = { size: 9, italic: true, color: { argb: 'FF888888' } };
-        r.eachCell((cell) => {
-          cell.border = { bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } } };
-        });
-      };
-
-      addMetricRow('Total Ingresos', fmtNum(totalIncome), `${fIncomes.length} registros`, 'FF10B981');
-      addMetricRow('Total Gastos', fmtNum(totalExpense), `${fExpenses.length} registros`, 'FFEF4444');
-      addMetricRow('Balance Neto', fmtNum(balance), `Margen: ${margin}%`, balance >= 0 ? 'FF10B981' : 'FFEF4444');
-      addMetricRow('Ingresos Recurrentes (ciclo)', fmtNum(totalRecInc), `${recIncActive.length} fuentes activas`, 'FF10B981');
-      addMetricRow('Gastos Recurrentes (ciclo)', fmtNum(totalRecExp), `${recExpActive.length} compromisos activos`, 'FFEF4444');
-      addMetricRow('Balance Recurrente (ciclo)', fmtNum(totalRecInc - totalRecExp), '', (totalRecInc - totalRecExp) >= 0 ? 'FF10B981' : 'FFEF4444');
-      addMetricRow('Prom. Ingreso', fmtNum(fIncomes.length > 0 ? totalIncome / fIncomes.length : 0), 'por transacción', 'FF10B981');
-      addMetricRow('Prom. Gasto', fmtNum(fExpenses.length > 0 ? totalExpense / fExpenses.length : 0), 'por transacción', 'FFEF4444');
-
-      // ═══ Sheet 3: Categorías ═══
+      // ── Distribución por Categoría ──
       if (categoryData.length > 0) {
-        const wsCat = wb.addWorksheet('Categorías');
+        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        const cTitle = ws.getCell(`A${currentRow}`);
+        cTitle.value = 'Distribución por Categoría';
+        cTitle.font = { size: 12, bold: true, color: { argb: 'FF333333' } };
+        currentRow++;
+
+        const hRow = ws.addRow(['Categoría', '', 'Monto', '% del Total']);
+        ws.mergeCells(`A${currentRow}:B${currentRow}`);
+        hRow.eachCell((cell, i) => {
+          if (i !== 2) {
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${hexColor}` } };
+            cell.alignment = { horizontal: 'center' };
+          }
+        });
+        hRow.getCell(3).alignment = { horizontal: 'right' };
+        hRow.getCell(4).alignment = { horizontal: 'center' };
+        currentRow++;
+
         const catTotal = categoryData.reduce((a, c) => a + c.value, 0);
-        const catHeaderRow = wsCat.addRow(['Categoría', 'Monto', '% del Total']);
-        catHeaderRow.eachCell((cell) => {
-          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${hexColor}` } };
-          cell.alignment = { horizontal: 'center' };
+        [...categoryData].sort((a,b) => b.value - a.value).forEach((cat) => {
+          const r = ws.addRow([cat.name, '', Math.round(cat.value * 100) / 100, Math.round((catTotal>0?(cat.value/catTotal)*100:0) * 10) / 10]);
+          ws.mergeCells(`A${currentRow}:B${currentRow}`);
+          r.getCell(1).font = { size: 10 };
+          r.getCell(3).font = { size: 10, bold: true };
+          r.getCell(3).numFmt = '#,##0.00';
+          r.getCell(3).alignment = { horizontal: 'right' };
+          r.getCell(4).font = { size: 10, color: { argb: 'FF888888' } };
+          r.getCell(4).numFmt = '0.0';
+          r.getCell(4).alignment = { horizontal: 'center' };
+          r.eachCell(cell => { cell.border = { bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } } }; });
+          currentRow++;
         });
-        wsCat.getColumn(1).width = 30;
-        wsCat.getColumn(2).width = 22;
-        wsCat.getColumn(3).width = 15;
-
-        [...categoryData].sort((a, b) => b.value - a.value).forEach((cat) => {
-          const pct = catTotal > 0 ? ((cat.value / catTotal) * 100) : 0;
-          const r = wsCat.addRow([cat.name, Math.round(cat.value * 100) / 100, Math.round(pct * 10) / 10]);
-          r.getCell(2).numFmt = '#,##0.00';
-          r.getCell(2).alignment = { horizontal: 'right' };
-          r.getCell(3).numFmt = '0.0';
-          r.getCell(3).alignment = { horizontal: 'center' };
-          r.eachCell((cell) => { cell.border = { bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } } }; });
-        });
-
-        const catTotalRow = wsCat.addRow(['TOTAL', Math.round(catTotal * 100) / 100, 100]);
-        catTotalRow.eachCell((cell, colNumber) => {
-          cell.font = { bold: true, size: 11 };
-          if (colNumber === 2) { cell.numFmt = '#,##0.00'; cell.alignment = { horizontal: 'right' }; }
-          if (colNumber === 3) { cell.numFmt = '0.0'; cell.alignment = { horizontal: 'center' }; }
-          cell.border = { top: { style: 'medium', color: { argb: `FF${hexColor}` } } };
-        });
+        currentRow++;
       }
 
-      // ═══ Sheet 4: Detalle Mensual (ÚLTIMO) ═══
-      if (monthlyData.length > 0) {
-        const wsMon = wb.addWorksheet('Detalle Mensual');
-        const monHeaders = ['Mes', 'Ingresos', 'Gastos', 'Balance'];
+      // ── Salud Financiera ──
+      ws.mergeCells(`A${currentRow}:D${currentRow}`);
+      const hTitle = ws.getCell(`A${currentRow}`);
+      hTitle.value = 'Salud Financiera';
+      hTitle.font = { size: 12, bold: true, color: { argb: 'FF333333' } };
+      currentRow++;
 
-        const headerRow = wsMon.addRow(monHeaders);
-        headerRow.eachCell((cell) => {
-          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      const totalFlow = totalIncome + totalExpense;
+      const incPct = totalFlow > 0 ? ((totalIncome / totalFlow) * 100).toFixed(1) : '50.0';
+      const expPct = totalFlow > 0 ? ((totalExpense / totalFlow) * 100).toFixed(1) : '50.0';
+
+      const healthRow1 = ws.addRow([`Ingresos: ${incPct}%`, '', `Gastos: ${expPct}%`, '']);
+      ws.mergeCells(`A${currentRow}:B${currentRow}`);
+      ws.mergeCells(`C${currentRow}:D${currentRow}`);
+      healthRow1.getCell(1).font = { bold: true, color: { argb: 'FF10B981' } };
+      healthRow1.getCell(3).font = { bold: true, color: { argb: 'FFF43F5E' } };
+      healthRow1.getCell(3).alignment = { horizontal: 'right' };
+      currentRow++;
+
+      const healthRow2 = ws.addRow([`Ingresos Recurrentes: ${recIncActive.length} fuentes · ${fmtNum(totalRecInc)}/ciclo`]);
+      ws.mergeCells(`A${currentRow}:D${currentRow}`);
+      healthRow2.getCell(1).font = { size: 10, color: { argb: 'FF333333' } };
+      currentRow++;
+
+      const healthRow3 = ws.addRow([`Gastos Recurrentes: ${recExpActive.length} compromisos · ${fmtNum(totalRecExp)}/ciclo`]);
+      ws.mergeCells(`A${currentRow}:D${currentRow}`);
+      healthRow3.getCell(1).font = { size: 10, color: { argb: 'FF333333' } };
+      currentRow += 2;
+
+      // ── Detalle Mensual ──
+      if (monthlyData.length > 0) {
+        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        const mTitle = ws.getCell(`A${currentRow}`);
+        mTitle.value = 'Detalle Mensual';
+        mTitle.font = { size: 12, bold: true, color: { argb: 'FF333333' } };
+        currentRow++;
+
+        const mHead = ws.addRow(['Mes', 'Ingresos', 'Gastos', 'Balance']);
+        mHead.eachCell((cell) => {
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${hexColor}` } };
           cell.alignment = { horizontal: 'center' };
         });
+        currentRow++;
 
-        wsMon.getColumn(1).width = 20;
-        for (let c = 2; c <= monHeaders.length; c++) wsMon.getColumn(c).width = 22;
-
-        monthlyData.forEach((row) => {
-          const rowData: (string | number)[] = [row.month, Math.round(row.ingresos * 100) / 100, Math.round(row.gastos * 100) / 100, Math.round((row.ingresos - row.gastos) * 100) / 100];
-          const r = wsMon.addRow(rowData);
-          r.eachCell((cell, colNumber) => {
-            if (colNumber > 1) {
-              cell.numFmt = '#,##0.00';
-              cell.alignment = { horizontal: 'right' };
-            }
-            cell.border = { bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } } };
-          });
+        monthlyData.forEach(row => {
+          const r = ws.addRow([row.month, Math.round(row.ingresos*100)/100, Math.round(row.gastos*100)/100, Math.round((row.ingresos-row.gastos)*100)/100]);
+          r.getCell(1).font = { size: 10 };
+          r.getCell(2).font = { size: 10, color: { argb: 'FF10B981' } }; r.getCell(2).numFmt = '#,##0.00'; r.getCell(2).alignment = { horizontal: 'right' };
+          r.getCell(3).font = { size: 10, color: { argb: 'FFF43F5E' } }; r.getCell(3).numFmt = '#,##0.00'; r.getCell(3).alignment = { horizontal: 'right' };
+          const bal = row.ingresos - row.gastos;
+          r.getCell(4).font = { size: 10, color: { argb: bal >= 0 ? 'FF10B981' : 'FFF43F5E' } }; r.getCell(4).numFmt = '#,##0.00'; r.getCell(4).alignment = { horizontal: 'right' };
+          r.eachCell(cell => { cell.border = { bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } } }; });
+          currentRow++;
         });
 
         const totInc = monthlyData.reduce((a, r) => a + r.ingresos, 0);
         const totExp = monthlyData.reduce((a, r) => a + r.gastos, 0);
-        const totRow: (string | number)[] = ['TOTAL', Math.round(totInc * 100) / 100, Math.round(totExp * 100) / 100, Math.round((totInc - totExp) * 100) / 100];
-        const totalR = wsMon.addRow(totRow);
-        totalR.eachCell((cell, colNumber) => {
-          cell.font = { bold: true, size: 11 };
-          if (colNumber > 1) { cell.numFmt = '#,##0.00'; cell.alignment = { horizontal: 'right' }; }
-          cell.border = { top: { style: 'medium', color: { argb: `FF${hexColor}` } } };
+        const balTot = totInc - totExp;
+        const totR = ws.addRow(['TOTAL', Math.round(totInc*100)/100, Math.round(totExp*100)/100, Math.round(balTot*100)/100]);
+        totR.getCell(1).font = { size: 10, bold: true };
+        totR.getCell(2).font = { size: 10, bold: true, color: { argb: 'FF10B981' } }; totR.getCell(2).numFmt = '#,##0.00'; totR.getCell(2).alignment = { horizontal: 'right' };
+        totR.getCell(3).font = { size: 10, bold: true, color: { argb: 'FFF43F5E' } }; totR.getCell(3).numFmt = '#,##0.00'; totR.getCell(3).alignment = { horizontal: 'right' };
+        totR.getCell(4).font = { size: 10, bold: true, color: { argb: balTot >= 0 ? 'FF10B981' : 'FFF43F5E' } }; totR.getCell(4).numFmt = '#,##0.00'; totR.getCell(4).alignment = { horizontal: 'right' };
+        totR.eachCell(cell => { cell.border = { top: { style: 'medium', color: { argb: `FF${hexColor}` } } }; });
+      }
+
+      // ── Últimas Transacciones (Excel) ──
+      if ((viewType === 'general' || viewType === 'solo-ingresos') && lastIncomes.length > 0) {
+        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        const tTitle = ws.getCell(`A${currentRow}`);
+        tTitle.value = 'Últimos Ingresos';
+        tTitle.font = { size: 12, bold: true, color: { argb: 'FF10B981' } };
+        currentRow++;
+
+        const tHead = ws.addRow(['Fecha', 'Descripción', 'Categoría', 'Monto']);
+        tHead.eachCell((cell) => {
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
+          cell.alignment = { horizontal: 'center' };
         });
+        currentRow++;
+
+        lastIncomes.forEach((inc:any) => {
+          const r = ws.addRow([
+            new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI'),
+            inc.source || inc.notes || 'Ingreso',
+            inc.category || 'Sin categoría',
+            Math.round(cv(inc) * 100) / 100
+          ]);
+          r.getCell(1).font = { size: 10 }; r.getCell(1).alignment = { horizontal: 'center' };
+          r.getCell(2).font = { size: 10 };
+          r.getCell(3).font = { size: 10, color: { argb: 'FF888888' } };
+          r.getCell(4).font = { size: 10, bold: true, color: { argb: 'FF10B981' } };
+          r.getCell(4).numFmt = '#,##0.00';
+          r.getCell(4).alignment = { horizontal: 'right' };
+          r.eachCell(cell => { cell.border = { bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } } }; });
+          currentRow++;
+        });
+        currentRow++;
+      }
+
+      if ((viewType === 'general' || viewType === 'solo-gastos') && lastExpenses.length > 0) {
+        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        const tTitle = ws.getCell(`A${currentRow}`);
+        tTitle.value = 'Últimos Gastos';
+        tTitle.font = { size: 12, bold: true, color: { argb: 'FFF43F5E' } };
+        currentRow++;
+
+        const tHead = ws.addRow(['Fecha', 'Descripción', 'Categoría', 'Monto']);
+        tHead.eachCell((cell) => {
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF43F5E' } };
+          cell.alignment = { horizontal: 'center' };
+        });
+        currentRow++;
+
+        lastExpenses.forEach((exp:any) => {
+          const r = ws.addRow([
+            new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI'),
+            exp.description || 'Gasto',
+            exp.category || 'Sin categoría',
+            Math.round(cv(exp) * 100) / 100
+          ]);
+          r.getCell(1).font = { size: 10 }; r.getCell(1).alignment = { horizontal: 'center' };
+          r.getCell(2).font = { size: 10 };
+          r.getCell(3).font = { size: 10, color: { argb: 'FF888888' } };
+          r.getCell(4).font = { size: 10, bold: true, color: { argb: 'FFF43F5E' } };
+          r.getCell(4).numFmt = '#,##0.00';
+          r.getCell(4).alignment = { horizontal: 'right' };
+          r.eachCell(cell => { cell.border = { bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } } }; });
+          currentRow++;
+        });
+        currentRow++;
       }
 
       const buffer = await wb.xlsx.writeBuffer();
@@ -878,7 +950,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Balance_General_${new Date().toISOString().split('T')[0]}.xlsx`;
+      a.download = `Balance_General_${now.toISOString().split('T')[0]}.xlsx`;
       a.click();
       toast.success("Excel exportado exitosamente");
     } catch(e) {

@@ -188,12 +188,18 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                       checked={newTraining.employeeIds.includes(emp.id)}
                       onChange={(e) => {
                         const isChecked = e.target.checked;
-                        setNewTraining(prev => ({
-                          ...prev,
-                          employeeIds: isChecked 
-                            ? [...prev.employeeIds, emp.id]
-                            : prev.employeeIds.filter(id => id !== emp.id)
-                        }));
+                        setNewTraining(prev => {
+                          if (isChecked && prev.employeeIds.length >= prev.capacity) {
+                            toast.error(`La capacidad máxima de la capacitación es de ${prev.capacity} empleados.`);
+                            return prev;
+                          }
+                          return {
+                            ...prev,
+                            employeeIds: isChecked 
+                              ? [...prev.employeeIds, emp.id]
+                              : prev.employeeIds.filter(id => id !== emp.id)
+                          };
+                        });
                       }}
                     />
                     <span className="text-sm">{emp.firstName} {emp.lastName}</span>

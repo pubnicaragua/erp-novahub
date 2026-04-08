@@ -65,8 +65,8 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
            amount: 0,
             currency: displayCurrency,
            exchangeRate: globalRate,
-           status: 'active',
-           category: 'OPERACIONAL'
+            status: 'active',
+            category: 'OPERACIONAL',
          });
       } else {
          const found = data.find(x => x.id === editingId);
@@ -81,6 +81,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
 
   const columns: ColumnDef<RecurringExpense>[] = [
     { key: 'description', header: 'Descripción', editable: canPerform('compras', 'edit') },
+
     { key: 'amount',      header: 'Monto',       width: '130px',
       render: (val, row) => (
         <span className="font-black tabular-nums text-rose-500">
@@ -245,6 +246,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
                     placeholder="OPERACIONAL" 
                   />
                 </div>
+
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
                   <select 
