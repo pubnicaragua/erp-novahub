@@ -131,7 +131,18 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
   const handleAddRow = () => {
     const newRow = {
       tempId: `new-${Date.now()}`,
-      employeeNumber: `EMP${String(employees.length + newRows.length + 1).padStart(4, '0')}`,
+      employeeNumber: (() => {
+        const existing = employees.map((e: any) => {
+          const match = e.employeeNumber?.match(/\d+$/);
+          return match ? parseInt(match[0], 10) : 0;
+        });
+        const pending = newRows.map((r: any) => {
+          const match = r.employeeNumber?.match(/\d+$/);
+          return match ? parseInt(match[0], 10) : 0;
+        });
+        const maxNum = Math.max(0, ...existing, ...pending);
+        return `EMP${String(maxNum + 1).padStart(4, '0')}`;
+      })(),
       firstName: '',
       lastName: '',
       email: '',

@@ -14,9 +14,11 @@ interface FinanceDashboardViewProps {
   incomes: any[];
   expenses: any[];
   recurringExpenses: any[];
+  recurringIncomes?: any[];
+  accounts?: any[];
 }
 
-export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: FinanceDashboardViewProps) {
+export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes = [], accounts = [] }: FinanceDashboardViewProps) {
   const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
 
@@ -35,6 +37,22 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: F
   const avgIncome = incomes.length > 0 ? totalIncomes / incomes.length : 0;
   const avgExpense = expenses.length > 0 ? totalExpenses / expenses.length : 0;
   const savingsRatio = totalIncomes > 0 ? ((netUtility / totalIncomes) * 100) : 0;
+
+  // New metrics
+  const totalRecurringIncomes = recurringIncomes.reduce(
+    (acc, r) => acc + convertAmount(r.amount || 0, r.currency, r.exchangeRate), 0
+  );
+  const netRecurringFlow = totalRecurringIncomes - totalRecurring;
+  const expenseToIncomeRatio = totalIncomes > 0 ? ((totalExpenses / totalIncomes) * 100) : 0;
+
+  // Accounts summary
+  const accountsByType = accounts.reduce((acc: Record<string, { count: number; total: number }>, a: any) => {
+    const type = String(a.type || 'OTHER').toUpperCase();
+    if (!acc[type]) acc[type] = { count: 0, total: 0 };
+    acc[type].count++;
+    acc[type].total += Number(a.balance || 0);
+    return acc;
+  }, {} as Record<string, { count: number; total: number }>);
 
   // ─── Expense by Category (Pie Chart) ──────────
   const pieData = useMemo(() => {
@@ -121,7 +139,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: F
       </div>
 
       {/* ═══ KPI Cards ═══ */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {/* Total Ingresos */}
         <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg hover:shadow-emerald-500/5 transition-all">
           <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><TrendingUp className="size-10" /></div>
@@ -207,6 +225,48 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses }: F
             <p className="text-[10px] text-muted-foreground mt-0.5">
               Prom. Ing: {fmtShort(avgIncome)} · Gto: {fmtShort(avgExpense)}
             </p>
+          </CardContent>
+        </Card>
+
+        {/* Ingresos Recurrentes */}
+        <Card className="border-teal-500/20 bg-gradient-to-br from-teal-500/5 to-transparent relative overflow-hidden group hover:shadow-lg hover:shadow-teal-500/5 transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><TrendingUp className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <ArrowUpRight className="size-3.5 text-teal-500" /> Ing. Recurrentes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-black text-teal-500">{formatConvertedAmount(totalRecurringIncomes, displayCurrency)}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{recurringIncomes.length} compromisos</p>
+          </CardContent>
+        </Card>
+
+        {/* Flujo Recurrente Neto */}
+        <Card className={`border-${netRecurringFlow >= 0 ? 'sky' : 'orange'}-500/20 bg-gradient-to-br from-${netRecurringFlow >= 0 ? 'sky' : 'orange'}-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all`}>
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Activity className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <Activity className="size-3.5" /> Flujo Rec. Neto
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className={`text-xl font-black ${netRecurringFlow >= 0 ? 'text-sky-500' : 'text-orange-500'}`}>{formatConvertedAmount(netRecurringFlow, displayCurrency)}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Ing. rec. - Gtos. rec.</p>
+          </CardContent>
+        </Card>
+
+        {/* Ratio Gastos/Ingresos */}
+        <Card className="border-pink-500/20 bg-gradient-to-br from-pink-500/5 to-transparent relative overflow-hidden group hover:shadow-lg hover:shadow-pink-500/5 transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Percent className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <Percent className="size-3.5 text-pink-500" /> Ratio Gto/Ing
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-black text-pink-500">{expenseToIncomeRatio.toFixed(1)}%</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{expenseToIncomeRatio <= 70 ? 'Óptimo' : expenseToIncomeRatio <= 90 ? 'Ajustado' : 'Crítico'}</p>
           </CardContent>
         </Card>
       </div>

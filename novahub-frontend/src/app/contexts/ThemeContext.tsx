@@ -71,25 +71,50 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('erp-theme-config', JSON.stringify(themeConfig));
   }, [themeConfig]);
 
-  // Handle branding from server
+  // Handle branding from server — re-fetch when token changes (login/switch)
+  const [tokenTrigger, setTokenTrigger] = useState(() => localStorage.getItem('nh-auth-token'));
+
   useEffect(() => {
-    const token = localStorage.getItem('nh-auth-token');
-    if (token) {
-      api.get<any>('/branding/current')
+    // Listen for token changes (login, switch company, logout)
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'nh-auth-token') {
+        setTokenTrigger(e.newValue);
+        if (!e.newValue) {
+          // Logged out — reset branding
+          setThemeConfig(defaultTheme);
+          localStorage.removeItem('erp-theme-config');
+        }
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    // Also poll for same-window changes (storage event only fires cross-tab)
+    const interval = setInterval(() => {
+      const current = localStorage.getItem('nh-auth-token');
+      setTokenTrigger(prev => prev !== current ? current : prev);
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!tokenTrigger) return;
+    api.get<any>('/branding/current')
       .then(b => {
         if (b && b.primaryColor) {
           updateTheme({
             primary: b.primaryColor,
             sidebar: b.sidebarColor,
             accent: b.accentColor,
-            // (Heuristic) foregrounds based on colors if needed
           });
           updateConfig({ tenantName: b.companyName, logo: b.logo || undefined });
         }
       })
       .catch(err => console.error('Failed to fetch branding:', err));
-    }
-  }, []);
+  }, [tokenTrigger]);
 
   const updateTheme = (colors: Partial<BrandColors>) => {
     setThemeConfig(prev => ({

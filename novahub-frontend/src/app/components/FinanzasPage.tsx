@@ -413,7 +413,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                 >
-                  <FinanceDashboardView incomes={incomes} expenses={expenses} recurringExpenses={recurringExpenses} />
+                  <FinanceDashboardView incomes={incomes} expenses={expenses} recurringExpenses={recurringExpenses} recurringIncomes={recurringIncomes} accounts={accounts} />
                 </motion.div>
               </TabsContent>
 

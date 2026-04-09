@@ -259,6 +259,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [companyName, setCompanyName] = useState('');
   const [companySlug, setCompanySlug] = useState('');
   const [companyIndustry, setCompanyIndustry] = useState('OTHER');
+  const [industryOptions, setIndustryOptions] = useState<{ id?: string; code: string; name: string; isDefault: boolean }[]>([]);
+  const [newIndustryName, setNewIndustryName] = useState('');
+  const [showAddIndustry, setShowAddIndustry] = useState(false);
   const [activeTab, setActiveTab] = useState(initialTab);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
@@ -287,7 +290,43 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   useEffect(() => {
     fetchBranding();
     fetchCurrencySettings();
+    if (user?.tenantId) fetchIndustries();
   }, []);
+
+  const fetchIndustries = async () => {
+    if (!user?.tenantId) return;
+    try {
+      const data = await api.get<{ id?: string; code: string; name: string; isDefault: boolean }[]>(`/tenants/${user.tenantId}/industries`);
+      if (data) setIndustryOptions(data);
+    } catch (error) {
+      console.error('Error fetching industries:', error);
+    }
+  };
+
+  const handleAddIndustry = async () => {
+    if (!newIndustryName.trim() || !user?.tenantId) return;
+    try {
+      const code = newIndustryName.trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
+      await api.post(`/tenants/${user.tenantId}/industries`, { name: newIndustryName.trim(), code });
+      toast.success('Industria agregada correctamente');
+      setNewIndustryName('');
+      setShowAddIndustry(false);
+      await fetchIndustries();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Error al agregar industria');
+    }
+  };
+
+  const handleDeleteIndustry = async (id: string) => {
+    if (!user?.tenantId) return;
+    try {
+      await api.delete(`/tenants/${user.tenantId}/industries/${id}`);
+      toast.success('Industria eliminada');
+      await fetchIndustries();
+    } catch (error) {
+      toast.error('Error al eliminar industria');
+    }
+  };
 
   const fetchCurrencySettings = async () => {
     try {
@@ -823,18 +862,71 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Industria</Label>
-                  <select value={companyIndustry} onChange={e => setCompanyIndustry(e.target.value)}
-                    className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    <option value="RETAIL">Comercio / Retail</option>
-                    <option value="SERVICES">Servicios Profesionales</option>
-                    <option value="CONSTRUCTION">Construcción / Obras</option>
-                    <option value="MANUFACTURING">Manufactura / Industria</option>
-                    <option value="IT">Tecnología / IT</option>
-                    <option value="HEALTHCARE">Salud / Farmacia</option>
-                    <option value="EDUCATION">Educación</option>
-                    <option value="FOOD">Alimentos y Bebidas</option>
-                    <option value="OTHER">Otro</option>
-                  </select>
+                  <div className="space-y-2">
+                    <select value={companyIndustry} onChange={e => setCompanyIndustry(e.target.value)}
+                      className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      {industryOptions.length > 0 ? (
+                        <>
+                          <optgroup label="Predeterminadas">
+                            {industryOptions.filter(o => o.isDefault).map(o => (
+                              <option key={o.code} value={o.code}>{o.name}</option>
+                            ))}
+                          </optgroup>
+                          {industryOptions.some(o => !o.isDefault) && (
+                            <optgroup label="Personalizadas">
+                              {industryOptions.filter(o => !o.isDefault).map(o => (
+                                <option key={o.code} value={o.code}>{o.name}</option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <option value="RETAIL">Comercio / Retail</option>
+                          <option value="SERVICES">Servicios Profesionales</option>
+                          <option value="OTHER">Otro</option>
+                        </>
+                      )}
+                    </select>
+                    {/* Custom industry entries with delete */}
+                    {industryOptions.filter(o => !o.isDefault).length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {industryOptions.filter(o => !o.isDefault).map(o => (
+                          <Badge key={o.id} variant="secondary" className="gap-1 pr-1 text-[10px] font-bold">
+                            {o.name}
+                            <button onClick={() => o.id && handleDeleteIndustry(o.id)}
+                              className="ml-0.5 rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive transition-colors">
+                              <Trash2 className="size-2.5" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {/* Add new industry inline */}
+                    {showAddIndustry ? (
+                      <div className="flex gap-2">
+                        <Input
+                          value={newIndustryName}
+                          onChange={e => setNewIndustryName(e.target.value)}
+                          placeholder="Ej: Logística y Transporte"
+                          className="rounded-xl h-9 text-xs flex-1"
+                          onKeyDown={e => e.key === 'Enter' && handleAddIndustry()}
+                          autoFocus
+                        />
+                        <Button size="sm" onClick={handleAddIndustry} className="rounded-xl h-9 gap-1 text-xs font-bold">
+                          <Check className="size-3" />Agregar
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => { setShowAddIndustry(false); setNewIndustryName(''); }} className="rounded-xl h-9 text-xs">
+                          Cancelar
+                        </Button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setShowAddIndustry(true)}
+                        className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-bold transition-colors">
+                        <Plus className="size-3.5" />Agregar nueva industria
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <Button onClick={handleSaveCompanyInfo} className="w-full rounded-xl gap-2 font-bold h-11">
                   <Save className="size-4" />Guardar Información
