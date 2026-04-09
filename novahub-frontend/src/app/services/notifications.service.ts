@@ -32,5 +32,5 @@ export const notificationsService = {
   },
   markAsRead: (id: string) => api.patch<{ success: boolean }>(`/notifications/inbox/${id}/read`, {}),
   markAllAsRead: () => api.patch('/notifications/inbox/read-all', {}),
-  delete: (id: string) => api.delete(`/notifications/alerts/${id}`),
+  delete: (id: string) => api.delete(`/notifications/inbox/${id}`),
 };
