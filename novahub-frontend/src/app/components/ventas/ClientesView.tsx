@@ -74,8 +74,13 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
     },
     { 
       key: 'name', 
+<<<<<<< HEAD
       header: 'Nombre del Cliente', 
       editable: canPerform('SALES_CLIENTS', 'edit'),
+=======
+      header: 'Nombre del cliente', 
+      editable: canPerform('ventas', 'edit'),
+>>>>>>> 1783c81492ed3cce930a71185617df5417428223
       render: (val) => (
         <div className="flex items-center gap-3">
           <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center font-black text-primary text-xs border border-primary/20">
