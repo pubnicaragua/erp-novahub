@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { tenantsService } from '../../services/tenants.service';
+import { usersService } from '../../services/users.service';
 import { toast } from 'sonner';
 import { ALL_PERM_MODULES } from '../ConfiguracionPage';
 
@@ -35,6 +36,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
+  const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [selectedModule, setSelectedModule] = useState<any>(null);
   const [notes, setNotes] = useState('');
@@ -43,6 +45,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'EMPLOYEE' });
   const [uploading, setUploading] = useState(false);
+
+  const [newPasswordForUser, setNewPasswordForUser] = useState('');
+  const [updatingPassword, setUpdatingPassword] = useState(false);
 
   useEffect(() => {
     if (tenant?.id) {
@@ -77,6 +82,31 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     setIsPermsDialogOpen(true);
   };
 
+  const handleOpenChangePassword = (user: any) => {
+    setSelectedUser(user);
+    setNewPasswordForUser('');
+    setIsChangePasswordDialogOpen(true);
+  };
+
+  const handleAdminChangePassword = async () => {
+    if (!newPasswordForUser || newPasswordForUser.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+    if (!selectedUser?.id) return;
+
+    try {
+      setUpdatingPassword(true);
+      await usersService.changePassword(selectedUser.id, newPasswordForUser);
+      toast.success('Contraseña del usuario actualizada correctamente');
+      setIsChangePasswordDialogOpen(false);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al cambiar la contraseña');
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
   if (!tenant) return (
     <div className="p-20 flex flex-col items-center justify-center text-muted-foreground italic">
       <Clock className="size-12 mb-4 opacity-20 animate-pulse" />
@@ -89,8 +119,8 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       toast.error('Complete nombre y email');
       return;
     }
-    if (!userForm.password || userForm.password.length < 10) {
-      toast.error('La contraseña es obligatoria y debe tener al menos 10 caracteres');
+    if (!userForm.password || userForm.password.length < 6) {
+      toast.error('La contraseña es obligatoria y debe tener al menos 6 caracteres');
       return;
     }
     try {
@@ -409,13 +439,24 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                     </div>
                     
                     <div className="flex items-center gap-2 pt-4">
+                      {u.role?.toUpperCase() !== 'ADMIN' && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-[0.5] text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500 h-8 border-orange-500/20"
+                          onClick={() => handleOpenChangePassword(u)}
+                          title="Cambiar Contraseña"
+                        >
+                          <KeyRound className="size-3" />
+                        </Button>
+                      )}
                       <Button 
                         variant="outline" 
                         size="sm" 
                         className="flex-1 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary h-8 border-primary/10"
                         onClick={() => handleViewPerms(u)}
                       >
-                        <Shield className="size-3 mr-2" /> Ver Permisos
+                        <Shield className="size-3 mr-2" /> Permisos
                       </Button>
                       <Button 
                         variant="ghost" 
@@ -633,6 +674,38 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
             <Button variant="outline" onClick={() => setIsRequestDialogOpen(false)}>Cancelar</Button>
             <Button className="bg-primary text-primary-foreground" onClick={submitRequest}>
               Enviar Solicitud
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Password Dialog (Admin) */}
+      <Dialog open={isChangePasswordDialogOpen} onOpenChange={setIsChangePasswordDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="size-5 text-orange-500" /> Cambiar Contraseña
+            </DialogTitle>
+            <DialogDescription>
+              Actualiza la contraseña del usuario <span className="font-bold text-foreground">{selectedUser?.name}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nueva Contraseña</Label>
+              <Input 
+                type="password" 
+                placeholder="Mínimo 6 caracteres" 
+                value={newPasswordForUser}
+                onChange={(e) => setNewPasswordForUser(e.target.value)}
+                className="bg-muted/10 h-11"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsChangePasswordDialogOpen(false)} disabled={updatingPassword}>Cancelar</Button>
+            <Button onClick={handleAdminChangePassword} disabled={updatingPassword} className="bg-orange-500 hover:bg-orange-600 text-white font-bold h-10">
+              {updatingPassword ? 'Guardando...' : 'Actualizar Contraseña'}
             </Button>
           </DialogFooter>
         </DialogContent>

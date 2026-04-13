@@ -39,6 +39,10 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { ScrollArea } from './ui/scroll-area';
 import { cn } from './ui/utils';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
+import { Label } from './ui/label';
+import { usersService } from '../services/users.service';
+import { Lock } from 'lucide-react';
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -59,6 +63,30 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   const { user, logout } = useAuth();
   const { unreadCount, markAllAsRead, notifications } = useNotifications();
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+
+  const handleChangePassword = async () => {
+    if (newPassword.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+    if (!user?.id) return;
+
+    try {
+      setIsUpdatingPassword(true);
+      await usersService.changePassword(user.id, newPassword);
+      toast.success('Contraseña actualizada exitosamente');
+      setShowPasswordModal(false);
+      setNewPassword('');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al actualizar la contraseña');
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -250,6 +278,10 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               <SettingsIcon className="mr-2 size-4 text-primary" />
               <span>Configuración</span>
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowPasswordModal(true)}>
+              <Lock className="mr-2 size-4 text-primary" />
+              <span>Cambiar Contraseña</span>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400 focus:bg-red-500/10 transition-colors">
               <LogOut className="mr-2 size-4 text-rose-500" />
@@ -258,6 +290,35 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-    </header >
+
+      <Dialog open={showPasswordModal} onOpenChange={setShowPasswordModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Lock className="size-5 text-primary" /> Cambiar Contraseña</DialogTitle>
+            <DialogDescription>
+              Ingresa la nueva contraseña para tu cuenta.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nueva Contraseña</Label>
+              <Input 
+                type="password" 
+                placeholder="Mínimo 6 caracteres" 
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPasswordModal(false)} disabled={isUpdatingPassword}>Cancelar</Button>
+            <Button onClick={handleChangePassword} disabled={isUpdatingPassword} className="bg-primary text-primary-foreground">
+              {isUpdatingPassword ? 'Guardando...' : 'Guardar Contraseña'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </header>
   );
 }
