@@ -156,3 +156,4 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
     </div>
   );
 };
+

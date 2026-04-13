@@ -189,7 +189,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
         </span>
       ) },
-    { key: 'status',   header: 'Estado',      width: '110px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status',   header: 'Estado',      width: '110px', editable: canPerform('PURCHASES_INVOICES', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -385,13 +385,13 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                  <Download className="size-3 mr-2" /> Descargar
                </Button>
              )}
-              {!isNew && canPerform('compras', 'delete') && (
+              {!isNew && canPerform('PURCHASES_INVOICES', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
               )}
-              {!isNew && canPerform('compras', 'create') && onRegisterPaymentFromInvoice && (
+              {!isNew && canPerform('PURCHASES_INVOICES', 'create') && onRegisterPaymentFromInvoice && (
                 <Button
                   variant="outline"
                   className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
@@ -400,7 +400,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   <Banknote className="size-3 mr-2" /> Registrar Pago
                 </Button>
               )}
-            {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+            {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Factura
               </Button>
@@ -425,7 +425,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 <div className="col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
                   <Combobox 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
                     options={suppliers
                       .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
                       .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
@@ -437,7 +437,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
                   <Input 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
                     type="date" 
                     value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
@@ -447,7 +447,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Vencimiento</p>
                   <Input 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
                     type="date" 
                     value={localDoc.dueDate ? new Date(localDoc.dueDate).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, dueDate: new Date(e.target.value).toISOString() })} 
@@ -457,7 +457,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <select 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
                     value={localDoc.status || 'PENDING'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                     className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
@@ -468,7 +468,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
                   <select 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
                     value={localDoc.currency || 'NIO'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any })}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
@@ -509,7 +509,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Ítems a Facturar</p>
-              {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+              {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
                 <Button variant="outline" size="sm" onClick={() => {
                   const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, taxRate: 0, total: 0 }];
                   setLocalDoc({ ...localDoc, items: newItems as any });
@@ -531,7 +531,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-4">
                     <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
                       value={item.description || ''} 
                       onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
                       className="h-8 text-xs" 
@@ -540,7 +540,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   </div>
                   <div className="col-span-2">
                     <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
                       type="number" 
                       min="0" 
                       value={item.quantity === 0 ? '' : item.quantity} 
@@ -551,7 +551,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   </div>
                   <div className="col-span-2">
                     <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
                       type="number" 
                       min="0" 
                       value={item.unitPrice === 0 ? '' : item.unitPrice} 
@@ -562,7 +562,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   </div>
                   <div className="col-span-2">
                     <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
                       type="number" 
                       min="0" 
                       value={item.taxRate === 0 ? '' : item.taxRate} 
@@ -573,7 +573,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   </div>
                   <div className="col-span-2 flex items-center justify-end gap-2">
                     <span className="text-xs font-black w-20 text-right tabular-nums">${Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                    {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+                    {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
                       <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
                         <Trash2 className="size-3" />
                       </Button>
@@ -627,13 +627,13 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           <div><h2 className="text-xl font-black uppercase tracking-tight">Facturas de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Cuentas por pagar</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerform('compras', 'create') && (
+            {canPerform('PURCHASES_INVOICES', 'create') && (
               <Button onClick={handleCreateNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Factura</Button>
             )}
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={canPerform('compras', 'delete') ? async (ids) => {
+          onBulkDelete={canPerform('PURCHASES_INVOICES', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
@@ -647,8 +647,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              {canPerform('compras', 'create') && onRegisterPaymentFromInvoice && (
+              <Button title={canPerform('PURCHASES_INVOICES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              {canPerform('PURCHASES_INVOICES', 'create') && onRegisterPaymentFromInvoice && (
                 <Button
                   title="Registrar Pago"
                   variant="ghost"
@@ -669,7 +669,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   <Banknote className="size-4" />
                 </Button>
               )}
-              {canPerform('compras', 'delete') && (
+              {canPerform('PURCHASES_INVOICES', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
               )}
             </div>
@@ -688,3 +688,4 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     </div>
   );
 }
+

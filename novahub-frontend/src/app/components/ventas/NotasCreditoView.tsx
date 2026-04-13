@@ -132,9 +132,9 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
         <span 
           className={cn(
             "text-xs font-black font-mono text-primary",
-            canPerform('ventas', 'edit') ? "cursor-pointer hover:underline" : "cursor-default"
+            canPerform('SALES_CREDIT_NOTES', 'edit') ? "cursor-pointer hover:underline" : "cursor-default"
           )} 
-          onClick={() => canPerform('ventas', 'edit') && setEditingId(row.id)}
+          onClick={() => canPerform('SALES_CREDIT_NOTES', 'edit') && setEditingId(row.id)}
         >
           {val}
         </span>
@@ -178,7 +178,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {canPerform('ventas', 'edit') && (
+            {canPerform('SALES_CREDIT_NOTES', 'edit') && (
               <>
                 {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={async () => { await creditNotesService.delete(localDoc.id); setEditingId(null); onRefresh(); }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
@@ -287,7 +287,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar nota..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-            {canPerform('ventas', 'create') && (
+            {canPerform('SALES_CREDIT_NOTES', 'create') && (
               <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva NC</Button>
             )}
@@ -298,12 +298,12 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           columns={columns} onRowUpdate={async () => {}} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               {canPerform('ventas', 'edit') && (row.status||'').toUpperCase() === 'DRAFT' && (
+               {canPerform('SALES_CREDIT_NOTES', 'edit') && (row.status||'').toUpperCase() === 'DRAFT' && (
                  <Button title="Emitir" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleIssue(row.id)}><Send className="size-4" /></Button>
                )}
                <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
                <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               {canPerform('ventas', 'delete') && (
+               {canPerform('SALES_CREDIT_NOTES', 'delete') && (
                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                )}
             </div>
@@ -337,3 +337,4 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
     </div>
   );
 }
+

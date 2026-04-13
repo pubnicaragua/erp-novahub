@@ -206,3 +206,4 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
     </div>
   );
 }
+

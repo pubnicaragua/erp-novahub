@@ -274,3 +274,4 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
     </div>
   );
 }
+

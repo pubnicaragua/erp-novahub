@@ -95,7 +95,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [cus, est, ord, inv, pay, rec, ret, cn, prod, series, warehouses, emp] = await Promise.all([
+      const results = await Promise.allSettled([
         customersService.getAll(),
         estimatesService.getAll(),
         salesOrdersService.getAll(),
@@ -111,19 +111,21 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
       ]);
       
       const toArr = (r: any) => Array.isArray(r) ? r : (r?.data || []);
+      const val = (i: number) => results[i].status === 'fulfilled' ? toArr((results[i] as any).value) : [];
+      
       setData({
-        clientes: toArr(cus),
-        estimaciones: toArr(est),
-        ordenes: toArr(ord),
-        facturas: toArr(inv),
-        recurrentes: toArr(rec),
-        pagos: toArr(pay),
-        devoluciones: toArr(ret),
-        notasCredito: toArr(cn),
-        productos: toArr(prod),
-        series: toArr(series),
-        warehouses: toArr(warehouses),
-        employees: toArr(emp),
+        clientes: val(0),
+        estimaciones: val(1),
+        ordenes: val(2),
+        facturas: val(3),
+        recurrentes: val(5),
+        pagos: val(4),
+        devoluciones: val(6),
+        notasCredito: val(7),
+        productos: val(8),
+        series: val(9),
+        warehouses: val(10),
+        employees: val(11),
       });
     } catch (error) {
       console.error('Error fetching sales data:', error);

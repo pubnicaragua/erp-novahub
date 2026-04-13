@@ -33,7 +33,7 @@ export type Module =
 export type SubModule = string;
 
 export interface Permission {
-  module: Module;
+  module: string; // Changed from Module to string to allow granular submodules like 'SALES_CLIENTS'
   canView: boolean;
   canCreate: boolean;
   canEdit: boolean;
@@ -46,6 +46,7 @@ export interface User {
   email: string;
   avatar?: string;
   role: Role;
+  customRoleName?: string;
   tenantId: string;
   tenantName: string;
   permissions: Permission[];
@@ -58,8 +59,8 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  hasAccess: (module: Module | string) => boolean;
-  canPerform: (module: Module, action: 'view' | 'create' | 'edit' | 'delete') => boolean;
+  hasAccess: (module: string) => boolean;
+  canPerform: (module: string, action: 'view' | 'create' | 'edit' | 'delete') => boolean;
   login: (email: string, password: string) => void;
   logout: () => void;
   switchIdentity: (userId: string) => Promise<void>;
@@ -191,8 +192,8 @@ const createUserObject = (apiPayload: any): User => {
       return {
         module: def.module,
         canView: !!serverMatch.read,
-        canCreate: !!serverMatch.write,
-        canEdit: !!serverMatch.write,
+        canCreate: serverMatch.create !== undefined ? !!serverMatch.create : !!serverMatch.write,
+        canEdit: serverMatch.edit !== undefined ? !!serverMatch.edit : !!serverMatch.write,
         canDelete: !!serverMatch.delete
       };
     }
@@ -207,13 +208,28 @@ const createUserObject = (apiPayload: any): User => {
         canDelete: false
       };
     }
-
+    
     return def;
   });
-  
+
+  // Include granular permissions that were not in ALL_MODULES
+  serverPermissionsSnippet.forEach((sp: any) => {
+    const spMod = (sp.module || sp.id || '').toUpperCase();
+    if (!mergedPermissions.find(p => p.module.toUpperCase() === spMod)) {
+      mergedPermissions.push({
+        module: spMod,
+        canView: !!sp.read,
+        canCreate: sp.create !== undefined ? !!sp.create : !!sp.write,
+        canEdit: sp.edit !== undefined ? !!sp.edit : !!sp.write,
+        canDelete: !!sp.delete
+      });
+    }
+  });
+
   console.log('[Auth] User Loaded:', { 
     id: apiUser.id, 
     role, 
+    customRoleName: apiUser.customRoleName,
     isPlatformAdmin, 
     tenant: apiUser.clientTenantId,
     permissionsCount: mergedPermissions.length
@@ -225,6 +241,7 @@ const createUserObject = (apiPayload: any): User => {
     email: apiUser.email,
     avatar: apiUser.avatar,
     role,
+    customRoleName: apiUser.customRoleName,
     tenantId: apiUser.clientTenantId,
     tenantName: apiUser.clientTenant?.name || 'Nova Hub',
     permissions: mergedPermissions,
@@ -252,7 +269,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         try {
-          const me = await api.get<any>('/auth/me');
+          const me = await api.get<any>('/auth/profile');
           setUser(createUserObject(me));
         } catch {
           // Backward compatibility with backends that still use switch-context for session restore.
@@ -377,7 +394,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return permission?.canView ?? false;
   }, [user]);
 
-  const canPerform = useCallback((module: Module, action: 'view' | 'create' | 'edit' | 'delete'): boolean => {
+  const canPerform = useCallback((module: string, action: 'view' | 'create' | 'edit' | 'delete'): boolean => {
     if (!user) return false;
     if (user.isPlatformAdmin) return hasAccess(module);
     

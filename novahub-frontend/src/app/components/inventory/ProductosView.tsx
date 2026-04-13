@@ -555,7 +555,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           <Plus className="size-4 mr-2" />
           Nueva Categoría
         </Button>
-        {canPerform('inventario', 'create') && (
+        {canPerform('INVENTORY_PRODUCTS', 'create') && (
           <Button 
             size="sm" 
             className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
@@ -609,7 +609,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                    <TableRow 
                      key={product.id} 
                      className="group hover:bg-muted/30 cursor-pointer"
-                     onDoubleClick={() => canPerform('inventario', 'edit') && handleEditRow(product)}
+                     onDoubleClick={() => canPerform('INVENTORY_PRODUCTS', 'edit') && handleEditRow(product)}
                     >
                     <TableCell className="font-mono text-xs text-muted-foreground">{product.code}</TableCell>
                     <TableCell>
@@ -650,7 +650,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                      </TableCell>
                      <TableCell className="text-right">
                        <div className="flex items-center justify-end gap-1 transition-opacity">
-                         {canPerform('inventario', 'edit') && (
+                         {canPerform('INVENTORY_PRODUCTS', 'edit') && (
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -663,7 +663,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                              <Save className="size-3.5" />
                            </Button>
                         )}
-                         {canPerform('inventario', 'delete') && (
+                         {canPerform('INVENTORY_PRODUCTS', 'delete') && (
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -809,3 +809,4 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     </Card>
   );
 }
+

@@ -366,7 +366,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       key: 'status',
       header: 'Estado',
       width: '130px',
-      editable: canPerform('ventas', 'edit'),
+      editable: canPerform('SALES_INVOICES', 'edit'),
       type: 'select',
       options: editableStatusOptions,
       render: (val) => {
@@ -435,7 +435,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {((isCreating && canPerform('ventas', 'create')) || (!isCreating && canPerform('ventas', 'edit'))) && (
+            {((isCreating && canPerform('SALES_INVOICES', 'create')) || (!isCreating && canPerform('SALES_INVOICES', 'edit'))) && (
               <>
                 <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
                   onClick={() => handleSaveInvoice(false)}>
@@ -778,7 +778,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            {canPerform('ventas', 'create') && (
+            {canPerform('SALES_INVOICES', 'create') && (
               <Button onClick={startNewInvoice} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Factura
               </Button>
@@ -809,7 +809,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'invoice' as any }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
                 <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4" /></Button>
                 <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-                {canPerform('ventas', 'delete') && (
+                {canPerform('SALES_INVOICES', 'delete') && (
                   <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                 )}
               </div>
@@ -858,3 +858,4 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     </div>
   );
 }
+

@@ -13,11 +13,6 @@ interface LoginPageProps {
   onLogin: (email: string, password: string) => void;
 }
 
-const demoUsers = [
-  { email: 'superadmin@novahub.com', password: 'admin123', role: 'Super Admin', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
-  { email: 'partner@demo.com',    password: 'admin123', role: 'Partner',    color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' },
-  { email: 'gerente@empresa-demo.com', password: 'Gerente2025!', role: 'Gerente (Demo)', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
-];
 
 export function LoginPage({ onLogin }: LoginPageProps) {
   const [email, setEmail] = useState('');
@@ -43,19 +38,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   };
 
-  const quickLogin = async (u: typeof demoUsers[0]) => {
-    setEmail(u.email);
-    setPassword(u.password);
-    setError('');
-    setLoading(true);
-    try {
-      await onLogin(u.email, u.password);
-    } catch (err: any) {
-      setError(err.message || 'Error en el acceso rápido.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -156,29 +138,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </Button>
             </form>
 
-            {/* Demo credentials */}
-            <div className="mt-8 pt-6 border-t border-border/40">
-              <p className="text-[11px] font-semibold text-muted-foreground mb-3 uppercase tracking-widest text-center">
-                Acceso Demo — Click para ingresar
-              </p>
-              <div className="grid gap-2">
-                {demoUsers.map((u) => (
-                  <button
-                    key={u.email}
-                    type="button"
-                    onClick={() => quickLogin(u)}
-                    className="flex justify-between items-center px-3 py-2 rounded-lg bg-muted/20 hover:bg-muted/50 border border-border/40 hover:border-emerald-500/30 transition-all text-xs text-left group"
-                  >
-                    <span className="font-medium text-foreground/80 group-hover:text-foreground transition-colors">
-                      {u.email}
-                    </span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${u.color}`}>
-                      {u.role}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {/* Footer */}
             <p className="mt-6 text-center text-[11px] text-muted-foreground/50">

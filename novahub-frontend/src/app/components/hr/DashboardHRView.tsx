@@ -238,3 +238,4 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
     </div>
   );
 }
+

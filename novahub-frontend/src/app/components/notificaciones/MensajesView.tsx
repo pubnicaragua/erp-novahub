@@ -94,3 +94,4 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
     </div>
   );
 };
+

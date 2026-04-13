@@ -11,6 +11,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -344,7 +345,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
+      const companyName = (themeConfig.tenantName || user?.tenantName || 'Mi Empresa').toUpperCase();
       const logoUrl = themeConfig.logo || '';
       const primaryColor = themeConfig.colors.primary || '#10b981';
       const rgbPrimary = primaryColor.startsWith('#') 
@@ -655,7 +656,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
     try {
       toast.info("Generando Excel, por favor espere...");
       const wb = new ExcelJS.Workbook();
-      const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
+      const companyName = (themeConfig.tenantName || user?.tenantName || 'Mi Empresa').toUpperCase();
       const logoUrl = themeConfig.logo || '';
       const primaryColor = themeConfig.colors.primary || '#10b981';
       const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : '10b981';
@@ -962,36 +963,60 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
   return (
     <div className="space-y-6">
       {/* Filters */}
-      <div className="flex flex-wrap items-end gap-4 p-4 bg-muted/30 rounded-xl border border-border/50">
-        <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground uppercase tracking-wider">
-          <Filter className="size-4" /> Filtros
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-semibold text-muted-foreground uppercase">Desde</label>
-          <Input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({...p, start: e.target.value}))} className="h-8 w-[150px]" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-semibold text-muted-foreground uppercase">Hasta</label>
-          <Input type="date" value={dateRange.end} onChange={e => setDateRange(p => ({...p, end: e.target.value}))} className="h-8 w-[150px]" />
-        </div>
-        {(dateRange.start || dateRange.end) && (
-          <button onClick={() => setDateRange({start:'',end:''})} className="h-8 px-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"><X className="size-3" /> Limpiar Fechas</button>
-        )}
-        <div className="flex gap-1.5 ml-auto">
-          {viewButtons.map(btn => (
-            <button key={btn.value} onClick={() => setViewType(btn.value)} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${viewType === btn.value ? 'bg-primary text-primary-foreground shadow-md scale-105' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>
-              {btn.label}
+      <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 bg-muted/30 rounded-2xl border border-border/50 shadow-sm relative overflow-hidden">
+        {/* Subtle background glow */}
+        <div className="absolute -left-10 -top-10 size-32 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
+        
+        <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 flex-1">
+          <div className="flex items-center gap-2 text-xs font-black text-muted-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
+            <Filter className="size-3.5" /> Filtros
+          </div>
+          
+          <div className="flex gap-4 w-full sm:w-auto justify-center">
+            <div className="flex flex-col gap-1.5 flex-1 sm:flex-none">
+              <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest text-center sm:text-left pl-1">Desde</label>
+              <Input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({...p, start: e.target.value}))} className="h-9 w-full sm:w-[150px] bg-background/50 border-border/40 focus:border-primary/50 text-center" />
+            </div>
+            <div className="flex flex-col gap-1.5 flex-1 sm:flex-none">
+              <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest text-center sm:text-left pl-1">Hasta</label>
+              <Input type="date" value={dateRange.end} onChange={e => setDateRange(p => ({...p, end: e.target.value}))} className="h-9 w-full sm:w-[150px] bg-background/50 border-border/40 focus:border-primary/50 text-center" />
+            </div>
+          </div>
+
+          {(dateRange.start || dateRange.end) && (
+            <button onClick={() => setDateRange({start:'',end:''})} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all">
+              <X className="size-3" /> Limpiar
             </button>
-          ))}
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 lg:ml-auto">
+          <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
+            {viewButtons.map(btn => (
+              <button 
+                key={btn.value} 
+                onClick={() => setViewType(btn.value)} 
+                className={cn(
+                  "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm",
+                  viewType === btn.value 
+                    ? "bg-primary text-primary-foreground shadow-primary/20 scale-[1.02]" 
+                    : "bg-background/50 text-muted-foreground hover:bg-muted border border-border/30"
+                )}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
+          
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all hover:bg-muted ml-2">
+              <button className="flex items-center justify-center gap-2 w-full sm:w-auto rounded-xl border border-border/60 bg-background px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all hover:bg-muted hover:shadow-md">
                 <Download className="size-4" /> Exportar
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={exportExcel}><FileSpreadsheet className="size-4 mr-2 text-green-600" /> Excel (.xlsx)</DropdownMenuItem>
-              <DropdownMenuItem onClick={exportPDF}><FileText className="size-4 mr-2 text-red-500" /> PDF (.pdf)</DropdownMenuItem>
+            <DropdownMenuContent align="end" className="rounded-xl border-border/50">
+              <DropdownMenuItem onClick={exportExcel} className="rounded-lg cursor-pointer"><FileSpreadsheet className="size-4 mr-2 text-green-600" /> Excel (.xlsx)</DropdownMenuItem>
+              <DropdownMenuItem onClick={exportPDF} className="rounded-lg cursor-pointer"><FileText className="size-4 mr-2 text-red-500" /> PDF (.pdf)</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -1137,12 +1162,12 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
               <CardHeader className="pb-2"><CardTitle className="text-sm font-bold uppercase tracking-wider flex items-center gap-2"><ArrowUpRight className="size-4 text-emerald-500" /> Últimos Ingresos</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 {lastIncomes.length === 0 ? <p className="text-sm text-muted-foreground italic py-4 text-center">Sin ingresos</p> : lastIncomes.map((inc:any) => (
-                  <div key={inc.id} className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 transition-colors">
+                  <div key={inc.id} className="flex items-start justify-between p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 transition-colors">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold truncate">{inc.source || inc.notes || 'Ingreso'}</p>
-                      <p className="text-[10px] text-muted-foreground">{inc.category || 'Sin categoría'} · {new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI')}</p>
+                      <p className="text-sm font-bold break-words">{inc.source || inc.notes || 'Ingreso'}</p>
+                      <p className="text-[10px] text-muted-foreground break-words">{inc.category || 'Sin categoría'} · {new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI')}</p>
                     </div>
-                    <span className="text-sm font-black text-emerald-500 shrink-0 ml-3">+{formatConvertedAmount(Number(inc.amount)||0, inc.currency, inc.exchangeRate)}</span>
+                    <span className="text-sm font-black text-emerald-500 shrink-0 ml-3 mt-0.5">+{formatConvertedAmount(Number(inc.amount)||0, inc.currency, inc.exchangeRate)}</span>
                   </div>
                 ))}
               </CardContent>
@@ -1153,12 +1178,12 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
               <CardHeader className="pb-2"><CardTitle className="text-sm font-bold uppercase tracking-wider flex items-center gap-2"><ArrowDownRight className="size-4 text-rose-500" /> Últimos Gastos</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 {lastExpenses.length === 0 ? <p className="text-sm text-muted-foreground italic py-4 text-center">Sin gastos</p> : lastExpenses.map((exp:any) => (
-                  <div key={exp.id} className="flex items-center justify-between p-3 rounded-lg bg-rose-500/5 border border-rose-500/10 hover:bg-rose-500/10 transition-colors">
+                  <div key={exp.id} className="flex items-start justify-between p-3 rounded-lg bg-rose-500/5 border border-rose-500/10 hover:bg-rose-500/10 transition-colors">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold truncate">{exp.description || 'Gasto'}</p>
-                      <p className="text-[10px] text-muted-foreground">{exp.source ? `${exp.source} · ` : ''}{exp.category || 'Sin categoría'} · {new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI')}</p>
+                      <p className="text-sm font-bold break-words">{exp.description || 'Gasto'}</p>
+                      <p className="text-[10px] text-muted-foreground break-words">{exp.source ? `${exp.source} · ` : ''}{exp.category || 'Sin categoría'} · {new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI')}</p>
                     </div>
-                    <span className="text-sm font-black text-rose-500 shrink-0 ml-3">-{formatConvertedAmount(Number(exp.amount)||0, exp.currency, exp.exchangeRate)}</span>
+                    <span className="text-sm font-black text-rose-500 shrink-0 ml-3 mt-0.5">-{formatConvertedAmount(Number(exp.amount)||0, exp.currency, exp.exchangeRate)}</span>
                   </div>
                 ))}
               </CardContent>

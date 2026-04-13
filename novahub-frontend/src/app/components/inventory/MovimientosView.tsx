@@ -163,3 +163,4 @@ export function MovimientosView({ movements, warehouses }: MovimientosViewProps)
     </Card>
   );
 }
+

@@ -90,18 +90,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: Recu
       if (showRefresh) setRefreshing(true);
       else setLoading(true);
 
-      const [
-        employeesRes,
-        departmentsRes,
-        positionsRes,
-        payrollsRes,
-        attendanceRes,
-        leaveRequestsRes,
-        reviewsRes,
-        trainingsRes,
-        benefitsRes,
-        statsRes,
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         hrService.getEmployees(),
         hrService.getDepartments(),
         hrService.getPositions(),
@@ -112,19 +101,26 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: Recu
         hrService.getTrainings(),
         hrService.getBenefits(),
         hrService.getDashboardStats(),
-      ]) as any[];
+      ]);
+
+      const safeVal = (i: number) => {
+        const r = results[i];
+        if (r.status !== 'fulfilled') return [];
+        const v = (r as any).value;
+        return Array.isArray(v) ? v : (v?.data || []);
+      };
 
       setData({
-        employees: Array.isArray(employeesRes) ? employeesRes : (employeesRes?.data || []),
-        departments: Array.isArray(departmentsRes) ? departmentsRes : (departmentsRes?.data || []),
-        positions: Array.isArray(positionsRes) ? positionsRes : (positionsRes?.data || []),
-        payrolls: Array.isArray(payrollsRes) ? payrollsRes : (payrollsRes?.data || []),
-        attendance: Array.isArray(attendanceRes) ? attendanceRes : (attendanceRes?.data || []),
-        leaveRequests: Array.isArray(leaveRequestsRes) ? leaveRequestsRes : (leaveRequestsRes?.data || []),
-        reviews: Array.isArray(reviewsRes) ? reviewsRes : (reviewsRes?.data || []),
-        trainings: Array.isArray(trainingsRes) ? trainingsRes : (trainingsRes?.data || []),
-        benefits: Array.isArray(benefitsRes) ? benefitsRes : (benefitsRes?.data || []),
-        stats: statsRes || null,
+        employees: safeVal(0),
+        departments: safeVal(1),
+        positions: safeVal(2),
+        payrolls: safeVal(3),
+        attendance: safeVal(4),
+        leaveRequests: safeVal(5),
+        reviews: safeVal(6),
+        trainings: safeVal(7),
+        benefits: safeVal(8),
+        stats: results[9].status === 'fulfilled' ? (results[9] as any).value : null,
       });
     } catch (error) {
       console.error('Error fetching HR data:', error);
@@ -141,7 +137,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: Recu
 
 
   return (
-    <div className="space-y-6 p-4 md:p-8 pb-20 max-w-[1920px] mx-auto">
+    <div className="space-y-6 p-4 md:p-8 pb-20 w-full max-w-[1920px] mx-auto min-w-0">
       {/* Header matching Suscripciones style */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}

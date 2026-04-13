@@ -77,12 +77,12 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
             {lowStockProducts.length > 0 ? (
               <div className="space-y-2">
                 {lowStockProducts.map((p: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
-                    <div>
-                      <p className="text-sm font-bold italic">{p.name}</p>
-                      <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{p.code}</p>
+                  <div key={i} className="flex items-center justify-between py-2 border-b last:border-0 gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold italic truncate">{p.name}</p>
+                      <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest truncate">{p.code}</p>
                     </div>
-                    <span className={`text-sm font-bold ${(p.stock || 0) === 0 ? 'text-red-600' : 'text-orange-600'}`}>
+                    <span className={`text-sm font-bold shrink-0 ${(p.stock || 0) === 0 ? 'text-red-600' : 'text-orange-600'}`}>
                       {p.stock || 0} uds
                     </span>
                   </div>
@@ -105,11 +105,11 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
             {recentActivity.length > 0 ? (
               <div className="space-y-2">
                 {recentActivity.map((act: any, i: number) => (
-                  <div key={i} className="flex items-start gap-2 py-2 border-b last:border-0">
-                    <div className={`mt-1.5 size-2 rounded-full ${act.alert ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]' : 'bg-primary shadow-[0_0_8px_rgba(6,114,49,0.5)]'}`} />
+                  <div key={i} className="flex items-start gap-2 py-2 border-b last:border-0 overflow-hidden">
+                    <div className={`mt-1.5 size-2 rounded-full shrink-0 ${act.alert ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]' : 'bg-primary shadow-[0_0_8px_rgba(6,114,49,0.5)]'}`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{act.desc}</p>
-                      <p className="text-xs text-muted-foreground">{act.type} · {act.date.toLocaleDateString()}</p>
+                      <p className="text-xs text-muted-foreground truncate">{act.type} · {act.date.toLocaleDateString()}</p>
                     </div>
                   </div>
                 ))}
@@ -123,3 +123,4 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
     </div>
   );
 }
+

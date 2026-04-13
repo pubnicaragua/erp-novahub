@@ -86,3 +86,4 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
     </div>
   );
 };
+

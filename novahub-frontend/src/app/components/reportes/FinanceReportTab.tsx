@@ -9,8 +9,9 @@ import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Percent, ArrowUpRight, ArrowDownRight, Activity, Scale, BarChart3 } from 'lucide-react';
+import { Percent, ArrowUpRight, ArrowDownRight, Activity, Scale, BarChart3, Wallet, CreditCard } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -190,196 +191,10 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
     });
   }, [monthlyData]);
 
-  const getBase64Image = async (url: string) => {
-    try {
-      const resp = await fetch(url);
-      const blob = await resp.blob();
-      return new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch (e) {
-      return null;
-    }
-  };
 
-  const sanitizeHtml2CanvasOklch = (_elementId: string, clonedDoc: Document, primaryHex: string) => {
-    // 1) Inject a global style that overrides ALL CSS custom properties with safe hex values
-    const styleTag = clonedDoc.createElement('style');
-    styleTag.innerHTML = `
-      :root, *, *::before, *::after {
-        --background: #ffffff !important;
-        --foreground: #333333 !important;
-        --card: #ffffff !important;
-        --card-foreground: #333333 !important;
-        --popover: #ffffff !important;
-        --popover-foreground: #333333 !important;
-        --primary: ${primaryHex} !important;
-        --primary-foreground: #ffffff !important;
-        --secondary: #f3f4f6 !important;
-        --secondary-foreground: #333333 !important;
-        --muted: #f3f4f6 !important;
-        --muted-foreground: #6b7280 !important;
-        --accent: #f3f4f6 !important;
-        --accent-foreground: #333333 !important;
-        --destructive: #ef4444 !important;
-        --destructive-foreground: #ffffff !important;
-        --border: #e5e7eb !important;
-        --input: #e5e7eb !important;
-        --ring: ${primaryHex} !important;
-        --chart-1: #10b981 !important;
-        --chart-2: #ef4444 !important;
-        --chart-3: #6366f1 !important;
-        --chart-4: #f59e0b !important;
-        --chart-5: #ec4899 !important;
-        --sidebar-background: #ffffff !important;
-        --sidebar-foreground: #333333 !important;
-        --sidebar-primary: ${primaryHex} !important;
-        --sidebar-primary-foreground: #ffffff !important;
-        --sidebar-accent: #f3f4f6 !important;
-        --sidebar-accent-foreground: #333333 !important;
-        --sidebar-border: #e5e7eb !important;
-        --sidebar-ring: ${primaryHex} !important;
-      }
-    `;
-    clonedDoc.head.appendChild(styleTag);
 
-    const hasUnsupported = (s: string | null | undefined) => s ? /oklch\(|oklab\(|color\(|lch\(|lab\(/i.test(s) : false;
 
-    // 2) Walk each export container and fix all child elements
-    const walkAndFix = (origRoot: Element | null, clonedRoot: Element | null) => {
-      if (!origRoot || !clonedRoot) return;
-      const origList = [origRoot, ...Array.from(origRoot.querySelectorAll('*'))];
-      const clonedList = [clonedRoot, ...Array.from(clonedRoot.querySelectorAll('*'))];
 
-      for (let i = 0; i < Math.min(origList.length, clonedList.length); i++) {
-        const origEl = origList[i] as HTMLElement;
-        const cloneEl = clonedList[i] as HTMLElement;
-        if (!origEl || !cloneEl) continue;
-
-        try {
-          const comp = window.getComputedStyle(origEl);
-
-          // Determine safe color based on classes
-          let safeColor = '#333333';
-          const cls = origEl.className?.toString?.() || '';
-          if (cls.includes('text-primary')) safeColor = primaryHex;
-          else if (cls.includes('text-emerald')) safeColor = '#10b981';
-          else if (cls.includes('text-rose')) safeColor = '#f43f5e';
-          else if (cls.includes('text-purple')) safeColor = '#a855f7';
-          else if (cls.includes('text-green')) safeColor = '#22c55e';
-          else if (cls.includes('text-red')) safeColor = '#ef4444';
-          else if (cls.includes('text-blue')) safeColor = '#3b82f6';
-          else if (cls.includes('text-amber') || cls.includes('text-orange')) safeColor = '#f59e0b';
-
-          // Fix color
-          if (hasUnsupported(comp.color)) {
-            cloneEl.style.setProperty('color', safeColor, 'important');
-          }
-          // Fix background-color
-          if (hasUnsupported(comp.backgroundColor)) {
-            let bg = 'transparent';
-            if (cls.includes('bg-primary')) bg = primaryHex;
-            else if (cls.includes('bg-emerald')) bg = '#10b981';
-            else if (cls.includes('bg-rose')) bg = '#f43f5e';
-            else if (cls.includes('bg-muted')) bg = '#f3f4f6';
-            else if (cls.includes('bg-card') || cls.includes('bg-background')) bg = '#ffffff';
-            else if (cls.includes('bg-secondary') || cls.includes('bg-accent')) bg = '#f3f4f6';
-            cloneEl.style.setProperty('background-color', bg, 'important');
-          }
-          // Fix border-color
-          if (hasUnsupported(comp.borderColor)) {
-            cloneEl.style.setProperty('border-color', '#e5e7eb', 'important');
-          }
-          // Fix outline-color
-          if (hasUnsupported(comp.outlineColor)) {
-            cloneEl.style.setProperty('outline-color', '#e5e7eb', 'important');
-          }
-          // Fix background-image (gradients can contain oklch)
-          if (hasUnsupported(comp.backgroundImage)) {
-            cloneEl.style.setProperty('background-image', 'none', 'important');
-          }
-          // Fix box-shadow / text-shadow
-          if (hasUnsupported(comp.boxShadow)) {
-            cloneEl.style.setProperty('box-shadow', 'none', 'important');
-          }
-          if (hasUnsupported((comp as any).textDecorationColor)) {
-            cloneEl.style.setProperty('text-decoration-color', safeColor, 'important');
-          }
-
-          // Fix SVG attributes
-          const tagName = cloneEl.tagName?.toLowerCase?.() || '';
-          if (tagName === 'svg' || cloneEl.closest?.('svg') || ['path','rect','circle','line','polygon','polyline','g','text','tspan'].includes(tagName)) {
-            const fill = cloneEl.getAttribute('fill');
-            const stroke = cloneEl.getAttribute('stroke');
-            const stopColor = cloneEl.getAttribute('stop-color');
-
-            if (fill && (hasUnsupported(fill) || fill.includes('var('))) {
-              if (cls.includes('recharts-bar-rectangle') || cls.includes('recharts-pie-sector')) {
-                // Keep the explicit fill from <Cell> or <Bar> - it should already be a hex
-              } else {
-                cloneEl.setAttribute('fill', '#9ca3af');
-              }
-            }
-            if (stroke && (hasUnsupported(stroke) || stroke.includes('var('))) {
-              cloneEl.setAttribute('stroke', '#e5e7eb');
-            }
-            if (stopColor && (hasUnsupported(stopColor) || stopColor.includes('var('))) {
-              cloneEl.setAttribute('stop-color', primaryHex);
-            }
-          }
-
-          // Fix any inline style values that might contain oklch
-          if (cloneEl.style) {
-            for (let j = 0; j < cloneEl.style.length; j++) {
-              const prop = cloneEl.style[j];
-              const val = cloneEl.style.getPropertyValue(prop);
-              if (hasUnsupported(val)) {
-                if (prop.includes('color') || prop === 'fill' || prop === 'stroke') {
-                  cloneEl.style.setProperty(prop, safeColor, 'important');
-                } else if (prop.includes('background')) {
-                  cloneEl.style.setProperty(prop, '#ffffff', 'important');
-                } else if (prop.includes('border') || prop.includes('outline')) {
-                  cloneEl.style.setProperty(prop, '#e5e7eb', 'important');
-                } else if (prop.includes('shadow')) {
-                  cloneEl.style.setProperty(prop, 'none', 'important');
-                }
-              }
-            }
-          }
-        } catch (e) {
-          // ignore errors on individual elements
-        }
-      }
-    };
-
-    // Fix all export containers
-    ['finance-report-kpis', 'finance-monthly-chart', 'finance-trend-chart', 'finance-top-incomes', 'finance-top-expenses'].forEach(id => {
-      walkAndFix(document.getElementById(id), clonedDoc.getElementById(id));
-    });
-
-    // Also do a broader pass on the entire body for any stray oklch in stylesheets
-    try {
-      const sheets = clonedDoc.styleSheets;
-      for (let s = 0; s < sheets.length; s++) {
-        try {
-          const rules = sheets[s].cssRules;
-          for (let r = 0; r < rules.length; r++) {
-            const rule = rules[r] as CSSStyleRule;
-            if (rule.cssText && hasUnsupported(rule.cssText)) {
-              let newCss = rule.cssText.replace(/oklch\([^)]*\)/gi, '#9ca3af').replace(/oklab\([^)]*\)/gi, '#9ca3af');
-              try {
-                sheets[s].deleteRule(r);
-                sheets[s].insertRule(newCss, r);
-              } catch (e2) {}
-            }
-          }
-        } catch (e) {}
-      }
-    } catch (e) {}
-  };
 
   useImperativeHandle(ref, () => ({
     exportPDF: async () => {
@@ -465,7 +280,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         if (chart1) {
           checkPage(95);
           try {
-            const canvas = await html2canvas(chart1, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch('finance-monthly-chart', clonedDoc, primaryHex) });
+            const canvas = await html2canvas(chart1, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(['finance-monthly-chart'], clonedDoc, primaryHex) });
             doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, 80, undefined, 'FAST');
             currentY += 85;
           } catch (imgErr) {
@@ -478,7 +293,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         if (chart2) {
           checkPage(95);
           try {
-            const canvas = await html2canvas(chart2, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch('finance-trend-chart', clonedDoc, primaryHex) });
+            const canvas = await html2canvas(chart2, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(['finance-trend-chart'], clonedDoc, primaryHex) });
             doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, 80, undefined, 'FAST');
             currentY += 85;
           } catch (imgErr) {
@@ -635,7 +450,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
             const canvas = await html2canvas(el, {
               scale: 2,
               backgroundColor: '#ffffff',
-              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(elementId, clonedDoc, primaryHex),
+              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch([elementId], clonedDoc, primaryHex),
             });
             const imgData = canvas.toDataURL('image/png');
             const imgId = wb.addImage({ base64: imgData, extension: 'png' });
@@ -922,7 +737,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
       {/* ═══ Top Items ═══ */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Top Ingresos */}
-        <Card id="finance-top-incomes" className="border-emerald-500/20">
+        <Card id="finance-top-incomes" className="border-emerald-500/20 min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
               <ArrowUpRight className="size-4 text-emerald-500" /> Top 5 Ingresos
@@ -935,9 +750,9 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
                   <div className="size-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-[10px] font-black text-emerald-600 shrink-0">
                     #{idx + 1}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold truncate">{inc.source || inc.description || 'Ingreso'}</p>
-                    <p className="text-[10px] text-muted-foreground">{inc.category || 'Sin cat.'} · {new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI')}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{inc.category || 'Sin cat.'} · {new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI')}</p>
                   </div>
                 </div>
                 <span className="text-sm font-black text-emerald-500 shrink-0 ml-3">+{formatConvertedAmount(Number(inc.amount), inc.currency, inc.exchangeRate)}</span>
@@ -947,7 +762,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         </Card>
 
         {/* Top Gastos */}
-        <Card id="finance-top-expenses" className="border-rose-500/20">
+        <Card id="finance-top-expenses" className="border-rose-500/20 min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
               <ArrowDownRight className="size-4 text-rose-500" /> Top 5 Gastos
@@ -960,9 +775,9 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
                   <div className="size-7 rounded-lg bg-rose-500/20 flex items-center justify-center text-[10px] font-black text-rose-600 shrink-0">
                     #{idx + 1}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold truncate">{exp.description || 'Gasto'}</p>
-                    <p className="text-[10px] text-muted-foreground">{exp.category || 'Sin cat.'} · {new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI')}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{exp.category || 'Sin cat.'} · {new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI')}</p>
                   </div>
                 </div>
                 <span className="text-sm font-black text-rose-500 shrink-0 ml-3">-{formatConvertedAmount(Number(exp.amount), exp.currency, exp.exchangeRate)}</span>
@@ -975,3 +790,4 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   );
 });
 FinanceReportTab.displayName = 'FinanceReportTab';
+

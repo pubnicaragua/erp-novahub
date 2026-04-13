@@ -179,7 +179,7 @@ export function ConfigNominaView() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <Settings2 className="size-6 text-primary" />
@@ -189,7 +189,7 @@ export function ConfigNominaView() {
             Define los porcentajes de deducciones, aportes patronales y provisiones
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge className={cn(
             "px-3 py-1 text-[10px] font-black uppercase tracking-widest",
             hasExisting ? "bg-primary/10 text-primary border-primary/20" : "bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400"
@@ -251,8 +251,8 @@ export function ConfigNominaView() {
                     <p className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                       <Scale className="size-4" /> Tabla Progresiva del IR (Rentas del Trabajo)
                     </p>
-                    <div className="rounded-xl border border-border/40 overflow-hidden">
-                      <table className="w-full text-sm">
+                    <div className="rounded-xl border border-border/40 overflow-x-auto">
+                      <table className="w-full text-sm min-w-[550px]">
                         <thead>
                           <tr className="bg-muted/30 border-b border-border/40">
                             <th className="text-left p-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Renta Neta Anual (C$)</th>
@@ -467,3 +467,4 @@ export function ConfigNominaView() {
     </div>
   );
 }
+

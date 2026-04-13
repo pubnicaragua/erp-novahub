@@ -59,16 +59,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
       if (showRefresh) setRefreshing(true);
       else setLoading(true);
       
-      const [
-        productsRes, 
-        warehousesRes, 
-        categoriesRes,
-        transfersRes,
-        adjustmentsRes,
-        lotsRes,
-        seriesRes,
-        movementsRes
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         inventoryService.getProducts(),
         inventoryService.getWarehouses(),
         inventoryService.getCategories(),
@@ -79,15 +70,21 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
         inventoryService.getMovements()
       ]);
 
+      const safeVal = (i: number) => {
+        const r = results[i];
+        if (r.status !== 'fulfilled') return [];
+        const v = (r as any).value;
+        return v?.data || (Array.isArray(v) ? v : []);
+      };
       setData({
-        products: productsRes.data || [],
-        warehouses: warehousesRes || [],
-        categories: categoriesRes || [],
-        transfers: transfersRes || [],
-        adjustments: adjustmentsRes || [],
-        lots: lotsRes || [],
-        series: seriesRes || [],
-        movements: movementsRes || []
+        products: safeVal(0),
+        warehouses: safeVal(1),
+        categories: safeVal(2),
+        transfers: safeVal(3),
+        adjustments: safeVal(4),
+        lots: safeVal(5),
+        series: safeVal(6),
+        movements: safeVal(7)
       });
     } catch (error) {
       console.error('Error fetching inventory data:', error);

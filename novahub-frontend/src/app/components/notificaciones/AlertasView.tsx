@@ -83,3 +83,4 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
     </div>
   );
 };
+

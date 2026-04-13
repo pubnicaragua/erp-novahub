@@ -309,3 +309,4 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
     </div>
   );
 };
+

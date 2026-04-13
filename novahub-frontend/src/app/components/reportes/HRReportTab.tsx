@@ -679,3 +679,4 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   );
 });
 HRReportTab.displayName = 'HRReportTab';
+

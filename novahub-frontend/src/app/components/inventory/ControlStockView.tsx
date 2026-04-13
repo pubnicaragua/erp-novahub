@@ -632,3 +632,4 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     </Card>
   );
 }
+

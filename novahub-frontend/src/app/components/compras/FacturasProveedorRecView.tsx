@@ -78,7 +78,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
   );
 
   const columns: ColumnDef<RecurringSupplierInvoice>[] = [
-    { key: 'description' as any, header: 'Descripción', editable: canPerform('compras', 'edit'), 
+    { key: 'description' as any, header: 'Descripción', editable: canPerform('PURCHASES_INVOICES_REC', 'edit'), 
       render: (_, row) => <span className="text-xs font-bold text-primary">{(row as any).description || 'Factura Automática'}</span> },
     { key: 'supplier' as any,    header: 'Proveedor',
       render: (_, row) => <span className="font-bold text-sm">{(row as any).supplier?.name||'-'}</span> },
@@ -88,9 +88,9 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
           {formatConvertedAmount(Number(val || (row as any).amount || 0), row.currency, row.exchangeRate)}
         </span>
       ) },
-    { key: 'frequency' as any,   header: 'Frecuencia',  width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: freqOpts,
+    { key: 'frequency' as any,   header: 'Frecuencia',  width: '120px', editable: canPerform('PURCHASES_INVOICES_REC', 'edit'), type: 'select', options: freqOpts,
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-purple-500/10 text-purple-500 border-none">{freqMap[(val||'').toLowerCase()]||val||'-'}</Badge> },
-    { key: 'status' as any,      header: 'Estado',      width: '110px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status' as any,      header: 'Estado',      width: '110px', editable: canPerform('PURCHASES_INVOICES_REC', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -162,13 +162,13 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-             {!isNew && canPerform('compras', 'delete') && (
+             {!isNew && canPerform('PURCHASES_INVOICES_REC', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
-            {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+            {((isNew && canPerform('PURCHASES_INVOICES_REC', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES_REC', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Factura Recurrente
               </Button>
@@ -184,7 +184,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Nombre Descriptivo</p>
                   <Input 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
                     value={(localDoc as any).description || ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, description: e.target.value } as any)} 
                     className="h-8 text-xs font-bold" 
@@ -194,7 +194,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor Obligatorio</p>
                   <Combobox
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
                     options={suppliers
                       .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
                       .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
@@ -206,7 +206,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
                   <select 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
                     value={localDoc.frequency || 'monthly'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, frequency: e.target.value as any })}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase text-primary"
@@ -217,7 +217,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha de Inicio</p>
                   <Input 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
                     type="date" 
                     value={localDoc.startDate ? new Date(localDoc.startDate).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, startDate: new Date(e.target.value).toISOString() })} 
@@ -227,7 +227,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] font-black text-rose-500 mb-1 tracking-widest">Siguiente Factura *</p>
                   <Input 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
                     type="date" 
                     value={(localDoc as any).nextInvoiceDate ? new Date((localDoc as any).nextInvoiceDate).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, nextInvoiceDate: new Date(e.target.value).toISOString() } as any)} 
@@ -237,7 +237,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <select 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
                     value={localDoc.status || 'ACTIVE'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                     className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
@@ -253,7 +253,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
              <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Plantilla de Ítems</p>
-                  {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+                  {((isNew && canPerform('PURCHASES_INVOICES_REC', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES_REC', 'edit'))) && (
                     <Button variant="outline" size="sm" onClick={() => {
                       const newItems = [...((localDoc as any).items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, total: 0 }];
                       setLocalDoc({ ...localDoc, items: newItems } as any);
@@ -274,7 +274,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                     <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
                       <div className="col-span-6">
                         <Input 
-                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                          disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
                           value={item.description || ''} 
                           onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
                           className="h-8 text-xs" 
@@ -283,7 +283,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                       </div>
                       <div className="col-span-2">
                         <Input 
-                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                          disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
                           type="number" 
                           min="0" 
                           value={item.quantity === 0 ? '' : item.quantity} 
@@ -294,7 +294,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                       </div>
                       <div className="col-span-2">
                         <Input 
-                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                          disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
                           type="number" 
                           min="0" 
                           value={item.unitPrice === 0 ? '' : item.unitPrice} 
@@ -305,7 +305,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                       </div>
                       <div className="col-span-2 flex items-center justify-end gap-2">
                         <span className="text-xs font-black w-20 text-right tabular-nums">${Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                        {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+                        {((isNew && canPerform('PURCHASES_INVOICES_REC', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES_REC', 'edit'))) && (
                           <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
                             <Trash2 className="size-3" />
                           </Button>
@@ -325,7 +325,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                       <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
                          <div className="w-1/2">
                             <select 
-                              disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                              disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
                               value={localDoc.currency || 'NIO'} 
                               onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value, exchangeRate: globalRate } as any)}
                               className="h-6 w-full max-w-[80px] rounded-md border border-input bg-background px-1 text-[10px] font-bold uppercase"
@@ -403,13 +403,13 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
           <div><h2 className="text-xl font-black uppercase tracking-tight">Facturas Recurrentes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Servicios y pagos automáticos</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerform('compras', 'create') && (
+            {canPerform('PURCHASES_INVOICES_REC', 'create') && (
               <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Agregar Factura Recurrente</Button>
             )}
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={canPerform('compras', 'delete') ? async (ids) => {
+          onBulkDelete={canPerform('PURCHASES_INVOICES_REC', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
@@ -423,8 +423,8 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              {canPerform('compras', 'delete') && (
+              <Button title={canPerform('PURCHASES_INVOICES_REC', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              {canPerform('PURCHASES_INVOICES_REC', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
               )}
             </div>
@@ -434,3 +434,4 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
     </div>
   );
 }
+

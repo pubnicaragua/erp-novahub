@@ -15,6 +15,7 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { tenantsService } from '../../services/tenants.service';
 import { toast } from 'sonner';
+import { ALL_PERM_MODULES } from '../ConfiguracionPage';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
@@ -26,10 +27,8 @@ interface TenantSubscriptionViewProps {
 }
 
 const SYSTEM_ROLE_OPTIONS = [
-  { value: 'ADMIN', label: 'Administrador', description: 'Acceso total a la empresa' },
-  { value: 'MANAGER', label: 'Gerente', description: 'Gestión operativa y supervisión' },
-  { value: 'EMPLOYEE', label: 'Empleado', description: 'Acceso operativo estándar' },
-  { value: 'VIEWER', label: 'Visualizador', description: 'Solo lectura de datos' },
+  { value: 'ADMIN', label: 'Administrador', description: 'Acceso total a todos los módulos' },
+  { value: 'EMPLOYEE', label: 'Colaborador', description: 'Acceso limitado según rol personalizado asignado' },
 ];
 
 export function TenantSubscriptionView({ tenant, availableModules, requests, customRoles = [], onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
@@ -362,18 +361,22 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                   <div className="space-y-3 pt-4 border-t border-border/50">
                     <div className="flex flex-col gap-2 pt-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Rol Base</span>
+                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Tipo</span>
                         <Select
-                          value={u.role?.toUpperCase()}
+                          value={u.role?.toUpperCase() === 'ADMIN' ? 'ADMIN' : 'EMPLOYEE'}
                           onValueChange={async (val) => {
                             try {
                               await tenantsService.updateUser(tenant.id, u.id, { role: val });
-                              toast.success('Rol del sistema actualizado');
+                              if (val === 'ADMIN') {
+                                // Admin no necesita rol personalizado
+                                await tenantsService.updateUser(tenant.id, u.id, { customRoleId: null } as any);
+                              }
+                              toast.success('Tipo de acceso actualizado');
                               fetchUsers();
                             } catch (err: any) { toast.error(err.response?.data?.message || 'Error'); }
                           }}
                         >
-                          <SelectTrigger className="h-7 w-[120px] text-[10px] font-bold uppercase bg-primary/5 border-none shadow-none focus:ring-0">
+                          <SelectTrigger className="h-7 w-[130px] text-[10px] font-bold uppercase bg-primary/5 border-none shadow-none focus:ring-0">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -384,23 +387,25 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                         </Select>
                       </div>
 
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Rol Personalizado</span>
-                        <Select
-                          value={u.customRoleId || 'none'}
-                          onValueChange={(val) => handleUpdateCustomRole(u.id, val)}
-                        >
-                          <SelectTrigger className="h-7 w-[120px] text-[10px] font-bold uppercase bg-purple-500/5 text-purple-600 border-none shadow-none focus:ring-0">
-                            <SelectValue placeholder="Ninguno" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none" className="text-[10px] font-bold uppercase">Ninguno</SelectItem>
-                            {customRoles.map(r => (
-                              <SelectItem key={r.id} value={r.id} className="text-[10px] font-bold uppercase">{r.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      {u.role?.toUpperCase() !== 'ADMIN' && (
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Rol Personalizado</span>
+                          <Select
+                            value={u.customRoleId || 'none'}
+                            onValueChange={(val) => handleUpdateCustomRole(u.id, val)}
+                          >
+                            <SelectTrigger className="h-7 w-[130px] text-[10px] font-bold uppercase bg-purple-500/5 text-purple-600 border-none shadow-none focus:ring-0">
+                              <SelectValue placeholder="Ninguno" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none" className="text-[10px] font-bold uppercase">Ninguno</SelectItem>
+                              {customRoles.map(r => (
+                                <SelectItem key={r.id} value={r.id} className="text-[10px] font-bold uppercase">{r.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </div>
                     
                     <div className="flex items-center gap-2 pt-4">
@@ -441,59 +446,87 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               Permisos de {selectedUser?.name}
             </DialogTitle>
             <DialogDescription>
-              Detalle de accesos basados en el Rol Base ({selectedUser?.role}) {selectedUser?.customRole && `y Rol Personalizado (${selectedUser.customRole.name})`}.
+              Detalle de accesos basados en el tipo ({selectedUser?.role === 'ADMIN' ? 'Administrador' : 'Colaborador'}) {selectedUser?.customRole && `y Rol Personalizado (${selectedUser.customRole.name})`}.
             </DialogDescription>
           </DialogHeader>
           
           <div className="py-4">
-            <div className="rounded-xl border border-border overflow-hidden">
+            <div className="rounded-xl border border-border overflow-hidden max-h-[60vh] overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="bg-muted/50 border-b border-border">
+                <thead className="bg-muted/50 border-b border-border sticky top-0">
                   <tr>
                     <th className="text-left p-3 font-black uppercase text-[10px] tracking-widest">Módulo</th>
                     <th className="text-center p-3 font-black uppercase text-[10px] tracking-widest">Ver</th>
-                    <th className="text-center p-3 font-black uppercase text-[10px] tracking-widest">Crear/Editar</th>
+                    <th className="text-center p-3 font-black uppercase text-[10px] tracking-widest">Crear</th>
+                    <th className="text-center p-3 font-black uppercase text-[10px] tracking-widest">Editar</th>
                     <th className="text-center p-3 font-black uppercase text-[10px] tracking-widest">Eliminar</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {/* Aquí mapearíamos los permisos reales si el objeto User los tuviera calculados, 
-                      pero como ejemplo mostramos la estructura del rol personalizado si existe */}
-                  {(selectedUser?.customRole?.permissions || []).length > 0 ? (
-                    selectedUser.customRole.permissions.map((p: any) => (
-                      <tr key={p.module} className="hover:bg-muted/20 transition-colors">
-                        <td className="p-3 font-bold text-xs">{p.module}</td>
-                        <td className="p-3 text-center">{p.read ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
-                        <td className="p-3 text-center">{p.write ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
-                        <td className="p-3 text-center">{p.delete ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="p-8 text-center text-muted-foreground italic">
-                        Este usuario utiliza los permisos predeterminados del Rol Base. 
-                        Para dar permisos específicos, asígnale un Rol Personalizado.
-                      </td>
-                    </tr>
-                  )}
+                  {(() => {
+                    // Buscar permisos: primero del customRole embebido, luego cruzar con customRoles prop
+                    let rolePermissions = selectedUser?.customRole?.permissions || [];
+                    if (rolePermissions.length === 0 && selectedUser?.customRoleId) {
+                      const fullRole = customRoles.find(r => r.id === selectedUser.customRoleId);
+                      rolePermissions = fullRole?.permissions || [];
+                    }
+                    
+                    if (rolePermissions.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={5} className="p-8 text-center text-muted-foreground italic">
+                            {selectedUser?.role?.toUpperCase() === 'ADMIN' 
+                              ? 'Este usuario es Administrador y tiene acceso total a todos los módulos.'
+                              : 'Este usuario no tiene un Rol Personalizado asignado. Asígnale uno desde "Mi Equipo" para configurar sus accesos.'}
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return ALL_PERM_MODULES.map((mod) => {
+                      const p = rolePermissions.find((perm: any) => perm.module === mod.id);
+                      if (!p) return null;
+                      const hasAny = p.read || p.create || p.edit || p.delete || p.write;
+                      if (!hasAny) return null;
+                      
+                      const isSubmodule = 'parent' in mod;
+                      const Icon = mod.icon;
+
+                      return (
+                        <tr key={mod.id} className={cn(
+                          "hover:bg-muted/10 transition-colors",
+                          isSubmodule ? "bg-muted/5 opacity-90" : "bg-card border-t border-border/50"
+                        )}>
+                          <td className="p-3">
+                            <div className={cn("flex items-center gap-3", isSubmodule && "pl-8")}>
+                              <div className={cn(
+                                "size-6 rounded-lg flex items-center justify-center flex-shrink-0",
+                                isSubmodule ? "bg-muted/20" : "bg-primary/10"
+                              )}>
+                                {Icon && <Icon className={cn("size-3", isSubmodule ? "text-muted-foreground" : "text-primary")} />}
+                              </div>
+                              <div>
+                                <p className={cn("font-bold", isSubmodule ? "text-xs text-muted-foreground" : "text-sm text-foreground")}>
+                                  {mod.label}
+                                  {isSubmodule && <span className="ml-2 text-[9px] font-black text-muted-foreground/50 uppercase">VISTA</span>}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-3 text-center">{p.read ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
+                          <td className="p-3 text-center">{(p.create ?? p.write) ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
+                          <td className="p-3 text-center">{(p.edit ?? p.write) ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
+                          <td className="p-3 text-center">{p.delete ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
+                        </tr>
+                      );
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
           </div>
 
-          <DialogFooter className="gap-3">
-            {selectedUser?.customRoleId && (
-              <Button 
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold gap-2"
-                onClick={() => {
-                  setIsPermsDialogOpen(false);
-                  toast.info('Redirigiendo a la edición del rol...');
-                  // Aquí podrías usar una función para navegar a la página de roles y abrir el editor del rol específico
-                }}
-              >
-                <Edit2 className="size-4" /> Ajustar este Rol
-              </Button>
-            )}
+          <DialogFooter>
             <Button variant="outline" onClick={() => setIsPermsDialogOpen(false)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
@@ -530,10 +563,10 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Rol Base del Sistema</Label>
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo de Acceso</Label>
               <Select value={userForm.role} onValueChange={v => setUserForm({...userForm, role: v})}>
                 <SelectTrigger className="bg-muted/10 h-11">
-                  <SelectValue placeholder="Seleccionar rol..." />
+                  <SelectValue placeholder="Seleccionar tipo..." />
                 </SelectTrigger>
                 <SelectContent>
                   {SYSTEM_ROLE_OPTIONS.map(role => (
@@ -546,6 +579,12 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                   ))}
                 </SelectContent>
               </Select>
+              {userForm.role === 'EMPLOYEE' && (
+                <p className="text-[10px] text-amber-500 font-medium flex items-center gap-1">
+                  <Shield className="size-3" />
+                  Deberás asignarle un rol personalizado después de crearlo desde "Mi Equipo".
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Contraseña Temporal *</Label>

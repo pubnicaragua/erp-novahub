@@ -75,7 +75,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
     { 
       key: 'name', 
       header: 'Nombre del Cliente', 
-      editable: canPerform('ventas', 'edit'),
+      editable: canPerform('SALES_CLIENTS', 'edit'),
       render: (val) => (
         <div className="flex items-center gap-3">
           <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center font-black text-primary text-xs border border-primary/20">
@@ -85,12 +85,12 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
         </div>
       )
     },
-    { key: 'contactName', header: 'Contacto', editable: canPerform('ventas', 'edit') },
+    { key: 'contactName', header: 'Contacto', editable: canPerform('SALES_CLIENTS', 'edit') },
     { 
       key: 'type', 
       header: 'Tipo', 
       width: '120px',
-      editable: canPerform('ventas', 'edit'),
+      editable: canPerform('SALES_CLIENTS', 'edit'),
       type: 'select',
       options: [
         { label: 'Particular', value: 'INDIVIDUAL', color: 'bg-blue-500/10 text-blue-500' },
@@ -105,8 +105,8 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
         </Badge>
       )
     },
-    { key: 'email', header: 'Email / Envío', editable: canPerform('ventas', 'edit') },
-    { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('ventas', 'edit') },
+    { key: 'email', header: 'Email / Envío', editable: canPerform('SALES_CLIENTS', 'edit') },
+    { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { 
       key: 'balance', 
       header: 'Saldo Deudor', 
@@ -124,7 +124,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
       key: 'status', 
       header: 'Estado', 
       width: '120px',
-      editable: canPerform('ventas', 'edit'),
+      editable: canPerform('SALES_CLIENTS', 'edit'),
       type: 'select',
       options: [
         { label: 'Activo', value: 'ACTIVE', color: 'bg-emerald-500/10 text-emerald-500' },
@@ -186,7 +186,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            {canPerform('ventas', 'create') && (
+            {canPerform('SALES_CLIENTS', 'create') && (
               <Button 
                 onClick={handleAddClient}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
@@ -218,7 +218,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           actions={(row) => (
             <div className="flex items-center gap-1">
                <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => toast.info('Detalle de cliente en desarrollo')}><Eye className="size-4" /></Button>
-               {canPerform('ventas', 'delete') && (
+               {canPerform('SALES_CLIENTS', 'delete') && (
                  <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                )}
             </div>
@@ -257,3 +257,4 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
     </div>
   );
 }
+

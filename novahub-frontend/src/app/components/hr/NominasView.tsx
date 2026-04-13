@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
@@ -9,6 +9,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { AlertTriangle } from 'lucide-react';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
   const { convertAmount, formatConvertedAmount, displayCurrency } = useCurrency();
@@ -30,6 +31,20 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
     return matchesEmployee && matchesStatus;
   });
+
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filterEmployee, filterStatus, includeCommissions, pageSize]);
+
+  const totalPages = Math.ceil(filteredPayrolls.length / pageSize);
+  const paginatedPayrolls = filteredPayrolls.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const handleProcessPayroll = async () => {
     try {
@@ -66,13 +81,16 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   };
 
   const handleDeletePayroll = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar esta nómina? Los datos no se podrán recuperar y las comisiones volverán a estado pendiente.')) return;
     try {
+      setDeleteLoading(true);
       await hrService.deletePayroll(id);
       toast.success('Nómina eliminada exitosamente');
       onRefresh();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Error al eliminar nómina');
+    } finally {
+      setDeleteLoading(false);
+      setPendingDeleteId(null);
     }
   };
 
@@ -211,7 +229,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             <option value="PAID">Pagado</option>
           </select>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleExportPDF}>
             <Download className="size-4 mr-2" />
             Descargar PDF
@@ -242,9 +260,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       </div>
 
       {/* Payroll Table */}
-      <div className="border rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+      <div className="border rounded-lg overflow-hidden flex flex-col">
+        <div className="overflow-x-auto hidden md:block">
+          <table className="w-full min-w-[1100px]">
             <thead className="bg-muted/50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold">Empleado</th>
@@ -257,7 +275,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filteredPayrolls.map((payroll: any) => {
+              {paginatedPayrolls.map((payroll: any) => {
                 const currency = payroll.employee?.currency || 'USD';
                 return (
                   <React.Fragment key={payroll.id}>
@@ -315,7 +333,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={(e) => { e.stopPropagation(); handleDeletePayroll(payroll.id); }}
+                              onClick={(e) => { e.stopPropagation(); setPendingDeleteId(payroll.id); }}
                               className="h-7 px-3 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 font-semibold"
                             >
                               <Trash2 className="size-3.5 mr-1" />
@@ -377,7 +395,131 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile View */}
+        <div className="block md:hidden space-y-4 p-4 bg-muted/10">
+          {paginatedPayrolls.map((payroll: any) => {
+            const currency = payroll.employee?.currency || 'USD';
+            return (
+              <div key={payroll.id} className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-card to-background p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4 border-b border-primary/10 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-full bg-gradient-to-br from-primary/60 to-primary flex items-center justify-center text-primary-foreground text-sm font-bold">
+                      {payroll.employee?.firstName?.[0]}{payroll.employee?.lastName?.[0]}
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm tracking-tight">{payroll.employee?.firstName} {payroll.employee?.lastName}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">{payroll.employee?.employeeNumber}</p>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] px-2 py-1 rounded-lg font-bold shadow-sm ${
+                    payroll.status === 'PAID' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                    isOverdue(payroll) ? 'bg-red-100 text-red-700 dark:bg-red-900/30 border border-red-500/20 shadow-red-500/20' :
+                    payroll.status === 'PENDING' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                    'bg-gray-100 text-gray-700 dark:bg-gray-800'
+                  }`}>
+                    {payroll.status === 'PAID' ? 'PAGADO' : isOverdue(payroll) ? 'VENCIDA' : payroll.status === 'PENDING' ? 'PENDIENTE' : payroll.status}
+                  </span>
+                </div>
+
+                <div className="space-y-3 mb-4">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Período</span>
+                    <span className="font-semibold text-right">{new Date(payroll.periodStart).toLocaleDateString()} - {new Date(payroll.periodEnd).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Salario Bruto</span>
+                    <span className="font-semibold text-right">{formatConvertedAmount(payroll.grossPay, currency)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs bg-primary/5 p-2 rounded-lg border border-primary/10">
+                    <span className="text-primary font-black uppercase text-[10px] tracking-widest">Neto a Pagar</span>
+                    <span className="font-black text-primary text-sm text-right">{formatConvertedAmount(payroll.netPay, currency)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Costo Total</span>
+                    <span className="font-bold text-orange-600 dark:text-orange-400 text-right">{formatConvertedAmount(payroll.costoTotalEmpresa || payroll.grossPay, currency)}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-3 border-t border-border/50">
+                  <Button size="sm" variant="outline" className="flex-1 rounded-xl text-[11px] h-8" onClick={() => setExpandedRow(expandedRow === payroll.id ? null : payroll.id)}>
+                    {expandedRow === payroll.id ? <><ChevronUp className="size-3 mr-1"/>Desglose</> : <><ChevronDown className="size-3 mr-1"/>Desglose</>}
+                  </Button>
+                  {payroll.status === 'PENDING' && (
+                    <>
+                      <Button size="sm" onClick={() => handleMarkAsPaid(payroll.id)} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-[11px] h-8">
+                        <CheckCircle className="size-3 mr-1" /> Pagar
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(payroll.id)} className="px-3 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 rounded-xl h-8">
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+                
+                {expandedRow === payroll.id && (
+                  <div className="mt-4 pt-4 border-t border-border/50 grid gap-x-4 gap-y-3 grid-cols-2 text-[10px]">
+                    <div className="space-y-1.5">
+                      <p className="font-black uppercase tracking-widest text-red-500 text-[9px]">Deducciones</p>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">INSS L.</span><span className="font-bold text-red-600 text-right">-{formatConvertedAmount(payroll.inssLaboral || 0, currency)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">IR</span><span className="font-bold text-red-600 text-right">-{formatConvertedAmount(payroll.ir || 0, currency)}</span></div>
+                      {Number(payroll.deductions || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground mr-1">Otras</span><span className="font-bold text-red-600 text-right">-{formatConvertedAmount(payroll.deductions || 0, currency)}</span></div>}
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="font-black uppercase tracking-widest text-green-600 text-[9px]">Ingresos</p>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Bonos</span><span className="font-bold text-green-600 text-right">+{formatConvertedAmount(payroll.bonuses || 0, currency)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">H. Extra</span><span className="font-bold text-green-600 text-right">+{formatConvertedAmount(payroll.overtime || 0, currency)}</span></div>
+                      {Number(payroll.commissionsSales || 0) > 0 && (
+                        <div className="flex justify-between"><span className="text-muted-foreground mr-1">Cmsns.</span><span className="font-bold text-emerald-600 text-right">+{formatConvertedAmount(payroll.commissionsSales, currency)}</span></div>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="font-black uppercase tracking-widest text-orange-500 text-[9px]">Aportes</p>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">INSS P.</span><span className="font-bold text-right">+{formatConvertedAmount(payroll.inssPatronal || 0, currency)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">INATEC</span><span className="font-bold text-right">+{formatConvertedAmount(payroll.inatec || 0, currency)}</span></div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="font-black uppercase tracking-widest text-blue-500 text-[9px]">Provisiones</p>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Vacac.</span><span className="font-bold text-blue-600 text-right">+{formatConvertedAmount(payroll.vacacionesProv || 0, currency)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Treaceavo</span><span className="font-bold text-blue-600 text-right">+{formatConvertedAmount(payroll.trecenoMes || 0, currency)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Indem.</span><span className="font-bold text-blue-600 text-right">+{formatConvertedAmount(payroll.indemnizacion || 0, currency)}</span></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
+
+      {/* Pagination Controls */}
+      {filteredPayrolls.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border/20">
+          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
+            <div className="flex items-center gap-2">
+              <span>Mostrar</span>
+              <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
+                {PAGE_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+              <span>por página</span>
+            </div>
+            <div className="h-4 w-px bg-border/40 hidden sm:block" />
+            <p className="bg-primary/5 px-3 py-1 rounded-full border border-primary/10">
+              Mostrando <span className="text-foreground font-black">{filteredPayrolls.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, filteredPayrolls.length)}</span> de <span className="text-primary font-black">{filteredPayrolls.length}</span> registros totales
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsLeft className="size-4" /></button>
+            <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronLeft className="size-4" /></button>
+            <div className="flex items-center px-4 h-9 rounded-lg border bg-muted/30 font-black text-xs">
+              Pág. {currentPage} / {Math.max(1, totalPages)}
+            </div>
+            <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronRight className="size-4" /></button>
+            <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsRight className="size-4" /></button>
+          </div>
+        </div>
+      )}
 
       {filteredPayrolls.length === 0 && (
         <div className="text-center py-12">
@@ -385,6 +527,18 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <p className="text-muted-foreground">No se encontraron registros de nómina</p>
         </div>
       )}
+
+      <ConfirmDialog 
+        open={pendingDeleteId !== null} 
+        onOpenChange={open => { if (!open) setPendingDeleteId(null); }} 
+        title="¿Eliminar Nómina?" 
+        description="¿Estás seguro de eliminar esta nómina? Los datos no se podrán recuperar y las comisiones volverán a estado pendiente." 
+        confirmLabel="Eliminar" 
+        variant="destructive" 
+        loading={deleteLoading} 
+        onConfirm={() => pendingDeleteId ? handleDeletePayroll(pendingDeleteId) : Promise.resolve()} 
+      />
     </div>
   );
 }
+

@@ -83,3 +83,4 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onR
     </div>
   );
 };
+

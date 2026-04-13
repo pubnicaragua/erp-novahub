@@ -248,7 +248,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             const canvas = await html2canvas(el, {
               scale: 2,
               backgroundColor: '#ffffff',
-              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex),
+              onclone: (clonedDoc) => sanitizeHtml2CanvasOklch([elementId], clonedDoc, primaryHex),
             });
             doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
             currentY += height + 5;
@@ -619,17 +619,17 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           </CardHeader>
           <CardContent className="space-y-2">
             {topValued.map((p: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 transition-colors">
+              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 transition-colors gap-4">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="size-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-[10px] font-black text-emerald-600 shrink-0">
                     #{idx + 1}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-black truncate">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{p.stock} unidades en almacén</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{p.stock} unidades en almacén</p>
                   </div>
                 </div>
-                <span className="text-sm font-black text-emerald-500 shrink-0 ml-3">{formatConvertedAmount(p.value, 'NIO')}</span>
+                <span className="text-sm font-black text-emerald-500 shrink-0">{formatConvertedAmount(p.value, 'NIO')}</span>
               </div>
             ))}
           </CardContent>
@@ -644,17 +644,17 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           </CardHeader>
           <CardContent className="space-y-2">
             {topRotated.map((p: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-blue-500/5 border border-blue-500/10 hover:bg-blue-500/10 transition-colors">
+              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-blue-500/5 border border-blue-500/10 hover:bg-blue-500/10 transition-colors gap-4">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="size-7 rounded-lg bg-blue-500/20 flex items-center justify-center text-[10px] font-black text-blue-600 shrink-0">
                     #{idx + 1}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-black truncate">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground">Despacho frecuente de inventario</p>
+                    <p className="text-[10px] text-muted-foreground truncate">Despacho frecuente de inventario</p>
                   </div>
                 </div>
-                <span className="text-sm font-black text-blue-500 shrink-0 ml-3">{p.qty} Unidades</span>
+                <span className="text-sm font-black text-blue-500 shrink-0">{p.qty} Unidades</span>
               </div>
             ))}
             {topRotated.length === 0 && <p className="text-xs text-muted-foreground text-center py-8 opacity-40 uppercase font-black tracking-widest leading-relaxed">Sin movimientos de salida<br/>detectados en el periodo</p>}
@@ -665,3 +665,4 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   );
 });
 InventoryReportTab.displayName = 'InventoryReportTab';
+

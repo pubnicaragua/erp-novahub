@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Upload, Building2, Briefcase, Phone } from 'lucide-react';
+import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Upload, Building2, Briefcase, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../ui/dialog';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Label } from '../ui/label';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
@@ -40,6 +41,21 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
     return matchesSearch && matchesDept && matchesStatus;
   });
 
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterDept, filterStatus, pageSize]);
+
+  const totalPages = Math.ceil(filteredEmployees.length / pageSize);
+  const paginatedEmployees = filteredEmployees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   const handleCreateDepartment = async () => {
     if (!newDeptName.trim()) { toast.error('Ingresa un nombre'); return; }
     try {
@@ -69,6 +85,15 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
   const handleEdit = (emp: any) => {
     setEditingId(emp.id);
     setEditData({ ...emp });
+    if (viewMode === 'cards') {
+      setIsEditModalOpen(true);
+    }
+  };
+
+  const handleCardEdit = (emp: any) => {
+    setEditingId(emp.id);
+    setEditData({ ...emp });
+    setIsEditModalOpen(true);
   };
 
   const handleSave = async (id: string) => {
@@ -118,13 +143,16 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar este empleado?')) return;
     try {
+      setDeleteLoading(true);
       await hrService.deleteEmployee(id);
       toast.success('Empleado eliminado');
       onRefresh();
     } catch (error) {
       toast.error('Error al eliminar empleado');
+    } finally {
+      setDeleteLoading(false);
+      setPendingDeleteId(null);
     }
   };
 
@@ -272,11 +300,10 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
         </div>
       </div>
 
-      {/* Table View */}
-      {viewMode === 'table' && (
-        <div className="border rounded-lg overflow-hidden">
+      {/* Table View - Desktop Only */}
+      <div className={`border rounded-lg overflow-hidden ${viewMode === 'table' ? 'hidden md:block' : 'hidden'}`}>
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[1000px]">
               <thead className="bg-muted/50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold">Número</th>
@@ -409,7 +436,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                 ))}
 
                 {/* Existing Employees */}
-                {filteredEmployees.map((emp: any) => (
+                {paginatedEmployees.map((emp: any) => (
                   <tr key={emp.id} className="hover:bg-muted/50">
                     <td className="px-4 py-2 text-sm">{emp.employeeNumber}</td>
                     <td className="px-4 py-2">
@@ -502,7 +529,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                             <Button size="sm" variant="ghost" onClick={() => handleEdit(emp)} className="h-7 px-2">
                               <Edit2 className="size-3" />
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => handleDelete(emp.id)} className="h-7 px-2 text-red-600">
+                            <Button size="sm" variant="ghost" onClick={() => setPendingDeleteId(emp.id)} className="h-7 px-2 text-red-600">
                               <Trash2 className="size-3" />
                             </Button>
                           </>
@@ -515,12 +542,11 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
             </table>
           </div>
         </div>
-      )}
+      
 
-      {/* Cards View */}
-      {viewMode === 'cards' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredEmployees.map((emp: any) => (
+      {/* Cards View - Always shown on mobile, conditional on desktop */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${viewMode === 'cards' ? 'block' : 'block md:hidden'}`}>
+          {paginatedEmployees.map((emp: any) => (
             <div key={emp.id} className="border border-border/40 rounded-2xl p-5 bg-gradient-to-br from-card to-muted/20 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 relative overflow-hidden group">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -568,16 +594,44 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border/40 relative z-10">
-                <Button size="sm" variant="outline" onClick={() => handleEdit(emp)} className="flex-1 rounded-xl transition-all hover:bg-primary/10 hover:text-primary hover:border-primary/30">
+                <Button size="sm" variant="outline" onClick={() => handleCardEdit(emp)} className="flex-1 rounded-xl transition-all hover:bg-primary/10 hover:text-primary hover:border-primary/30">
                   <Edit2 className="size-3 mr-1" />
                   Editar
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleDelete(emp.id)} className="text-red-600 rounded-xl hover:bg-red-500/10 hover:border-red-500/30 transition-all">
+                <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(emp.id)} className="text-red-600 rounded-xl hover:bg-red-500/10 hover:border-red-500/30 transition-all">
                   <Trash2 className="size-3" />
                 </Button>
               </div>
             </div>
           ))}
+        </div>
+
+      {/* Pagination Controls */}
+      {filteredEmployees.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border/20">
+          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
+            <div className="flex items-center gap-2">
+              <span>Mostrar</span>
+              <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
+                {PAGE_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+              <span>por página</span>
+            </div>
+            <div className="h-4 w-px bg-border/40 hidden sm:block" />
+            <p className="bg-primary/5 px-3 py-1 rounded-full border border-primary/10">
+              Mostrando <span className="text-foreground font-black">{filteredEmployees.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, filteredEmployees.length)}</span> de <span className="text-primary font-black">{filteredEmployees.length}</span> registros
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsLeft className="size-4" /></button>
+            <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronLeft className="size-4" /></button>
+            <div className="flex items-center px-4 h-9 rounded-lg border bg-muted/30 font-black text-xs">
+              Pág. {currentPage} / {Math.max(1, totalPages)}
+            </div>
+            <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronRight className="size-4" /></button>
+            <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsRight className="size-4" /></button>
+          </div>
         </div>
       )}
 
@@ -637,6 +691,77 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Modal: Editar Empleado (Cards View) */}
+      <Dialog open={isEditModalOpen} onOpenChange={(open) => {
+        setIsEditModalOpen(open);
+        if (!open) setEditingId(null);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Edit2 className="size-5 text-primary" /> Editar Empleado</DialogTitle>
+            <DialogDescription>Modifica los datos del empleado. Los cambios se guardarán de inmediato.</DialogDescription>
+          </DialogHeader>
+          {editingId && (
+            <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto px-1">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre</Label>
+                  <Input value={editData.firstName} onChange={e => setEditData({ ...editData, firstName: e.target.value })} className="rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Apellido</Label>
+                  <Input value={editData.lastName} onChange={e => setEditData({ ...editData, lastName: e.target.value })} className="rounded-xl" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Email</Label>
+                <Input value={editData.email} onChange={e => setEditData({ ...editData, email: e.target.value })} className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Teléfono</Label>
+                <Input value={editData.phone || ''} onChange={e => setEditData({ ...editData, phone: e.target.value })} className="rounded-xl" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Salario</Label>
+                  <Input type="number" value={editData.salary} onChange={e => setEditData({ ...editData, salary: parseFloat(e.target.value) })} className="rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Moneda</Label>
+                  <Select value={editData.currency} onValueChange={(v) => setEditData({ ...editData, currency: v })}>
+                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Moneda" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="USD">USD</SelectItem>
+                      <SelectItem value="NIO">NIO</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancelar</Button>
+            <Button onClick={() => {
+              if (editingId) {
+                handleSave(editingId);
+                setIsEditModalOpen(false);
+              }
+            }} className="bg-primary text-primary-foreground">Guardar Cambios</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog 
+        open={pendingDeleteId !== null} 
+        onOpenChange={open => { if (!open) setPendingDeleteId(null); }} 
+        title="¿Eliminar Empleado?" 
+        description="¿Estás seguro de que deseas eliminar este empleado? Esta acción no se puede deshacer." 
+        confirmLabel="Eliminar" 
+        variant="destructive" 
+        loading={deleteLoading} 
+        onConfirm={() => pendingDeleteId ? handleDelete(pendingDeleteId) : Promise.resolve()} 
+      />
     </div>
   );
 }
+

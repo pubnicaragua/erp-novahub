@@ -308,3 +308,4 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     </div>
   );
 }
+

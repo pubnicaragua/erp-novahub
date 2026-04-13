@@ -127,7 +127,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
 
         </span>
       ) },
-    { key: 'status',   header: 'Estado',    width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status',   header: 'Estado',    width: '120px', editable: canPerform('PURCHASES_ORDERS', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -385,13 +385,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                  </Button>
                </>
              )}
-             {!isNew && canPerform('compras', 'delete') && (
+             {!isNew && canPerform('PURCHASES_ORDERS', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
-            {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+            {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar
               </Button>
@@ -413,7 +413,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div className={isNew ? 'col-span-2' : ''}>
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
                   <Combobox 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                     options={suppliers
                       .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
                       .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
@@ -425,7 +425,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
                   <Input 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                     type="date" 
                     value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
@@ -435,7 +435,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Entrega Esperada</p>
                   <Input 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                     type="date" 
                     value={localDoc.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, expectedDelivery: new Date(e.target.value).toISOString() })} 
@@ -445,7 +445,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <select 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                     value={localDoc.status || 'DRAFT'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                     className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
@@ -456,7 +456,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
                   <select 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                     value={localDoc.currency || 'NIO'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any })}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
@@ -472,14 +472,14 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                     <Switch
                       checked={!!localDoc.isService}
                       onCheckedChange={handleServiceToggle}
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                     />
                   </div>
                 </div>
                 <div className="col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Dirección</p>
                   <Input
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                     value={localDoc.address || ''}
                     onChange={(e) => setLocalDoc({ ...localDoc, address: e.target.value })}
                     className="h-8 text-xs"
@@ -489,7 +489,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div className="col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Adjuntar evidencia (PDF, imagen, XLSX)</p>
                   <Input
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                     type="file"
                     accept=".pdf,.xlsx,.xls,image/*"
                     onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
@@ -577,7 +577,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Ítems de Orden</p>
-              {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+              {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
                 <Button variant="outline" size="sm" onClick={() => {
                   const isServiceOrder = !!localDoc.isService;
                   const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, code: '', name: '', category: '', stockApplies: isServiceOrder ? false : false, stock: undefined, quantity: 1, unitPrice: 0, total: 0 }];
@@ -603,7 +603,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-2">
                     <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                       value={item.code || ''} 
                       onChange={(e) => handleItemChange(idx, 'code', e.target.value)} 
                       className="h-8 text-xs" 
@@ -612,7 +612,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   </div>
                   <div className="col-span-2">
                     <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                       value={item.name || ''} 
                       onChange={(e) => handleItemChange(idx, 'name', e.target.value)} 
                       className="h-8 text-xs" 
@@ -621,7 +621,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   </div>
                   <div className="col-span-2">
                     <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                       value={item.category || ''} 
                       onChange={(e) => handleItemChange(idx, 'category', e.target.value)} 
                       className="h-8 text-xs" 
@@ -635,12 +635,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                           type="checkbox"
                           checked={!!item.stockApplies}
                           onChange={(e) => handleItemChange(idx, 'stockApplies', e.target.checked)}
-                          disabled={!!localDoc.isService || (isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit'))}
+                          disabled={!!localDoc.isService || (isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit'))}
                         />
                         Stock
                       </label>
                       <Input 
-                        disabled={!item.stockApplies || (isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit'))}
+                        disabled={!item.stockApplies || (isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit'))}
                         type="number"
                         min="0"
                         value={item.stock === 0 ? '' : (item.stock ?? '')} 
@@ -652,7 +652,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   </div>
                   <div className="col-span-1">
                     <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                       type="number" 
                       min="0" 
                       value={item.quantity === 0 ? '' : item.quantity} 
@@ -663,7 +663,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   </div>
                   <div className="col-span-1">
                     <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                       type="number" 
                       min="0" 
                       value={item.unitPrice === 0 ? '' : item.unitPrice} 
@@ -682,7 +682,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                     />
                   </div>
                   <div className="col-span-1 flex items-center justify-end gap-2">
-                    {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+                    {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
                       <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
                         <Trash2 className="size-3" />
                       </Button>
@@ -736,13 +736,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
           <div><h2 className="text-xl font-black uppercase tracking-tight">Órdenes de Compra</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Pedidos a proveedores</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerform('compras', 'create') && (
+            {canPerform('PURCHASES_ORDERS', 'create') && (
               <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Orden</Button>
             )}
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={canPerform('compras', 'delete') ? async (ids) => {
+          onBulkDelete={canPerform('PURCHASES_ORDERS', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
@@ -766,8 +766,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
               >
                 <FileInput className="size-4" />
               </Button>
-              <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              {canPerform('compras', 'delete') && (
+              <Button title={canPerform('PURCHASES_ORDERS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              {canPerform('PURCHASES_ORDERS', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
               )}
             </div>
@@ -786,3 +786,4 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     </div>
   );
 }
+

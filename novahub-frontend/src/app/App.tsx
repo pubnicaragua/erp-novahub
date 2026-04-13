@@ -28,8 +28,24 @@ import { PrismaSchemaPage } from './components/PrismaSchemaPage';
 
 function DashboardLayout() {
   const { hasAccess, user } = useAuth();
-  const [activeModule, setActiveModule] = useState<Module | 'overview'>('overview');
-  const [activeSubModule, setActiveSubModule] = useState<string | undefined>();
+  const [activeModule, setActiveModule] = useState<Module | 'overview'>(() => {
+    return (localStorage.getItem('erp-active-module') as Module | 'overview') || 'overview';
+  });
+  const [activeSubModule, setActiveSubModule] = useState<string | undefined>(() => {
+    return localStorage.getItem('erp-active-submodule') || undefined;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('erp-active-module', activeModule);
+  }, [activeModule]);
+
+  useEffect(() => {
+    if (activeSubModule) {
+      localStorage.setItem('erp-active-submodule', activeSubModule);
+    } else {
+      localStorage.removeItem('erp-active-submodule');
+    }
+  }, [activeSubModule]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     // optional: read from localStorage if you want persistence
@@ -62,6 +78,33 @@ function DashboardLayout() {
     setActiveModule('overview');
     setActiveSubModule(undefined);
   };
+
+  // Auto-redirigir si está en un módulo para el cual no tiene acceso (o al iniciar sesión)
+  useEffect(() => {
+    const isDeny = activeModule !== 'overview' && !hasAccess(activeModule as Module);
+    const isOverview = activeModule === 'overview';
+    
+    // Si no tiene acceso al módulo actual o si estamos en overview pero hay un primer módulo preferido
+    if (isDeny || isOverview) {
+      // Intentar encontrar el primer módulo operativo disponible
+      const preferredOrder: Module[] = [
+        'inventario', 'ventas', 'compras', 'finanzas', 'rh',
+        'clientes', 'proveedores', 'actividades', 'tickets',
+        'documentos', 'notificaciones', 'transferencias', 
+        'reportes', 'roles', 'configuracion', 'suscripciones', 'schema'
+      ];
+      
+      const firstAllowed = preferredOrder.find(m => hasAccess(m));
+      
+      // Si fue denegado, forzar redirección
+      // Si estaba en overview pero el usuario no es admin/partner, mejor mandarlo a su módulo de trabajo real
+      if (isDeny || (isOverview && user && !user.isPlatformAdmin && !user.isTenantAdmin)) {
+        if (firstAllowed) {
+          setActiveModule(firstAllowed);
+        }
+      }
+    }
+  }, [activeModule, hasAccess, user]);
 
   useEffect(() => {
     const handler = (e: any) => {

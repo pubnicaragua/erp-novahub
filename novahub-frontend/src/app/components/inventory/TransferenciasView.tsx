@@ -363,3 +363,4 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
     </Card>
   );
 }
+

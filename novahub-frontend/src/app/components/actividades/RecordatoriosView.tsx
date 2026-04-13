@@ -215,3 +215,4 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
     </div>
   );
 };
+

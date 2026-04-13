@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Truck, Scale, TrendingUp, ShoppingBag, Package, Activity, Wallet, CreditCard } from 'lucide-react';
+import { ShoppingCart, Scale, TrendingUp, DollarSign, Package, ArrowUpRight, Activity, CreditCard, Luggage, ShoppingBag, Truck, Wallet, PieChart as PieChartIcon } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { cn } from '../ui/utils';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
@@ -700,7 +700,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         <Card id="purchases-pie-chart" className="border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <PieChart className="size-4 text-primary" /> Distribución de Gasto
+              <PieChartIcon className="size-4 text-primary" /> Distribución de Gasto
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -732,7 +732,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       {/* ═══ Top Items ═══ */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Top Proveedores */}
-        <Card id="purchases-top-suppliers" className="border-orange-500/20">
+        <Card id="purchases-top-suppliers" className="border-orange-500/20 min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
               <Truck className="size-4 text-orange-500" /> Top 5 Proveedores
@@ -745,9 +745,9 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                   <div className="size-7 rounded-lg bg-orange-500/20 flex items-center justify-center text-[10px] font-black text-orange-600 shrink-0">
                     #{idx + 1}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold truncate">{s.name}</p>
-                    <p className="text-[10px] text-muted-foreground">Suministro Estratégico</p>
+                    <p className="text-[10px] text-muted-foreground truncate">Suministro Estratégico</p>
                   </div>
                 </div>
                 <span className="text-sm font-black text-orange-500 shrink-0 ml-3">{formatConvertedAmount(Number(s.value), 'NIO')}</span>
@@ -757,7 +757,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         </Card>
 
         {/* Items Críticos */}
-        <Card id="purchases-top-products" className="border-blue-500/20">
+        <Card id="purchases-top-products" className="border-blue-500/20 min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
               <Package className="size-4 text-blue-500" /> Items Críticos (Inversión)
@@ -770,9 +770,9 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                   <div className="size-7 rounded-lg bg-blue-500/20 flex items-center justify-center text-[10px] font-black text-blue-600 shrink-0">
                     #{idx + 1}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold truncate">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{p.qty} unidades adquiridas</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{p.qty} unidades adquiridas</p>
                   </div>
                 </div>
                 <span className="text-sm font-black text-blue-500 shrink-0 ml-3">{formatConvertedAmount(Number(p.value), 'NIO')}</span>
@@ -785,3 +785,4 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   );
 });
 PurchasesReportTab.displayName = 'PurchasesReportTab';
+

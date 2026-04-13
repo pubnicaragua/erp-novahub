@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Truck, Scale, TrendingUp, ShoppingBag, Package, Activity, Wallet, CreditCard, Users } from 'lucide-react';
+import { Users, Scale, TrendingUp, Package, ArrowUpRight, Activity, ShoppingCart, Truck, ExternalLink, Globe, Phone, ShoppingBag, Wallet, CreditCard } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { cn } from '../ui/utils';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
@@ -660,7 +660,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       {/* ═══ Top Providers & Items ═══ */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Top Proveedores */}
-        <Card id="providers-top-suppliers" className="border-orange-500/20">
+        <Card id="providers-top-suppliers" className="border-orange-500/20 min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
               <Users className="size-4 text-orange-500" /> Socios Estratégicos (Volumen)
@@ -673,9 +673,9 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                   <div className="size-10 rounded-xl bg-orange-500/20 flex items-center justify-center text-xs font-black text-orange-600 shrink-0 transition-transform group-hover:scale-110">
                     #{idx + 1}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-black truncate">{s.name}</p>
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Clasificación Tier 1</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight truncate">Clasificación Tier 1</p>
                   </div>
                 </div>
                 <div className="text-right ml-4">
@@ -693,7 +693,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         </Card>
 
         {/* Items Críticos */}
-        <Card id="providers-top-products" className="border-blue-500/20">
+        <Card id="providers-top-products" className="border-blue-500/20 min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
               <Package className="size-4 text-blue-500" /> Insumos con Mayor Gasto
@@ -706,9 +706,9 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                   <div className="size-7 rounded-lg bg-blue-500/20 flex items-center justify-center text-[10px] font-black text-blue-600 shrink-0">
                     #{idx + 1}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold truncate">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{p.qty} unidades recibidas</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{p.qty} unidades recibidas</p>
                   </div>
                 </div>
                 <span className="text-sm font-black text-blue-500 shrink-0 ml-3">{formatConvertedAmount(Number(p.value), 'NIO')}</span>
@@ -721,3 +721,4 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   );
 });
 ProvidersReportTab.displayName = 'ProvidersReportTab';
+

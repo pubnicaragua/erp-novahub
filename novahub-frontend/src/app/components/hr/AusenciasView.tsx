@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Plus, Check, X } from 'lucide-react';
+import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -86,6 +86,17 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const pendingRequests = leaveRequests.filter((r: any) => r.status === 'PENDING');
   const approvedRequests = leaveRequests.filter((r: any) => r.status === 'APPROVED');
   const rejectedRequests = leaveRequests.filter((r: any) => r.status === 'REJECTED');
+
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [pageSize]);
+
+  const totalPages = Math.ceil(leaveRequests.length / pageSize);
+  const paginatedRequests = leaveRequests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="space-y-4">
@@ -223,9 +234,9 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       )}
 
       {/* Leave Requests Table */}
-      <div className="border rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+      <div className="border rounded-lg overflow-hidden flex flex-col">
+        <div className="overflow-x-auto hidden md:block">
+          <table className="w-full min-w-[900px]">
             <thead className="bg-muted/50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold">Empleado</th>
@@ -239,7 +250,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {leaveRequests.map((request: any) => (
+              {paginatedRequests.map((request: any) => (
                 <tr key={request.id} className="hover:bg-muted/50">
                   <td className="px-4 py-3">
                     <div>
@@ -305,7 +316,100 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile View */}
+        <div className="block md:hidden space-y-4 p-4 bg-muted/10">
+          {paginatedRequests.map((request: any) => (
+            <div key={request.id} className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-card to-background p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-4 border-b border-primary/10 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="size-10 rounded-full bg-gradient-to-br from-primary/60 to-primary flex items-center justify-center text-primary-foreground text-sm font-bold">
+                    {request.employee?.firstName?.[0]}{request.employee?.lastName?.[0]}
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm tracking-tight">{request.employee?.firstName} {request.employee?.lastName}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase">{request.employee?.employeeNumber}</p>
+                  </div>
+                </div>
+                <span className={`text-[10px] px-2 py-1 rounded-lg font-bold shadow-sm ${
+                  request.status === 'APPROVED' ? 'bg-green-100 text-green-700 dark:bg-green-900/30' :
+                  request.status === 'REJECTED' ? 'bg-red-100 text-red-700 dark:bg-red-900/30' :
+                  'bg-orange-100 text-orange-700 dark:bg-orange-900/30'
+                }`}>
+                  {request.status === 'APPROVED' ? 'APROBADO' : request.status === 'REJECTED' ? 'RECHAZADO' : 'PENDIENTE'}
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Tipo</span>
+                  <span className="font-semibold">{request.type === 'VACATION' ? 'Vacaciones' : request.type === 'SICK' ? 'Enfermedad' : request.type === 'UNPAID' ? 'Sin Goce' : request.type}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-2">
+                  <div className="bg-primary/5 p-2 rounded-lg border border-primary/10">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-primary mb-1">Inicio</p>
+                    <p className="font-bold text-sm">{new Date(request.startDate).toLocaleDateString()}</p>
+                  </div>
+                  <div className="bg-primary/5 p-2 rounded-lg border border-primary/10">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-primary mb-1">Fin</p>
+                    <p className="font-bold text-sm">{new Date(request.endDate).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center text-xs border-t border-border/50 pt-2">
+                  <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Duración</span>
+                  <span className="font-bold bg-muted/50 px-2 py-1 rounded-md">{request.daysCount} días</span>
+                </div>
+                {request.reason && (
+                  <div className="text-xs border-t border-border/50 pt-2">
+                    <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest block mb-1">Motivo</span>
+                    <span className="font-medium text-muted-foreground bg-muted/30 p-2 rounded-lg block">{request.reason}</span>
+                  </div>
+                )}
+              </div>
+
+              {request.status === 'PENDING' && (
+                <div className="flex items-center gap-2 pt-4 mt-2 border-t border-border/50">
+                  <Button size="sm" onClick={() => handleApproveRequest(request.id)} className="flex-1 bg-green-500 hover:bg-green-600 text-white rounded-xl text-[11px] h-8">
+                    <Check className="size-3 mr-1" /> Aprobar
+                  </Button>
+                  <Button size="sm" onClick={() => handleRejectRequest(request.id)} className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl text-[11px] h-8">
+                    <X className="size-3 mr-1" /> Rechazar
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
+
+      {/* Pagination Controls */}
+      {leaveRequests.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border/20">
+          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
+            <div className="flex items-center gap-2">
+              <span>Mostrar</span>
+              <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
+                {PAGE_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+              <span>por página</span>
+            </div>
+            <div className="h-4 w-px bg-border/40 hidden sm:block" />
+            <p className="bg-primary/5 px-3 py-1 rounded-full border border-primary/10">
+              Mostrando <span className="text-foreground font-black">{leaveRequests.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, leaveRequests.length)}</span> de <span className="text-primary font-black">{leaveRequests.length}</span> registros totales
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsLeft className="size-4" /></button>
+            <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronLeft className="size-4" /></button>
+            <div className="flex items-center px-4 h-9 rounded-lg border bg-muted/30 font-black text-xs">
+              Pág. {currentPage} / {Math.max(1, totalPages)}
+            </div>
+            <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronRight className="size-4" /></button>
+            <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsRight className="size-4" /></button>
+          </div>
+        </div>
+      )}
 
       {leaveRequests.length === 0 && (
         <div className="text-center py-12">
@@ -316,3 +420,4 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     </div>
   );
 }
+

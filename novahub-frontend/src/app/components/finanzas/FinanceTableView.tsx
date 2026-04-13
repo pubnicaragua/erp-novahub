@@ -8,7 +8,8 @@ import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import {
   Plus, Trash2, Search, Filter, Download,
-  CheckCircle2, Edit3, FileSpreadsheet, FileText, X
+  CheckCircle2, Edit3, FileSpreadsheet, FileText, X,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
@@ -43,6 +44,9 @@ interface FinanceTableViewProps {
   onDelete: (id: string) => Promise<void>;
   title: string;
   loading?: boolean;
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 export function FinanceTableView({
@@ -52,7 +56,10 @@ export function FinanceTableView({
   onAdd,
   onDelete,
   title,
-  loading
+  loading,
+  canCreate = true,
+  canEdit = true,
+  canDelete = true
 }: FinanceTableViewProps) {
   const { displayCurrency, formatConvertedAmount } = useCurrency();
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
@@ -71,7 +78,22 @@ export function FinanceTableView({
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categoryTargetItem, setCategoryTargetItem] = useState<{ id: string; key: string } | null>(null);
 
+  // Edit Modal State (Mobile/Alternative Desktop)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [itemBeingEdited, setItemBeingEdited] = useState<any | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+
+  // Pagination State
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
+
   useEffect(() => { setLocalData(data); }, [data]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, categoryFilter, dateRange, pageSize]);
 
   const handleCellEdit = (id: string, key: string, value: any) => {
     setLocalData(prev => prev.map(item => {
@@ -110,6 +132,33 @@ export function FinanceTableView({
     toast.success(`Categoría "${upperCat}" creada y asignada`);
   };
 
+  const handleModalSave = async () => {
+    if (!itemBeingEdited) return;
+    try {
+      setEditLoading(true);
+      const original = data.find(d => d.id === itemBeingEdited.id);
+      if (!original) return;
+
+      const updates: any = {};
+      columns.forEach(col => {
+        if (col.editable && itemBeingEdited[col.key] !== original[col.key]) {
+          updates[col.key] = itemBeingEdited[col.key];
+        }
+      });
+
+      if (Object.keys(updates).length > 0) {
+        await onUpdate(itemBeingEdited.id, updates);
+        toast.success('Registro actualizado exitosamente');
+      }
+      setIsEditModalOpen(false);
+      setItemBeingEdited(null);
+    } catch {
+      toast.error('Error al actualizar registro');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const filteredData = (localData || []).filter(item => {
     if (!item) return false;
     const matchesSearch = Object.values(item).some(val => String(val).toLowerCase().includes(searchTerm.toLowerCase()));
@@ -123,10 +172,14 @@ export function FinanceTableView({
     return matchesSearch && matchesCategory && matchesDate;
   });
 
-  const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
+  const companyName = (themeConfig.tenantName || user?.tenantName || 'Mi Empresa').toUpperCase();
   const logoUrl = themeConfig.logo || '';
   const now = new Date();
   const reportTimestamp = `${now.toLocaleDateString('es-NI')} ${now.toLocaleTimeString('es-NI')}`;
+
+  // Pagination Logic
+  const totalPages = Math.ceil(filteredData.length / pageSize);
+  const paginatedData = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const getLabelForValue = (col: Column, value: any) => {
     if (value && col.options) {
@@ -411,7 +464,9 @@ export function FinanceTableView({
               <DropdownMenuItem onClick={exportPDF}><FileText className="size-4 mr-2 text-red-500" /> PDF (.pdf)</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <button onClick={onAdd} className="flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"><Plus className="size-4" /> Nuevo Registro</button>
+          {canCreate && (
+            <button onClick={onAdd} className="flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"><Plus className="size-4" /> Nuevo Registro</button>
+          )}
         </div>
       </div>
 
@@ -455,8 +510,59 @@ export function FinanceTableView({
         </DialogContent>
       </Dialog>
 
+      {/* Manual Edit Modal (Mainly for Mobile) */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-[500px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit3 className="size-5 text-primary" /> Editar Registro
+            </DialogTitle>
+            <DialogDescription>
+              Realiza los cambios necesarios en este registro financiero.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid gap-5 py-4 max-h-[60vh] overflow-y-auto px-1">
+            {itemBeingEdited && columns.filter(c => c.editable).map(col => (
+              <div key={col.key} className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">{col.label}</Label>
+                {col.type === 'select' ? (
+                  <select 
+                    className="flex h-10 w-full rounded-xl border border-input bg-background/50 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={itemBeingEdited[col.key] || ''}
+                    onChange={e => setItemBeingEdited({...itemBeingEdited, [col.key]: e.target.value})}
+                  >
+                    <option value="">Seleccione...</option>
+                    {(col.options || []).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </select>
+                ) : (
+                  <Input 
+                    type={col.type === 'number' ? 'number' : col.type.includes('date') ? 'date' : 'text'}
+                    value={itemBeingEdited[col.key] || ''}
+                    onChange={e => setItemBeingEdited({...itemBeingEdited, [col.key]: col.type === 'number' ? Number(e.target.value) : e.target.value})}
+                    className="h-10 rounded-xl bg-background/50"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 mt-4">
+            <Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="rounded-xl grow sm:grow-0">Cancelar</Button>
+            <Button 
+              onClick={handleModalSave} 
+              disabled={editLoading}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl grow sm:grow-0"
+            >
+              {editLoading ? 'Guardando...' : 'Guardar Cambios'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="rounded-xl border border-border/50 bg-card overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow className="hover:bg-transparent border-border/50">
@@ -468,9 +574,9 @@ export function FinanceTableView({
             <TableBody>
               {loading ? (
                 <TableRow><TableCell colSpan={columns.length + 2} className="h-24 text-center">Cargando datos...</TableCell></TableRow>
-              ) : filteredData.length === 0 ? (
+              ) : paginatedData.length === 0 ? (
                 <TableRow><TableCell colSpan={columns.length + 2} className="h-24 text-center">No hay registros</TableCell></TableRow>
-              ) : filteredData.map(item => (
+              ) : paginatedData.map(item => (
                 <TableRow key={item.id} className="group hover:bg-muted/30 border-border/30 transition-colors">
                   <TableCell>
                     {savingIds.has(item.id) ? <div className="size-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -479,7 +585,7 @@ export function FinanceTableView({
                     : <CheckCircle2 className="size-4 text-green-500/50" />}
                   </TableCell>
                   {columns.map(col => (
-                    <TableCell key={col.key} className={cn("p-1.5 transition-all", editingCell?.id === item.id && editingCell?.key === col.key ? "bg-primary/5 ring-1 ring-inset ring-primary" : "")} onDoubleClick={() => col.editable && setEditingCell({ id: item.id, key: col.key })}>
+                    <TableCell key={col.key} className={cn("p-1.5 transition-all", editingCell?.id === item.id && editingCell?.key === col.key ? "bg-primary/5 ring-1 ring-inset ring-primary" : "")} onDoubleClick={() => canEdit && col.editable && setEditingCell({ id: item.id, key: col.key })}>
                       {editingCell?.id === item.id && editingCell?.key === col.key ? (
                         col.type === 'select' ? (
                           <select autoFocus className="w-full bg-transparent border-none outline-none text-sm px-1 font-medium" value={item[col.key] || ''}
@@ -498,7 +604,7 @@ export function FinanceTableView({
                             onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingCell(null); }} />
                         )
                       ) : (
-                        <div className={cn("px-1 py-1 text-sm cursor-pointer hover:bg-muted/50 rounded transition-colors", col.type === 'currency' ? "font-bold" : "font-medium")} onClick={() => col.editable && setEditingCell({ id: item.id, key: col.key })}>
+                        <div className={cn("px-1 py-1 text-sm cursor-pointer hover:bg-muted/50 rounded transition-colors", col.type === 'currency' ? "font-bold" : "font-medium")} onClick={() => canEdit && col.editable && setEditingCell({ id: item.id, key: col.key })}>
                           {renderCellContent(item, col)}
                         </div>
                       )}
@@ -506,8 +612,12 @@ export function FinanceTableView({
                   ))}
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => { if (item.isPayment) toast.error('No se puede editar un pago de factura'); else setEditingCell({ id: item.id, key: columns.find(c => c.editable)?.key || columns[0].key }); }} disabled={item.isPayment} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50" title="Editar"><Edit3 className="size-3.5" /></button>
-                      <button onClick={() => !item.isPayment && setPendingDeleteId(item.id)} disabled={item.isPayment} className="p-1.5 text-destructive/80 hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors disabled:opacity-50" title="Eliminar"><Trash2 className="size-3.5" /></button>
+                      {canEdit && (
+                        <button onClick={() => { if (item.isPayment) toast.error('No se puede editar un pago de factura'); else setEditingCell({ id: item.id, key: columns.find(c => c.editable)?.key || columns[0].key }); }} disabled={item.isPayment} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50" title="Editar"><Edit3 className="size-3.5" /></button>
+                      )}
+                      {canDelete && (
+                        <button onClick={() => !item.isPayment && setPendingDeleteId(item.id)} disabled={item.isPayment} className="p-1.5 text-destructive/80 hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors disabled:opacity-50" title="Eliminar"><Trash2 className="size-3.5" /></button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -515,10 +625,124 @@ export function FinanceTableView({
             </TableBody>
           </Table>
         </div>
+
+        {/* Mobile Card View */}
+        <div className="block md:hidden space-y-4 p-4 bg-muted/20">
+          {loading ? (
+            <div className="p-8 text-center text-sm text-muted-foreground bg-card rounded-2xl border border-border/40">Cargando datos...</div>
+          ) : paginatedData.length === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground bg-card rounded-2xl border border-border/40">No hay registros</div>
+          ) : paginatedData.map(item => (
+            <div key={item.id} className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background p-5 shadow-sm transition-all hover:shadow-lg active:scale-[0.98]">
+              {/* Decorative accent */}
+              <div className="absolute -right-4 -top-4 size-16 rounded-full bg-primary/5 blur-2xl" />
+              
+              <div className="relative flex items-center justify-between mb-4 border-b border-primary/10 pb-3 gap-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className={cn(
+                    "size-9 rounded-xl flex items-center justify-center shadow-sm shrink-0",
+                    item.isPayment ? "bg-emerald-500/10 text-emerald-600" : "bg-primary/10 text-primary"
+                  )}>
+                    {savingIds.has(item.id) ? (
+                      <div className="size-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                    ) : item.isPayment ? (
+                      <CheckCircle2 className="size-5" />
+                    ) : (
+                      <div className="text-[10px] font-black">{item.number?.slice(-3) || '??'}</div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 leading-none mb-1">
+                      {item.number || 'Registro'}
+                    </p>
+                    <p className="text-sm font-bold truncate">
+                      {item.source || item.description || 'Sin título'}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-1.5 bg-background/50 backdrop-blur-sm p-1 rounded-xl border border-border/40 shadow-inner shrink-0 relative z-20">
+                  {canEdit && (
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation();
+                        if (item.isPayment) toast.error('No se puede editar un pago de factura'); 
+                        else { setItemBeingEdited({...item}); setIsEditModalOpen(true); }
+                      }} 
+                      disabled={item.isPayment} 
+                      className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-lg transition-colors disabled:opacity-30" 
+                      title="Editar"
+                    >
+                      <Edit3 className="size-4" />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!item.isPayment) setPendingDeleteId(item.id);
+                      }} 
+                      disabled={item.isPayment} 
+                      className="p-2 text-rose-500/70 hover:text-rose-600 hover:bg-rose-500/5 rounded-lg transition-colors disabled:opacity-30" 
+                      title="Eliminar"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-y-4 gap-x-6 relative">
+                {columns.map(col => (
+                  <div key={col.key} className={cn("space-y-1", col.type === 'currency' ? "col-span-2 bg-primary/5 -mx-5 px-5 py-3 border-y border-primary/10 mt-1" : "")}>
+                    <p className="text-[9px] font-black uppercase text-muted-foreground/50 tracking-[0.15em]">{col.label}</p>
+                    <div className={cn(
+                      "transition-all",
+                      col.type === 'currency' ? "text-lg font-black" : "text-sm font-semibold text-foreground/90"
+                    )} onDoubleClick={() => canEdit && col.editable && setEditingCell({ id: item.id, key: col.key })}>
+                      {renderCellContent(item, col)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Status or meta info */}
+              {item.isDraft && (
+                <div className="mt-4 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-orange-500 bg-orange-500/5 py-1 px-3 rounded-full w-fit">
+                  <span className="size-1.5 rounded-full bg-orange-500 animate-pulse" />
+                  Cambios pendientes
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="flex items-center justify-between text-xs text-muted-foreground pt-2">
-        <p>Mostrando {filteredData.length} de {localData.length} registros</p>
-        <p className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-green-500" /> Sistema sincronizado en tiempo real</p>
+
+      {/* Pagination Controls */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border/20">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
+          <div className="flex items-center gap-2">
+            <span>Mostrar</span>
+            <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
+              {PAGE_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+            <span>por página</span>
+          </div>
+          <div className="h-4 w-px bg-border/40 hidden sm:block" />
+          <p className="bg-primary/5 px-3 py-1 rounded-full border border-primary/10">
+            Mostrando <span className="text-foreground font-black">{paginatedData.length === 0 ? 0 : (currentPage-1)*pageSize + 1} - {Math.min(currentPage*pageSize, filteredData.length)}</span> de <span className="text-primary font-black">{filteredData.length}</span> registros totales
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsLeft className="size-4" /></button>
+          <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronLeft className="size-4" /></button>
+          <div className="flex items-center px-4 h-9 rounded-lg border bg-muted/30 font-black text-xs">
+            Pág. {currentPage} / {Math.max(1, totalPages)}
+          </div>
+          <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronRight className="size-4" /></button>
+          <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsRight className="size-4" /></button>
+        </div>
       </div>
     </div>
   );

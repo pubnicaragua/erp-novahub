@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Separator } from './ui/separator';
 import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
+import { Checkbox } from './ui/checkbox';
 import { useTheme, type BrandColors } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -45,21 +46,97 @@ const AVAILABLE_MODULES = [
 ];
 
 // Submódulos para permisos ultra-granulares
-const SUBMODULES_FOR_PERMS = [
-  { id: 'SALES_QUOTES', label: 'Cotizaciones', parent: 'SALES' },
-  { id: 'SALES_INVOICES', label: 'Facturación', parent: 'SALES' },
+export const SUBMODULES_FOR_PERMS = [
+  // Ventas
+  { id: 'SALES_CLIENTS', label: 'Clientes', parent: 'SALES' },
+  { id: 'SALES_QUOTES', label: 'Estimaciones', parent: 'SALES' },
+  { id: 'SALES_ORDERS', label: 'Órdenes de Venta', parent: 'SALES' },
+  { id: 'SALES_INVOICES', label: 'Facturas', parent: 'SALES' },
+  { id: 'SALES_RECURRING', label: 'Facturas Recurrentes', parent: 'SALES' },
+  { id: 'SALES_PAYMENTS', label: 'Pagos Recibidos', parent: 'SALES' },
+  { id: 'SALES_RETURNS', label: 'Devoluciones de Venta', parent: 'SALES' },
+  { id: 'SALES_CREDIT_NOTES', label: 'Notas de Crédito', parent: 'SALES' },
+
+  // Compras
+  { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', parent: 'PURCHASES' },
+  { id: 'PURCHASES_EXPENSES', label: 'Gastos', parent: 'PURCHASES' },
+  { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos Recurrentes', parent: 'PURCHASES' },
+  { id: 'PURCHASES_ORDERS', label: 'Órdenes de Compra', parent: 'PURCHASES' },
+  { id: 'PURCHASES_RECEIPTS', label: 'Recepciones de Compra', parent: 'PURCHASES' },
+  { id: 'PURCHASES_INVOICES', label: 'Facturas de Proveedor', parent: 'PURCHASES' },
+  { id: 'PURCHASES_INVOICES_REC', label: 'Facturas de Proveedor Rec.', parent: 'PURCHASES' },
+  { id: 'PURCHASES_PAYMENTS', label: 'Pagos Realizados', parent: 'PURCHASES' },
+  { id: 'PURCHASES_RETURNS', label: 'Créditos de Proveedor', parent: 'PURCHASES' },
+
+  // Recursos Humanos
+  { id: 'HR_DASHBOARD', label: 'Dashboard HR', parent: 'HR' },
+  { id: 'HR_EMPLOYEES', label: 'Empleados', parent: 'HR' },
+  { id: 'HR_PAYROLL', label: 'Nóminas', parent: 'HR' },
+  { id: 'HR_ATTENDANCE', label: 'Asistencia', parent: 'HR' },
+  { id: 'HR_LEAVES', label: 'Vacaciones', parent: 'HR' },
+  { id: 'HR_PERFORMANCE', label: 'Desempeño', parent: 'HR' },
+  { id: 'HR_TRAINING', label: 'Capacitación', parent: 'HR' },
+  { id: 'HR_BENEFITS', label: 'Beneficios', parent: 'HR' },
+  { id: 'HR_PAYROLL_CONFIG', label: 'Config Nómina', parent: 'HR' },
+
+  // Finanzas
+  { id: 'FINANCIAL_DASHBOARD', label: 'Dashboard', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_INCOMES', label: 'Ingresos', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_EXPENSES', label: 'Gastos', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_EXPENSES_REC', label: 'Gastos Recurrentes', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_INCOMES_REC', label: 'Ingresos Recurrentes', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_BALANCE', label: 'Balance General', parent: 'FINANCIAL' },
+
+  // Inventario
+  { id: 'INVENTORY_DASHBOARD', label: 'Dashboard', parent: 'INVENTORY' },
   { id: 'INVENTORY_PRODUCTS', label: 'Productos', parent: 'INVENTORY' },
   { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', parent: 'INVENTORY' },
-  { id: 'PURCHASES_ORDERS', label: 'Órdenes de Compra', parent: 'PURCHASES' },
-  { id: 'HR_EMPLOYEES', label: 'Empleados', parent: 'HR' },
-  { id: 'HR_NOMINAS', label: 'Nóminas', parent: 'HR' },
+  { id: 'INVENTORY_TRANSFERS', label: 'Transferencias', parent: 'INVENTORY' },
+  { id: 'INVENTORY_ADJUSTMENTS', label: 'Ajustes', parent: 'INVENTORY' },
+  { id: 'INVENTORY_MOVEMENTS', label: 'Movimientos', parent: 'INVENTORY' },
+
+  // Actividades
+  { id: 'ACTIVITIES_TASKS', label: 'Tareas', parent: 'ACTIVITIES' },
+  { id: 'ACTIVITIES_EVENTS', label: 'Eventos', parent: 'ACTIVITIES' },
+  { id: 'ACTIVITIES_REMINDERS', label: 'Recordatorios', parent: 'ACTIVITIES' },
+  { id: 'ACTIVITIES_LOGS', label: 'Bitácora', parent: 'ACTIVITIES' },
+
+  // Documentos
+  { id: 'DOCUMENTS_FILES', label: 'Archivos', parent: 'DOCUMENTS' },
+  { id: 'DOCUMENTS_CONTRACTS', label: 'Contratos', parent: 'DOCUMENTS' },
+  { id: 'DOCUMENTS_INVOICES', label: 'Facturas Legales', parent: 'DOCUMENTS' },
+  { id: 'DOCUMENTS_REPORTS', label: 'Reportes', parent: 'DOCUMENTS' },
+
+  // Notificaciones
+  { id: 'NOTIFICATIONS_ALERTS', label: 'Alertas', parent: 'NOTIFICATIONS' },
+  { id: 'NOTIFICATIONS_MESSAGES', label: 'Mensajes', parent: 'NOTIFICATIONS' },
+  { id: 'NOTIFICATIONS_PUSH', label: 'Push', parent: 'NOTIFICATIONS' },
+
+  // Reportes
+  { id: 'REPORTS_SALES', label: 'Ventas', parent: 'REPORTS' },
+  { id: 'REPORTS_PURCHASES', label: 'Compras', parent: 'REPORTS' },
+  { id: 'REPORTS_FINANCIAL', label: 'Financiero', parent: 'REPORTS' },
+  { id: 'REPORTS_INVENTORY', label: 'Inventario', parent: 'REPORTS' },
+  { id: 'REPORTS_CLIENTS', label: 'Clientes', parent: 'REPORTS' },
+  { id: 'REPORTS_PROVIDERS', label: 'Proveedores', parent: 'REPORTS' },
+  { id: 'REPORTS_HR', label: 'Recursos Humanos', parent: 'REPORTS' },
+  { id: 'REPORTS_SUBSCRIPTIONS', label: 'Suscripciones', parent: 'REPORTS' },
+  
+  // Configuración
+  { id: 'CONFIG_COMPANY', label: 'Empresa', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_BRANDING', label: 'Marca y Tema', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_ROLES', label: 'Roles y Permisos', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_SECURITY', label: 'Seguridad', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_CURRENCY', label: 'Moneda', parent: 'CONFIGURATION' },
 ];
 
-// Fusionar para la lista de permisos
-const ALL_PERM_MODULES = [
-  ...AVAILABLE_MODULES,
-  ...SUBMODULES_FOR_PERMS.map(s => ({ ...s, icon: Activity, description: `Submódulo de ${s.parent}` }))
-];
+// Fusionar para la lista de permisos anidando los submódulos justo debajo de sus padres
+export const ALL_PERM_MODULES = AVAILABLE_MODULES.flatMap(mod => [
+  mod,
+  ...SUBMODULES_FOR_PERMS
+    .filter(sub => sub.parent === mod.id)
+    .map(s => ({ ...s, icon: Activity, description: `Vista de ${mod.label}` }))
+]);
 
 // ---- Hex / OKLCH conversion helpers ----
 function hexToRgb(hex: string): [number, number, number] {
@@ -555,7 +632,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       permissions: ALL_PERM_MODULES.map(m => ({
         module: m.id,
         read: true,
-        write: false,
+        create: false,
+        edit: false,
         delete: false
       })),
       tenantId: user?.tenantId
@@ -585,12 +663,13 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         return { 
           module: m.id, 
           read: !!existing.read, 
-          write: !!existing.write, 
+          create: existing.create !== undefined ? !!existing.create : !!existing.write,
+          edit: existing.edit !== undefined ? !!existing.edit : !!existing.write,
           delete: !!existing.delete 
         };
       }
       
-      return { module: m.id, read: false, write: false, delete: false };
+      return { module: m.id, read: false, create: false, edit: false, delete: false };
     });
     
     setEditingRole({
@@ -622,7 +701,11 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       const payload = {
         name: cleanRole.name,
         description: cleanRole.description || '',
-        permissions: cleanRole.permissions || [],
+        // Asegurar compatibilidad: el backend usa 'write', el frontend granular usa 'create'/'edit'
+        permissions: (cleanRole.permissions || []).map((p: any) => ({
+          ...p,
+          write: !!(p.create || p.edit || p.write), // compat con backend
+        })),
         allowedModules: cleanRole.allowedModules || [],
         clientTenantId: user?.tenantId
       };
@@ -644,14 +727,72 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     }
   };
 
-  const togglePermission = (module: string, type: 'read' | 'write' | 'delete') => {
+  const togglePermission = (module: string, type: 'read' | 'write' | 'create' | 'edit' | 'delete') => {
     if (!editingRole) return;
-    const newPerms = (editingRole.permissions || []).map(p => {
-      if (p.module === module) {
-        return { ...p, [type]: !p[type] };
+    let newPerms = [...(editingRole.permissions || []).map(p => ({ ...p }))];
+
+    const targetPerm = newPerms.find(p => p.module === module);
+    if (!targetPerm) return;
+
+    const newValue = !targetPerm[type];
+
+    // Si se intenta desactivar leer, pero crear/editar/borrar siguen activos, no permitir.
+    if (type === 'read' && newValue === false) {
+      if (targetPerm.create || targetPerm.edit || targetPerm.delete || targetPerm.write) {
+        return; // Bloquear
       }
-      return p;
-    });
+    }
+
+    // Aplicar el cambio al módulo clickeado
+    targetPerm[type] = newValue;
+    // Si se activa crear, editar o borrar, asegurar que se active leer.
+    if ((type === 'create' || type === 'edit' || type === 'delete') && newValue === true) {
+      targetPerm.read = true;
+    }
+
+    // Verificar si es un módulo padre (tiene hijos en SUBMODULES_FOR_PERMS)
+    const childModules = SUBMODULES_FOR_PERMS.filter(sub => sub.parent === module);
+    
+    if (childModules.length > 0) {
+      // Es un PADRE → propagar a todos los hijos
+      childModules.forEach(child => {
+        const childPerm = newPerms.find(p => p.module === child.id);
+        if (childPerm) {
+          childPerm[type] = newValue;
+          // Si se activa crear/editar/borrar en padre, también activar leer en hijos
+          if ((type === 'create' || type === 'edit' || type === 'delete') && newValue === true) {
+            childPerm.read = true;
+          }
+          // Si se desactiva leer en padre, desactivar todo en hijos
+          if (type === 'read' && newValue === false) {
+            childPerm.create = false;
+            childPerm.edit = false;
+            childPerm.delete = false;
+            childPerm.write = false;
+          }
+        }
+      });
+    }
+
+    // Verificar si es un submódulo (tiene parent)
+    const submoduleDef = SUBMODULES_FOR_PERMS.find(sub => sub.id === module);
+    if (submoduleDef) {
+      // Es un HIJO → recalcular el estado del padre
+      const parentPerm = newPerms.find(p => p.module === submoduleDef.parent);
+      if (parentPerm) {
+        const siblings = SUBMODULES_FOR_PERMS.filter(sub => sub.parent === submoduleDef.parent);
+        const siblingPerms = siblings.map(s => newPerms.find(p => p.module === s.id)).filter(Boolean);
+        
+        // El padre está ON solo si TODOS los hijos tienen ese permiso ON
+        parentPerm[type] = siblingPerms.length > 0 && siblingPerms.every(sp => !!sp![type]);
+        
+        // Recalcular también 'read' del padre
+        if (type !== 'read') {
+          parentPerm.read = siblingPerms.length > 0 && siblingPerms.every(sp => !!sp!.read);
+        }
+      }
+    }
+
     setEditingRole({ ...editingRole, permissions: newPerms });
   };
 
@@ -662,8 +803,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
         className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black tracking-tighter flex items-center gap-3 uppercase italic">
-            <Settings2 className="size-9 text-primary" />
+          <h1 className="text-2xl md:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-2 md:gap-3 uppercase italic">
+            <Settings2 className="size-6 md:size-9 text-primary" />
             Configuración <span className="text-primary">Sistema</span>
           </h1>
           <div className="flex items-center gap-2 mt-2">
@@ -1019,7 +1160,16 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                               </div>
                               <div>
                                 <h4 className="font-black text-base tracking-tight">{role.name}</h4>
-                                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{role.permissions?.length || 0} módulos configurados</p>
+                                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+                                  {(() => {
+                                    const activePerms = (role.permissions || []).filter((p: Permission) => p.read || p.create || p.edit || p.delete || p.write);
+                                    const parentModules = new Set(activePerms.map((p: Permission) => {
+                                      const sub = SUBMODULES_FOR_PERMS.find(s => s.id === p.module);
+                                      return sub ? sub.parent : p.module;
+                                    }));
+                                    return `${parentModules.size} módulos activos`;
+                                  })()}
+                                </p>
                               </div>
                             </div>
                             <div className="flex gap-1 transition-all relative z-20">
@@ -1045,19 +1195,26 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
                           {/* Permissions Matrix */}
                           <div className="space-y-1.5 mb-5">
-                            {(role.permissions || []).slice(0, 4).map((p: Permission) => (
-                              <div key={p.module} className="flex items-center justify-between text-[11px] px-2 py-1 rounded-lg hover:bg-muted/20">
-                                <span className="font-bold capitalize text-muted-foreground">{p.module}</span>
-                                <div className="flex gap-1">
-                                  <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', p.read ? 'bg-blue-500/15 text-blue-500' : 'bg-muted/30 text-muted-foreground/30')}>R</span>
-                                  <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', p.write ? 'bg-emerald-500/15 text-emerald-500' : 'bg-muted/30 text-muted-foreground/30')}>W</span>
-                                  <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', p.delete ? 'bg-rose-500/15 text-rose-500' : 'bg-muted/30 text-muted-foreground/30')}>D</span>
+                            {(role.permissions || []).filter((p: Permission) => p.read || p.create || p.edit || p.delete || p.write).slice(0, 4).map((p: Permission) => {
+                              const mod = ALL_PERM_MODULES.find(m => m.id === p.module);
+                              return (
+                                <div key={p.module} className="flex items-center justify-between text-[11px] px-2 py-1 rounded-lg hover:bg-muted/20">
+                                  <span className="font-bold text-muted-foreground truncate mr-2">{mod?.label || p.module}</span>
+                                  <div className="flex gap-1 flex-shrink-0">
+                                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', p.read ? 'bg-blue-500/15 text-blue-500' : 'bg-muted/30 text-muted-foreground/30')}>L</span>
+                                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', (p.create || p.write) ? 'bg-emerald-500/15 text-emerald-500' : 'bg-muted/30 text-muted-foreground/30')}>C</span>
+                                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', (p.edit || p.write) ? 'bg-amber-500/15 text-amber-500' : 'bg-muted/30 text-muted-foreground/30')}>E</span>
+                                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', p.delete ? 'bg-rose-500/15 text-rose-500' : 'bg-muted/30 text-muted-foreground/30')}>B</span>
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
-                            {(role.permissions?.length || 0) > 4 && (
-                              <p className="text-[10px] text-muted-foreground/50 italic pl-2">+ {role.permissions.length - 4} módulos más</p>
-                            )}
+                              );
+                            })}
+                            {(() => {
+                              const active = (role.permissions || []).filter((p: Permission) => p.read || p.create || p.edit || p.delete || p.write);
+                              return active.length > 4 ? (
+                                <p className="text-[10px] text-muted-foreground/50 italic pl-2">+ {active.length - 4} vistas más</p>
+                              ) : null;
+                            })()}
                           </div>
 
                           <button onClick={() => handleEditRole(role)} disabled={!canEditRoles}
@@ -1094,15 +1251,15 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
           {/* Role Edit Dialog */}
           <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 rounded-3xl border-none">
-              <div className="flex items-center justify-between p-6 border-b border-border/30 bg-muted/10">
+            <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-hidden p-0 rounded-3xl border-none flex flex-col">
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border/30 bg-muted/10 flex-shrink-0">
                 <div>
                   <DialogTitle className="text-lg font-black">{editingRole?.id ? 'Editar Rol' : 'Nuevo Rol'}</DialogTitle>
                   <DialogDescription className="text-sm text-muted-foreground">Define nombre y matriz de permisos</DialogDescription>
                 </div>
               </div>
-              <div className="p-6 space-y-6">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="overflow-y-auto flex-1 p-3 sm:p-6 space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre del Rol *</Label>
                     <Input placeholder="Ej: Gerente de Ventas" className="rounded-xl h-11"
@@ -1116,22 +1273,24 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Matriz de Permisos por Módulo</Label>
-                    <div className="flex gap-4 text-[10px] font-black uppercase tracking-widest">
+                    <div className="flex flex-wrap gap-3 text-[10px] font-black uppercase tracking-widest">
                       <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-blue-500 inline-block" />Leer</span>
-                      <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-500 inline-block" />Escribir</span>
+                      <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-500 inline-block" />Crear</span>
+                      <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-amber-500 inline-block" />Editar</span>
                       <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" />Borrar</span>
                     </div>
                   </div>
                   <div className="rounded-2xl border border-border/40 overflow-hidden">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-sm table-fixed">
                       <thead className="bg-muted/30">
                         <tr>
-                          <th className="text-left px-4 py-3 text-xs font-black uppercase tracking-widest text-muted-foreground w-1/2">Módulo</th>
-                          <th className="px-4 py-3 text-center text-xs font-black text-blue-500 w-1/6">LEER</th>
-                          <th className="px-4 py-3 text-center text-xs font-black text-emerald-500 w-1/6">ESCRIBIR</th>
-                          <th className="px-4 py-3 text-center text-xs font-black text-rose-500 w-1/6">BORRAR</th>
+                          <th className="text-left px-2 sm:px-3 py-2 text-[10px] sm:text-xs font-black uppercase tracking-wider text-muted-foreground">Módulo</th>
+                          <th className="px-0 py-2 text-center text-[10px] sm:text-xs font-black text-blue-500 w-[52px] sm:w-[72px]">Leer</th>
+                          <th className="px-0 py-2 text-center text-[10px] sm:text-xs font-black text-emerald-500 w-[52px] sm:w-[72px]">Crear</th>
+                          <th className="px-0 py-2 text-center text-[10px] sm:text-xs font-black text-amber-500 w-[52px] sm:w-[72px]">Editar</th>
+                          <th className="px-0 py-2 text-center text-[10px] sm:text-xs font-black text-rose-500 w-[52px] sm:w-[72px]">Borrar</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/30">
@@ -1145,31 +1304,34 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                               "hover:bg-muted/10 transition-colors",
                               isSubmodule ? "bg-muted/5 opacity-90" : "bg-card"
                             )}>
-                              <td className="px-4 py-3">
-                                <div className={cn("flex items-center gap-3", isSubmodule && "pl-8")}>
+                              <td className="px-2 sm:px-3 py-1.5">
+                                <div className={cn("flex items-center gap-2", isSubmodule && "pl-4 sm:pl-6")}>
                                   <div className={cn(
-                                    "size-8 rounded-lg flex items-center justify-center flex-shrink-0",
+                                    "hidden sm:flex size-7 rounded-lg items-center justify-center flex-shrink-0",
                                     isSubmodule ? "bg-muted/20" : "bg-primary/10"
                                   )}>
-                                    {Icon && <Icon className={cn("size-4", isSubmodule ? "text-muted-foreground" : "text-primary")} />}
+                                    {Icon && <Icon className={cn("size-3.5", isSubmodule ? "text-muted-foreground" : "text-primary")} />}
                                   </div>
-                                  <div>
-                                    <p className={cn("font-bold", isSubmodule ? "text-xs" : "text-sm")}>
+                                  <div className="min-w-0">
+                                    <p className={cn("font-bold leading-tight truncate", isSubmodule ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm")}>
                                       {mod?.label || p.module}
-                                      {isSubmodule && <span className="ml-2 text-[9px] font-black text-muted-foreground/50 uppercase">SUB</span>}
+                                      {isSubmodule && <span className="ml-1 text-[8px] font-black text-muted-foreground/50 uppercase">SUB</span>}
                                     </p>
-                                    <p className="text-[10px] text-muted-foreground">{mod?.description || ''}</p>
+                                    <p className="hidden lg:block text-[9px] text-muted-foreground truncate">{mod?.description || ''}</p>
                                   </div>
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-center">
-                                <Switch disabled={!canEditRoles} checked={p.read} onCheckedChange={() => togglePermission(p.module, 'read')} />
+                              <td className="px-0 py-1.5 text-center">
+                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.read} onCheckedChange={() => togglePermission(p.module, 'read')} className="scale-[0.65] sm:scale-75" /></div>
                               </td>
-                              <td className="px-4 py-3 text-center">
-                                <Switch disabled={!canEditRoles} checked={p.write} onCheckedChange={() => togglePermission(p.module, 'write')} />
+                              <td className="px-0 py-1.5 text-center">
+                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.create} onCheckedChange={() => togglePermission(p.module, 'create')} className="scale-[0.65] sm:scale-75" /></div>
                               </td>
-                              <td className="px-4 py-3 text-center">
-                                <Switch disabled={!canEditRoles} checked={p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} />
+                              <td className="px-0 py-1.5 text-center">
+                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.edit} onCheckedChange={() => togglePermission(p.module, 'edit')} className="scale-[0.65] sm:scale-75" /></div>
+                              </td>
+                              <td className="px-0 py-1.5 text-center">
+                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} className="scale-[0.65] sm:scale-75" /></div>
                               </td>
                             </tr>
                           );

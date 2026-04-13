@@ -73,3 +73,4 @@ export const ReportesView: React.FC<ReportesViewProps> = ({ data, loading, onRef
     </div>
   );
 };
+

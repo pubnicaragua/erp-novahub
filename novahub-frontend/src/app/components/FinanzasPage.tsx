@@ -435,6 +435,9 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
                       toast.success('Ingreso eliminado');
                     }}
                     loading={loading}
+                    canCreate={canPerform('FINANCIAL_INCOMES', 'create')}
+                    canEdit={canPerform('FINANCIAL_INCOMES', 'edit')}
+                    canDelete={canPerform('FINANCIAL_INCOMES', 'delete')}
                   />
                 </motion.div>
               </TabsContent>
@@ -461,6 +464,9 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
                       toast.success('Gasto eliminado');
                     }}
                     loading={loading}
+                    canCreate={canPerform('FINANCIAL_EXPENSES', 'create')}
+                    canEdit={canPerform('FINANCIAL_EXPENSES', 'edit')}
+                    canDelete={canPerform('FINANCIAL_EXPENSES', 'delete')}
                   />
                 </motion.div>
               </TabsContent>
@@ -483,6 +489,9 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
                       toast.success('Gasto recurrente eliminado');
                     }}
                     loading={loading}
+                    canCreate={canPerform('FINANCIAL_EXPENSES_REC', 'create')}
+                    canEdit={canPerform('FINANCIAL_EXPENSES_REC', 'edit')}
+                    canDelete={canPerform('FINANCIAL_EXPENSES_REC', 'delete')}
                   />
                 </motion.div>
               </TabsContent>
@@ -505,6 +514,9 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
                       toast.success('Ingreso recurrente eliminado');
                     }}
                     loading={loading}
+                    canCreate={canPerform('FINANCIAL_INCOMES_REC', 'create')}
+                    canEdit={canPerform('FINANCIAL_INCOMES_REC', 'edit')}
+                    canDelete={canPerform('FINANCIAL_INCOMES_REC', 'delete')}
                   />
                 </motion.div>
               </TabsContent>

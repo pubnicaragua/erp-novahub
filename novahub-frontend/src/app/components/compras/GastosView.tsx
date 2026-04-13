@@ -148,11 +148,11 @@ export function GastosView({ data, loading, onRefresh }: Props) {
   const columns: ColumnDef<Expense>[] = [
     { key: 'date',        header: 'Fecha',     width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
-    { key: 'category',    header: 'Categoría', width: '130px', editable: canPerform('compras', 'edit'), type: 'select', options: [
+    { key: 'category',    header: 'Categoría', width: '130px', editable: canPerform('PURCHASES_EXPENSES', 'edit'), type: 'select', options: [
         {label: 'Operacional', value: 'OPERATIVO'}, {label: 'Administrativo', value: 'ADMINISTRATIVO'}, {label: 'Ventas', value: 'VENTAS'}, {label: 'Financiero', value: 'FINANCIERO'}, {label: 'Otro', value: 'OTRO'}
       ],
       render: (val, row) => <Badge variant="outline" className="text-[9px] uppercase bg-primary/5 text-primary border-none">{String(val || '').toUpperCase() === 'OTRO' ? (row.categoryCustom || 'OTRO') : (val || '-')}</Badge> },
-    { key: 'description', header: 'Descripción', editable: canPerform('compras', 'edit') },
+    { key: 'description', header: 'Descripción', editable: canPerform('PURCHASES_EXPENSES', 'edit') },
     { key: 'paidTo',      header: 'Pagado a', width: '170px',
       render: (val) => <span className="text-xs font-medium text-foreground">{val || '-'}</span> },
     { key: 'paymentSource', header: 'Cuenta Origen', width: '130px',
@@ -164,7 +164,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
 
         </span>
       ) },
-    { key: 'status',      header: 'Estado',    width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status',      header: 'Estado',    width: '120px', editable: canPerform('PURCHASES_EXPENSES', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -244,7 +244,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
-    const canMutate = isNew ? canPerform('compras', 'create') : canPerform('compras', 'edit');
+    const canMutate = isNew ? canPerform('PURCHASES_EXPENSES', 'create') : canPerform('PURCHASES_EXPENSES', 'edit');
     const resolvedHour = localDoc.time || (localDoc.date ? new Date(localDoc.date).toTimeString().slice(0, 5) : '');
 
     return (
@@ -260,13 +260,13 @@ export function GastosView({ data, loading, onRefresh }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-             {!isNew && canPerform('compras', 'delete') && (
+             {!isNew && canPerform('PURCHASES_EXPENSES', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
-            {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
+            {((isNew && canPerform('PURCHASES_EXPENSES', 'create')) || (!isNew && canPerform('PURCHASES_EXPENSES', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Gasto
               </Button>
@@ -295,7 +295,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Descripción / Concepto</p>
                     <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
                       value={localDoc.description || ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, description: e.target.value })} 
                       className="h-8 text-xs font-bold" 
@@ -305,7 +305,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Categoría</p>
                     <select
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
                       value={localDoc.category || 'OPERATIVO'}
                       onChange={(e) => setLocalDoc({ ...localDoc, category: e.target.value })}
                       className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs uppercase"
@@ -320,7 +320,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Fecha del Gasto</p>
                     <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
                       type="date" 
                       value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
@@ -338,7 +338,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Proveedor (Opcional)</p>
                     <Combobox
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
                       options={suppliers
                         .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
                         .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
@@ -385,7 +385,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                     <select
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
                       value={localDoc.status || 'PENDING'}
                       onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                       className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
@@ -396,7 +396,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Referencia (Factura/Recibo)</p>
                     <Input 
-                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
                       value={localDoc.reference || ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} 
                       className="h-8 text-xs" 
@@ -433,7 +433,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                    <div className="w-1/2">
                       <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
                       <select
-                        disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                        disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
                         value={localDoc.currency || 'NIO'}
                         onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
                         className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
@@ -445,7 +445,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                    <div className="w-1/2 flex flex-col items-end">
                       <p className="text-[10px] text-muted-foreground mb-1">Monto Total</p>
                       <Input 
-                        disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
+                        disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
                         type="number" 
                         min="0" 
                         value={localDoc.amount || ''} 
@@ -592,13 +592,13 @@ export function GastosView({ data, loading, onRefresh }: Props) {
               </Button>
             )}
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerform('compras', 'create') && (
+            {canPerform('PURCHASES_EXPENSES', 'create') && (
               <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Gasto</Button>
             )}
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={canPerform('compras', 'delete') ? async (ids) => {
+          onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
@@ -612,8 +612,8 @@ export function GastosView({ data, loading, onRefresh }: Props) {
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              {canPerform('compras', 'delete') && (
+              <Button title={canPerform('PURCHASES_EXPENSES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              {canPerform('PURCHASES_EXPENSES', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
               )}
             </div>
@@ -632,3 +632,4 @@ export function GastosView({ data, loading, onRefresh }: Props) {
     </div>
   );
 }
+

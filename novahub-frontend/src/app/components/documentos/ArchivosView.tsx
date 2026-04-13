@@ -74,3 +74,4 @@ export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, onRef
     </div>
   );
 };
+

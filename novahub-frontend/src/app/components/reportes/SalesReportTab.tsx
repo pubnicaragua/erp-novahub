@@ -9,8 +9,9 @@ import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, PieChart as PieChartIcon, Users } from 'lucide-react';
+import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, PieChart as PieChartIcon, Users, Truck, ShoppingBag, Wallet, CreditCard } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -192,161 +193,6 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     });
   }, [monthlyData]);
 
-  const getBase64Image = async (url: string) => {
-    try {
-      const resp = await fetch(url);
-      const blob = await resp.blob();
-      return new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch (e) {
-      return null;
-    }
-  };
-
-  const sanitizeHtml2CanvasOklch = (_elementId: string, clonedDoc: Document, primaryHex: string) => {
-    const styleTag = clonedDoc.createElement('style');
-    styleTag.innerHTML = `
-      :root, *, *::before, *::after {
-        --background: #ffffff !important;
-        --foreground: #333333 !important;
-        --card: #ffffff !important;
-        --card-foreground: #333333 !important;
-        --popover: #ffffff !important;
-        --popover-foreground: #333333 !important;
-        --primary: ${primaryHex} !important;
-        --primary-foreground: #ffffff !important;
-        --secondary: #f3f4f6 !important;
-        --secondary-foreground: #333333 !important;
-        --muted: #f3f4f6 !important;
-        --muted-foreground: #6b7280 !important;
-        --accent: #f3f4f6 !important;
-        --accent-foreground: #333333 !important;
-        --destructive: #ef4444 !important;
-        --destructive-foreground: #ffffff !important;
-        --border: #e5e7eb !important;
-        --input: #e5e7eb !important;
-        --ring: ${primaryHex} !important;
-        --chart-1: #10b981 !important;
-        --chart-2: #ef4444 !important;
-        --chart-3: #6366f1 !important;
-        --chart-4: #f59e0b !important;
-        --chart-5: #ec4899 !important;
-        --sidebar-background: #ffffff !important;
-        --sidebar-foreground: #333333 !important;
-        --sidebar-primary: ${primaryHex} !important;
-        --sidebar-primary-foreground: #ffffff !important;
-        --sidebar-accent: #f3f4f6 !important;
-        --sidebar-accent-foreground: #333333 !important;
-        --sidebar-border: #e5e7eb !important;
-        --sidebar-ring: ${primaryHex} !important;
-      }
-    `;
-    clonedDoc.head.appendChild(styleTag);
-    const hasUnsupported = (s: string | null | undefined) => s ? /oklch\(|oklab\(|color\(|lch\(|lab\(/i.test(s) : false;
-    const walkAndFix = (origRoot: Element | null, clonedRoot: Element | null) => {
-      if (!origRoot || !clonedRoot) return;
-      const origList = [origRoot, ...Array.from(origRoot.querySelectorAll('*'))];
-      const clonedList = [clonedRoot, ...Array.from(clonedRoot.querySelectorAll('*'))];
-      for (let i = 0; i < Math.min(origList.length, clonedList.length); i++) {
-        const origEl = origList[i] as HTMLElement;
-        const cloneEl = clonedList[i] as HTMLElement;
-        if (!origEl || !cloneEl) continue;
-        try {
-          const comp = window.getComputedStyle(origEl);
-          let safeColor = '#333333';
-          const cls = origEl.className?.toString?.() || '';
-          if (cls.includes('text-primary')) safeColor = primaryHex;
-          else if (cls.includes('text-emerald') || cls.includes('text-green')) safeColor = '#10b981';
-          else if (cls.includes('text-rose') || cls.includes('text-red')) safeColor = '#f43f5e';
-          else if (cls.includes('text-blue')) safeColor = '#3b82f6';
-          else if (cls.includes('text-amber') || cls.includes('text-orange')) safeColor = '#f59e0b';
-          else if (cls.includes('text-purple')) safeColor = '#a855f7';
-
-          if (hasUnsupported(comp.color)) cloneEl.style.setProperty('color', safeColor, 'important');
-          if (hasUnsupported(comp.backgroundColor)) {
-            let bg = 'transparent';
-            if (cls.includes('bg-primary')) bg = primaryHex;
-            else if (cls.includes('bg-emerald')) bg = '#10b981';
-            else if (cls.includes('bg-rose')) bg = '#f43f5e';
-            else if (cls.includes('bg-blue')) bg = '#3b82f6';
-            else if (cls.includes('bg-amber')) bg = '#f59e0b';
-            else if (cls.includes('bg-purple')) bg = '#a855f7';
-            else if (cls.includes('bg-muted')) bg = '#f3f4f6';
-            else if (cls.includes('bg-card') || cls.includes('bg-background')) bg = '#ffffff';
-            else if (cls.includes('bg-secondary') || cls.includes('bg-accent')) bg = '#f3f4f6';
-            cloneEl.style.setProperty('background-color', bg, 'important');
-          }
-          if (hasUnsupported(comp.borderColor)) cloneEl.style.setProperty('border-color', '#e5e7eb', 'important');
-          if (hasUnsupported(comp.backgroundImage)) cloneEl.style.setProperty('background-image', 'none', 'important');
-          if (hasUnsupported(comp.boxShadow)) cloneEl.style.setProperty('box-shadow', 'none', 'important');
-          
-          if (hasUnsupported((comp as any).textDecorationColor)) {
-            cloneEl.style.setProperty('text-decoration-color', safeColor, 'important');
-          }
-
-          const tagName = cloneEl.tagName?.toLowerCase?.() || '';
-          if (tagName === 'svg' || cloneEl.closest?.('svg') || ['path','rect','circle','line','polygon','polyline','g','text','tspan'].includes(tagName)) {
-            const fill = cloneEl.getAttribute('fill');
-            const stroke = cloneEl.getAttribute('stroke');
-            const stopColor = cloneEl.getAttribute('stop-color');
-            if (fill && (hasUnsupported(fill) || fill.includes('var('))) {
-              if (!cls.includes('recharts-bar-rectangle') && !cls.includes('recharts-pie-sector')) {
-                cloneEl.setAttribute('fill', '#9ca3af');
-              }
-            }
-            if (stroke && (hasUnsupported(stroke) || stroke.includes('var('))) {
-              cloneEl.setAttribute('stroke', '#e5e7eb');
-            }
-            if (stopColor && (hasUnsupported(stopColor) || stopColor.includes('var('))) {
-              cloneEl.setAttribute('stop-color', primaryHex);
-            }
-          }
-
-          if (cloneEl.style) {
-            for (let j = 0; j < cloneEl.style.length; j++) {
-              const prop = cloneEl.style[j];
-              const val = cloneEl.style.getPropertyValue(prop);
-              if (hasUnsupported(val)) {
-                if (prop.includes('color') || prop === 'fill' || prop === 'stroke') {
-                  cloneEl.style.setProperty(prop, safeColor, 'important');
-                } else if (prop.includes('background')) {
-                  cloneEl.style.setProperty(prop, '#ffffff', 'important');
-                } else if (prop.includes('border') || prop.includes('outline')) {
-                  cloneEl.style.setProperty(prop, '#e5e7eb', 'important');
-                } else if (prop.includes('shadow')) {
-                  cloneEl.style.setProperty(prop, 'none', 'important');
-                }
-              }
-            }
-          }
-        } catch (e) {}
-      }
-    };
-
-    const ids = ['sales-report-kpis', 'sales-chart-bar', 'sales-chart-pie', 'sales-chart-trend', 'sales-health-card'];
-    ids.forEach(id => walkAndFix(document.getElementById(id), clonedDoc.getElementById(id)));
-
-    try {
-      const sheets = clonedDoc.styleSheets;
-      for (let s = 0; s < sheets.length; s++) {
-        try {
-          const rules = sheets[s].cssRules;
-          for (let r = 0; r < rules.length; r++) {
-            const rule = rules[r] as CSSStyleRule;
-            if (rule.cssText && hasUnsupported(rule.cssText)) {
-              let newCss = rule.cssText.replace(/oklch\([^)]*\)/gi, '#9ca3af').replace(/oklab\([^)]*\)/gi, '#9ca3af');
-              try { sheets[s].deleteRule(r); sheets[s].insertRule(newCss, r); } catch (e2) {}
-            }
-          }
-        } catch (e) {}
-      }
-    } catch (e) {}
-  };
-
   useImperativeHandle(ref, () => ({
     exportPDF: async () => {
       try {
@@ -411,7 +257,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           if (el) {
             checkPage(95);
             try {
-              const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(chartId, clonedDoc, primaryHex) });
+              const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch([chartId], clonedDoc, primaryHex) });
               doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, 80, undefined, 'FAST');
               currentY += 85;
             } catch (imgErr) { console.warn(`${chartId} failed`, imgErr); }
@@ -758,7 +604,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
       {/* ═══ Top Items ═══ */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Top Clientes */}
-        <Card className="border-blue-500/20">
+        <Card className="border-blue-500/20 min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
               <Users className="size-4 text-blue-500" /> Top 5 Clientes
@@ -766,24 +612,24 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           </CardHeader>
           <CardContent className="space-y-2">
             {topCustomers.map((c: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-blue-500/5 border border-blue-500/10 hover:bg-blue-500/10 transition-colors">
+              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-blue-500/5 border border-blue-500/10 hover:bg-blue-500/10 transition-colors gap-4">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="size-7 rounded-lg bg-blue-500/20 flex items-center justify-center text-[10px] font-black text-blue-600 shrink-0">
                     #{idx + 1}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold truncate">{c.name}</p>
-                    <p className="text-[10px] text-muted-foreground">Cliente Preferencial</p>
+                    <p className="text-[10px] text-muted-foreground truncate">Cliente Preferencial</p>
                   </div>
                 </div>
-                <span className="text-sm font-black text-blue-500 shrink-0 ml-3">{formatConvertedAmount(Number(c.value), 'NIO')}</span>
+                <span className="text-sm font-black text-blue-500 shrink-0">{formatConvertedAmount(Number(c.value), 'NIO')}</span>
               </div>
             ))}
           </CardContent>
         </Card>
 
         {/* Top Productos */}
-        <Card className="border-purple-500/20">
+        <Card id="top-products-card" className="border-purple-500/20 min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
               <ShoppingCart className="size-4 text-purple-500" /> Top 5 Productos
@@ -791,17 +637,17 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           </CardHeader>
           <CardContent className="space-y-2">
             {topProducts.map((p: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-purple-500/5 border border-purple-500/10 hover:bg-purple-500/10 transition-colors">
+              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-purple-500/5 border border-purple-500/10 hover:bg-purple-500/10 transition-colors gap-4">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="size-7 rounded-lg bg-purple-500/20 flex items-center justify-center text-[10px] font-black text-purple-600 shrink-0">
                     #{idx + 1}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold truncate">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground">Mayor margen neto</p>
+                    <p className="text-[10px] text-muted-foreground truncate">Margen: {formatConvertedAmount(p.margin, 'NIO')}</p>
                   </div>
                 </div>
-                <span className="text-sm font-black text-purple-500 shrink-0 ml-3">+{formatConvertedAmount(Number(p.margin), 'NIO')}</span>
+                <span className="text-sm font-black text-purple-500 shrink-0">TOP {idx + 1}</span>
               </div>
             ))}
           </CardContent>
@@ -811,3 +657,4 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   );
 });
 SalesReportTab.displayName = 'SalesReportTab';
+

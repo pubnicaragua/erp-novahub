@@ -465,17 +465,17 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
             {topIncomes.length === 0 ? (
               <p className="text-sm text-muted-foreground italic py-4 text-center">Sin ingresos</p>
             ) : topIncomes.map((inc: any, idx: number) => (
-              <div key={inc.id || idx} className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 transition-colors group">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="size-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-[10px] font-black text-emerald-600 shrink-0">
+              <div key={inc.id || idx} className="flex items-start justify-between p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 transition-colors group">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className="size-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-[10px] font-black text-emerald-600 shrink-0 mt-0.5">
                     #{idx + 1}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold truncate">{inc.source || inc.notes || 'Ingreso'}</p>
-                    <p className="text-[10px] text-muted-foreground">{inc.category || 'Sin cat.'} · {new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI')}</p>
+                    <p className="text-sm font-bold break-words">{inc.source || inc.notes || 'Ingreso'}</p>
+                    <p className="text-[10px] text-muted-foreground break-words">{inc.category || 'Sin cat.'} · {new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI')}</p>
                   </div>
                 </div>
-                <span className="text-sm font-black text-emerald-500 shrink-0 ml-3">+{formatConvertedAmount(inc.amount || 0, inc.currency, inc.exchangeRate)}</span>
+                <span className="text-sm font-black text-emerald-500 shrink-0 ml-3 mt-0.5">+{formatConvertedAmount(inc.amount || 0, inc.currency, inc.exchangeRate)}</span>
               </div>
             ))}
           </CardContent>
@@ -492,17 +492,17 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
             {topExpenses.length === 0 ? (
               <p className="text-sm text-muted-foreground italic py-4 text-center">Sin gastos</p>
             ) : topExpenses.map((exp: any, idx: number) => (
-              <div key={exp.id || idx} className="flex items-center justify-between p-3 rounded-xl bg-rose-500/5 border border-rose-500/10 hover:bg-rose-500/10 transition-colors group">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="size-7 rounded-lg bg-rose-500/20 flex items-center justify-center text-[10px] font-black text-rose-600 shrink-0">
+              <div key={exp.id || idx} className="flex items-start justify-between p-3 rounded-xl bg-rose-500/5 border border-rose-500/10 hover:bg-rose-500/10 transition-colors group">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className="size-7 rounded-lg bg-rose-500/20 flex items-center justify-center text-[10px] font-black text-rose-600 shrink-0 mt-0.5">
                     #{idx + 1}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold truncate">{exp.description || 'Gasto'}</p>
-                    <p className="text-[10px] text-muted-foreground">{exp.source ? `${exp.source} · ` : ''}{exp.category || 'Sin cat.'} · {new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI')}</p>
+                    <p className="text-sm font-bold break-words">{exp.description || 'Gasto'}</p>
+                    <p className="text-[10px] text-muted-foreground break-words">{exp.source ? `${exp.source} · ` : ''}{exp.category || 'Sin cat.'} · {new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI')}</p>
                   </div>
                 </div>
-                <span className="text-sm font-black text-rose-500 shrink-0 ml-3">-{formatConvertedAmount(exp.amount || 0, exp.currency, exp.exchangeRate)}</span>
+                <span className="text-sm font-black text-rose-500 shrink-0 ml-3 mt-0.5">-{formatConvertedAmount(exp.amount || 0, exp.currency, exp.exchangeRate)}</span>
               </div>
             ))}
           </CardContent>

@@ -249,16 +249,16 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         <span 
           className={cn(
             "text-xs font-black font-mono text-primary group-hover:underline",
-            canPerform('ventas', 'edit') ? "cursor-pointer" : "cursor-default"
+            canPerform('SALES_RECURRING', 'edit') ? "cursor-pointer" : "cursor-default"
           )} 
-          onClick={() => canPerform('ventas', 'edit') && setEditingId(row.id)}
+          onClick={() => canPerform('SALES_RECURRING', 'edit') && setEditingId(row.id)}
         >
           Factura #{row.id.slice(0, 8)}
         </span>
       )
     },
     { key: 'customer', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
-    { key: 'frequency', header: 'Frecuencia', width: '120px', editable: canPerform('ventas', 'edit'), type: 'select', options: frequencyOptions,
+    { key: 'frequency', header: 'Frecuencia', width: '120px', editable: canPerform('SALES_RECURRING', 'edit'), type: 'select', options: frequencyOptions,
       render: (val) => { const freqMap: Record<string, string> = { WEEKLY: 'Semanal', MONTHLY: 'Mensual', QUARTERLY: 'Trimestral', YEARLY: 'Anual' };
         return <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-500 border-none">{freqMap[(val||'').toUpperCase()] || val}</Badge>; } },
     { key: 'total', header: 'Monto Ciclo', width: '150px',
@@ -320,7 +320,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {canPerform('ventas', 'edit') && (
+            {canPerform('SALES_RECURRING', 'edit') && (
               <>
                 {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={async () => { await recurringInvoicesService.delete(localDoc.id); setEditingId(null); onRefresh(); }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
@@ -482,7 +482,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar suscripción..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-            {canPerform('ventas', 'create') && (
+            {canPerform('SALES_RECURRING', 'create') && (
               <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Agregar Factura Recurrente</Button>
             )}
@@ -493,7 +493,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               {canPerform('ventas', 'edit') && (
+               {canPerform('SALES_RECURRING', 'edit') && (
                  (row.status||'').toUpperCase() === 'ACTIVE' ? (
                    <Button title="Pausar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 transition-colors"><Pause className="size-4" /></Button>
                  ) : (
@@ -502,7 +502,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                )}
                <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               {canPerform('ventas', 'delete') && (
+               {canPerform('SALES_RECURRING', 'delete') && (
                  <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                )}
             </div>
@@ -542,3 +542,4 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     </div>
   );
 }
+

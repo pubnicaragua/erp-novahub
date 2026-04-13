@@ -531,7 +531,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                   </p>
                   <div className="flex">
                     <p className="truncate text-[11px] text-sidebar-foreground/50 capitalize odoo-highlight">
-                      {user?.role}
+                      {user?.role === 'admin' ? 'Admin' : (user?.customRoleName || user?.role)}
                     </p>
                   </div>
                 </div>

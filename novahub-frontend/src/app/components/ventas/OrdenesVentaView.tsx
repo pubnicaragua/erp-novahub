@@ -146,9 +146,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           <span 
             className={cn(
               "text-xs font-black font-mono text-primary",
-              canPerform('ventas', 'edit') ? "cursor-pointer hover:underline" : "cursor-default"
+              canPerform('SALES_ORDERS', 'edit') ? "cursor-pointer hover:underline" : "cursor-default"
             )} 
-            onClick={() => canPerform('ventas', 'edit') && setEditingId(row.id)}
+            onClick={() => canPerform('SALES_ORDERS', 'edit') && setEditingId(row.id)}
           >
             {val}
           </span>
@@ -185,7 +185,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       key: 'status', 
       header: 'Estado', 
       width: '130px',
-      editable: canPerform('ventas', 'edit'),
+      editable: canPerform('SALES_ORDERS', 'edit'),
       type: 'select',
       options: statusOptions,
       render: (val) => {
@@ -244,7 +244,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {canPerform('ventas', 'edit') && (
+            {canPerform('SALES_ORDERS', 'edit') && (
               <>
                 <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
                   onClick={() => { handleUpdate(localDoc!.id, { status: 'DRAFT' as any }); setEditingId(null); }}>
@@ -568,7 +568,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            {canPerform('ventas', 'create') && (
+            {canPerform('SALES_ORDERS', 'create') && (
               <Button onClick={handleAddOrder} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Orden
               </Button>
@@ -595,7 +595,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-                {row.status === 'confirmed' && canPerform('ventas', 'edit') && (
+                {row.status === 'confirmed' && canPerform('SALES_ORDERS', 'edit') && (
                   <Button 
                     title="Generar Factura" 
                     onClick={() => onGenerateInvoice(row)}
@@ -608,7 +608,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 )}
                 <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                 <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
-                {canPerform('ventas', 'delete') && (
+                {canPerform('SALES_ORDERS', 'delete') && (
                   <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                 )}
              </div>
@@ -643,3 +643,4 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     </div>
   );
 }
+
