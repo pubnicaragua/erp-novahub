@@ -122,10 +122,11 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
       // Manejo del archivo local y subida a supabase si hay credenciales
       if (formData.file) {
         const file = formData.file;
-        const fileSizeGB = file.size / (1024 * 1024 * 1024);
+        const totalSizeBytes = data.reduce((acc, log) => acc + (Number(log.fileSize) || 0), 0);
+        const newTotalSize = totalSizeBytes + file.size;
         
-        if (fileSizeGB > 1) {
-          toast.error('El archivo excede el límite de 1GB.');
+        if (newTotalSize > 1024 * 1024 * 1024) { // 1GB
+          toast.error('El archivo excede el límite de almacenamiento total de la empresa (1GB).');
           setIsUploading(false);
           return;
         }
@@ -197,11 +198,14 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
     }
   };
 
+  const totalSizeBytes = data.reduce((acc, log) => acc + (Number(log.fileSize) || 0), 0);
+  const totalSizeMB = (totalSizeBytes / (1024 * 1024)).toFixed(2);
+
   const kpis = [
+    { title: 'Almacenamiento (1GB)', value: `${totalSizeMB} MB`, icon: Database, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
     { title: 'Total Registros', value: data.length, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Creaciones', value: data.filter(l => (l.action || '').toUpperCase() === 'CREATE').length, icon: Database, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Actualizaciones', value: data.filter(l => (l.action || '').toUpperCase() === 'UPDATE').length, icon: RefreshCcw, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'Eliminaciones', value: data.filter(l => (l.action || '').toUpperCase() === 'DELETE').length, icon: MousePointerClick, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+    { title: 'Agregados', value: data.filter(l => ['CREATE','UPLOAD'].includes((l.action || '').toUpperCase())).length, icon: Plus, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Eliminados', value: data.filter(l => (l.action || '').toUpperCase() === 'DELETE').length, icon: MousePointerClick, color: 'text-rose-500', bg: 'bg-rose-500/10' },
   ];
 
   const filtered = data.filter(l => l.entity?.toLowerCase().includes(searchTerm.toLowerCase()) || l.details?.toLowerCase().includes(searchTerm.toLowerCase()) || l.action?.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -291,7 +295,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
             </div>
             <div className="space-y-2">
               <Label>Adjuntar Archivo (Opcional, Máx 1GB)</Label>
-              <Input type="file" onChange={e => setFormData({...formData, file: e.target.files?.[0] || null})} className="text-muted-foreground file:text-primary file:font-bold" />
+              <Input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" onChange={e => setFormData({...formData, file: e.target.files?.[0] || null})} className="text-muted-foreground file:text-primary file:font-bold" />
             </div>
           </div>
           <DialogFooter>

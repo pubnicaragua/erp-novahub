@@ -33,6 +33,7 @@ export const hrService = {
   getPayrollPeriods: () => api.get('/hr/payroll/periods'),
   getPayrollReports: (period?: string) => api.get('/hr/payroll/reports', { params: { period } }),
   updatePayrollStatus: (id: string, status: string) => api.patch(`/hr/payroll/${id}/status`, { status }),
+  deletePayroll: (id: string) => api.delete(`/hr/payroll/${id}`),
 
   // ===== ATTENDANCE =====
   clockIn: (data: any) => api.post('/hr/attendance/clock-in', data),

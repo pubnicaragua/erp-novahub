@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp } from 'lucide-react';
+import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
@@ -14,6 +14,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const { convertAmount, formatConvertedAmount, displayCurrency } = useCurrency();
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [includeCommissions, setIncludeCommissions] = useState(true);
 
   const employeeOptions = [
     { label: 'Todos los empleados', value: 'all' },
@@ -39,6 +40,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       const payload: any = {
         periodStart: periodStart.toISOString(),
         periodEnd: periodEnd.toISOString(),
+        includeCommissions,
       };
       if (filterEmployee !== 'all') {
         payload.employeeIds = [filterEmployee];
@@ -60,6 +62,17 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       onRefresh();
     } catch (error) {
       toast.error('Error al actualizar estado');
+    }
+  };
+
+  const handleDeletePayroll = async (id: string) => {
+    if (!confirm('¿Estás seguro de eliminar esta nómina? Los datos no se podrán recuperar y las comisiones volverán a estado pendiente.')) return;
+    try {
+      await hrService.deletePayroll(id);
+      toast.success('Nómina eliminada exitosamente');
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al eliminar nómina');
     }
   };
 
@@ -209,6 +222,18 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               Pagar Todas ({pendingCount})
             </Button>
           )}
+          <div className="flex items-center gap-2 mx-2">
+            <input 
+              type="checkbox" 
+              id="includeComm" 
+              checked={includeCommissions} 
+              onChange={(e) => setIncludeCommissions(e.target.checked)}
+              className="rounded border-border text-primary focus:ring-primary h-4 w-4 accent-primary"
+            />
+            <label htmlFor="includeComm" className="text-xs font-bold text-muted-foreground uppercase tracking-widest cursor-pointer select-none">
+              Incluir Comisiones
+            </label>
+          </div>
           <Button size="sm" onClick={handleProcessPayroll} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
             <Calculator className="size-4 mr-2" />
             Procesar Nómina
@@ -277,15 +302,26 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {payroll.status === 'PENDING' && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(payroll.id); }}
-                            className="h-7 px-3 text-xs text-primary hover:text-primary hover:bg-primary/10 font-semibold"
-                          >
-                            <CheckCircle className="size-3.5 mr-1" />
-                            Pagar
-                          </Button>
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(payroll.id); }}
+                              className="h-7 px-3 text-xs text-primary hover:text-primary hover:bg-primary/10 font-semibold"
+                            >
+                              <CheckCircle className="size-3.5 mr-1" />
+                              Pagar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => { e.stopPropagation(); handleDeletePayroll(payroll.id); }}
+                              className="h-7 px-3 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 font-semibold"
+                            >
+                              <Trash2 className="size-3.5 mr-1" />
+                              Eliminar
+                            </Button>
+                          </>
                         )}
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); setExpandedRow(expandedRow === payroll.id ? null : payroll.id); }}>
                           {expandedRow === payroll.id ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
@@ -325,6 +361,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                             <div className="space-y-1">
                               <div className="flex justify-between"><span className="text-muted-foreground">Bonos</span><span className="font-bold text-green-600">+{formatConvertedAmount(payroll.bonuses || 0, currency)}</span></div>
                               <div className="flex justify-between"><span className="text-muted-foreground">H. Extra</span><span className="font-bold text-blue-600">+{formatConvertedAmount(payroll.overtime || 0, currency)}</span></div>
+                              {Number(payroll.commissionsSales || 0) > 0 && (
+                                <div className="flex justify-between"><span className="text-muted-foreground">Comisiones por Ventas</span><span className="font-bold text-emerald-600">+{formatConvertedAmount(payroll.commissionsSales, currency)}</span></div>
+                              )}
                               <div className="flex justify-between"><span className="text-muted-foreground">Otras Deducc.</span><span className="font-bold text-red-600">-{formatConvertedAmount(payroll.deductions || 0, currency)}</span></div>
                             </div>
                           </div>

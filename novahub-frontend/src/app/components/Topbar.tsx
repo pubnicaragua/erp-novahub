@@ -174,19 +174,44 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <div className="flex flex-col gap-1 p-2 max-h-[300px] overflow-y-auto">
-              <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 cursor-pointer" onClick={() => onNavigate('notificaciones')}>
-                {unreadCount > 0 ? (
-                  <>
+              {unreadCount > 0 ? (
+                notifications.filter(n => !n.read).slice(0, 5).map((n) => (
+                  <DropdownMenuItem 
+                    key={n.id} 
+                    className="flex flex-col items-start gap-1 p-3 cursor-pointer border-b border-border/50 last:border-0" 
+                    onClick={() => {
+                      if (n.message?.startsWith('TAREA:')) {
+                        onNavigate('actividades');
+                        window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'actividades', subModule: 'tareas' }}));
+                      } else if (n.message?.startsWith('RECORDATORIO:')) {
+                        onNavigate('actividades');
+                        window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'actividades', subModule: 'recordatorios' }}));
+                      } else {
+                        onNavigate('notificaciones');
+                      }
+                    }}
+                  >
                     <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-primary" />
-                      <span className="font-medium text-sm">Tienes {unreadCount} {unreadCount === 1 ? 'notificación nueva' : 'notificaciones nuevas'}</span>
+                       <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                       <span className="font-medium text-sm line-clamp-1">{n.title}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground ml-4">Despliega el centro de notificaciones para revisar.</span>
-                  </>
-                ) : (
-                  <span className="text-sm text-muted-foreground py-2 text-center w-full">Sin notificaciones nuevas.</span>
-                )}
-              </DropdownMenuItem>
+                    <span className="text-xs text-muted-foreground ml-4 line-clamp-2">
+                      {n.message?.startsWith('TAREA:') ? n.message.split(':').slice(2).join(':') : 
+                       n.message?.startsWith('RECORDATORIO:') ? n.message.split(':').slice(2).join(':') : 
+                       n.message}
+                    </span>
+                  </DropdownMenuItem>
+                ))
+              ) : (
+                <DropdownMenuItem className="py-2 justify-center text-sm text-muted-foreground" onClick={() => onNavigate('notificaciones')}>
+                  Sin notificaciones nuevas.
+                </DropdownMenuItem>
+              )}
+              {unreadCount > 5 && (
+                 <DropdownMenuItem className="py-2 justify-center text-xs text-primary font-medium" onClick={() => onNavigate('notificaciones')}>
+                    Ver {unreadCount - 5} más
+                 </DropdownMenuItem>
+              )}
             </div>
           </DropdownMenuContent>
         </DropdownMenu>

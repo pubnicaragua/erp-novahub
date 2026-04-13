@@ -28,6 +28,7 @@ import type {
   CreditNote, Product
 } from '../types';
 import { inventoryService } from '../services/inventario.service';
+import { hrService } from '../services/hr.service';
 
 // Sub-Views
 import { ClientesView } from './ventas/ClientesView';
@@ -83,6 +84,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
     productos: [] as Product[],
     series: [] as any[],
     warehouses: [] as any[],
+    employees: [] as any[],
   });
   const [loading, setLoading] = useState(true);
 
@@ -93,7 +95,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [cus, est, ord, inv, pay, rec, ret, cn, prod, series, warehouses] = await Promise.all([
+      const [cus, est, ord, inv, pay, rec, ret, cn, prod, series, warehouses, emp] = await Promise.all([
         customersService.getAll(),
         estimatesService.getAll(),
         salesOrdersService.getAll(),
@@ -105,6 +107,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
         inventoryService.getProducts(),
         inventoryService.getSeries(),
         inventoryService.getWarehouses(),
+        hrService.getEmployees(),
       ]);
       
       const toArr = (r: any) => Array.isArray(r) ? r : (r?.data || []);
@@ -120,6 +123,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
         productos: toArr(prod),
         series: toArr(series),
         warehouses: toArr(warehouses),
+        employees: toArr(emp),
       });
     } catch (error) {
       console.error('Error fetching sales data:', error);
@@ -232,6 +236,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
                   products={data.productos} 
                   series={data.series}
                   warehouses={data.warehouses}
+                  employees={data.employees}
                   invoiceDraft={invoiceDraft}
                   onClearInvoiceDraft={() => setInvoiceDraft(null)}
                 />

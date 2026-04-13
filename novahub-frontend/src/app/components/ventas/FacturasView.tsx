@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, FileDown
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, FileDown, History
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -18,6 +18,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -27,6 +28,7 @@ interface FacturasViewProps {
   products?: Product[];
   series?: any[];
   warehouses?: any[];
+  employees?: any[];
   invoiceDraft?: any;
   onClearInvoiceDraft?: () => void;
 }
@@ -50,7 +52,7 @@ const editableStatusOptions = [
   { label: 'Cancelada', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], invoiceDraft, onClearInvoiceDraft }: FacturasViewProps) {
+export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft }: FacturasViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -61,6 +63,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
   const [isCreating, setIsCreating] = useState(false);
+  const [auditInvoiceId, setAuditInvoiceId] = useState<string | null>(null);
 
   const isSerialTracked = (product: any) =>
     Boolean(
@@ -201,6 +204,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       discountAmount: 0,
       total: 0,
       notes: '',
+      sellerEmployeeId: '',
+      commissionRate: 0,
     });
     setLocalRates({ dRate: 0, tRate: 15 });
   };
@@ -285,6 +290,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           status: emitir ? 'PENDING' : 'DRAFT',
           notes: finalNotes,
           salesOrderId: localDoc.salesOrderId || undefined,
+          sellerEmployeeId: localDoc.sellerEmployeeId || undefined,
+          commissionRate: localDoc.commissionRate || undefined,
         } as any);
         toast.success(emitir ? 'Factura emitida exitosamente' : 'Factura guardada como borrador');
       } else {
@@ -482,6 +489,33 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   <p className="text-[10px] text-muted-foreground mb-1">Vencimiento</p>
                   <Input type="date" value={localDoc?.dueDate ? (typeof localDoc.dueDate === 'string' && localDoc.dueDate.includes('T') ? localDoc.dueDate.split('T')[0] : localDoc.dueDate) : ''}
                     onChange={(e) => setLocalDoc({ ...localDoc, dueDate: e.target.value })} className="h-8 text-xs" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Vendedor (Opcional)</p>
+                  <Combobox
+                    options={(employees || []).filter(e => e.employmentStatus === 'ACTIVE' || e.id === localDoc?.sellerEmployeeId).map(e => ({ 
+                      label: `${e.firstName} ${e.lastName}`, 
+                      value: e.id, 
+                      description: e.position?.title 
+                    }))}
+                    value={localDoc?.sellerEmployeeId || ''}
+                    onChange={(val) => { setLocalDoc({ ...localDoc, sellerEmployeeId: val }); if (!isCreating) handleUpdate(localDoc!.id, { sellerEmployeeId: val }); }}
+                    placeholder="Seleccionar Vendedor"
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">% Comisión</p>
+                  <Input type="number" min="0" max="100" value={localDoc?.commissionRate || ''} placeholder="0" 
+                    onChange={(e) => { 
+                      const val = Number(e.target.value); 
+                      setLocalDoc({ ...localDoc, commissionRate: val }); 
+                    }} 
+                    onBlur={() => {
+                        if (!isCreating) handleUpdate(localDoc!.id, { commissionRate: localDoc?.commissionRate });
+                    }} 
+                    className={cn("h-8 text-xs", !localDoc?.sellerEmployeeId && "opacity-50 cursor-not-allowed bg-muted/20")} disabled={!localDoc?.sellerEmployeeId} 
+                  />
+                  {!localDoc?.sellerEmployeeId && <p className="text-[9px] text-muted-foreground/60 mt-0.5 italic">Selecciona vendedor primero</p>}
                 </div>
                   {/* Moneda se ajusta dinámicamente según la preferencia del topbar */}
               </div>
@@ -773,6 +807,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           actions={(row) => (
               <div className="flex items-center gap-1">
                 <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'invoice' as any }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
+                <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4" /></Button>
                 <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                 {canPerform('ventas', 'delete') && (
                   <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
@@ -811,6 +846,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             setPendingDeleteId(null);
           }
         }}
+      />
+
+      <AuditHistoryModal
+        isOpen={!!auditInvoiceId}
+        onClose={() => setAuditInvoiceId(null)}
+        entity="INVOICE"
+        entityId={auditInvoiceId || ''}
+        title="Historial de la Factura"
       />
     </div>
   );
