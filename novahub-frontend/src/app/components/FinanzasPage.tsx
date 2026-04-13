@@ -20,7 +20,7 @@ interface FinanzasPageProps {
 }
 
 export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPageProps) {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const { displayCurrency, exchangeRate: globalRate, convertAmount } = useCurrency();
 
   const hasAccess = (moduleId: string) => !user?.enabledModules || user.enabledModules.includes(moduleId);
