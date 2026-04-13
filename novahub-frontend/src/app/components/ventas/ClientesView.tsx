@@ -74,7 +74,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
     },
     { 
       key: 'name', 
-      header: 'Nombre del Cliente', 
+      header: 'Nombre del cliente', 
       editable: canPerform('ventas', 'edit'),
       render: (val) => (
         <div className="flex items-center gap-3">
