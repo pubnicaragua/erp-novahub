@@ -389,7 +389,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!isSubscribed) return false;
 
     // 2. Verificar permisos del Rol
-    const permission = user.permissions.find(p => p.module === module);
+    const permissions = Array.isArray(user.permissions) ? user.permissions : [];
+    const permission = permissions.find(p => p.module === module);
 
     return permission?.canView ?? false;
   }, [user]);
@@ -397,8 +398,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canPerform = useCallback((module: string, action: 'view' | 'create' | 'edit' | 'delete'): boolean => {
     if (!user) return false;
     if (user.isPlatformAdmin) return hasAccess(module);
-    
-    const permission = user.permissions.find(p => p.module === module);
+
+    const permissions = Array.isArray(user.permissions) ? user.permissions : [];
+    const normalizedModule = String(module || '');
+    const upperModule = normalizedModule.toUpperCase();
+    const parentByGranularPrefix: Record<string, string> = {
+      'PURCHASES_': 'compras',
+      'SALES_': 'ventas',
+      'INVENTORY_': 'inventario',
+      'FINANCIAL_': 'finanzas',
+      'HR_': 'rh',
+      'NOTIFICATIONS_': 'notificaciones',
+      'REPORTS_': 'reportes',
+      'DOCUMENTS_': 'documentos',
+      'ACTIVITIES_': 'actividades',
+      'PROVIDERS_': 'proveedores',
+      'CLIENTS_': 'clientes',
+    };
+
+    const findPermission = (moduleName: string) => permissions.find(
+      (p) => String(p.module || '').toUpperCase() === String(moduleName || '').toUpperCase(),
+    );
+
+    let permission = findPermission(normalizedModule);
+    if (!permission) {
+      const parentModule = Object.entries(parentByGranularPrefix).find(([prefix]) => upperModule.startsWith(prefix))?.[1];
+      if (parentModule) permission = findPermission(parentModule);
+    }
+
     if (!permission) return false;
     switch (action) {
       case 'view': return permission.canView;
@@ -452,20 +479,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user?.tenantId]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="size-12 border-4 border-muted border-t-primary rounded-full animate-spin" />
-          <p className="text-sm text-muted-foreground font-medium">Cargando sesión...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, logout, switchIdentity, refreshEnabledModules, isLoading }}>
-      {children}
+      {isLoading ? (
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <div className="flex flex-col items-center gap-4">
+            <div className="size-12 border-4 border-muted border-t-primary rounded-full animate-spin" />
+            <p className="text-sm text-muted-foreground font-medium">Cargando sesión...</p>
+          </div>
+        </div>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 }

@@ -408,6 +408,7 @@ export interface PurchaseReceiptItem {
   id: string;
   purchaseReceiptId: string;
   productId?: string;
+  warehouseId?: string;
   description: string;
   quantityOrdered: number;
   quantityReceived: number;

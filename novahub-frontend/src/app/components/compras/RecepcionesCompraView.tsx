@@ -8,7 +8,8 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { purchaseReceiptsService, suppliersService, purchaseOrdersService } from '../../services/compras.service';
-import type { PurchaseReceipt, Supplier, PurchaseOrder } from '../../types';
+import { inventoryService } from '../../services/inventario.service';
+import type { PurchaseReceipt, Supplier, PurchaseOrder, Warehouse } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -31,6 +32,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseReceipt> | null>(null);
@@ -43,6 +45,10 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
     purchaseOrdersService.getAll().then(res => {
       const list = Array.isArray(res) ? res : (res as any).data || [];
       setOrders(list);
+    }).catch();
+    inventoryService.getWarehouses().then((res: any) => {
+      const list = Array.isArray(res) ? res : (res as any).data || [];
+      setWarehouses(list);
     }).catch();
   }, []);
 
@@ -84,20 +90,122 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PurchaseReceipt>) => {
-    try { await (purchaseReceiptsService as any).update(id as string, updates); toast.success('Recepción actualizada'); onRefresh(); }
+    try {
+      const currentReceipt = data.find((x) => x.id === id);
+      const previousStatus = String(currentReceipt?.status || '').toUpperCase();
+      const requestedStatus = String(updates.status || currentReceipt?.status || '').toUpperCase();
+      if (!['RECEIVED', 'PARTIAL'].includes(previousStatus) && ['RECEIVED', 'PARTIAL'].includes(requestedStatus)) {
+        const missingWarehouse = (currentReceipt?.items || []).some((item: any) =>
+          Number(item?.quantityReceived || 0) > 0 && !String(item?.warehouseId || '').trim(),
+        );
+        if (missingWarehouse) {
+          toast.error('Selecciona la bodega para cada ítem recibido antes de marcar la recepción');
+          return;
+        }
+      }
+      const updatedResponse = await (purchaseReceiptsService as any).update(id as string, updates);
+      const updatedReceipt = (updatedResponse as any)?.data || updatedResponse;
+      const nextStatus = String(updatedReceipt?.status || updates.status || previousStatus).toUpperCase();
+      if (!['RECEIVED', 'PARTIAL'].includes(previousStatus) && ['RECEIVED', 'PARTIAL'].includes(nextStatus)) {
+        try {
+          await ensureInventoryEntriesForReceipt({
+            ...(currentReceipt || {}),
+            ...(updatedReceipt || {}),
+            id: String(id),
+            status: nextStatus as any,
+          });
+        } catch (syncError: any) {
+          toast.warning(`Recepción actualizada, pero no se pudo sincronizar inventario: ${syncError?.message || 'Error de sincronización'}`);
+        }
+      }
+      toast.success('Recepción actualizada');
+      onRefresh();
+    }
     catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
+  };
+
+  const ensureInventoryEntriesForReceipt = async (receipt: Partial<PurchaseReceipt>) => {
+    const nextStatus = String(receipt.status || '').toUpperCase();
+    if (!['RECEIVED', 'PARTIAL'].includes(nextStatus)) return;
+    if (!receipt.id) return;
+    const receiptItems = Array.isArray(receipt.items) ? receipt.items : [];
+    if (receiptItems.length === 0) return;
+
+    const movementsResponse = await inventoryService.getMovements({ type: 'IN', limit: 1000 }).catch(() => []);
+    const existingMovements = Array.isArray(movementsResponse)
+      ? movementsResponse
+      : (movementsResponse as any)?.data || [];
+
+    for (const [index, item] of receiptItems.entries()) {
+      const quantityReceived = Number((item as any)?.quantityReceived || 0);
+      if (quantityReceived <= 0) continue;
+      const productId = String((item as any)?.productId || '').trim();
+      const warehouseId = String((item as any)?.warehouseId || '').trim();
+      if (!productId) continue;
+      if (!warehouseId) {
+        throw new Error(`Debe seleccionar bodega para el ítem ${index + 1}`);
+      }
+
+      const movementReference = `PURCHASE_RECEIPT:${receipt.id}:${(item as any)?.id || productId}:${warehouseId}`;
+      const alreadySynced = existingMovements.some((movement: any) => String(movement?.reference || '') === movementReference);
+      if (alreadySynced) continue;
+
+      await inventoryService.createMovement({
+        productId,
+        warehouseId,
+        type: 'IN',
+        quantity: quantityReceived,
+        reference: movementReference,
+      } as any);
+    }
   };
 
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
     if (!localDoc?.purchaseOrderId) return toast.error('Debe seleccionar una orden de compra');
+    const isReceiving = ['RECEIVED', 'PARTIAL'].includes(String(localDoc.status || '').toUpperCase());
+    if (isReceiving) {
+      const missingWarehouse = (localDoc.items || []).some((item: any) =>
+        Number(item?.quantityReceived || 0) > 0 && !String(item?.warehouseId || '').trim(),
+      );
+      if (missingWarehouse) {
+        return toast.error('Debe seleccionar una bodega para cada ítem recibido');
+      }
+    }
     
     try {
       if (editingId === 'NEW') {
-        await purchaseReceiptsService.create(localDoc as any);
+        const createdResponse = await purchaseReceiptsService.create(localDoc as any);
+        const createdReceipt = (createdResponse as any)?.data || createdResponse;
+        if (['RECEIVED', 'PARTIAL'].includes(String(createdReceipt?.status || localDoc.status || '').toUpperCase())) {
+          try {
+            await ensureInventoryEntriesForReceipt({
+              ...(localDoc || {}),
+              ...(createdReceipt || {}),
+            });
+          } catch (syncError: any) {
+            toast.warning(`Recepción creada, pero no se pudo sincronizar inventario: ${syncError?.message || 'Error de sincronización'}`);
+          }
+        }
         toast.success('Recepción creada');
       } else {
-        await (purchaseReceiptsService as any).update(editingId!, localDoc as any);
+        const currentReceipt = data.find((x) => x.id === editingId);
+        const previousStatus = String(currentReceipt?.status || '').toUpperCase();
+        const updatedResponse = await (purchaseReceiptsService as any).update(editingId!, localDoc as any);
+        const updatedReceipt = (updatedResponse as any)?.data || updatedResponse;
+        const nextStatus = String(updatedReceipt?.status || localDoc.status || previousStatus).toUpperCase();
+        if (!['RECEIVED', 'PARTIAL'].includes(previousStatus) && ['RECEIVED', 'PARTIAL'].includes(nextStatus)) {
+          try {
+            await ensureInventoryEntriesForReceipt({
+              ...(currentReceipt || {}),
+              ...(updatedReceipt || {}),
+              id: editingId!,
+              status: nextStatus as any,
+            });
+          } catch (syncError: any) {
+            toast.warning(`Recepción guardada, pero no se pudo sincronizar inventario: ${syncError?.message || 'Error de sincronización'}`);
+          }
+        }
         toast.success('Recepción guardada');
       }
       setEditingId(null);
@@ -183,10 +291,11 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
                           description: (it as any).description,
                           quantityOrdered: (it as any).quantity,
                           quantityReceived: (it as any).quantity,
-                          productId: (it as any).productId
-                       })) || [];
-                       setLocalDoc({ ...localDoc, purchaseOrderId: val, items: newItems as any });
-                    }}
+                          productId: (it as any).productId,
+                          warehouseId: warehouses.find((w) => (w as any)?.isMain)?.id || '',
+                        })) || [];
+                        setLocalDoc({ ...localDoc, purchaseOrderId: val, items: newItems as any });
+                     }}
                     placeholder={localDoc.supplierId ? "Seleccionar Orden" : "Seleccione un proveedor primero"}
                   />
                 </div>
@@ -232,14 +341,15 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
             
             <div className="space-y-2">
               <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className="col-span-6">Descripción del Producto</div>
+                <div className="col-span-4">Descripción del Producto</div>
                 <div className="col-span-2 text-right">Cant. Ordenada</div>
                 <div className="col-span-2 text-right">Cant. Recibida</div>
-                <div className="col-span-2 text-right"></div>
+                <div className="col-span-3">Bodega</div>
+                <div className="col-span-1 text-right"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-6">
+                  <div className="col-span-4">
                     <Input 
                       disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
                       value={item.description || ''} 
@@ -270,7 +380,22 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
                       placeholder="0" 
                     />
                   </div>
-                  <div className="col-span-2 flex items-center justify-end gap-2">
+                  <div className="col-span-3">
+                    <Combobox
+                      disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
+                      options={warehouses
+                        .filter((w) => (w as any)?.isActive !== false)
+                        .map((w) => ({
+                          label: w.name,
+                          value: w.id,
+                          description: w.code ? `[${w.code}] ${w.location || ''}` : (w.location || ''),
+                        }))}
+                      value={item.warehouseId || ''}
+                      onChange={(val) => handleItemChange(idx, 'warehouseId', val)}
+                      placeholder="Seleccionar bodega"
+                    />
+                  </div>
+                  <div className="col-span-1 flex items-center justify-end gap-2">
                     {((isNew && canPerform('PURCHASES_RECEIPTS', 'create')) || (!isNew && canPerform('PURCHASES_RECEIPTS', 'edit'))) && (
                       <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
                         <Trash2 className="size-3" />

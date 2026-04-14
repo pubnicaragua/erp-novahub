@@ -9,6 +9,7 @@ import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
 import { Combobox } from '../ui/Combobox';
 import { purchaseOrdersService, suppliersService } from '../../services/compras.service';
+import { inventoryService } from '../../services/inventario.service';
 import { storageService } from '../../services/storage.service';
 import type { PurchaseOrder, Supplier, SupplierInvoice } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -46,6 +47,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseOrder> | null>(null);
@@ -55,6 +57,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     suppliersService.getAll().then(res => {
       const list = Array.isArray(res) ? res : (res as any).data || [];
       setSuppliers(list);
+    }).catch();
+    inventoryService.getProducts().then((res: any) => {
+      const list = Array.isArray(res)
+        ? res
+        : (res?.data?.items || res?.data || res?.items || []);
+      setProducts(Array.isArray(list) ? list : []);
     }).catch();
   }, []);
 
@@ -285,6 +293,29 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
        const sub = q * p;
        newItems[idx].total = sub;
     }
+    recalculateTotals(newItems);
+  };
+
+  const handleSelectExistingProduct = (idx: number, productId: string) => {
+    if (!localDoc) return;
+    const selected = products.find((p: any) => String(p.id) === String(productId));
+    if (!selected) return;
+
+    const newItems = [...(localDoc.items || [])];
+    const currentItem = newItems[idx] || {};
+    const purchasePrice = Number(selected.costPrice ?? selected.cost ?? selected.price ?? 0);
+    newItems[idx] = {
+      ...currentItem,
+      productId: selected.id,
+      code: selected.code || selected.sku || currentItem.code || '',
+      name: selected.name || currentItem.name || '',
+      description: selected.description || currentItem.description || selected.name || '',
+      category: selected.category?.name || selected.category || selected.categoryId || currentItem.category || '',
+      stockApplies: localDoc.isService ? false : true,
+      unitPrice: purchasePrice,
+      quantity: Number(currentItem.quantity || 1),
+      total: Number(currentItem.quantity || 1) * purchasePrice,
+    };
     recalculateTotals(newItems);
   };
 
@@ -580,7 +611,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
               {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
                 <Button variant="outline" size="sm" onClick={() => {
                   const isServiceOrder = !!localDoc.isService;
-                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, code: '', name: '', category: '', stockApplies: isServiceOrder ? false : false, stock: undefined, quantity: 1, unitPrice: 0, total: 0 }];
+                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, productId: '', code: '', name: '', category: '', stockApplies: isServiceOrder ? false : false, stock: undefined, quantity: 1, unitPrice: 0, total: 0 }];
                   setLocalDoc({ ...localDoc, items: newItems as any });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                   <Plus className="size-3 mr-2" /> Agregar Item
@@ -588,105 +619,141 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
               )}
             </div>
             
-            <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className="col-span-2">Código</div>
-                <div className="col-span-2">Nombre</div>
-                <div className="col-span-2">Categoría</div>
-                <div className="col-span-2 text-right">Stock</div>
-                <div className="col-span-1 text-right">Cant.</div>
-                <div className="col-span-1 text-right">Precio</div>
-                <div className="col-span-1 text-right">Total</div>
-                <div className="col-span-1"></div>
-              </div>
+            <div className="space-y-3">
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-2">
-                    <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                      value={item.code || ''} 
-                      onChange={(e) => handleItemChange(idx, 'code', e.target.value)} 
-                      className="h-8 text-xs" 
-                      placeholder="Código" 
-                    />
+                <div key={item.id || idx} className="group relative rounded-2xl border border-border/40 bg-background/60 backdrop-blur-sm p-4 space-y-3 hover:border-primary/30 hover:shadow-md transition-all duration-200">
+                  {/* Header row: product selector + delete */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1.5">
+                        Vincular producto del inventario
+                        {item.productId && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-primary font-black">
+                            <span className="size-1.5 rounded-full bg-primary inline-block" />
+                            Vinculado
+                          </span>
+                        )}
+                      </p>
+                      <Combobox
+                        disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                        options={[
+                          { label: 'Sin vincular (ítem manual)', value: '__none__', description: 'Ingresar datos manualmente' },
+                          ...products.filter(Boolean).map((p: any) => ({
+                            label: p.name || 'Producto',
+                            value: String(p.id),
+                            description: `${p.code || p.sku || 'SIN-COD'} · ${p.category?.name || p.category || 'Sin categoría'}`,
+                          }))
+                        ]}
+                        value={item.productId ? String(item.productId) : '__none__'}
+                        onChange={(val) => {
+                          if (val === '__none__' || !val) {
+                            handleItemChange(idx, 'productId', '');
+                          } else {
+                            handleSelectExistingProduct(idx, val);
+                          }
+                        }}
+                        placeholder="Buscar producto por nombre, código o categoría..."
+                      />
+                    </div>
+                    {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 shrink-0 text-muted-foreground/40 hover:bg-rose-500/10 hover:text-rose-500 rounded-xl transition-colors opacity-0 group-hover:opacity-100"
+                        onClick={() => handleDeleteItem(idx)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    )}
                   </div>
-                  <div className="col-span-2">
-                    <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                      value={item.name || ''} 
-                      onChange={(e) => handleItemChange(idx, 'name', e.target.value)} 
-                      className="h-8 text-xs" 
-                      placeholder={localDoc.isService ? 'Nombre del servicio' : 'Nombre del producto'} 
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                      value={item.category || ''} 
-                      onChange={(e) => handleItemChange(idx, 'category', e.target.value)} 
-                      className="h-8 text-xs" 
-                      placeholder="Categoría" 
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <div className="flex items-center justify-end gap-2">
-                      <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <input
-                          type="checkbox"
-                          checked={!!item.stockApplies}
-                          onChange={(e) => handleItemChange(idx, 'stockApplies', e.target.checked)}
-                          disabled={!!localDoc.isService || (isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit'))}
+
+                  {/* Fields grid */}
+                  <div className="grid grid-cols-12 gap-2 items-end">
+                    <div className="col-span-3">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Código</p>
+                      <Input
+                        disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                        value={item.code || ''}
+                        onChange={(e) => handleItemChange(idx, 'code', e.target.value)}
+                        className="h-8 text-xs font-mono"
+                        placeholder="Código"
+                      />
+                    </div>
+                    <div className="col-span-3">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Nombre</p>
+                      <Input
+                        disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                        value={item.name || ''}
+                        onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
+                        className="h-8 text-xs"
+                        placeholder={localDoc.isService ? 'Nombre del servicio' : 'Nombre del producto'}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Categoría</p>
+                      <Input
+                        disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                        value={item.category || ''}
+                        onChange={(e) => handleItemChange(idx, 'category', e.target.value)}
+                        className="h-8 text-xs"
+                        placeholder="Categoría"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Stock inicial</p>
+                      <div className="flex items-center gap-1.5">
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!item.stockApplies}
+                            onChange={(e) => handleItemChange(idx, 'stockApplies', e.target.checked)}
+                            disabled={!!localDoc.isService || (isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit'))}
+                            className="accent-primary size-3"
+                          />
+                        </label>
+                        <Input
+                          disabled={!item.stockApplies || (isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit'))}
+                          type="number"
+                          min="0"
+                          value={item.stock === 0 ? '' : (item.stock ?? '')}
+                          onChange={(e) => handleItemChange(idx, 'stock', e.target.value)}
+                          className="h-8 text-xs text-right"
+                          placeholder="-"
                         />
-                        Stock
-                      </label>
-                      <Input 
-                        disabled={!item.stockApplies || (isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit'))}
+                      </div>
+                    </div>
+                    <div className="col-span-1">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Cant.</p>
+                      <Input
+                        disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                         type="number"
                         min="0"
-                        value={item.stock === 0 ? '' : (item.stock ?? '')} 
-                        onChange={(e) => handleItemChange(idx, 'stock', e.target.value)} 
-                        className="h-8 text-xs text-right w-20" 
-                        placeholder="-" 
+                        value={item.quantity === 0 ? '' : item.quantity}
+                        onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
+                        className="h-8 text-xs text-right"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Precio</p>
+                      <Input
+                        disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                        type="number"
+                        min="0"
+                        value={item.unitPrice === 0 ? '' : item.unitPrice}
+                        onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
+                        className="h-8 text-xs text-right"
+                        placeholder="0"
                       />
                     </div>
                   </div>
-                  <div className="col-span-1">
-                    <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                      type="number" 
-                      min="0" 
-                      value={item.quantity === 0 ? '' : item.quantity} 
-                      onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} 
-                      className="h-8 text-xs text-right" 
-                      placeholder="0" 
-                    />
-                  </div>
-                  <div className="col-span-1">
-                    <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                      type="number" 
-                      min="0" 
-                      value={item.unitPrice === 0 ? '' : item.unitPrice} 
-                      onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
-                      className="h-8 text-xs text-right" 
-                      placeholder="0" 
-                    />
-                  </div>
-                  <div className="col-span-1">
-                    <Input 
-                      disabled
-                      type="number" 
-                      value={Number(item.total || 0)} 
-                      className="h-8 text-xs text-right bg-muted/20" 
-                      readOnly
-                    />
-                  </div>
-                  <div className="col-span-1 flex items-center justify-end gap-2">
-                    {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
-                      <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
-                        <Trash2 className="size-3" />
-                      </Button>
-                    )}
+
+                  {/* Total footer */}
+                  <div className="flex items-center justify-end pt-1 border-t border-border/30">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 mr-2">Subtotal ítem</span>
+                    <span className="text-sm font-black tabular-nums text-primary">
+                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
               ))}

@@ -21,10 +21,47 @@ import { DocumentosPage } from './components/DocumentosPage';
 import { NotificacionesPage } from './components/NotificacionesPage';
 import { TransferenciasPage } from './components/TransferenciasPage';
 import { ReportesPage } from './components/ReportesPage';
-import { RolesPage } from './components/RolesPage';
 import { ConfiguracionPage } from './components/ConfiguracionPage';
 import { SuscripcionesPage } from './components/SuscripcionesPage';
 import { PrismaSchemaPage } from './components/PrismaSchemaPage';
+
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[ErrorBoundary] Uncaught error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 32, fontFamily: 'monospace', background: '#0f0f0f', color: '#ff6b6b', minHeight: '100vh' }}>
+          <h2 style={{ color: '#ff6b6b', marginBottom: 16 }}>⚠ Error de renderizado detectado</h2>
+          <pre style={{ background: '#1a1a1a', padding: 16, borderRadius: 8, overflowX: 'auto', color: '#ffa07a', fontSize: 13 }}>
+            {this.state.error?.message}
+            {'\n\n'}
+            {this.state.error?.stack}
+          </pre>
+          <button
+            style={{ marginTop: 16, padding: '8px 20px', background: '#333', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+            onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+          >
+            Recargar
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 
 function DashboardLayout() {
   const { hasAccess, user } = useAuth();
@@ -217,12 +254,14 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <CurrencyProvider>
-          <AppContent />
-        </CurrencyProvider>
-      </ThemeProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ThemeProvider>
+          <CurrencyProvider>
+            <AppContent />
+          </CurrencyProvider>
+        </ThemeProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
