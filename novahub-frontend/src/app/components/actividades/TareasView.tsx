@@ -5,35 +5,42 @@ import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Plus, Search, CheckCircle2, Clock, AlertTriangle, ListTodo, Paperclip } from 'lucide-react';
+import { Plus, Search, CheckCircle2, Clock, AlertTriangle, ListTodo, ImageIcon } from 'lucide-react';
 import { tasksService } from '../../services/actividades.service';
 import { tenantsService } from '../../services/tenants.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
 
 interface TareasViewProps {
   data: Task[];
   loading: boolean;
   onRefresh: () => void;
+  /** Bitacora logs data for shared storage calculation */
+  bitacoraData?: any[];
 }
 
-export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh }) => {
+export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh, bitacoraData }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [employees, setEmployees] = useState<any[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCompleteOpen, setIsCompleteOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Add Task form state
   const [newTask, setNewTask] = useState({ title: '', description: '', dueDate: '', priority: 'MEDIUM', assignedTo: [] as string[] });
 
-  // Complete Task form state
-  const [evidenceUrl, setEvidenceUrl] = useState('');
+  // Complete Task form state - now file-based
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [evidencePreview, setEvidencePreview] = useState<string | null>(null);
   const { user } = useAuth();
+
+  const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL || '';
+  const SUPABASE_ANON_KEY = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
   
   useEffect(() => {
     const fetchUsers = async () => {
@@ -62,6 +69,18 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
     { value: 'URGENT', label: 'Urgente', color: 'text-rose-500' },
   ];
 
+  /** Calculate combined storage from bitacora AND task evidences */
+  const getUsedStorageBytes = (): number => {
+    // Sum from bitacora logs
+    const bitacoraSize = (bitacoraData || []).reduce((acc: number, log: any) => acc + (Number(log.fileSize) || 0), 0);
+    // Sum from task evidences
+    const taskEvidenceSize = data.reduce((acc: number, task: any) => {
+      const evidences = task.evidences || [];
+      return acc + evidences.reduce((eAcc: number, ev: any) => eAcc + (Number(ev.fileSize) || 0), 0);
+    }, 0);
+    return bitacoraSize + taskEvidenceSize;
+  };
+
   const handleUpdate = async (id: string | number, updates: Partial<Task>) => {
     try { await tasksService.update(id as string, updates); toast.success('Tarea actualizada'); onRefresh(); }
     catch { toast.error('Error al actualizar tarea'); }
@@ -89,17 +108,102 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (file) {
+      // Only images allowed
+      if (!file.type.startsWith('image/')) {
+        toast.error('Solo se permiten imágenes como evidencia (JPG, PNG, WEBP, etc.)');
+        e.target.value = '';
+        return;
+      }
+      setEvidenceFile(file);
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = () => setEvidencePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setEvidenceFile(null);
+      setEvidencePreview(null);
+    }
+  };
+
   const handleCompleteTask = async () => {
     if (!selectedTask) return;
     try {
-      await tasksService.complete(selectedTask.id, { fileUrl: evidenceUrl });
-      toast.success('Tarea completada exitosamente con evidencia');
+      setIsUploading(true);
+      let fileUrl = '';
+      let fileName = '';
+      let fileSize = 0;
+      let fileType = '';
+
+      if (evidenceFile) {
+        // Check combined storage limit (1GB shared with bitacora)
+        const usedBytes = getUsedStorageBytes();
+        const newTotalBytes = usedBytes + evidenceFile.size;
+
+        if (newTotalBytes > 1024 * 1024 * 1024) {
+          toast.error('La imagen excede el límite de almacenamiento compartido de la empresa (1GB entre Bitácora y Tareas).');
+          setIsUploading(false);
+          return;
+        }
+
+        fileName = evidenceFile.name;
+        fileSize = evidenceFile.size;
+        fileType = evidenceFile.type;
+
+        if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+          toast.info('Subiendo imagen de evidencia...');
+
+          try {
+            const fileExt = evidenceFile.name.split('.').pop();
+            const uniqueName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+
+            const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/tareas_actividades/${uniqueName}`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'apikey': SUPABASE_ANON_KEY,
+                'Content-Type': evidenceFile.type || 'application/octet-stream'
+              },
+              body: evidenceFile
+            });
+
+            if (!uploadRes.ok) {
+              const errData = await uploadRes.json().catch(() => ({}));
+              console.error('Supabase upload error:', errData);
+              throw new Error(errData?.message || errData?.error || 'HTTP ' + uploadRes.status);
+            }
+
+            fileUrl = `${SUPABASE_URL}/storage/v1/object/public/tareas_actividades/${uniqueName}`;
+          } catch (e: any) {
+            toast.error('Error al subir imagen a Supabase: ' + e.message);
+            setIsUploading(false);
+            return;
+          }
+        } else {
+          toast.warning('Credenciales de Supabase ausentes. Link simulado.', { duration: 4000 });
+          fileUrl = `https://mock-supabase.com/tareas_actividades/${evidenceFile.name}`;
+        }
+      }
+
+      await tasksService.complete(selectedTask.id, {
+        fileUrl: fileUrl || undefined,
+        fileName: fileName || undefined,
+        fileSize: fileSize || undefined,
+        fileType: fileType || undefined,
+      });
+
+      toast.success('Tarea completada exitosamente' + (fileUrl ? ' con evidencia' : ''));
       setIsCompleteOpen(false);
-      setEvidenceUrl('');
+      setEvidenceFile(null);
+      setEvidencePreview(null);
       setSelectedTask(null);
       onRefresh();
     } catch {
       toast.error('Error al completar la tarea');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -157,7 +261,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           const evidence = row.evidences?.[0];
           return evidence ? (
             <a href={evidence.fileUrl} target="_blank" rel="noreferrer" className="flex items-center text-[10px] text-blue-500 hover:underline">
-              <Paperclip className="size-3 mr-1" /> Evidencia
+              <ImageIcon className="size-3 mr-1" /> Ver Evidencia
             </a>
           ) : <span className="text-[10px] text-muted-foreground">Sin evidencia</span>;
         }
@@ -202,6 +306,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
         <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
             <DialogTitle className="font-black uppercase tracking-tight">Crear Nueva Tarea</DialogTitle>
+            <DialogDescription className="sr-only">Formulario para crear una nueva tarea</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
@@ -250,30 +355,53 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isCompleteOpen} onOpenChange={setIsCompleteOpen}>
+      <Dialog open={isCompleteOpen} onOpenChange={(open) => {
+        setIsCompleteOpen(open);
+        if (!open) {
+          setEvidenceFile(null);
+          setEvidencePreview(null);
+        }
+      }}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle className="font-black uppercase tracking-tight">Completar Tarea</DialogTitle>
+            <DialogDescription className="sr-only">Subir evidencia para completar la tarea</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <p className="text-sm text-muted-foreground">Estás a punto de marcar la tarea <strong>{selectedTask?.title}</strong> como completada.</p>
             <div className="space-y-2 mt-2">
-              <Label>Evidencia (URL de archivo / imagen)</Label>
-              <Input 
-                placeholder="https://ejemplo.com/imagen.jpg" 
-                value={evidenceUrl} 
-                onChange={e => setEvidenceUrl(e.target.value)} 
+              <Label className="flex items-center gap-2">
+                <ImageIcon className="size-4 text-primary" />
+                Evidencia (Imagen)
+              </Label>
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="text-muted-foreground file:text-primary file:font-bold"
               />
-              <p className="text-[10px] text-muted-foreground">Puedes adjuntar el link del archivo o imagen como comprobante del trabajo realizado.</p>
+              <p className="text-[10px] text-muted-foreground">Solo imágenes (JPG, PNG, WEBP). Almacenamiento compartido con Bitácora (máx. 1GB por empresa).</p>
             </div>
+            {evidencePreview && (
+              <div className="mt-2 rounded-xl overflow-hidden border border-border/50 bg-muted/20">
+                <img src={evidencePreview} alt="Vista previa" className="w-full max-h-48 object-contain" />
+                <div className="px-3 py-2 flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground truncate">{evidenceFile?.name}</span>
+                  <Badge variant="outline" className="text-[9px]">
+                    {((evidenceFile?.size || 0) / 1024).toFixed(1)} KB
+                  </Badge>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCompleteOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCompleteTask} variant="default">Confirmar Cierre</Button>
+            <Button variant="outline" onClick={() => { setIsCompleteOpen(false); setEvidenceFile(null); setEvidencePreview(null); }} disabled={isUploading}>Cancelar</Button>
+            <Button onClick={handleCompleteTask} variant="default" disabled={isUploading}>
+              {isUploading ? 'Subiendo...' : 'Confirmar Cierre'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
 };
-

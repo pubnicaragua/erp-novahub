@@ -17,6 +17,7 @@ export const incomeService = {
   create: (data: Partial<Income>) => api.post<Income>('/financials/income', data),
   update: (id: string, data: Partial<Income>) => api.patch<Income>(`/financials/income/${id}`, data),
   delete: (id: string) => api.delete<void>(`/financials/income/${id}`),
+  bulkImport: (data: any[]) => api.post<any>('/financials/income/bulk-import', data),
 };
 
 export const expensesService = {
@@ -25,6 +26,7 @@ export const expensesService = {
   create: (data: Partial<Expense>) => api.post<Expense>('/financials/expenses', data),
   update: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/financials/expenses/${id}`, data),
   delete: (id: string) => api.delete<void>(`/financials/expenses/${id}`),
+  bulkImport: (data: any[]) => api.post<any>('/financials/expenses/bulk-import', data),
 };
 
 export const recurringExpensesService = {

@@ -199,8 +199,8 @@ const createUserObject = (apiPayload: any): User => {
     }
     
     // Si tiene un rol personalizado pero no hay permiso explícito del servidor para este módulo
-    // y NO es un admin global, denegamos cualquier acción de escritura/borrado.
-    if (apiUser.customRoleId && !isPlatformAdmin) {
+    // y NO es un admin global o de tenant, denegamos cualquier acción de escritura/borrado.
+    if (apiUser.customRoleId && !isPlatformAdmin && role !== 'admin') {
       return {
         ...def,
         canCreate: false,
@@ -389,6 +389,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!isSubscribed) return false;
 
     // 2. Verificar permisos del Rol
+    // Si es admin del tenant, tiene acceso total a los módulos suscritos
+    if (user.isTenantAdmin) return true;
+
     const permission = user.permissions.find(p => p.module === module);
 
     return permission?.canView ?? false;
@@ -396,7 +399,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const canPerform = useCallback((module: string, action: 'view' | 'create' | 'edit' | 'delete'): boolean => {
     if (!user) return false;
-    if (user.isPlatformAdmin) return hasAccess(module);
+    // Admins (Platform o Tenant) tienen acceso basado en la suscripción del módulo
+    if (user.isPlatformAdmin || user.isTenantAdmin) return hasAccess(module);
     
     const permission = user.permissions.find(p => p.module === module);
     if (!permission) return false;

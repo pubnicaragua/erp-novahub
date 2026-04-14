@@ -134,10 +134,10 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                {activeTab === 'tareas' && <TareasView data={data.tareas} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'tareas' && <TareasView data={data.tareas} loading={loading} onRefresh={fetchData} bitacoraData={data.bitacora} />}
                 {activeTab === 'eventos' && <EventosView data={data.eventos} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'recordatorios' && <RecordatoriosView data={data.recordatorios} loading={loading} onRefresh={fetchData} />}
-                {activeTab === 'bitacora' && <BitacoraView data={data.bitacora} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'bitacora' && <BitacoraView data={data.bitacora} loading={loading} onRefresh={fetchData} tasksData={data.tareas} />}
               </motion.div>
             </AnimatePresence>
           </Tabs>

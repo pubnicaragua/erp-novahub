@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Upload, Building2, Briefcase, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Upload, Building2, Briefcase, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileSpreadsheet } from 'lucide-react';
+import { ImportDataModal } from './ImportDataModal';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -10,12 +11,12 @@ import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 
-export function EmpleadosView({ employees, departments, positions, onRefresh }: any) {
+export function EmpleadosView({ employees, departments, positions, onRefresh, hasPayrollConfig, onNavigateToConfig }: any) {
   const { displayCurrency, formatConvertedAmount } = useCurrency();
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('ACTIVE');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<any>({});
   const [newRows, setNewRows] = useState<any[]>([]);
@@ -54,6 +55,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const handleCreateDepartment = async () => {
@@ -292,6 +294,10 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setViewMode(viewMode === 'table' ? 'cards' : 'table')}>
             {viewMode === 'table' ? <Grid className="size-4" /> : <List className="size-4" />}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowImportModal(true)} className="border-primary/30 text-primary hover:bg-primary/10">
+            <FileSpreadsheet className="size-4 mr-2" />
+            Importar
           </Button>
           <Button size="sm" onClick={handleAddRow} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
             <Plus className="size-4 mr-2" />
@@ -760,6 +766,27 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
         variant="destructive" 
         loading={deleteLoading} 
         onConfirm={() => pendingDeleteId ? handleDelete(pendingDeleteId) : Promise.resolve()} 
+      />
+
+      {/* Import Modal */}
+      <ImportDataModal
+        open={showImportModal}
+        onOpenChange={setShowImportModal}
+        type="employees"
+        departments={departments}
+        positions={positions}
+        employees={employees}
+        onImport={async (data) => {
+          const result = await hrService.bulkImportEmployees(data);
+          return result.data || result;
+        }}
+        onRefresh={onRefresh}
+        hasPayrollConfig={hasPayrollConfig}
+        onNavigateToConfig={onNavigateToConfig}
+        onBulkProcessPayroll={async (data) => {
+          const result: any = await hrService.bulkProcessPayroll(data);
+          return result;
+        }}
       />
     </div>
   );

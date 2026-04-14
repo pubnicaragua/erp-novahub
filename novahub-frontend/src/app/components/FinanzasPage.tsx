@@ -8,6 +8,7 @@ import { Badge } from './ui/badge';
 import { FinanceDashboardView } from './finanzas/FinanceDashboardView';
 import { FinanceTableView } from './finanzas/FinanceTableView';
 import { FinanceBalanceView } from './finanzas/FinanceBalanceView';
+import { FinanceImportModal } from './finanzas/FinanceImportModal';
 import { accountsService, incomeService, expensesService, recurringExpensesService, recurringIncomesService } from '../services/finanzas.service';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
@@ -43,6 +44,10 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
   const [recurringIncomes, setRecurringIncomes] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Import Modal State
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importType, setImportType] = useState<'incomes' | 'expenses'>('incomes');
 
   const normalizeListResponse = (response: any) => {
     if (Array.isArray(response)) return response;
@@ -340,6 +345,14 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
     }
   };
 
+  const handleBulkImport = async (data: any[]) => {
+    if (importType === 'incomes') {
+      return await incomeService.bulkImport(data);
+    } else {
+      return await expensesService.bulkImport(data);
+    }
+  };
+
   const totalIncome = incomes.reduce((acc, i) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0);
   const totalExpense = expenses.reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
   const balanceSymbol = displayCurrency === 'USD' ? '$' : 'C$';
@@ -438,6 +451,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
                     canCreate={canPerform('FINANCIAL_INCOMES', 'create')}
                     canEdit={canPerform('FINANCIAL_INCOMES', 'edit')}
                     canDelete={canPerform('FINANCIAL_INCOMES', 'delete')}
+                    onImportClick={() => { setImportType('incomes'); setImportModalOpen(true); }}
                   />
                 </motion.div>
               </TabsContent>
@@ -467,6 +481,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
                     canCreate={canPerform('FINANCIAL_EXPENSES', 'create')}
                     canEdit={canPerform('FINANCIAL_EXPENSES', 'edit')}
                     canDelete={canPerform('FINANCIAL_EXPENSES', 'delete')}
+                    onImportClick={() => { setImportType('expenses'); setImportModalOpen(true); }}
                   />
                 </motion.div>
               </TabsContent>
@@ -534,6 +549,14 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
           )}
         </motion.div>
       </Tabs>
+
+      <FinanceImportModal
+        open={importModalOpen}
+        onOpenChange={setImportModalOpen}
+        type={importType}
+        onImport={handleBulkImport}
+        onRefresh={fetchData}
+      />
     </div>
   );
 }

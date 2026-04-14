@@ -28,9 +28,11 @@ interface BitacoraViewProps {
   data: ActivityLog[];
   loading: boolean;
   onRefresh: () => void;
+  /** Tasks data for shared storage calculation */
+  tasksData?: any[];
 }
 
-export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRefresh }) => {
+export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRefresh, tasksData }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -122,11 +124,17 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
       // Manejo del archivo local y subida a supabase si hay credenciales
       if (formData.file) {
         const file = formData.file;
-        const totalSizeBytes = data.reduce((acc, log) => acc + (Number(log.fileSize) || 0), 0);
+        // Shared storage: bitacora logs + task evidences
+        const bitacoraSize = data.reduce((acc, log) => acc + (Number(log.fileSize) || 0), 0);
+        const taskEvidenceSize = (tasksData || []).reduce((acc: number, task: any) => {
+          const evidences = task.evidences || [];
+          return acc + evidences.reduce((eAcc: number, ev: any) => eAcc + (Number(ev.fileSize) || 0), 0);
+        }, 0);
+        const totalSizeBytes = bitacoraSize + taskEvidenceSize;
         const newTotalSize = totalSizeBytes + file.size;
         
         if (newTotalSize > 1024 * 1024 * 1024) { // 1GB
-          toast.error('El archivo excede el límite de almacenamiento total de la empresa (1GB).');
+          toast.error('El archivo excede el límite de almacenamiento compartido de la empresa (1GB entre Bitácora y Tareas).');
           setIsUploading(false);
           return;
         }
@@ -198,7 +206,13 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
     }
   };
 
-  const totalSizeBytes = data.reduce((acc, log) => acc + (Number(log.fileSize) || 0), 0);
+  // Shared storage calculation: bitacora + task evidences
+  const bitacoraSizeBytes = data.reduce((acc, log) => acc + (Number(log.fileSize) || 0), 0);
+  const taskEvidenceSizeBytes = (tasksData || []).reduce((acc: number, task: any) => {
+    const evidences = task.evidences || [];
+    return acc + evidences.reduce((eAcc: number, ev: any) => eAcc + (Number(ev.fileSize) || 0), 0);
+  }, 0);
+  const totalSizeBytes = bitacoraSizeBytes + taskEvidenceSizeBytes;
   const totalSizeMB = (totalSizeBytes / (1024 * 1024)).toFixed(2);
 
   const kpis = [

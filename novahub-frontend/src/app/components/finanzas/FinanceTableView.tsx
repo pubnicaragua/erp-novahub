@@ -8,7 +8,7 @@ import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import {
   Plus, Trash2, Search, Filter, Download,
-  CheckCircle2, Edit3, FileSpreadsheet, FileText, X,
+  CheckCircle2, Edit3, FileSpreadsheet, FileText, X, FileUp,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import {
@@ -47,6 +47,7 @@ interface FinanceTableViewProps {
   canCreate?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
+  onImportClick?: () => void;
 }
 
 export function FinanceTableView({
@@ -59,7 +60,8 @@ export function FinanceTableView({
   loading,
   canCreate = true,
   canEdit = true,
-  canDelete = true
+  canDelete = true,
+  onImportClick
 }: FinanceTableViewProps) {
   const { displayCurrency, formatConvertedAmount } = useCurrency();
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
@@ -464,6 +466,9 @@ export function FinanceTableView({
               <DropdownMenuItem onClick={exportPDF}><FileText className="size-4 mr-2 text-red-500" /> PDF (.pdf)</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {onImportClick && (
+            <button onClick={onImportClick} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted"><FileUp className="size-4" /> Importar</button>
+          )}
           {canCreate && (
             <button onClick={onAdd} className="flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"><Plus className="size-4" /> Nuevo Registro</button>
           )}

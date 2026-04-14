@@ -83,6 +83,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: Recu
     trainings: [],
     benefits: [],
     stats: null,
+    hasPayrollConfig: false,
   });
 
   const fetchData = useCallback(async (showRefresh = false) => {
@@ -101,6 +102,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: Recu
         hrService.getTrainings(),
         hrService.getBenefits(),
         hrService.getDashboardStats(),
+        hrService.getActivePayrollConfig().catch(() => null),
       ]);
 
       const safeVal = (i: number) => {
@@ -121,6 +123,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: Recu
         trainings: safeVal(7),
         benefits: safeVal(8),
         stats: results[9].status === 'fulfilled' ? (results[9] as any).value : null,
+        hasPayrollConfig: results[10].status === 'fulfilled' && !!(results[10] as any).value,
       });
     } catch (error) {
       console.error('Error fetching HR data:', error);
@@ -223,6 +226,8 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: Recu
                   departments={data.departments}
                   positions={data.positions}
                   onRefresh={() => fetchData(true)}
+                  hasPayrollConfig={data.hasPayrollConfig}
+                  onNavigateToConfig={() => handleTabChange('config-nomina')}
                 />
               </TabsContent>
 
