@@ -124,7 +124,10 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       2: { cellWidth: 35, halign: 'right' },
       3: { cellWidth: 35, halign: 'right' }
     },
-    styles: { overflow: 'linebreak', cellPadding: 5 }
+    styles: { overflow: 'linebreak', cellPadding: 5, lineWidth: 0.2, lineColor: [203, 213, 225] },
+    tableLineWidth: 0.2,
+    tableLineColor: [203, 213, 225],
+    alternateRowStyles: { fillColor: [248, 250, 252] },
   });
 
   // 7. Resumen Financiero
@@ -323,7 +326,10 @@ export const generateExpensePDF = async ({
       0: { cellWidth: 50, fontStyle: 'bold' },
       1: { cellWidth: 'auto' },
     },
-    styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak' },
+    styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak', lineWidth: 0.2, lineColor: [203, 213, 225] },
+    tableLineWidth: 0.2,
+    tableLineColor: [203, 213, 225],
+    alternateRowStyles: { fillColor: [248, 250, 252] },
   });
 
   doc.setFontSize(8);
@@ -405,7 +411,10 @@ export const generatePurchaseOrderPDF = async ({
       5: { cellWidth: 25, halign: 'right' },
       6: { cellWidth: 25, halign: 'right' },
     },
-    styles: { cellPadding: 3, overflow: 'linebreak' },
+    styles: { cellPadding: 3, overflow: 'linebreak', lineWidth: 0.2, lineColor: [203, 213, 225] },
+    tableLineWidth: 0.2,
+    tableLineColor: [203, 213, 225],
+    alternateRowStyles: { fillColor: [248, 250, 252] },
   });
 
   const baseY = ((doc as any).lastAutoTable?.finalY || 140) + 10;
@@ -487,7 +496,10 @@ export const generateRecurringInvoicePDF = async ({
     headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold' },
     bodyStyles: { textColor },
     columnStyles: { 0: { cellWidth: 50, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
-    styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak' },
+    styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak', lineWidth: 0.2, lineColor: [203, 213, 225] },
+    tableLineWidth: 0.2,
+    tableLineColor: [203, 213, 225],
+    alternateRowStyles: { fillColor: [248, 250, 252] },
   });
 
   const itemsRows = (recurringInvoice.items || []).map((item: any) => [
@@ -512,7 +524,10 @@ export const generateRecurringInvoicePDF = async ({
       3: { cellWidth: 30, halign: 'right' },
       4: { cellWidth: 30, halign: 'right' },
     },
-    styles: { cellPadding: 3, overflow: 'linebreak' },
+    styles: { cellPadding: 3, overflow: 'linebreak', lineWidth: 0.2, lineColor: [203, 213, 225] },
+    tableLineWidth: 0.2,
+    tableLineColor: [203, 213, 225],
+    alternateRowStyles: { fillColor: [248, 250, 252] },
   });
 
   const baseY = ((doc as any).lastAutoTable?.finalY || 140) + 10;
