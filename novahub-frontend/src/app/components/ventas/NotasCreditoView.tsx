@@ -294,6 +294,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           </div>
         </div>
         <EditableDataTable data={filtered}
+          allowAddRow={false}
           onBulkDelete={async (ids) => { try { for (const id of ids) { await creditNotesService.delete(id as string); } toast.success('Eliminadas'); onRefresh(); } catch { toast.error('Error'); } }}
           columns={columns} onRowUpdate={async () => {}} isLoading={loading}
           actions={(row) => (

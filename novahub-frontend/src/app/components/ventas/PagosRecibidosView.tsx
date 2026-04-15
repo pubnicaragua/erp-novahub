@@ -276,6 +276,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           </div>
         </div>
         <EditableDataTable data={filtered}
+          allowAddRow={false}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch { toast.error('Error al eliminar'); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (

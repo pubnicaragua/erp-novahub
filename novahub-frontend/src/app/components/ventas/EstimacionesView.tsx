@@ -545,6 +545,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
           columns={columns}
           onRowUpdate={handleUpdate}
           onRowDelete={async (id) => handleDeleteEstimate(id as string, { stopPropagation: () => {} } as any)} 
+          allowAddRow={false}
           actions={(row) => (
             <>
               <Button variant="ghost" title="Descargar PDF" size="icon" onClick={(e) => { 

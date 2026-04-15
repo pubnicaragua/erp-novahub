@@ -39,6 +39,7 @@ interface EditableDataTableProps<T> {
   showSelection?: boolean;
   bulkActions?: (selectedIds: (string | number)[]) => React.ReactNode;
   onAddRow?: () => void;
+  allowAddRow?: boolean;
 }
 
 export function EditableDataTable<T extends { [key: string]: any }>({
@@ -53,6 +54,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   showSelection = true,
   bulkActions,
   onAddRow,
+  allowAddRow = true,
 }: EditableDataTableProps<T>) {
   const [data, setData] = useState<T[]>(initialData);
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
@@ -377,13 +379,15 @@ export function EditableDataTable<T extends { [key: string]: any }>({
          <p className="text-[11px] font-medium text-muted-foreground/50 italic">
             Tip: Usa Tab para moverte entre celdas y Enter para guardar. O pega desde Excel.
          </p>
-         <Button 
-            variant="ghost" 
-            className="h-8 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
-            onClick={handleAddNewRow}
-         >
-            <Plus className="size-3 mr-2" /> Agregar Nueva Fila
-         </Button>
+         {allowAddRow && (
+           <Button 
+              variant="ghost" 
+              className="h-8 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
+              onClick={handleAddNewRow}
+           >
+              <Plus className="size-3 mr-2" /> Agregar Nueva Fila
+           </Button>
+         )}
       </div>
 
       {/* Confirm Delete Dialog */}

@@ -593,6 +593,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           columns={columns}
           onRowUpdate={handleUpdate}
           isLoading={loading}
+          allowAddRow={false}
           actions={(row) => (
             <div className="flex items-center gap-1">
                 {row.status === 'confirmed' && canPerform('SALES_ORDERS', 'edit') && (

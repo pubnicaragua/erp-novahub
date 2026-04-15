@@ -637,3 +637,280 @@ export const generateSupplierInvoicePDF = async ({
 
   doc.save(`${invoice.number || invoice.id || 'factura_proveedor'}.pdf`);
 };
+
+export const generateCustomerStatementPDF = async ({ 
+  customer, 
+  transactions, 
+  tenantName, 
+  tenantLogo, 
+  formatAmount 
+}: {
+  customer: any;
+  transactions: any[];
+  tenantName: string;
+  tenantLogo?: string;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+}) => {
+  const doc = new jsPDF();
+  const primaryColor = [16, 185, 129] as [number, number, number];
+  const textColor = [51, 65, 85] as [number, number, number];
+
+  // 1. Identidad Corporativa
+  let titleY = 25;
+  if (tenantLogo) {
+     try {
+       doc.addImage(tenantLogo, 'PNG', 14, 15, 30, 15);
+       titleY = 38;
+     } catch (e) { doc.setFontSize(22); }
+  } else { doc.setFontSize(22); }
+
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(tenantName || 'Nova Hub', 14, titleY);
+
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Estado de Cuenta Mensual / Histórico', 14, titleY + 7);
+
+  // 2. Título General
+  doc.setFontSize(18);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text('ESTADO DE CUENTA', 196, 25, { align: 'right' });
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Emisión: ${new Date().toLocaleDateString()}`, 196, 32, { align: 'right' });
+
+  // 3. Separador
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(14, 52, 196, 52);
+
+  // 4. Información del Cliente
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Detalle del Cliente:', 14, 62);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${customer.name} (Cód: ${customer.code})`, 14, 68);
+  if (customer.taxId) doc.text(`RUC/Tax ID: ${customer.taxId}`, 14, 73);
+  if (customer.email) doc.text(`Email: ${customer.email}`, 14, 78);
+  if (customer.phone) doc.text(`Tel: ${customer.phone}`, 14, 83);
+
+  // 5. Resumen de Saldo
+  doc.setFont('helvetica', 'bold');
+  doc.text('SALDO PENDIENTE:', 140, 68);
+  doc.setFontSize(14);
+  doc.setTextColor(239, 68, 68); // Rose 500
+  doc.text(formatAmount(customer.balance || 0), 196, 68, { align: 'right' });
+  
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Límite de Crédito:', 140, 75);
+  doc.text(formatAmount(customer.creditLimit || 0), 196, 75, { align: 'right' });
+
+  // 6. Tabla de Transacciones
+  const tableData = transactions.map((t: any) => [
+    new Date(t.date).toLocaleDateString(),
+    t.label,
+    t.number,
+    t.status || 'Completado',
+    formatAmount(t.total, t.currency, t.exchangeRate)
+  ]);
+
+  autoTable(doc, {
+    startY: 95,
+    head: [['Fecha', 'Tipo', 'Documento', 'Estado', 'Monto']],
+    body: tableData,
+    theme: 'grid',
+    headStyles: {
+      fillColor: primaryColor,
+      textColor: 255,
+      fontSize: 10,
+      fontStyle: 'bold',
+      halign: 'center'
+    },
+    bodyStyles: {
+      textColor: textColor,
+      fontSize: 9
+    },
+    columnStyles: {
+      0: { cellWidth: 25, halign: 'center' },
+      1: { cellWidth: 35, halign: 'center' },
+      2: { cellWidth: 'auto', halign: 'left' },
+      3: { cellWidth: 30, halign: 'center' },
+      4: { cellWidth: 35, halign: 'right' }
+    },
+    styles: { overflow: 'linebreak', cellPadding: 4 }
+  });
+
+  // 7. Footer
+  const pageHeight = doc.internal.pageSize.height;
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'italic');
+  doc.text(`Documento administrativo de uso interno. Generado por la plataforma ERP Nova Hub para ${tenantName}.`, 14, pageHeight - 10);
+
+  // 8. Descarga
+  doc.save(`Estado_Cuenta_${customer.name.replace(/\s+/g, '_')}.pdf`);
+};
+
+export const generatePlatformDocumentPDF = async ({
+  tenantName,
+  documentType,
+  items,
+  totalPrice,
+  currency,
+}: {
+  tenantName: string;
+  documentType: 'invoice' | 'quote';
+  items: any[];
+  totalPrice: number;
+  currency: string;
+}) => {
+  const doc = new jsPDF();
+  const primaryColor = [34, 197, 94] as [number, number, number]; // Emerald 500
+  const secondaryColor = [10, 10, 10] as [number, number, number]; // Blackish
+  const textColor = [51, 65, 85] as [number, number, number]; // Slate 700
+
+  const isQuote = documentType === 'quote';
+  const docTitle = isQuote ? 'COTIZACIÓN DE SERVICIOS' : 'FACTURA POR SERVICIOS';
+  const prefix = isQuote ? 'COT' : 'FACT';
+
+  // 1. Cabecera con Logo NovaHub
+  doc.setFillColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+  doc.roundedRect(14, 15, 20, 20, 4, 4, 'F');
+  
+  doc.setDrawColor(255, 255, 255);
+  doc.setLineWidth(1.5);
+  doc.line(18, 20, 18, 30);
+  doc.line(30, 20, 30, 30);
+  doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.line(18, 20, 30, 30);
+
+  // 2. Branding
+  doc.setFontSize(22);
+  doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text('NOVAHUB ', 38, 25);
+  const novaHubWidth = doc.getTextWidth('NOVAHUB ');
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.text('ERP', 38 + novaHubWidth, 25);
+
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Soluciones Inteligentes de Gestión Empresarial', 38, 31);
+
+  // 3. Título Dinámico
+  doc.setFontSize(18);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(docTitle, 196, 25, { align: 'right' });
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`N°-${prefix}: ${Math.floor(Math.random() * 9000) + 1000}`, 196, 31, { align: 'right' });
+  doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 196, 37, { align: 'right' });
+  doc.text(`Hora: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, 196, 42, { align: 'right' });
+
+  // 4. Separador
+  doc.setDrawColor(226, 232, 240);
+  doc.line(14, 50, 196, 50);
+
+  // 5. Cliente
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('DIRIGIDO A:', 14, 65);
+  
+  doc.setFontSize(12);
+  doc.text(tenantName, 14, 72);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Cliente Corporativo / Suscriptor', 14, 77);
+
+  // 6. Tabla Granular
+  const tableData = items.map(item => [
+    item.label,
+    item.description,
+    item.quantity.toString(),
+    currency === 'USD' ? `$${item.price.toLocaleString()}` : `C$${item.price.toLocaleString()}`,
+    currency === 'USD' ? `$${(item.price * item.quantity).toLocaleString()}` : `C$${(item.price * item.quantity).toLocaleString()}`
+  ]);
+
+  const formattedTotal = currency === 'USD' ? `$${totalPrice.toLocaleString()}` : `C$${totalPrice.toLocaleString()}`;
+
+  autoTable(doc, {
+    startY: 90,
+    head: [['Item', 'Descripción', 'Cant.', 'Unitario', 'Subtotal']],
+    body: tableData,
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 10, fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { textColor: textColor, fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 40, halign: 'left' },
+      1: { cellWidth: 'auto', halign: 'left' },
+      2: { cellWidth: 20, halign: 'center' },
+      3: { cellWidth: 30, halign: 'right' },
+      4: { cellWidth: 30, halign: 'right' }
+    },
+    styles: { overflow: 'linebreak', cellPadding: 5 },
+    margin: { bottom: 30 }
+  });
+
+  // 7. TOTAL SECCION SEPARADA
+  const finalY = (doc as any).lastAutoTable.finalY || 100;
+  
+  // Dibujar bloque de total
+  doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setLineWidth(0.5);
+  doc.line(140, finalY + 10, 196, finalY + 10); // Línea superior total
+
+  doc.setFontSize(10);
+  doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TOTAL:', 140, finalY + 18);
+  
+  doc.setFontSize(16);
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.text(formattedTotal, 196, finalY + 18, { align: 'right' });
+
+  // 8. Términos y Notas
+  // Verificar si hay espacio para los términos
+  if (finalY > 230) {
+    doc.addPage();
+    doc.setPage(doc.internal.getNumberOfPages());
+  }
+
+  const termsY = finalY > 230 ? 30 : finalY + 30;
+
+  doc.setFontSize(9);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(isQuote ? 'Validez de la Cotización:' : 'Términos de Pago:', 14, termsY);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 116, 139);
+  doc.text(isQuote ? 'Esta cotización tiene una validez de 15 días calendario.' : 'Pago inmediato al recibir esta factura para mantener la continuidad de los servicios.', 14, termsY + 5);
+
+  // 9. Footer (En todas las páginas)
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    const pageHeight = doc.internal.pageSize.height;
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.setFont('helvetica', 'italic');
+    doc.text(`Documento generado por NovaHub Tool - Página ${i} de ${pageCount}`, 14, pageHeight - 15);
+    doc.text('www.novahub.io | soporte@novahub.io', 14, pageHeight - 10);
+  }
+
+  // 10. Descarga
+  const fileName = `${prefix}_NovaHub_${tenantName.replace(/\s+/g, '_')}.pdf`;
+  doc.save(fileName);
+};

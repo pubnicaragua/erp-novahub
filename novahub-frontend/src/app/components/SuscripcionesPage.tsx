@@ -3,6 +3,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
+import { Checkbox } from './ui/checkbox';
+import { Switch } from './ui/switch';
+import { ScrollArea } from './ui/scroll-area';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionsService, type SubscriptionRequest } from '../services/subscriptions.service';
 import { tenantsService } from '../services/tenants.service';
@@ -43,7 +47,9 @@ import {
   Headphones,
   BellRing,
   X,
-  KeyRound
+  KeyRound,
+  ChevronRight,
+  UserPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './ui/utils';
@@ -66,6 +72,7 @@ import {
 } from '../types/modules';
 import { storageService } from '../services/storage.service';
 import { TenantSubscriptionView } from './suscripciones/TenantSubscriptionView';
+import { generatePlatformDocumentPDF } from '../utils/pdfGenerator';
 
 const AVAILABLE_MODULES = [
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes', submodules: SALES_SUBMODULES },
@@ -109,6 +116,7 @@ export function SuscripcionesPage() {
   const [isTenantDialogOpen, setIsTenantDialogOpen] = useState(false);
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
+  const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'EMPLOYEE' });
@@ -120,6 +128,16 @@ export function SuscripcionesPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>('');
   const [uploading, setUploading] = useState(false);
+
+  // Form state for platform document (Invoice/Quote)
+  const [invoiceForm, setInvoiceForm] = useState({
+    type: 'invoice' as 'invoice' | 'quote',
+    items: {} as Record<string, { active: boolean, price: number, label: string }>,
+    subItems: {} as Record<string, { active: boolean, price: number, label: string }>,
+    userCount: 1,
+    pricePerUser: 10,
+    currency: 'USD'
+  });
 
   // Form state for module request
   const [requestForm, setRequestForm] = useState({
@@ -449,6 +467,101 @@ export function SuscripcionesPage() {
       fetchData();
     } catch (error) {
       toast.error('Error al rechazar suscripción');
+    }
+  };
+
+  const openGenerateInvoice = (tenant: any) => {
+    setSelectedTenant(tenant);
+    
+    const initialItems: Record<string, { active: boolean, price: number, label: string }> = {};
+    const initialSubItems: Record<string, { active: boolean, price: number, label: string }> = {};
+
+    AVAILABLE_MODULES.forEach(mod => {
+      const isActive = tenant.subscriptions?.some((s: any) => s.module === mod.id && s.isActive);
+      initialItems[mod.id] = {
+        active: !!isActive,
+        price: 35, // Precio base por módulo
+        label: mod.label
+      };
+
+      mod.submodules?.forEach(sub => {
+        initialSubItems[sub.id] = {
+          active: false,
+          price: 5, // Precio base por submódulo
+          label: sub.label
+        };
+      });
+    });
+
+    setInvoiceForm({
+      type: 'invoice',
+      items: initialItems,
+      subItems: initialSubItems,
+      userCount: tenant._count?.users || 1,
+      pricePerUser: 10,
+      currency: 'USD'
+    });
+    setIsInvoiceDialogOpen(true);
+  };
+
+  const handleGenerateInvoice = async () => {
+    if (!selectedTenant) return;
+    
+    const finalItems: any[] = [];
+    
+    // Módulos
+    Object.entries(invoiceForm.items).forEach(([id, data]) => {
+      if (data.active) {
+        finalItems.push({
+          label: `Módulo: ${data.label}`,
+          description: 'Suscripción de módulo operativo',
+          quantity: 1,
+          price: data.price
+        });
+      }
+    });
+
+    // Submódulos
+    Object.entries(invoiceForm.subItems).forEach(([id, data]) => {
+      if (data.active) {
+        finalItems.push({
+          label: `Sub-Vista: ${data.label}`,
+          description: 'Acceso a funcionalidad especializada',
+          quantity: 1,
+          price: data.price
+        });
+      }
+    });
+
+    // Usuarios
+    if (invoiceForm.userCount > 0) {
+      finalItems.push({
+        label: 'Licencias de Usuario',
+        description: `Licencia para ${invoiceForm.userCount} usuarios activos`,
+        quantity: invoiceForm.userCount,
+        price: invoiceForm.pricePerUser
+      });
+    }
+
+    if (finalItems.length === 0) {
+      return toast.error('Seleccione al menos un item para facturar');
+    }
+
+    const totalPrice = finalItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
+    try {
+      await generatePlatformDocumentPDF({
+        tenantName: selectedTenant.name,
+        documentType: invoiceForm.type,
+        items: finalItems,
+        totalPrice,
+        currency: invoiceForm.currency
+      });
+      toast.success(`${invoiceForm.type === 'quote' ? 'Cotización' : 'Factura'} generada correctamente`);
+      setIsInvoiceDialogOpen(false);
+    } catch (error) {
+      console.error('Invoice generation error:', error);
+      toast.error('Error al generar el documento');
     }
   };
 
@@ -821,6 +934,9 @@ export function SuscripcionesPage() {
                         <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded-xl" onClick={() => handleDeleteTenant(tenant.id, tenant.name)}>
                           <Trash2 className="size-5" />
                         </Button>
+                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 rounded-xl" onClick={() => openGenerateInvoice(tenant)}>
+                          <FileText className="size-5" />
+                        </Button>
                       </div>
 
                       <div className="bg-muted/30 dark:bg-black/40 p-3 rounded-2xl border border-border/50">
@@ -1024,6 +1140,224 @@ export function SuscripcionesPage() {
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" className="w-full rounded-xl" onClick={() => setIsDetailsDialogOpen(false)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate Document Dialog (Invoice / Quote) */}
+      <Dialog open={isInvoiceDialogOpen} onOpenChange={setIsInvoiceDialogOpen}>
+        <DialogContent className="sm:max-w-[700px] h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 border-b bg-muted/5 shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter">
+                  {invoiceForm.type === 'quote' ? 'Crear Cotización' : 'Generar Factura'}
+                </DialogTitle>
+                <DialogDescription>
+                  Configure los componentes, precios y licencias para {selectedTenant?.name}.
+                </DialogDescription>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border">
+                  <Button 
+                    variant={invoiceForm.currency === 'USD' ? 'default' : 'ghost'} 
+                    size="sm" 
+                    className="rounded-lg text-[10px] font-bold h-8 px-2"
+                    onClick={() => setInvoiceForm({...invoiceForm, currency: 'USD'})}
+                  >
+                    USD
+                  </Button>
+                  <Button 
+                    variant={invoiceForm.currency === 'NIO' ? 'default' : 'ghost'} 
+                    size="sm" 
+                    className="rounded-lg text-[10px] font-bold h-8 px-2"
+                    onClick={() => setInvoiceForm({...invoiceForm, currency: 'NIO'})}
+                  >
+                    NIO
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2 bg-muted p-1 rounded-xl border">
+                  <Button 
+                    variant={invoiceForm.type === 'quote' ? 'default' : 'ghost'} 
+                    size="sm" 
+                    className="rounded-lg text-[10px] font-bold uppercase tracking-widest h-8"
+                    onClick={() => setInvoiceForm({...invoiceForm, type: 'quote'})}
+                  >
+                    Cotización
+                  </Button>
+                  <Button 
+                    variant={invoiceForm.type === 'invoice' ? 'default' : 'ghost'} 
+                    size="sm" 
+                    className="rounded-lg text-[10px] font-bold uppercase tracking-widest h-8"
+                    onClick={() => setInvoiceForm({...invoiceForm, type: 'invoice'})}
+                  >
+                    Factura
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="space-y-8">
+              {/* Sección de Usuarios */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <UserPlus className="size-4 text-primary" />
+                  <h3 className="text-sm font-black uppercase tracking-widest">Licencias de Usuario</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4 bg-muted/20 p-4 rounded-2xl border border-dashed">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Cantidad de Usuarios</Label>
+                    <Input 
+                      type="number" 
+                      min="0"
+                      className="bg-background border-border/50 h-10 rounded-xl font-bold"
+                      value={invoiceForm.userCount}
+                      onChange={e => setInvoiceForm({...invoiceForm, userCount: Number(e.target.value)})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Precio por Usuario ({invoiceForm.currency === 'USD' ? '$' : 'C$'})</Label>
+                    <Input 
+                      type="number" 
+                      className="bg-background border-border/50 h-10 rounded-xl font-bold"
+                      value={invoiceForm.pricePerUser}
+                      onChange={e => setInvoiceForm({...invoiceForm, pricePerUser: Number(e.target.value)})}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección de Módulos y Submódulos */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="size-4 text-primary" />
+                  <h3 className="text-sm font-black uppercase tracking-widest">Configuración de Módulos</h3>
+                </div>
+
+                <Accordion type="multiple" className="space-y-2">
+                  {AVAILABLE_MODULES.map(mod => (
+                    <AccordionItem key={mod.id} value={mod.id} className="border border-border/50 rounded-2xl px-4 bg-card/50 overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-4 py-1">
+                        <Checkbox 
+                          checked={invoiceForm.items[mod.id]?.active} 
+                          onCheckedChange={(checked) => {
+                            setInvoiceForm(prev => ({
+                              ...prev,
+                              items: {
+                                ...prev.items,
+                                [mod.id]: { ...prev.items[mod.id], active: !!checked }
+                              }
+                            }));
+                          }}
+                          className="data-[state=checked]:bg-primary rounded-md"
+                        />
+                        <AccordionTrigger className="flex-1 hover:no-underline py-4">
+                          <div className="flex items-center gap-3">
+                            <mod.icon className="size-4 text-muted-foreground" />
+                            <span className="text-xs font-bold uppercase tracking-tight">{mod.label}</span>
+                          </div>
+                        </AccordionTrigger>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-muted-foreground">{invoiceForm.currency === 'USD' ? '$' : 'C$'}</span>
+                          <Input 
+                            size={5}
+                            type="number"
+                            className="w-20 h-8 text-xs font-bold rounded-lg bg-background"
+                            value={invoiceForm.items[mod.id]?.price || 0}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setInvoiceForm(prev => ({
+                                ...prev,
+                                items: {
+                                  ...prev.items,
+                                  [mod.id]: { ...prev.items[mod.id], price: val }
+                                }
+                              }));
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <AccordionContent className="pb-4 pt-0">
+                        <div className="pl-10 space-y-2 border-l-2 border-muted ml-2">
+                          {mod.submodules?.map(sub => (
+                            <div 
+                              key={sub.id} 
+                              onClick={() => {
+                                setInvoiceForm(prev => ({
+                                  ...prev,
+                                  subItems: {
+                                    ...prev.subItems,
+                                    [sub.id]: { ...prev.subItems[sub.id], active: !prev.subItems[sub.id]?.active }
+                                  }
+                                }));
+                              }}
+                              className="flex items-center justify-between gap-4 p-2 rounded-xl hover:bg-muted/30 transition-colors cursor-pointer"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Checkbox 
+                                  checked={invoiceForm.subItems[sub.id]?.active} 
+                                  readOnly
+                                  className="rounded"
+                                />
+                                <span className="text-[10px] font-medium text-muted-foreground">{sub.label}</span>
+                              </div>
+                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                <span className="text-[9px] text-muted-foreground/50">{invoiceForm.currency === 'USD' ? '$' : 'C$'}</span>
+                                <Input 
+                                  type="number"
+                                  className="w-16 h-7 text-[10px] font-bold rounded-md bg-background"
+                                  value={invoiceForm.subItems[sub.id]?.price || 0}
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value);
+                                    setInvoiceForm(prev => ({
+                                      ...prev,
+                                      subItems: {
+                                        ...prev.subItems,
+                                        [sub.id]: { ...prev.subItems[sub.id], price: val }
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                          {(!mod.submodules || mod.submodules.length === 0) && (
+                            <p className="text-[10px] text-muted-foreground italic pl-2">No hay sub-vistas configurables</p>
+                          )}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="p-6 border-t bg-muted/5 flex flex-row items-center justify-between gap-4">
+            <div className="text-left">
+              <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Total Estimado</p>
+              <p className="text-2xl font-black text-primary tracking-tighter">
+                {invoiceForm.currency === 'USD' ? '$' : 'C$'}
+                {(
+                  Object.values(invoiceForm.items).reduce((acc, v) => acc + (v.active ? v.price : 0), 0) +
+                  Object.values(invoiceForm.subItems).reduce((acc, v) => acc + (v.active ? v.price : 0), 0) +
+                  (invoiceForm.userCount * invoiceForm.pricePerUser)
+                ).toLocaleString()}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="outline" className="rounded-xl h-11 px-6 font-bold" onClick={() => setIsInvoiceDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleGenerateInvoice} className="bg-primary hover:bg-primary/90 text-primary-foreground h-11 px-8 rounded-xl font-black italic uppercase tracking-tighter gap-2">
+                <FileText className="size-4" />
+                Finalizar {invoiceForm.type === 'quote' ? 'Cotización' : 'Factura'}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

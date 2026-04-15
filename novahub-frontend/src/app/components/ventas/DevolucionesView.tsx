@@ -306,6 +306,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           </div>
         </div>
         <EditableDataTable data={filtered}
+          allowAddRow={false}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch { toast.error('Error'); } }}
           columns={columns} onRowUpdate={async () => {}} isLoading={loading}
           actions={(row) => (

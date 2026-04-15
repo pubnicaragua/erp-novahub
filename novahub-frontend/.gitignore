@@ -46,3 +46,8 @@ coverage
 
 # OS files
 Thumbs.db
+
+# Agent Skills
+.agents/
+.windsurf/
+skills-lock.json

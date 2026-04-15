@@ -489,6 +489,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           </div>
         </div>
         <EditableDataTable data={filtered}
+          allowAddRow={false}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch { toast.error('Error al eliminar'); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (

@@ -50,7 +50,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
   const columns: ColumnDef<Supplier>[] = [
     { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('proveedores', 'edit') },
     { key: 'name',        header: 'Nombre',    editable: canPerform('proveedores', 'edit') },
-    { key: 'contactName', header: 'direccion',  editable: canPerform('proveedores', 'edit') },
+    { key: 'contactName', header: 'Contacto',  editable: canPerform('proveedores', 'edit') },
     { key: 'email',       header: 'Email',     editable: canPerform('proveedores', 'edit') },
     { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('proveedores', 'edit') },
     { key: 'balance', header: 'Saldo', width: '130px',
@@ -81,9 +81,17 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
 
   const handleAdd = async () => {
     try {
-      await suppliersService.create({ name: 'Nuevo Proveedor' });
-      toast.success('Proveedor creado'); onRefresh();
-    } catch { toast.error('Error al crear proveedor'); }
+      const code = `PROV-${Date.now().toString().slice(-6)}`;
+      await suppliersService.create({ 
+        code,
+        name: 'Nuevo Proveedor',
+        status: 'ACTIVE' as any
+      });
+      toast.success('Proveedor creado'); 
+      onRefresh();
+    } catch { 
+      toast.error('Error al crear proveedor'); 
+    }
   };
 
   const kpis = [

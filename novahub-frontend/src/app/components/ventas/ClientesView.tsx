@@ -14,6 +14,7 @@ import type { Customer } from '../../types';
 import { Badge } from '../ui/badge';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { CustomerDetailsModal } from './CustomerDetailsModal';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -27,6 +28,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
   const filtered = data.filter(c => {
     const search = searchTerm.toLowerCase();
@@ -141,11 +143,44 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
     }
   ];
 
+  const activeCount = data.filter(c => (c.status || '').toUpperCase() === 'ACTIVE').length;
+  const inactiveCount = data.length - activeCount;
+
+  const activeBalance = data.filter(c => (c.status || '').toUpperCase() === 'ACTIVE').reduce((acc, c) => acc + Number(c.balance || 0), 0);
+  const inactiveBalance = data.filter(c => (c.status || '').toUpperCase() !== 'ACTIVE').reduce((acc, c) => acc + Number(c.balance || 0), 0);
+  const totalBalance = activeBalance + inactiveBalance;
+
   const kpis = [
-    { title: 'Total Clientes', value: data.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
-    { title: 'Particulares', value: data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Empresas', value: data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length, icon: CheckCircle2, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'Saldo Pendiente', value: formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.balance || 0), 0)), icon: CreditCard, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+    { 
+      title: 'Total Clientes', 
+      value: data.length, 
+      subValue: `${activeCount} Activos / ${inactiveCount} Inactivos`,
+      icon: Users, 
+      color: 'text-primary', 
+      bg: 'bg-primary/10' 
+    },
+    { 
+      title: 'Particulares', 
+      value: data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length, 
+      icon: Users, 
+      color: 'text-blue-500', 
+      bg: 'bg-blue-500/10' 
+    },
+    { 
+      title: 'Empresas', 
+      value: data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length, 
+      icon: CheckCircle2, 
+      color: 'text-amber-500', 
+      bg: 'bg-amber-500/10' 
+    },
+    { 
+      title: 'Saldo Pendiente', 
+      value: formatConvertedAmount(totalBalance), 
+      subValue: `${formatConvertedAmount(activeBalance)} activos`,
+      icon: CreditCard, 
+      color: 'text-rose-500', 
+      bg: 'bg-rose-500/10' 
+    },
   ];
 
   return (
@@ -159,9 +194,12 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
                 <div className={cn("p-3 rounded-xl shadow-inner", kpi.bg, kpi.color)}>
                   <kpi.icon className="size-5" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p>
                   <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{kpi.value}</p>
+                  {kpi.subValue && (
+                    <p className="text-[10px] font-bold text-muted-foreground/40 mt-0.5 truncate">{kpi.subValue}</p>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -217,7 +255,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => toast.info('Detalle de cliente en desarrollo')}><Eye className="size-4" /></Button>
+               <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomer(row)}><Eye className="size-4" /></Button>
                {canPerform('SALES_CLIENTS', 'delete') && (
                  <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                )}
@@ -225,6 +263,12 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           )}
         />
       </div>
+
+      <CustomerDetailsModal
+        customer={selectedCustomer}
+        open={selectedCustomer !== null}
+        onOpenChange={(open) => !open && setSelectedCustomer(null)}
+      />
 
       <ConfirmDialog
         open={pendingDeleteId !== null}

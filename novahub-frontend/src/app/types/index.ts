@@ -23,6 +23,8 @@ export interface PaginatedResponse<T> {
 export interface ApiFilters {
   search?: string;
   status?: string;
+  customerId?: string;
+  supplierId?: string;
   dateFrom?: string;
   dateTo?: string;
   page?: number;

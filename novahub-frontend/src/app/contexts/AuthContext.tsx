@@ -370,6 +370,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tickets: [
         'TICKETS',
       ],
+      proveedores: [
+        'PROVIDERS', 'PURCHASES_PROVIDERS',
+      ],
+      clientes: [
+        'CLIENTS', 'SALES_CLIENTS',
+      ],
     };
 
     const backendModuleName = moduleEnumMap[module] || module.toUpperCase();

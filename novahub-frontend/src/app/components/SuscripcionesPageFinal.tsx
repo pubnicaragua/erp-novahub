@@ -12,6 +12,7 @@ import {
 import { subscriptionsService } from '../services/subscriptions.service';
 import { tenantsService } from '../services/tenants.service';
 import { useAuth } from '../contexts/AuthContext';
+import { generatePlatformInvoicePDF } from '../utils/pdfGenerator';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -45,6 +46,7 @@ export function SuscripcionesPageFinal() {
   const [isTenantDialogOpen, setIsTenantDialogOpen] = useState(false);
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   const [isModuleDialogOpen, setIsModuleDialogOpen] = useState(false);
+  const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   
   // Forms
@@ -54,6 +56,11 @@ export function SuscripcionesPageFinal() {
   });
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'user' });
   const [moduleForm, setModuleForm] = useState({ module: '', price: 0, notes: '' });
+  const [invoiceForm, setInvoiceForm] = useState({
+    selectedModules: [] as string[],
+    totalPrice: 0,
+    currency: 'USD'
+  });
 
   useEffect(() => { fetchData(); }, []);
 
@@ -236,6 +243,39 @@ export function SuscripcionesPageFinal() {
     setIsUserDialogOpen(true);
   };
 
+  const openGenerateInvoice = (tenant: any) => {
+    setSelectedTenant(tenant);
+    // Auto-select current active modules
+    const activeModuleIds = tenant.subscriptions?.map((sub: any) => sub.module) || [];
+    setInvoiceForm({
+      selectedModules: activeModuleIds,
+      totalPrice: activeModuleIds.length * 25, // Default estimated price
+      currency: 'USD'
+    });
+    setIsInvoiceDialogOpen(true);
+  };
+
+  const handleGenerateInvoice = async () => {
+    if (!selectedTenant) return;
+    if (invoiceForm.selectedModules.length === 0) {
+      return toast.error('Seleccione al menos un módulo');
+    }
+    try {
+      const modulesToInvoice = AVAILABLE_MODULES.filter(m => invoiceForm.selectedModules.includes(m.id));
+      await generatePlatformInvoicePDF({
+        tenantName: selectedTenant.name,
+        modules: modulesToInvoice,
+        totalPrice: invoiceForm.totalPrice,
+        currency: invoiceForm.currency
+      });
+      toast.success('Factura generada exitosamente');
+      setIsInvoiceDialogOpen(false);
+    } catch (error) {
+      console.error('Invoice generation error:', error);
+      toast.error('Error al generar factura');
+    }
+  };
+
   const resetTenantForm = () => {
     setTenantForm({
       name: '', slug: '', industry: 'TECHNOLOGY', plan: 'BASIC',
@@ -373,6 +413,9 @@ export function SuscripcionesPageFinal() {
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => openAddModule(tenant)}>
                           <Plus className="size-4 mr-2" />Módulo
+                        </Button>
+                        <Button variant="outline" size="sm" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200" onClick={() => openGenerateInvoice(tenant)}>
+                          <FileText className="size-4 mr-2" />Factura
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => openEditTenant(tenant)}>
                           <Edit2 className="size-4" />
@@ -584,6 +627,80 @@ export function SuscripcionesPageFinal() {
               </div>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate Invoice Dialog */}
+      <Dialog open={isInvoiceDialogOpen} onOpenChange={setIsInvoiceDialogOpen}>
+        <DialogContent className="sm:max-w-[550px]">
+          <DialogHeader>
+            <DialogTitle>Generar Factura para {selectedTenant?.name}</DialogTitle>
+            <DialogDescription>
+              Seleccione los módulos y el precio final para la factura de la plataforma.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold">Módulos a incluir</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {AVAILABLE_MODULES.map(m => (
+                  <div 
+                    key={m.id} 
+                    onClick={() => {
+                      const current = [...invoiceForm.selectedModules];
+                      if (current.includes(m.id)) {
+                        setInvoiceForm({...invoiceForm, selectedModules: current.filter(id => id !== m.id)});
+                      } else {
+                        setInvoiceForm({...invoiceForm, selectedModules: [...current, m.id]});
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors",
+                      invoiceForm.selectedModules.includes(m.id) 
+                        ? "bg-emerald-50 border-emerald-500 dark:bg-emerald-950/30" 
+                        : "hover:bg-muted"
+                    )}
+                  >
+                    <m.icon className={cn("size-4", invoiceForm.selectedModules.includes(m.id) ? "text-emerald-600" : "text-muted-foreground")} />
+                    <span className="text-sm font-medium">{m.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Moneda</Label>
+                <Select value={invoiceForm.currency} onValueChange={v => setInvoiceForm({...invoiceForm, currency: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">Dólares ($)</SelectItem>
+                    <SelectItem value="NIO">Córdobas (C$)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Precio Final Total</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">
+                    {invoiceForm.currency === 'USD' ? '$' : 'C$'}
+                  </span>
+                  <Input 
+                    type="number" 
+                    className="pl-8" 
+                    value={invoiceForm.totalPrice} 
+                    onChange={e => setInvoiceForm({...invoiceForm, totalPrice: Number(e.target.value)})} 
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsInvoiceDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleGenerateInvoice} className="bg-emerald-600 hover:bg-emerald-700">
+              <FileText className="size-4 mr-2" />Generar PDF
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -789,6 +789,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         <EditableDataTable
           data={filtered}
         columns={columns}
+        allowAddRow={false}
         onRowUpdate={async (id, updates) => {
           if (updates.status) {
             const row = data.find(r => r.id === id);
