@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Wallet, Plus, Search, Eye, Trash2, TrendingDown, Clock, Tag, ChevronLeft, Calendar as CalendarIcon, FileText, Download
+  Wallet, Plus, Search, Eye, Trash2, TrendingDown, Clock, Tag, ChevronLeft, Calendar as CalendarIcon, FileText, Download, Upload, FileDown, Info
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -9,6 +9,7 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Calendar } from '../ui/calendar';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { expensesService, suppliersService } from '../../services/compras.service';
 import type { Expense, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -46,6 +47,10 @@ export function GastosView({ data, loading, onRefresh }: Props) {
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('all');
   const [specificDate, setSpecificDate] = useState<Date | undefined>(undefined);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<Expense> | null>(null);
@@ -144,6 +149,176 @@ export function GastosView({ data, loading, onRefresh }: Props) {
     if (activeKpiFilter.type === 'category') return String(g.category || '').toUpperCase() === activeKpiFilter.category;
     return true;
   });
+
+  const downloadExpenseTemplate = () => {
+    const rows = [
+      ['date', 'description', 'category', 'amount', 'currency', 'paymentSource', 'paidTo', 'reference', 'status', 'notes'],
+      ['2026-01-15', 'Pago servicio internet', 'OPERATIVO', '1500', 'NIO', 'BAC', 'Proveedor Internet', 'FAC-001', 'PAID', 'Importado desde plantilla'],
+    ];
+    const csv = [
+      'sep=;',
+      ...rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(';')),
+    ].join('\r\n');
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'plantilla_gastos.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Plantilla descargada');
+  };
+
+  const splitCsvLine = (line: string, delimiter: string) => {
+    const values: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const next = line[i + 1];
+      if (char === '"') {
+        if (inQuotes && next === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+      if (char === delimiter && !inQuotes) {
+        values.push(current.trim());
+        current = '';
+        continue;
+      }
+      current += char;
+    }
+    values.push(current.trim());
+    return values.map((v) => v.replace(/^"(.*)"$/, '$1').trim());
+  };
+
+  const parseExpensesCsv = async (file: File) => {
+    const text = await file.text();
+    const rawLines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const lines = rawLines[0]?.toLowerCase().startsWith('sep=') ? rawLines.slice(1) : rawLines;
+    if (lines.length < 2) return [];
+    const headerLine = lines[0];
+    const delimiter = (
+      (headerLine.match(/,/g)?.length || 0) >= (headerLine.match(/;/g)?.length || 0)
+        ? ((headerLine.match(/,/g)?.length || 0) >= (headerLine.match(/\t/g)?.length || 0) ? ',' : '\t')
+        : ((headerLine.match(/;/g)?.length || 0) >= (headerLine.match(/\t/g)?.length || 0) ? ';' : '\t')
+    );
+    const headers = splitCsvLine(headerLine, delimiter).map((h) => h.toLowerCase());
+    return lines.slice(1).map((line) => {
+      const cols = splitCsvLine(line, delimiter);
+      const row: Record<string, string> = {};
+      headers.forEach((h, idx) => {
+        row[h] = cols[idx] ?? '';
+      });
+      return row;
+    });
+  };
+
+  const normalizeExpenseCategory = (raw: string) => {
+    const category = String(raw || '').trim().toUpperCase();
+    if (!category) return 'OPERATIVO';
+    if (['OPERACIONAL', 'OPERATIVO'].includes(category)) return 'OPERATIVO';
+    if (['ADMINISTRATIVO', 'VENTAS', 'FINANCIERO', 'OTRO'].includes(category)) return category;
+    return 'OTRO';
+  };
+
+  const normalizeExpenseStatus = (raw: string) => {
+    const status = String(raw || '').trim().toUpperCase();
+    if (['APPROVED', 'PAID', 'REJECTED'].includes(status)) return status;
+    return 'PENDING';
+  };
+
+  const handleImportExpenses = async () => {
+    if (!importFile) {
+      toast.error('Selecciona un archivo CSV');
+      return;
+    }
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const rows = await parseExpensesCsv(importFile);
+      if (rows.length === 0) {
+        toast.error('El archivo no contiene filas para importar');
+        return;
+      }
+
+      let created = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+
+      for (let idx = 0; idx < rows.length; idx++) {
+        const row = rows[idx];
+        const rowNumber = idx + 2;
+        const description = String(row.description || row.descripcion || '').trim();
+        const amount = Number(String(row.amount || row.monto || '0').replace(',', '.'));
+        const category = normalizeExpenseCategory(String(row.category || row.categoria || ''));
+        const categoryCustom = category === 'OTRO' ? String(row.categorycustom || row.categoriacustom || '').trim() : '';
+        const status = normalizeExpenseStatus(String(row.status || row.estado || 'PENDING'));
+        const currencyRaw = String(row.currency || row.moneda || displayCurrency || 'NIO').trim().toUpperCase();
+        const currency = currencyRaw === 'USD' ? 'USD' : 'NIO';
+        const paymentSourceRaw = String(row.paymentsource || row.cuentaorigen || 'EFECTIVO').trim().toUpperCase();
+        const paymentSource = paymentSourceOptions.includes(paymentSourceRaw as any) ? paymentSourceRaw : 'EFECTIVO';
+        const paidTo = String(row.paidto || row.pagadoa || '').trim();
+        const reference = String(row.reference || row.referencia || '').trim();
+        const notes = String(row.notes || row.notas || '').trim();
+        const dateRaw = String(row.date || row.fecha || '').trim();
+        const dateParsed = dateRaw ? new Date(dateRaw) : new Date();
+        const date = Number.isNaN(dateParsed.getTime()) ? new Date().toISOString() : dateParsed.toISOString();
+
+        if (!description) {
+          skipped++;
+          errors.push(`Fila ${rowNumber}: descripción es obligatoria`);
+          continue;
+        }
+        if (!Number.isFinite(amount) || amount <= 0) {
+          skipped++;
+          errors.push(`Fila ${rowNumber}: monto inválido`);
+          continue;
+        }
+        if (category === 'OTRO' && !categoryCustom) {
+          skipped++;
+          errors.push(`Fila ${rowNumber}: categoría OTRO requiere categoryCustom`);
+          continue;
+        }
+
+        try {
+          await expensesService.create({
+            date,
+            amount,
+            currency: currency as any,
+            exchangeRate: globalRate,
+            category,
+            categoryCustom: categoryCustom || undefined,
+            description,
+            paidTo: paidTo || undefined,
+            paymentSource: paymentSource as any,
+            reference: reference || undefined,
+            notes: notes || undefined,
+            status: status as any,
+          } as any);
+          created++;
+        } catch (e: any) {
+          skipped++;
+          errors.push(`Fila ${rowNumber}: ${e?.response?.data?.message || e?.message || 'no se pudo crear'}`);
+        }
+      }
+
+      setImportResult({ total: rows.length, created, skipped, errors: errors.slice(0, 12) });
+      if (created > 0) onRefresh();
+      toast.success(`Importación finalizada: ${created} creados, ${skipped} omitidos`);
+    } catch (error: any) {
+      toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const columns: ColumnDef<Expense>[] = [
     { key: 'date',        header: 'Fecha',     width: '110px',
@@ -593,6 +768,15 @@ export function GastosView({ data, loading, onRefresh }: Props) {
             )}
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('PURCHASES_EXPENSES', 'create') && (
+              <Button
+                variant="outline"
+                onClick={() => { setImportOpen(true); setImportResult(null); }}
+                className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
+              >
+                <Upload className="size-4" /> Importar
+              </Button>
+            )}
+            {canPerform('PURCHASES_EXPENSES', 'create') && (
               <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Gasto</Button>
             )}
           </div>
@@ -628,6 +812,60 @@ export function GastosView({ data, loading, onRefresh }: Props) {
           onConfirm={handleDeleteConfirm}
           loading={deleteLoading}
         />
+
+        <Dialog open={importOpen} onOpenChange={setImportOpen}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar gastos</DialogTitle>
+              <DialogDescription>
+                Sube un CSV para registrar gastos masivamente. Usa la plantilla para mantener el formato correcto.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="rounded-xl border border-border/60 p-4 bg-muted/20">
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Formato esperado</p>
+                <p className="text-xs text-muted-foreground">
+                  Columnas: <span className="font-mono">date,description,category,amount,currency,paymentSource,paidTo,reference,status,notes</span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  category: OPERATIVO/ADMINISTRATIVO/VENTAS/FINANCIERO/OTRO · status: PENDING/APPROVED/PAID/REJECTED
+                </p>
+                <Button variant="ghost" size="sm" className="mt-3 gap-2 h-8" onClick={downloadExpenseTemplate}>
+                  <FileDown className="size-4" /> Descargar plantilla CSV
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-muted-foreground">Archivo CSV</label>
+                <Input type="file" accept=".csv,text/csv" onChange={(e) => setImportFile(e.target.files?.[0] || null)} />
+                {importFile && <p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p>}
+              </div>
+
+              {importResult && (
+                <div className="rounded-xl border border-border/60 p-4 bg-background">
+                  <p className="text-xs font-black uppercase tracking-widest mb-2">Resultado</p>
+                  <p className="text-sm">
+                    Total: <b>{importResult.total}</b> · Creados: <b className="text-emerald-500">{importResult.created}</b> · Omitidos: <b className="text-amber-500">{importResult.skipped}</b>
+                  </p>
+                  {importResult.errors.length > 0 && (
+                    <div className="mt-2 text-xs text-amber-600 space-y-1">
+                      <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
+                      {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
+              <Button onClick={handleImportExpenses} disabled={importing || !importFile} className="gap-2">
+                <Upload className="size-4" /> {importing ? 'Importando...' : 'Importar gastos'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

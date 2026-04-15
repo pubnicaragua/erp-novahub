@@ -1,5 +1,6 @@
-import React, { useMemo, useState, useRef } from 'react';
-import { Search, Plus, Trash2, Save, X, Check, Package } from 'lucide-react';
+import React, { useMemo, useState, useRef, useCallback } from 'react';
+import { Search, Plus, Trash2, Save, X, Check, Package, Upload, FileSpreadsheet, AlertTriangle, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -30,6 +31,7 @@ interface EditingProduct {
   salePrice: number;
   costPrice: number;
   trackSerialNumbers?: boolean;
+  itemType?: 'PRODUCT' | 'SERVICE';
   initialStock?: number;
   initialAllocations?: Array<{
     id: string;
@@ -44,6 +46,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'PRODUCT' | 'SERVICE'>('all');
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importData, setImportData] = useState<any[]>([]);
+  const [importFileName, setImportFileName] = useState('');
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingRows, setEditingRows] = useState<Map<string, EditingProduct>>(new Map());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -61,7 +69,9 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       p.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.category?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || p.categoryId === categoryFilter;
-    return matchesSearch && matchesCategory;
+    const pType = (p.itemType || 'PRODUCT').toUpperCase();
+    const matchesType = typeFilter === 'all' || pType === typeFilter;
+    return matchesSearch && matchesCategory && matchesType;
   });
 
   const getStockStatus = (stock: number) => {
@@ -80,6 +90,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       salePrice: 0,
       costPrice: 0,
       trackSerialNumbers: false,
+      itemType: 'PRODUCT',
       initialStock: 0,
       initialAllocations: [{ id: `alloc-${Date.now()}`, warehouseId: '', quantity: 0 }],
       isNew: true,
@@ -102,6 +113,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         product.serialNumberTracking ||
         String(product.trackingType || '').toUpperCase() === 'SERIAL',
       ),
+      itemType: (product.itemType || 'PRODUCT').toUpperCase() as 'PRODUCT' | 'SERVICE',
     };
     setEditingRows(new Map(editingRows.set(product.id, editProduct)));
   };
@@ -190,6 +202,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           salePrice: product.salePrice,
           costPrice: product.costPrice,
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
+          itemType: product.itemType || 'PRODUCT',
           initialStock: 0,
         });
         const created = (createdResponse as any)?.data || createdResponse;
@@ -236,6 +249,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           salePrice: product.salePrice,
           costPrice: product.costPrice,
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
+          itemType: product.itemType || 'PRODUCT',
         });
         toast.success('Producto actualizado');
       }
@@ -402,8 +416,25 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             </SelectContent>
           </Select>
         </TableCell>
+        <TableCell>
+          <Select 
+            value={product.itemType || 'PRODUCT'} 
+            onValueChange={(v) => handleUpdateField(product.id, 'itemType', v)}
+            disabled={isSaving || !product.isNew}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="Tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="PRODUCT">Producto</SelectItem>
+              <SelectItem value="SERVICE">Servicio</SelectItem>
+            </SelectContent>
+          </Select>
+        </TableCell>
         <TableCell className="text-right">
-          {product.isNew ? (() => {
+          {product.itemType === 'SERVICE' ? (
+            <span className="text-xs text-muted-foreground/50 italic flex justify-end items-center h-8">N/A</span>
+          ) : product.isNew ? (() => {
             const allocations = product.initialAllocations || [];
             const totalAllocated = allocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
             return (
@@ -520,6 +551,110 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     );
   };
 
+  // ==================== EXCEL IMPORT ====================
+  const handleDownloadTemplate = useCallback(() => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Código', 'Nombre', 'Categoría', 'Tipo', 'Precio Venta', 'Precio Costo', 'Stock Inicial', 'IMEI'],
+      ['SKU-001', 'Ejemplo Producto', 'Electrónica', 'PRODUCTO', 150, 100, 50, 'NO'],
+      ['SRV-001', 'Ejemplo Servicio', 'Consultoría', 'SERVICIO', 500, 0, 0, 'NO'],
+    ]);
+    ws['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 8 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
+    XLSX.writeFile(wb, 'plantilla_importar_productos.xlsx');
+    toast.success('Plantilla descargada');
+  }, []);
+
+  const handleFileSelected = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const raw: any[][] = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+        if (raw.length < 2) {
+          toast.error('El archivo está vacío o no tiene datos');
+          return;
+        }
+        const headers = raw[0].map((h: any) => String(h || '').trim().toLowerCase());
+        const colMap: Record<string, number> = {};
+        const aliases: Record<string, string[]> = {
+          code: ['código', 'codigo', 'code', 'sku'],
+          name: ['nombre', 'name', 'producto', 'descripción', 'descripcion'],
+          category: ['categoría', 'categoria', 'category', 'cat'],
+          itemType: ['tipo', 'type', 'item type', 'itemtype'],
+          salePrice: ['precio venta', 'precio_venta', 'sale price', 'saleprice', 'venta', 'precio'],
+          costPrice: ['precio costo', 'precio_costo', 'cost price', 'costprice', 'costo'],
+          initialStock: ['stock inicial', 'stock', 'initial stock', 'cantidad', 'qty'],
+          imei: ['imei', 'serial', 'tracking'],
+        };
+        for (const [key, alts] of Object.entries(aliases)) {
+          const idx = headers.findIndex((h: string) => alts.includes(h));
+          if (idx >= 0) colMap[key] = idx;
+        }
+        const parsed = raw.slice(1).filter((row: any[]) => row.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== '')).map((row: any[]) => {
+          const get = (key: string) => colMap[key] !== undefined ? row[colMap[key]] : undefined;
+          const typeStr = String(get('itemType') || 'PRODUCTO').toUpperCase();
+          const isService = typeStr === 'SERVICIO' || typeStr === 'SERVICE';
+          return {
+            code: String(get('code') || '').trim(),
+            name: String(get('name') || '').trim(),
+            category: String(get('category') || '').trim(),
+            itemType: isService ? 'SERVICE' : 'PRODUCT',
+            salePrice: Number(get('salePrice') || 0),
+            costPrice: Number(get('costPrice') || 0),
+            initialStock: isService ? 0 : Number(get('initialStock') || 0),
+            trackSerialNumbers: String(get('imei') || '').toUpperCase() === 'SI' || String(get('imei') || '').toUpperCase() === 'YES',
+            _hasError: !String(get('code') || '').trim() || !String(get('name') || '').trim(),
+          };
+        });
+        setImportData(parsed);
+        setImportFileName(file.name);
+        toast.success(`${parsed.length} registros encontrados`);
+      } catch (err) {
+        console.error('Parse error', err);
+        toast.error('No se pudo leer el archivo. Asegúrate de que sea un .xlsx o .csv válido.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }, []);
+
+  const handleImportConfirm = useCallback(async () => {
+    const valid = importData.filter((row) => !row._hasError);
+    if (valid.length === 0) {
+      toast.error('No hay registros válidos para importar');
+      return;
+    }
+    setImporting(true);
+    try {
+      const items = valid.map((row) => {
+        const cat = categories.find((c: any) => c.name?.toLowerCase() === row.category?.toLowerCase());
+        return {
+          code: row.code,
+          name: row.name,
+          categoryId: cat?.id || categories[0]?.id || '',
+          itemType: row.itemType as 'PRODUCT' | 'SERVICE',
+          salePrice: row.salePrice,
+          costPrice: row.costPrice,
+          initialStock: row.initialStock,
+          trackSerialNumbers: row.trackSerialNumbers,
+        };
+      });
+      const results = await inventoryService.bulkCreateProducts(items);
+      if (results.success > 0) toast.success(`${results.success} registros importados correctamente`);
+      if (results.failed > 0) toast.error(`${results.failed} registros fallaron: ${results.errors.slice(0, 3).join(', ')}`);
+      setImportModalOpen(false);
+      setImportData([]);
+      setImportFileName('');
+      onRefresh();
+    } catch (e: any) {
+      toast.error('Error durante la importación: ' + (e.message || 'Error'));
+    } finally {
+      setImporting(false);
+    }
+  }, [importData, categories, onRefresh]);
+
   return (
     <Card className="p-4 border bg-card rounded-xl">
       {/* Toolbar */}
@@ -535,7 +670,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             />
           </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-[240px] max-w-[45vw] h-9">
+            <SelectTrigger className="w-[200px] max-w-[40vw] h-9">
               <SelectValue placeholder="Categoría" />
             </SelectTrigger>
             <SelectContent>
@@ -545,26 +680,48 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               ))}
             </SelectContent>
           </Select>
+          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as any)}>
+            <SelectTrigger className="w-[160px] max-w-[35vw] h-9">
+              <SelectValue placeholder="Tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los tipos</SelectItem>
+              <SelectItem value="PRODUCT">🏷 Productos</SelectItem>
+              <SelectItem value="SERVICE">⚙ Servicios</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
-          onClick={() => setCategoryModalOpen(true)}
-        >
-          <Plus className="size-4 mr-2" />
-          Nueva Categoría
-        </Button>
-        {canPerform('INVENTORY_PRODUCTS', 'create') && (
-          <Button 
-            size="sm" 
-            className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
-            onClick={handleAddNewRow}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
+            onClick={() => setCategoryModalOpen(true)}
           >
-            <Plus className="size-4" />
-            Agregar Producto
+            <Plus className="size-4 mr-2" />
+            Nueva Categoría
           </Button>
-        )}
+          {canPerform('INVENTORY_PRODUCTS', 'create') && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4 border-primary/30 text-primary hover:bg-primary/10"
+              onClick={() => { setImportData([]); setImportFileName(''); setImportModalOpen(true); }}
+            >
+              <Upload className="size-4 mr-2" />
+              Importar Excel
+            </Button>
+          )}
+          {canPerform('INVENTORY_PRODUCTS', 'create') && (
+            <Button 
+              size="sm" 
+              className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
+              onClick={handleAddNewRow}
+            >
+              <Plus className="size-4" />
+              Agregar
+            </Button>
+          )}
       </div>
 
       {/* Table */}
@@ -575,6 +732,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Código</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Nombre</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Categoría</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-24">Tipo</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Venta</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Costo</TableHead>
@@ -591,7 +749,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             {/* Existing products */}
             {filteredProducts.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                   <Package className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">No hay productos</p>
                   <p className="text-sm">Haz clic en "Agregar Producto" para comenzar</p>
@@ -640,7 +798,18 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     <TableCell>
                       <span className="text-xs text-muted-foreground">{product.category?.name || '-'}</span>
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{product.stock || 0}</TableCell>
+                    <TableCell>
+                      {(product.itemType || 'PRODUCT').toUpperCase() === 'SERVICE' ? (
+                        <Badge className="bg-violet-500/10 text-violet-500 text-[9px] font-black uppercase px-1.5 py-0">Servicio</Badge>
+                      ) : (
+                        <Badge className="bg-sky-500/10 text-sky-500 text-[9px] font-black uppercase px-1.5 py-0">Producto</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {(product.itemType || 'PRODUCT').toUpperCase() === 'SERVICE' ? (
+                        <span className="text-xs text-muted-foreground/50 italic">N/A</span>
+                      ) : (product.stock || 0)}
+                    </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">{formatAmount(product.salePrice || 0)}</TableCell>
                      <TableCell className="text-right text-muted-foreground tabular-nums">{formatAmount(product.costPrice || 0)}</TableCell>
                      <TableCell className="text-right font-black tabular-nums">
@@ -804,6 +973,134 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               </Card>
             </div>
           )}
+        </DialogContent>
+      <Dialog open={importModalOpen} onOpenChange={(open) => {
+        if (!importing) {
+          setImportModalOpen(open);
+          if (!open) { setImportData([]); setImportFileName(''); }
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Importar Productos/Servicios</DialogTitle>
+            <DialogDescription>
+              Sube un archivo Excel (.xlsx) o CSV con tu catálogo. 
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-auto min-h-0 space-y-4 py-2">
+            {!importFileName ? (
+              <div className="space-y-4">
+                <div 
+                  className="border-2 border-dashed border-primary/20 rounded-xl p-8 hover:bg-primary/5 transition-colors cursor-pointer text-center flex flex-col items-center gap-3"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (e.dataTransfer.files?.[0]) handleFileSelected(e.dataTransfer.files[0]);
+                  }}
+                >
+                  <div className="size-12 bg-primary/10 rounded-full flex items-center justify-center">
+                    <FileSpreadsheet className="size-6 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-bold">Haz clic para buscar un archivo</p>
+                    <p className="text-xs text-muted-foreground mt-1">O arrástralo y suéltalo aquí</p>
+                  </div>
+                  <input type="file" className="hidden" accept=".xlsx,.xls,.csv" ref={fileInputRef} onChange={(e) => {
+                    if (e.target.files?.[0]) handleFileSelected(e.target.files[0]);
+                  }} />
+                </div>
+                <div className="bg-muted/30 p-4 rounded-xl border">
+                  <p className="text-sm font-semibold mb-2">Columnas soportadas:</p>
+                  <div className="text-xs text-muted-foreground grid grid-cols-2 gap-2">
+                    <p>• <b>Código</b> (requerido)</p>
+                    <p>• <b>Nombre</b> (requerido)</p>
+                    <p>• <b>Categoría</b></p>
+                    <p>• <b>Tipo</b> (Producto / Servicio)</p>
+                    <p>• <b>Precio Venta</b></p>
+                    <p>• <b>Precio Costo</b></p>
+                    <p>• <b>Stock Inicial</b></p>
+                    <p>• <b>IMEI</b> (Si/No)</p>
+                  </div>
+                  <Button variant="outline" size="sm" className="mt-4 text-xs font-bold w-full" onClick={handleDownloadTemplate}>
+                    <Download className="size-3 mr-2" />
+                    Descargar Plantilla de Ejemplo
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 flex flex-col h-full">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm">
+                    Archivo: <span className="font-semibold">{importFileName}</span> 
+                    <span className="text-muted-foreground ml-2">({importData.length} filas válidas)</span>
+                  </p>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setImportFileName(''); setImportData([]); }} disabled={importing}>
+                    Cambiar archivo
+                  </Button>
+                </div>
+
+                <div className="border rounded-md flex-1 overflow-auto">
+                  <Table>
+                    <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
+                      <TableRow>
+                        <TableHead className="text-[10px] uppercase w-8"></TableHead>
+                        <TableHead className="text-[10px] uppercase">Código</TableHead>
+                        <TableHead className="text-[10px] uppercase">Nombre</TableHead>
+                        <TableHead className="text-[10px] uppercase">Tipo</TableHead>
+                        <TableHead className="text-[10px] uppercase">Categoría</TableHead>
+                        <TableHead className="text-[10px] uppercase text-right">Venta</TableHead>
+                        <TableHead className="text-[10px] uppercase text-right">Stock</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {importData.slice(0, 100).map((row, i) => (
+                        <TableRow key={i} className={row._hasError ? 'bg-red-500/10' : ''}>
+                          <TableCell>
+                            {row._hasError ? (
+                              <AlertTriangle className="size-4 text-red-500" />
+                            ) : (
+                              <Check className="size-4 text-emerald-500" />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs font-mono">{row.code || <span className="text-red-500">Falta</span>}</TableCell>
+                          <TableCell className="text-xs truncate max-w-[200px]">{row.name || <span className="text-red-500">Falta</span>}</TableCell>
+                          <TableCell className="text-xs">
+                            {row.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}
+                          </TableCell>
+                          <TableCell className="text-xs max-w-[120px] truncate">{row.category || '-'}</TableCell>
+                          <TableCell className="text-xs text-right tabular-nums">{formatAmount(row.salePrice)}</TableCell>
+                          <TableCell className="text-xs text-right tabular-nums">
+                            {row.itemType === 'SERVICE' ? 'N/A' : row.initialStock}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {importData.length > 100 && (
+                    <p className="text-xs text-center p-2 text-muted-foreground border-t bg-muted/20">
+                      Mostrando 100 de {importData.length} filas
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="mt-2 pt-2 border-t">
+            <Button variant="outline" onClick={() => setImportModalOpen(false)} disabled={importing}>
+              Cerrar
+            </Button>
+            {importData.length > 0 && (
+              <Button 
+                onClick={handleImportConfirm} 
+                disabled={importing || importData.filter(r => !r._hasError).length === 0}
+                className="bg-primary text-primary-foreground font-bold"
+              >
+                {importing ? 'Importando...' : `Importar ${importData.filter(r => !r._hasError).length} Registros`}
+              </Button>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>

@@ -689,6 +689,7 @@ export interface Product {
   stock: number;
   minStock: number;
   trackSerialNumbers?: boolean;
+  itemType?: 'PRODUCT' | 'SERVICE';
   status: EntityStatus;
   createdAt: string;
   updatedAt: string;

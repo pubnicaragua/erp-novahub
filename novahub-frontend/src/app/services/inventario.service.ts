@@ -62,4 +62,19 @@ export const inventoryService = {
   // ==================== DASHBOARD ====================
   getDashboardStats: () => api.get<any>('/inventory/dashboard/stats'),
   getLowStockProducts: () => api.get<any[]>('/inventory/dashboard/low-stock'),
+
+  // ==================== BULK IMPORT ====================
+  bulkCreateProducts: async (items: Array<Partial<Product> & { initialStock?: number }>) => {
+    const results: { success: number; failed: number; errors: string[] } = { success: 0, failed: 0, errors: [] };
+    for (let i = 0; i < items.length; i++) {
+      try {
+        await api.post<Product>('/inventory/products', items[i]);
+        results.success++;
+      } catch (e: any) {
+        results.failed++;
+        results.errors.push(`Fila ${i + 1} (${items[i].code || items[i].name || '?'}): ${e?.message || 'Error desconocido'}`);
+      }
+    }
+    return results;
+  },
 };
