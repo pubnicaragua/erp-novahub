@@ -16,6 +16,7 @@ export interface Module {
 
 // Submódulos de Ventas (alineados con sidebar)
 export const SALES_SUBMODULES: Submodule[] = [
+  { id: 'SALES_DASHBOARD', label: 'Dashboard', description: 'Vista general de ventas' },
   { id: 'SALES_CLIENTS', label: 'Clientes', description: 'Gestión de clientes y CRM' },
   { id: 'SALES_QUOTES', label: 'Estimaciones', description: 'Cotizaciones comerciales' },
   { id: 'SALES_ORDERS', label: 'Órdenes de Venta', description: 'Pedidos por procesar' },
@@ -28,6 +29,7 @@ export const SALES_SUBMODULES: Submodule[] = [
 
 // Submódulos de Compras (alineados con sidebar)
 export const PURCHASES_SUBMODULES: Submodule[] = [
+  { id: 'PURCHASES_DASHBOARD', label: 'Dashboard', description: 'Vista general de compras' },
   { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', description: 'Gestión de proveedores' },
   { id: 'PURCHASES_EXPENSES', label: 'Gastos', description: 'Registro de gastos' },
   { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos Recurrentes', description: 'Gastos periódicos' },
@@ -41,6 +43,7 @@ export const PURCHASES_SUBMODULES: Submodule[] = [
 
 // Submódulos de Inventario
 export const INVENTORY_SUBMODULES: Submodule[] = [
+  { id: 'INVENTORY_DASHBOARD', label: 'Dashboard', description: 'Vista general de inventario' },
   { id: 'INVENTORY_PRODUCTS', label: 'Productos', description: 'Catálogo de productos' },
   { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', description: 'Gestión de almacenes' },
   { id: 'INVENTORY_TRANSFERS', label: 'Transferencias', description: 'Movimientos entre almacenes' },
@@ -95,6 +98,14 @@ export const DOCUMENTS_SUBMODULES: Submodule[] = [
   { id: 'DOCUMENTS_CONTRACTS', label: 'Contratos', description: 'Gestión de contratos' },
   { id: 'DOCUMENTS_INVOICES', label: 'Facturas Legales', description: 'Facturas y documentos legales' },
   { id: 'DOCUMENTS_REPORTS', label: 'Reportes', description: 'Reportes documentales' },
+];
+
+// Submódulos de Configuración
+export const CONFIGURATION_SUBMODULES: Submodule[] = [
+  { id: 'CONFIG_COMPANY', label: 'Empresa', description: 'Datos y branding de la empresa' },
+  { id: 'CONFIG_USERS', label: 'Usuarios', description: 'Gestión de accesos y perfiles' },
+  { id: 'CONFIG_ROLES', label: 'Roles y Permisos', description: 'Control de acceso granular' },
+  { id: 'CONFIG_SUBSCRIPTION', label: 'Suscripción', description: 'Estado y planes de servicio' },
 ];
 
 // Submódulos de Reportes

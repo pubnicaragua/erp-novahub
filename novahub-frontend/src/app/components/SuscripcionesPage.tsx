@@ -68,6 +68,7 @@ import {
   ACTIVITIES_SUBMODULES,
   DOCUMENTS_SUBMODULES,
   REPORTS_SUBMODULES,
+  CONFIGURATION_SUBMODULES,
   type Submodule 
 } from '../types/modules';
 import { storageService } from '../services/storage.service';
@@ -85,7 +86,7 @@ const AVAILABLE_MODULES = [
   { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema', submodules: NOTIFICATIONS_SUBMODULES },
   { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis', submodules: REPORTS_SUBMODULES },
-  { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
+  { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema', submodules: CONFIGURATION_SUBMODULES },
 ];
 
 const SYSTEM_ROLE_OPTIONS = [
@@ -132,6 +133,8 @@ export function SuscripcionesPage() {
   // Form state for platform document (Invoice/Quote)
   const [invoiceForm, setInvoiceForm] = useState({
     type: 'invoice' as 'invoice' | 'quote',
+    pricingMode: 'granular' as 'granular' | 'global',
+    globalPrice: 0,
     items: {} as Record<string, { active: boolean, price: number, label: string }>,
     subItems: {} as Record<string, { active: boolean, price: number, label: string }>,
     userCount: 1,
@@ -477,9 +480,8 @@ export function SuscripcionesPage() {
     const initialSubItems: Record<string, { active: boolean, price: number, label: string }> = {};
 
     AVAILABLE_MODULES.forEach(mod => {
-      const isActive = tenant.subscriptions?.some((s: any) => s.module === mod.id && s.isActive);
       initialItems[mod.id] = {
-        active: !!isActive,
+        active: false,
         price: 35, // Precio base por módulo
         label: mod.label
       };
@@ -495,6 +497,8 @@ export function SuscripcionesPage() {
 
     setInvoiceForm({
       type: 'invoice',
+      pricingMode: 'granular',
+      globalPrice: 0,
       items: initialItems,
       subItems: initialSubItems,
       userCount: tenant._count?.users || 1,
@@ -508,6 +512,7 @@ export function SuscripcionesPage() {
     if (!selectedTenant) return;
     
     const finalItems: any[] = [];
+    const isGlobal = invoiceForm.pricingMode === 'global';
     
     // Módulos
     Object.entries(invoiceForm.items).forEach(([id, data]) => {
@@ -516,7 +521,7 @@ export function SuscripcionesPage() {
           label: `Módulo: ${data.label}`,
           description: 'Suscripción de módulo operativo',
           quantity: 1,
-          price: data.price
+          price: isGlobal ? 0 : data.price
         });
       }
     });
@@ -528,7 +533,7 @@ export function SuscripcionesPage() {
           label: `Sub-Vista: ${data.label}`,
           description: 'Acceso a funcionalidad especializada',
           quantity: 1,
-          price: data.price
+          price: isGlobal ? 0 : data.price
         });
       }
     });
@@ -539,7 +544,7 @@ export function SuscripcionesPage() {
         label: 'Licencias de Usuario',
         description: `Licencia para ${invoiceForm.userCount} usuarios activos`,
         quantity: invoiceForm.userCount,
-        price: invoiceForm.pricePerUser
+        price: isGlobal ? 0 : invoiceForm.pricePerUser
       });
     }
 
@@ -547,7 +552,8 @@ export function SuscripcionesPage() {
       return toast.error('Seleccione al menos un item para facturar');
     }
 
-    const totalPrice = finalItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    const priceSum = finalItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    const totalPrice = isGlobal ? invoiceForm.globalPrice : priceSum;
 
     try {
       await generatePlatformDocumentPDF({
@@ -555,7 +561,8 @@ export function SuscripcionesPage() {
         documentType: invoiceForm.type,
         items: finalItems,
         totalPrice,
-        currency: invoiceForm.currency
+        currency: invoiceForm.currency,
+        hidePrices: isGlobal
       });
       toast.success(`${invoiceForm.type === 'quote' ? 'Cotización' : 'Factura'} generada correctamente`);
       setIsInvoiceDialogOpen(false);
@@ -1157,46 +1164,86 @@ export function SuscripcionesPage() {
                   Configure los componentes, precios y licencias para {selectedTenant?.name}.
                 </DialogDescription>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border">
-                  <Button 
-                    variant={invoiceForm.currency === 'USD' ? 'default' : 'ghost'} 
-                    size="sm" 
-                    className="rounded-lg text-[10px] font-bold h-8 px-2"
-                    onClick={() => setInvoiceForm({...invoiceForm, currency: 'USD'})}
-                  >
-                    USD
-                  </Button>
-                  <Button 
-                    variant={invoiceForm.currency === 'NIO' ? 'default' : 'ghost'} 
-                    size="sm" 
-                    className="rounded-lg text-[10px] font-bold h-8 px-2"
-                    onClick={() => setInvoiceForm({...invoiceForm, currency: 'NIO'})}
-                  >
-                    NIO
-                  </Button>
-                </div>
-                <div className="flex items-center gap-2 bg-muted p-1 rounded-xl border">
-                  <Button 
-                    variant={invoiceForm.type === 'quote' ? 'default' : 'ghost'} 
-                    size="sm" 
-                    className="rounded-lg text-[10px] font-bold uppercase tracking-widest h-8"
-                    onClick={() => setInvoiceForm({...invoiceForm, type: 'quote'})}
-                  >
-                    Cotización
-                  </Button>
-                  <Button 
-                    variant={invoiceForm.type === 'invoice' ? 'default' : 'ghost'} 
-                    size="sm" 
-                    className="rounded-lg text-[10px] font-bold uppercase tracking-widest h-8"
-                    onClick={() => setInvoiceForm({...invoiceForm, type: 'invoice'})}
-                  >
-                    Factura
-                  </Button>
+              <div className="flex flex-col items-end gap-3">
+                <Tabs 
+                  value={invoiceForm.pricingMode} 
+                  onValueChange={(val: any) => setInvoiceForm({...invoiceForm, pricingMode: val})}
+                  className="w-full"
+                >
+                  <TabsList className="bg-muted p-1 h-9 rounded-xl border grid grid-cols-2 w-[220px]">
+                    <TabsTrigger value="granular" className="rounded-lg text-[10px] font-bold uppercase tracking-wider h-7">
+                      Detallado
+                    </TabsTrigger>
+                    <TabsTrigger value="global" className="rounded-lg text-[10px] font-bold uppercase tracking-wider h-7">
+                      Global
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border">
+                    <Button 
+                      variant={invoiceForm.currency === 'USD' ? 'default' : 'ghost'} 
+                      size="sm" 
+                      className="rounded-lg text-[10px] font-bold h-8 px-2"
+                      onClick={() => setInvoiceForm({...invoiceForm, currency: 'USD'})}
+                    >
+                      USD
+                    </Button>
+                    <Button 
+                      variant={invoiceForm.currency === 'NIO' ? 'default' : 'ghost'} 
+                      size="sm" 
+                      className="rounded-lg text-[10px] font-bold h-8 px-2"
+                      onClick={() => setInvoiceForm({...invoiceForm, currency: 'NIO'})}
+                    >
+                      NIO
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 bg-muted p-1 rounded-xl border">
+                    <Button 
+                      variant={invoiceForm.type === 'quote' ? 'default' : 'ghost'} 
+                      size="sm" 
+                      className="rounded-lg text-[10px] font-bold uppercase tracking-widest h-8"
+                      onClick={() => setInvoiceForm({...invoiceForm, type: 'quote'})}
+                    >
+                      Cotización
+                    </Button>
+                    <Button 
+                      variant={invoiceForm.type === 'invoice' ? 'default' : 'ghost'} 
+                      size="sm" 
+                      className="rounded-lg text-[10px] font-bold uppercase tracking-widest h-8"
+                      onClick={() => setInvoiceForm({...invoiceForm, type: 'invoice'})}
+                    >
+                      Factura
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
           </DialogHeader>
+
+          {invoiceForm.pricingMode === 'global' && (
+            <div className="px-6 py-4 bg-primary/5 border-b border-primary/20 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="size-5 text-primary" />
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-primary tracking-widest">Precio Final de Activación</p>
+                    <p className="text-[9px] text-muted-foreground italic">Este valor se mostrará como único ítem en el documento</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-background p-2 rounded-2xl border-2 border-primary/30 shadow-sm">
+                  <span className="text-xl font-black text-primary">{invoiceForm.currency === 'USD' ? '$' : 'C$'}</span>
+                  <Input 
+                    type="number"
+                    className="w-32 h-10 text-xl font-black border-none focus-visible:ring-0 bg-transparent p-0"
+                    placeholder="0.00"
+                    value={invoiceForm.globalPrice}
+                    onChange={(e) => setInvoiceForm({...invoiceForm, globalPrice: Number(e.target.value)})}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto px-6 py-4">
             <div className="space-y-8">
@@ -1217,15 +1264,17 @@ export function SuscripcionesPage() {
                       onChange={e => setInvoiceForm({...invoiceForm, userCount: Number(e.target.value)})}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Precio por Usuario ({invoiceForm.currency === 'USD' ? '$' : 'C$'})</Label>
-                    <Input 
-                      type="number" 
-                      className="bg-background border-border/50 h-10 rounded-xl font-bold"
-                      value={invoiceForm.pricePerUser}
-                      onChange={e => setInvoiceForm({...invoiceForm, pricePerUser: Number(e.target.value)})}
-                    />
-                  </div>
+                  {invoiceForm.pricingMode === 'granular' && (
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Precio por Usuario ({invoiceForm.currency === 'USD' ? '$' : 'C$'})</Label>
+                      <Input 
+                        type="number" 
+                        className="bg-background border-border/50 h-10 rounded-xl font-bold"
+                        value={invoiceForm.pricePerUser}
+                        onChange={e => setInvoiceForm({...invoiceForm, pricePerUser: Number(e.target.value)})}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1259,30 +1308,75 @@ export function SuscripcionesPage() {
                             <span className="text-xs font-bold uppercase tracking-tight">{mod.label}</span>
                           </div>
                         </AccordionTrigger>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-muted-foreground">{invoiceForm.currency === 'USD' ? '$' : 'C$'}</span>
-                          <Input 
-                            size={5}
-                            type="number"
-                            className="w-20 h-8 text-xs font-bold rounded-lg bg-background"
-                            value={invoiceForm.items[mod.id]?.price || 0}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => {
-                              const val = Number(e.target.value);
-                              setInvoiceForm(prev => ({
-                                ...prev,
-                                items: {
-                                  ...prev.items,
-                                  [mod.id]: { ...prev.items[mod.id], price: val }
-                                }
-                              }));
-                            }}
-                          />
-                        </div>
+                        {invoiceForm.pricingMode === 'granular' && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-muted-foreground">{invoiceForm.currency === 'USD' ? '$' : 'C$'}</span>
+                            <Input 
+                              size={5}
+                              type="number"
+                              className="w-20 h-8 text-xs font-bold rounded-lg bg-background"
+                              value={invoiceForm.items[mod.id]?.price || 0}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                setInvoiceForm(prev => ({
+                                  ...prev,
+                                  items: {
+                                    ...prev.items,
+                                    [mod.id]: { ...prev.items[mod.id], price: val }
+                                  }
+                                }));
+                              }}
+                            />
+                          </div>
+                        )}
                       </div>
 
                       <AccordionContent className="pb-4 pt-0">
                         <div className="pl-10 space-y-2 border-l-2 border-muted ml-2">
+                          {mod.submodules && mod.submodules.length > 0 && (
+                            <div className="flex items-center justify-between mb-2 py-2 border-b border-dashed border-muted/50">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-7 text-[9px] uppercase font-bold text-primary hover:text-primary hover:bg-primary/10 px-2"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const allSelected = mod.submodules?.every(sub => invoiceForm.subItems[sub.id]?.active);
+                                  const newSubItems = { ...invoiceForm.subItems };
+                                  mod.submodules?.forEach(sub => {
+                                    newSubItems[sub.id] = { ...newSubItems[sub.id], active: !allSelected, label: sub.label };
+                                  });
+                                  setInvoiceForm(prev => ({ ...prev, subItems: newSubItems }));
+                                }}
+                              >
+                                <CheckCircle2 className="size-3 mr-1" />
+                                {mod.submodules.every(sub => invoiceForm.subItems[sub.id]?.active) ? 'Desmarcar todos' : 'Marcar todos'}
+                              </Button>
+                              
+                              {invoiceForm.pricingMode === 'granular' && (
+                                <div className="flex items-center gap-2 pr-2">
+                                  <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Precio para todos:</span>
+                                  <Input 
+                                    type="number"
+                                    placeholder="0.00"
+                                    className="w-16 h-7 text-[10px] font-bold rounded-md bg-muted/30"
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        const val = Number((e.target as HTMLInputElement).value);
+                                        const newSubItems = { ...invoiceForm.subItems };
+                                        mod.submodules?.forEach(sub => {
+                                          newSubItems[sub.id] = { ...newSubItems[sub.id], price: val, label: sub.label };
+                                        });
+                                        setInvoiceForm(prev => ({ ...prev, subItems: newSubItems }));
+                                        toast.success(`Precio aplicado a ${mod.label}`);
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
                           {mod.submodules?.map(sub => (
                             <div 
                               key={sub.id} 
@@ -1305,25 +1399,27 @@ export function SuscripcionesPage() {
                                 />
                                 <span className="text-[10px] font-medium text-muted-foreground">{sub.label}</span>
                               </div>
-                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                <span className="text-[9px] text-muted-foreground/50">{invoiceForm.currency === 'USD' ? '$' : 'C$'}</span>
-                                <Input 
-                                  type="number"
-                                  className="w-16 h-7 text-[10px] font-bold rounded-md bg-background"
-                                  value={invoiceForm.subItems[sub.id]?.price || 0}
-                                  onChange={(e) => {
-                                    const val = Number(e.target.value);
-                                    setInvoiceForm(prev => ({
-                                      ...prev,
-                                      subItems: {
-                                        ...prev.subItems,
-                                        [sub.id]: { ...prev.subItems[sub.id], price: val }
-                                      }
-                                    }));
-                                  }}
-                                />
+                                {invoiceForm.pricingMode === 'granular' && (
+                                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                    <span className="text-[9px] text-muted-foreground/50">{invoiceForm.currency === 'USD' ? '$' : 'C$'}</span>
+                                    <Input 
+                                      type="number"
+                                      className="w-16 h-7 text-[10px] font-bold rounded-md bg-background"
+                                      value={invoiceForm.subItems[sub.id]?.price || 0}
+                                      onChange={(e) => {
+                                        const val = Number(e.target.value);
+                                        setInvoiceForm(prev => ({
+                                          ...prev,
+                                          subItems: {
+                                            ...prev.subItems,
+                                            [sub.id]: { ...prev.subItems[sub.id], price: val }
+                                          }
+                                        }));
+                                      }}
+                                    />
+                                  </div>
+                                )}
                               </div>
-                            </div>
                           ))}
                           {(!mod.submodules || mod.submodules.length === 0) && (
                             <p className="text-[10px] text-muted-foreground italic pl-2">No hay sub-vistas configurables</p>
@@ -1343,9 +1439,13 @@ export function SuscripcionesPage() {
               <p className="text-2xl font-black text-primary tracking-tighter">
                 {invoiceForm.currency === 'USD' ? '$' : 'C$'}
                 {(
-                  Object.values(invoiceForm.items).reduce((acc, v) => acc + (v.active ? v.price : 0), 0) +
-                  Object.values(invoiceForm.subItems).reduce((acc, v) => acc + (v.active ? v.price : 0), 0) +
-                  (invoiceForm.userCount * invoiceForm.pricePerUser)
+                  invoiceForm.pricingMode === 'global' 
+                    ? invoiceForm.globalPrice
+                    : (
+                      Object.values(invoiceForm.items).reduce((acc, v) => acc + (v.active ? v.price : 0), 0) +
+                      Object.values(invoiceForm.subItems).reduce((acc, v) => acc + (v.active ? v.price : 0), 0) +
+                      (invoiceForm.userCount * invoiceForm.pricePerUser)
+                    )
                 ).toLocaleString()}
               </p>
             </div>

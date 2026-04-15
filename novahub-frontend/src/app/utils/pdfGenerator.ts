@@ -766,12 +766,14 @@ export const generatePlatformDocumentPDF = async ({
   items,
   totalPrice,
   currency,
+  hidePrices,
 }: {
   tenantName: string;
   documentType: 'invoice' | 'quote';
   items: any[];
   totalPrice: number;
   currency: string;
+  hidePrices?: boolean;
 }) => {
   const doc = new jsPDF();
   const primaryColor = [34, 197, 94] as [number, number, number]; // Emerald 500
@@ -836,67 +838,90 @@ export const generatePlatformDocumentPDF = async ({
   doc.text('Cliente Corporativo / Suscriptor', 14, 77);
 
   // 6. Tabla Granular
-  const tableData = items.map(item => [
-    item.label,
-    item.description,
-    item.quantity.toString(),
-    currency === 'USD' ? `$${item.price.toLocaleString()}` : `C$${item.price.toLocaleString()}`,
-    currency === 'USD' ? `$${(item.price * item.quantity).toLocaleString()}` : `C$${(item.price * item.quantity).toLocaleString()}`
-  ]);
+  const tableData = items.map(item => {
+    const row = [
+      item.label,
+      item.description,
+      item.quantity.toString()
+    ];
+    if (!hidePrices) {
+      row.push(item.price === 0 ? '-' : new Intl.NumberFormat('en-US', { style: 'currency', currency: currency === 'USD' ? 'USD' : 'NIO', currencyDisplay: 'narrowSymbol' }).format(item.price));
+      row.push(item.price === 0 ? '-' : new Intl.NumberFormat('en-US', { style: 'currency', currency: currency === 'USD' ? 'USD' : 'NIO', currencyDisplay: 'narrowSymbol' }).format(item.price * item.quantity));
+    }
+    return row;
+  });
 
-  const formattedTotal = currency === 'USD' ? `$${totalPrice.toLocaleString()}` : `C$${totalPrice.toLocaleString()}`;
+  const formattedTotal = new Intl.NumberFormat('en-US', { 
+    style: 'currency', 
+    currency: currency === 'USD' ? 'USD' : 'NIO', 
+    currencyDisplay: 'narrowSymbol' 
+  }).format(totalPrice);
 
   autoTable(doc, {
     startY: 90,
-    head: [['Item', 'Descripción', 'Cant.', 'Unitario', 'Subtotal']],
+    head: [hidePrices ? ['Item', 'Descripción', 'Cant.'] : ['Item', 'Descripción', 'Cant.', 'Unitario', 'Subtotal']],
     body: tableData,
     theme: 'grid',
     headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 10, fontStyle: 'bold', halign: 'center' },
-    bodyStyles: { textColor: textColor, fontSize: 9 },
-    columnStyles: {
-      0: { cellWidth: 40, halign: 'left' },
-      1: { cellWidth: 'auto', halign: 'left' },
-      2: { cellWidth: 20, halign: 'center' },
+    bodyStyles: { textColor: textColor, fontSize: 9, cellPadding: 4 },
+    columnStyles: hidePrices ? {
+      0: { cellWidth: 50 },
+      1: { cellWidth: 'auto' },
+      2: { cellWidth: 20, halign: 'center' }
+    } : {
+      0: { cellWidth: 40 },
+      1: { cellWidth: 'auto' },
+      2: { cellWidth: 15, halign: 'center' },
       3: { cellWidth: 30, halign: 'right' },
       4: { cellWidth: 30, halign: 'right' }
     },
-    styles: { overflow: 'linebreak', cellPadding: 5 },
-    margin: { bottom: 30 }
+    styles: { overflow: 'linebreak' },
+    margin: { bottom: 40 }
   });
 
-  // 7. TOTAL SECCION SEPARADA
-  const finalY = (doc as any).lastAutoTable.finalY || 100;
+  // 7. TOTAL SECCION SEPARADA (ESTILIZADO)
+  const finalTableY = (doc as any).lastAutoTable.finalY || 100;
   
-  // Dibujar bloque de total
+  // Dibujar fondo para bloque de total
+  doc.setFillColor(248, 250, 252); // slate-50
+  doc.rect(130, finalTableY + 5, 66, 20, 'F');
+  
+  // Línea de acento arriba del total
   doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.setLineWidth(0.5);
-  doc.line(140, finalY + 10, 196, finalY + 10); // Línea superior total
+  doc.setLineWidth(1);
+  doc.line(130, finalTableY + 5, 196, finalTableY + 5); 
 
-  doc.setFontSize(10);
+  doc.setFontSize(isQuote ? 8.5 : 10);
   doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL:', 140, finalY + 18);
+  const labelX = 132; 
+  doc.text(isQuote ? 'Costo total de activación:' : 'TOTAL:', labelX, finalTableY + 17);
   
   doc.setFontSize(16);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.text(formattedTotal, 196, finalY + 18, { align: 'right' });
+  doc.text(formattedTotal, 195, finalTableY + 18, { align: 'right' });
 
   // 8. Términos y Notas
-  // Verificar si hay espacio para los términos
-  if (finalY > 230) {
+  // Verificar si hay espacio para los términos (ajustado a 200 para evitar que queden huérfanos)
+  const availableSpace = 250 - finalTableY;
+  const needsNewPage = availableSpace < 40;
+
+  if (needsNewPage) {
     doc.addPage();
     doc.setPage(doc.internal.getNumberOfPages());
   }
 
-  const termsY = finalY > 230 ? 30 : finalY + 30;
+  const termsY = needsNewPage ? 30 : finalTableY + 35;
 
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
   doc.setFont('helvetica', 'bold');
   doc.text(isQuote ? 'Validez de la Cotización:' : 'Términos de Pago:', 14, termsY);
+  
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 116, 139);
-  doc.text(isQuote ? 'Esta cotización tiene una validez de 15 días calendario.' : 'Pago inmediato al recibir esta factura para mantener la continuidad de los servicios.', 14, termsY + 5);
+  doc.text(isQuote ? 'Esta cotización tiene una validez de 15 días calendario.' : 'Pago inmediato al recibir esta factura para mantener la continuidad de los servicios.', 14, termsY + 6);
 
   // 9. Footer (En todas las páginas)
   const pageCount = doc.internal.getNumberOfPages();
