@@ -18,6 +18,7 @@ import {
 } from '../../services/ventas.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import type { Customer } from '../../types';
@@ -32,6 +33,7 @@ interface CustomerDetailsModalProps {
 export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerDetailsModalProps) {
   const { formatConvertedAmount } = useCurrency();
   const { user } = useAuth();
+  const { themeConfig } = useTheme();
   const [loading, setLoading] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
 
@@ -104,7 +106,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
         customer,
         transactions,
         tenantName: user?.tenantName || 'Nova Hub',
-        tenantLogo: user?.avatar,
+        tenantLogo: themeConfig?.logo,
         formatAmount: formatConvertedAmount
       });
       toast.success('Estado de cuenta exportado');
@@ -225,38 +227,39 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                 {transactions.map((it, idx) => (
                   <div 
                     key={idx} 
-                    className="group relative flex items-center justify-between gap-4 p-5 bg-card hover:bg-slate-50 dark:hover:bg-slate-900/40 border border-border/50 rounded-3xl transition-all duration-300 hover:shadow-md hover:-translate-y-0.5"
+                    className="group relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-card hover:bg-slate-50 dark:hover:bg-slate-900/40 border border-border/50 rounded-3xl transition-all duration-300 hover:shadow-md hover:-translate-y-0.5"
                   >
-                    <div className="flex items-center gap-5 text-left">
+                    <div className="flex items-center gap-4 sm:gap-5 text-left">
                       <div className={cn(
-                        "size-12 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 shadow-sm", 
+                        "size-10 sm:size-12 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 shadow-sm shrink-0", 
                         it.bg, it.color
                       )}>
-                        <it.icon className="size-6" />
+                        <it.icon className="size-5 sm:size-6" />
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-[15px] font-black text-foreground tracking-tight">{it.number}</span>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm sm:text-[15px] font-black text-foreground tracking-tight truncate max-w-[120px] xs:max-w-none">{it.number}</span>
                           <span className={cn(
-                            "text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full",
+                            "text-[9px] sm:text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full whitespace-nowrap",
                             it.bg, it.color
                           )}>
                             {it.label}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3 mt-1.5">
-                          <span className="text-[11px] font-bold text-muted-foreground/70 flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                          <span className="text-[11px] font-bold text-muted-foreground/70 flex items-center gap-1.5 whitespace-nowrap">
                             <Calendar className="size-3.5" /> {new Date(it.date).toLocaleDateString()}
                           </span>
-                          <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/30 flex items-center gap-1">
+                          <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/30 flex items-center gap-1 whitespace-nowrap">
                             • {it.status || 'Completado'}
                           </span>
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right sm:text-right border-t sm:border-none pt-3 sm:pt-0 mt-1 sm:mt-0 flex justify-between sm:block items-center">
+                      <p className="sm:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">Monto Total</p>
                       <p className={cn(
-                        "text-[18px] font-black tabular-nums tracking-tighter", 
+                        "text-[16px] sm:text-[18px] font-black tabular-nums tracking-tighter", 
                         it.type === 'PAYMENT' || it.type === 'CREDIT_NOTE' ? 'text-emerald-500' : 'text-foreground'
                       )}>
                         {it.type === 'PAYMENT' || it.type === 'CREDIT_NOTE' ? '-' : ''}{formatConvertedAmount(it.total, it.currency, it.exchangeRate)}

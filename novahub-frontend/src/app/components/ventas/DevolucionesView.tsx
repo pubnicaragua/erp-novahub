@@ -36,7 +36,6 @@ const statusOptions = [
 export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [] }: DevolucionesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -52,10 +51,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     }
   }, [editingId]);
 
-  const filtered = data.filter(r => 
-    r.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (r.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+
 
   const startNew = () => {
     setIsCreating(true);
@@ -128,6 +124,14 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     } catch { toast.error('Error al aprobar'); }
   };
 
+  const handleReject = async (id: string) => {
+    try {
+      await salesReturnsService.reject(id);
+      toast.success('Devolución rechazada/cancelada');
+      onRefresh();
+    } catch { toast.error('Error al rechazar'); }
+  };
+
   // Get invoices for selected customer
   const customerInvoices = localDoc?.customerId
     ? invoices.filter(i => i.customerId === localDoc.customerId)
@@ -187,8 +191,14 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
               <>
                 {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={async () => { await salesReturnsService.delete(localDoc.id); setEditingId(null); onRefresh(); }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
-                {canApprove && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => { handleApprove(localDoc.id); setEditingId(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar Devolución</Button>}
+                {canApprove && (
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                      onClick={() => { handleReject(localDoc.id); setEditingId(null); }}><XCircle className="size-3 mr-2" /> Rechazar / Cancelar</Button>
+                    <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                      onClick={() => { handleApprove(localDoc.id); setEditingId(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar Devolución</Button>
+                  </div>
+                )}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   {isCreating ? 'Registrar Devolución' : 'Guardar Cambios'}
                 </Button>
@@ -201,7 +211,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
                     options={(customers || [])
@@ -214,13 +224,31 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                 <div><p className="text-[10px] text-muted-foreground mb-1">Factura Origen</p>
                   <Combobox options={customerInvoices.map(i => ({ label: `${i.number} — ${formatConvertedAmount(Number(i.total||0), i.currency, i.exchangeRate)}`, value: i.id }))} value={localDoc?.invoiceId || ''} onChange={(val) => {
                     const inv = invoices.find(i => i.id === val);
-                    setLocalDoc({
-                      ...localDoc,
-                      invoiceId: val,
-                      currency: inv?.currency || localDoc?.currency || displayCurrency,
-                      exchangeRate: inv?.exchangeRate || localDoc?.exchangeRate || globalRate,
-                    });
-                  }} placeholder="Seleccionar Factura" /></div>
+                    if (inv) {
+                      const invoiceItems = (inv.items || []).map((it: any, index: number) => ({
+                        id: Date.now().toString() + index,
+                        productId: it.productId,
+                        description: it.description || '',
+                        quantity: Number(it.quantity || 1), 
+                        unitPrice: Number(it.unitPrice || 0),
+                        total: Number(it.quantity || 1) * Number(it.unitPrice || 0),
+                        originalQuantity: Number(it.quantity || 1)
+                      }));
+                      
+                      setLocalDoc({
+                        ...localDoc,
+                        invoiceId: val,
+                        currency: inv.currency || displayCurrency,
+                        exchangeRate: inv.exchangeRate || globalRate,
+                        items: invoiceItems,
+                        total: recalcTotal(invoiceItems),
+                      });
+                      toast.info('Se han importado los artículos de la factura. Ajuste las cantidades para una devolución parcial.');
+                    } else {
+                      setLocalDoc({ ...localDoc, invoiceId: val, items: [], total: 0 });
+                    }
+                  }} placeholder="Seleccionar Factura" />
+                </div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
                   <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
                 {!isCreating && <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
@@ -234,9 +262,9 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen</p>
-              <div className="flex justify-between items-center text-base border-b pb-3 border-border/50">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 border-b pb-3 border-border/50">
                 <span className="font-black">Total Devolución</span>
-                <span className="text-rose-500 font-black text-lg">{formatConvertedAmount(Number(localDoc?.total||0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
+                <span className="text-rose-500 font-black text-lg text-right">{formatConvertedAmount(Number(localDoc?.total||0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
               </div>
               <p className="text-[10px] text-muted-foreground italic">Al aprobar esta devolución, el estado cambiará a aprobado. Los ajustes contables deben realizarse mediante una Nota de Crédito manual.</p>
             </CardContent>
@@ -253,24 +281,56 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
               }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar Item</Button>
             </div>
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+              <div className="hidden md:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                 <div className="col-span-5">Descripción</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div><div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-5"><Combobox options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
-                    onChange={(val) => { const ni = [...(localDoc.items || [])]; const prod = products.find(p => p.id === val);
-                      ni[idx] = { ...ni[idx], productId: val, description: prod?.name || '', unitPrice: Number(prod?.price || 0), total: Number(ni[idx].quantity || 1) * Number(prod?.price || 0) };
-                      setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} placeholder="Producto..." /></div>
-                  <div className="col-span-2"><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
-                    const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };
-                    setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-8 text-xs text-right" /></div>
-                  <div className="col-span-2"><Input type="number" min="0" value={Number(item.unitPrice) || ''} onChange={(e) => {
-                    const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
-                    setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-8 text-xs text-right" /></div>
-                  <div className="col-span-2 text-right"><span className="text-xs font-black text-rose-500">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
-                  <div className="col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
-                    onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }}><Trash2 className="size-3" /></Button></div>
+                <div key={item.id || idx} className="flex flex-col md:grid md:grid-cols-12 gap-4 md:gap-2 items-start md:items-center p-4 md:p-0 border md:border-none rounded-2xl md:rounded-none bg-muted/5 md:bg-transparent relative group">
+                  <div className="w-full md:col-span-5 space-y-1">
+                    <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Producto / Servicio</label>
+                    <Combobox options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
+                      onChange={(val) => { const ni = [...(localDoc.items || [])]; const prod = products.find(p => p.id === val);
+                        ni[idx] = { ...ni[idx], productId: val, description: prod?.name || '', unitPrice: Number(prod?.price || 0), total: Number(ni[idx].quantity || 1) * Number(prod?.price || 0) };
+                        setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} placeholder="Producto..." />
+                  </div>
+                  
+                  <div className="flex gap-4 w-full md:contents">
+                    <div className="flex-1 md:col-span-2 space-y-1">
+                      <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Cant.</label>
+                      <Input type="number" min="0" max={item.originalQuantity || undefined} value={Number(item.quantity) || ''} onChange={(e) => {
+                        const ni = [...(localDoc.items || [])];
+                        let val = Number(e.target.value);
+                        if (item.originalQuantity && val > item.originalQuantity) {
+                          toast.error(`La cantidad máxima permitida es ${item.originalQuantity} (cantidad original en factura)`);
+                          val = item.originalQuantity;
+                        }
+                        ni[idx] = { ...ni[idx], quantity: val, total: val * Number(ni[idx].unitPrice || 0) };
+                        setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-9 md:h-8 text-xs md:text-right font-bold" />
+                    </div>
+                    <div className="flex-1 md:col-span-2 space-y-1">
+                      <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Precio U.</label>
+                      <Input type="number" min="0" value={Number(item.unitPrice) || ''} onChange={(e) => {
+                        const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
+                        setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-9 md:h-8 text-xs md:text-right font-bold" />
+                    </div>
+                  </div>
+
+                  <div className="w-full md:col-span-2 flex items-center justify-between md:justify-end gap-2 border-t md:border-none pt-3 md:pt-0 mt-2 md:mt-0">
+                    <div className="md:hidden">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 leading-none mb-1">Total</p>
+                       <p className="text-sm font-black text-rose-500">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</p>
+                    </div>
+                    <span className="hidden md:block text-xs font-black text-rose-500 w-24 text-right tabular-nums">
+                      {formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}
+                    </span>
+                  </div>
+
+                  <div className="absolute top-2 right-2 md:relative md:top-0 md:right-0 md:col-span-1 flex justify-end">
+                    <Button variant="ghost" size="icon" className="size-8 md:size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-lg md:rounded-md"
+                      onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }}>
+                      <Trash2 className="size-4 md:size-3" />
+                    </Button>
+                  </div>
                 </div>
               ))}
               {(!localDoc.items || localDoc.items.length === 0) && <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">Sin productos devueltos. Haz clic en "Agregar Item".</div>}
@@ -297,22 +357,23 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground">Devoluciones de Venta</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de retornos y aprobación de mercancía.</p></div>
           <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input placeholder="Buscar devolución..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
             {canPerform('SALES_RETURNS', 'create') && (
               <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Devolución</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered}
+        <EditableDataTable data={data}
           allowAddRow={false}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch { toast.error('Error'); } }}
           columns={columns} onRowUpdate={async () => {}} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
                {canPerform('SALES_RETURNS', 'edit') && (row.status||'').toUpperCase() === 'PENDING' && (
-                 <Button title="Aprobar Devolución" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
+                 <>
+                   <Button title="Rechazar Devolución" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors" onClick={() => handleReject(row.id)}><XCircle className="size-4" /></Button>
+                   <Button title="Aprobar Devolución" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
+                 </>
                )}
                <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>

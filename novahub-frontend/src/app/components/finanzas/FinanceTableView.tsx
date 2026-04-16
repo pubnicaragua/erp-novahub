@@ -660,7 +660,7 @@ export function FinanceTableView({
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 leading-none mb-1">
                       {item.number || 'Registro'}
                     </p>
-                    <p className="text-sm font-bold truncate">
+                    <p className="text-sm font-bold truncate max-w-[140px] xs:max-w-none">
                       {item.source || item.description || 'Sin título'}
                     </p>
                   </div>
@@ -697,7 +697,7 @@ export function FinanceTableView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-y-4 gap-x-6 relative">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-y-4 gap-x-6 relative">
                 {columns.map(col => (
                   <div key={col.key} className={cn("space-y-1", col.type === 'currency' ? "col-span-2 bg-primary/5 -mx-5 px-5 py-3 border-y border-primary/10 mt-1" : "")}>
                     <p className="text-[9px] font-black uppercase text-muted-foreground/50 tracking-[0.15em]">{col.label}</p>
@@ -724,8 +724,8 @@ export function FinanceTableView({
       </div>
 
       {/* Pagination Controls */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border/20">
-        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-6 pt-6 border-t border-border/20 pb-8 px-2">
+        <div className="flex flex-col sm:flex-row items-center gap-4 text-xs text-muted-foreground font-medium w-full md:w-auto">
           <div className="flex items-center gap-2">
             <span>Mostrar</span>
             <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
@@ -734,7 +734,7 @@ export function FinanceTableView({
             <span>por página</span>
           </div>
           <div className="h-4 w-px bg-border/40 hidden sm:block" />
-          <p className="bg-primary/5 px-3 py-1 rounded-full border border-primary/10">
+          <p className="bg-primary/5 px-4 py-1.5 rounded-full border border-primary/10 text-center sm:text-left">
             Mostrando <span className="text-foreground font-black">{paginatedData.length === 0 ? 0 : (currentPage-1)*pageSize + 1} - {Math.min(currentPage*pageSize, filteredData.length)}</span> de <span className="text-primary font-black">{filteredData.length}</span> registros totales
           </p>
         </div>
@@ -742,7 +742,7 @@ export function FinanceTableView({
         <div className="flex items-center gap-2">
           <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsLeft className="size-4" /></button>
           <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronLeft className="size-4" /></button>
-          <div className="flex items-center px-4 h-9 rounded-lg border bg-muted/30 font-black text-xs">
+          <div className="flex items-center px-4 h-9 rounded-lg border bg-muted/30 font-black text-xs min-w-[100px] justify-center shadow-inner">
             Pág. {currentPage} / {Math.max(1, totalPages)}
           </div>
           <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronRight className="size-4" /></button>

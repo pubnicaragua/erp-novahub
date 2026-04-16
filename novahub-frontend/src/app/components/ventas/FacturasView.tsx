@@ -56,7 +56,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
-  const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -131,11 +130,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       setLocalDoc(null);
     }
   }, [editingId, invoiceDraft]);
-
-  const filtered = data.filter(f =>
-    f.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (f.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const handleUpdate = async (id: string | number, updates: Partial<Invoice>) => {
     try {
@@ -454,7 +448,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Número</p>
                   <Input value={localDoc?.number || ''} onChange={(e) => setLocalDoc({ ...localDoc, number: e.target.value })} className="h-8 text-xs font-black uppercase" />
@@ -526,9 +520,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>
               <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Subtotal</span>
-                  <div className="flex items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="number" min="0" value={Number(localDoc?.subtotal || 0)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div></div>
-                <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Descuento</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2 text-sm">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <div className="flex items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="number" min="0" value={Number(localDoc?.subtotal || 0)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2 text-sm">
+                  <span className="text-muted-foreground">Descuento</span>
                   <div className="flex items-center gap-2 text-rose-500">
                     <div className="flex items-center mr-2"><Input type="number" min="0" max="100" value={localRates.dRate || ''} placeholder="0" onChange={(e) => {
                       const newRate = Number(e.target.value); setLocalRates(p => ({ ...p, dRate: newRate }));
@@ -536,8 +533,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       setLocalDoc({ ...localDoc, ...calc });
                     }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> <span className="ml-1 text-xs font-black">%</span></div>
                     -{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.discountAmount || 0).toLocaleString()}
-                  </div></div>
-                <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">IVA</span>
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2 text-sm">
+                  <span className="text-muted-foreground">IVA</span>
                   <div className="flex items-center gap-2">
                     <div className="flex items-center mr-2"><Input type="number" min="0" max="100" value={localRates.tRate || ''} placeholder="0" onChange={(e) => {
                       const newRate = Number(e.target.value); setLocalRates(p => ({ ...p, tRate: newRate }));
@@ -545,7 +544,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       setLocalDoc({ ...localDoc, ...calc });
                     }} className="w-16 h-8 text-right font-bold bg-transparent" /> <span className="ml-1 text-xs font-black">%</span></div>
                     {localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.taxAmount || 0).toLocaleString()}
-                  </div></div>
+                  </div>
+                </div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black">Total</span>
                   <div className="flex flex-col items-end">
@@ -574,7 +574,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               </div>
             </div>
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+              <div className="hidden md:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                 <div className="col-span-5">Descripción</div>
                 <div className="col-span-2 text-right">Cant.</div>
                 <div className="col-span-2 text-right">Precio U.</div>
@@ -582,8 +582,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 <div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-5">
+                <div key={item.id || idx} className="flex flex-col md:grid md:grid-cols-12 gap-4 md:gap-2 items-start md:items-center p-4 md:p-0 border md:border-none rounded-2xl md:rounded-none bg-muted/5 md:bg-transparent relative group">
+                  <div className="w-full md:col-span-5 space-y-1">
+                    <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Producto / Servicio</label>
                     <Combobox
                       options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))}
                       value={item.productId || ''}
@@ -605,7 +606,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       placeholder="Seleccionar Producto..."
                     />
                     {item.productId && (
-                      <div className="mt-1 flex items-center gap-2 px-1">
+                      <div className="mt-1 flex flex-wrap items-center gap-2 px-1">
                         {(() => {
                           const p = products.find(x => x.id === item.productId);
                           if (!p) return null;
@@ -627,7 +628,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       </div>
                     )}
                     {item.productId && isSerialTracked(products.find(x => x.id === item.productId)) && (
-                      <div className="mt-2 space-y-2 rounded-md border border-border/50 p-2 bg-muted/10">
+                      <div className="mt-2 space-y-2 rounded-md border border-border/50 p-2 bg-muted/10 w-full">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                           <div>
                             <p className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Almacén origen</p>
@@ -675,49 +676,62 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       </div>
                     )}
                   </div>
-                  <div className="col-span-2">
-                    <Input type="number" min="0" max={Number(products.find(x => x.id === item.productId)?.stock || 1000000)} value={Number(item.quantity) || ''} placeholder="0"
-                      onChange={(e) => {
-                        let newQty = Number(e.target.value);
-                        const p = products.find(x => x.id === item.productId);
-                        if (p && newQty > Number(p.stock || 0)) {
-                          toast.warning(`Stock insuficiente. Disponible: ${p.stock}`, { id: `stock-warn-${idx}` });
-                          newQty = Number(p.stock || 0);
-                        }
-                        const newItems = [...(localDoc.items || [])];
-                        newItems[idx] = { ...newItems[idx], quantity: newQty, total: newQty * Number(newItems[idx].unitPrice || 0) };
-                        const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
-                        setLocalDoc({ ...localDoc, items: newItems, ...calc });
-                      }} onBlur={() => {
-                        if (!isCreating) {
-                          const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
-                          handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
-                        }
-                      }} className="h-8 text-xs text-right" disabled={item.productId && isSerialTracked(products.find(x => x.id === item.productId))} />
+
+                  <div className="flex gap-4 w-full md:contents">
+                    <div className="flex-1 md:col-span-2 space-y-1">
+                      <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Cant.</label>
+                      <Input type="number" min="0" max={Number(products.find(x => x.id === item.productId)?.stock || 1000000)} value={Number(item.quantity) || ''} placeholder="0"
+                        onChange={(e) => {
+                          let newQty = Number(e.target.value);
+                          const p = products.find(x => x.id === item.productId);
+                          if (p && newQty > Number(p.stock || 0)) {
+                            toast.warning(`Stock insuficiente. Disponible: ${p.stock}`, { id: `stock-warn-${idx}` });
+                            newQty = Number(p.stock || 0);
+                          }
+                          const newItems = [...(localDoc.items || [])];
+                          newItems[idx] = { ...newItems[idx], quantity: newQty, total: newQty * Number(newItems[idx].unitPrice || 0) };
+                          const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
+                          setLocalDoc({ ...localDoc, items: newItems, ...calc });
+                        }} onBlur={() => {
+                          if (!isCreating) {
+                            const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
+                            handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
+                          }
+                        }} className="h-9 md:h-8 text-xs md:text-right font-bold" disabled={item.productId && isSerialTracked(products.find(x => x.id === item.productId))} />
+                    </div>
+                    <div className="flex-1 md:col-span-2 space-y-1">
+                      <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Precio U.</label>
+                      <Input type="number" min="0" value={Number(item.unitPrice) || ''} placeholder="0"
+                        onChange={(e) => {
+                          const newItems = [...(localDoc.items || [])];
+                          newItems[idx] = { ...newItems[idx], unitPrice: Number(e.target.value), total: Number(newItems[idx].quantity || 1) * Number(e.target.value) };
+                          const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
+                          setLocalDoc({ ...localDoc, items: newItems, ...calc });
+                        }} onBlur={() => {
+                          if (!isCreating) {
+                            const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
+                            handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
+                          }
+                        }} className="h-9 md:h-8 text-xs md:text-right font-bold" />
+                    </div>
                   </div>
-                  <div className="col-span-2">
-                    <Input type="number" min="0" value={Number(item.unitPrice) || ''} placeholder="0"
-                      onChange={(e) => {
-                        const newItems = [...(localDoc.items || [])];
-                        newItems[idx] = { ...newItems[idx], unitPrice: Number(e.target.value), total: Number(newItems[idx].quantity || 1) * Number(e.target.value) };
-                        const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
-                        setLocalDoc({ ...localDoc, items: newItems, ...calc });
-                      }} onBlur={() => {
-                        if (!isCreating) {
-                          const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
-                          handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
-                        }
-                      }} className="h-8 text-xs text-right" />
+
+                  <div className="w-full md:col-span-2 flex items-center justify-between md:justify-end gap-2 border-t md:border-none pt-3 md:pt-0 mt-2 md:mt-0">
+                    <div className="md:hidden">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 leading-none mb-1">Total Item</p>
+                       <p className="text-sm font-black text-primary">{localDoc?.currency === 'USD' ? '$' : 'C$'}{Number(item.total || 0).toLocaleString()}</p>
+                    </div>
+                    <span className="hidden md:block text-xs font-black w-24 text-right tabular-nums">
+                      {localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString()}
+                    </span>
                   </div>
-                  <div className="col-span-2 text-right">
-                    <span className="text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString()}</span>
-                  </div>
-                  <div className="col-span-1 flex justify-end">
-                    <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => {
+
+                  <div className="absolute top-2 right-2 md:relative md:top-0 md:right-0 md:col-span-1 flex justify-end">
+                    <Button variant="ghost" size="icon" className="size-8 md:size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-lg md:rounded-md" onClick={() => {
                       const newItems = [...(localDoc.items || [])]; newItems.splice(idx, 1);
                       const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
                       setLocalDoc({ ...localDoc, items: newItems, ...calc });
-                    }}><Trash2 className="size-3" /></Button>
+                    }}><Trash2 className="size-4 md:size-3" /></Button>
                   </div>
                 </div>
               ))}
@@ -769,15 +783,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de recaudos masivos sin fricción.</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input
-                placeholder="Buscar factura..."
-                className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
             {canPerform('SALES_INVOICES', 'create') && (
               <Button onClick={startNewInvoice} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Factura
@@ -787,7 +792,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         </div>
 
         <EditableDataTable
-          data={filtered}
+          data={data}
         columns={columns}
         allowAddRow={false}
         onRowUpdate={async (id, updates) => {

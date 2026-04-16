@@ -75,7 +75,6 @@ const calculateNextInvoiceDate = (frequency: string, startDate: string) => {
 export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [] }: FacturasRecurrentesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -91,10 +90,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     }
   }, [editingId]);
 
-  const filtered = data.filter(r => 
-    (r as any).profileName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (r.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+
 
   const handleUpdate = async (id: string | number, updates: Partial<RecurringInvoice>) => {
     try {
@@ -336,7 +332,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Datos de Factura Recurrente</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
                     options={(customers || [])
@@ -380,9 +376,14 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen por Ciclo</p>
               <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Subtotal</span><span className="font-black">{formatConvertedAmount(Number(localDoc?.subtotal || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
-                <div className="flex justify-between items-center text-base border-t pt-3 border-border/50"><span className="font-black">Total por Ciclo</span>
-                  <span className="text-primary font-black text-lg">{formatConvertedAmount(Number(localDoc?.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="font-black text-right">{formatConvertedAmount(Number(localDoc?.subtotal || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-base border-t pt-3 border-border/50">
+                  <span className="font-black">Total por Ciclo</span>
+                  <span className="text-primary font-black text-lg text-right">{formatConvertedAmount(Number(localDoc?.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -398,33 +399,39 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
               }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border border-primary/20"><Plus className="size-3 mr-2" /> Agregar Item</Button>
             </div>
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+              <div className="hidden md:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                 <div className="col-span-2">Tipo</div><div className="col-span-3">Producto / Servicio</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div><div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-2">
-                    <label className="flex items-center gap-2 text-[10px] font-bold uppercase">
-                      <input
-                        type="checkbox"
-                        checked={(item.itemType || 'PRODUCT').toUpperCase() === 'SERVICE'}
-                        onChange={(e) => {
-                          const ni = [...(localDoc.items || [])];
-                          const itemType = e.target.checked ? 'SERVICE' : 'PRODUCT';
-                          ni[idx] = {
-                            ...ni[idx],
-                            itemType,
-                            productId: itemType === 'PRODUCT' ? ni[idx].productId : '',
-                            serviceName: itemType === 'SERVICE' ? (ni[idx].serviceName || ni[idx].description || '') : '',
-                            description: itemType === 'SERVICE' ? (ni[idx].serviceName || ni[idx].description || '') : ni[idx].description,
-                          };
-                          setLocalDoc({ ...localDoc, items: ni });
-                        }}
-                      />
-                      {(item.itemType || 'PRODUCT').toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'}
-                    </label>
+                <div key={item.id || idx} className="flex flex-col md:grid md:grid-cols-12 gap-4 md:gap-2 items-start md:items-center p-4 md:p-0 border md:border-none rounded-2xl md:rounded-none bg-muted/5 md:bg-transparent relative group">
+                  <div className="w-full md:col-span-2 space-y-1">
+                    <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Tipo</label>
+                    <div className="flex items-center h-9 md:h-8">
+                      <label className="flex items-center gap-2 text-[10px] font-bold uppercase cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="size-3.5 rounded border-muted/50"
+                          checked={(item.itemType || 'PRODUCT').toUpperCase() === 'SERVICE'}
+                          onChange={(e) => {
+                            const ni = [...(localDoc.items || [])];
+                            const itemType = e.target.checked ? 'SERVICE' : 'PRODUCT';
+                            ni[idx] = {
+                              ...ni[idx],
+                              itemType,
+                              productId: itemType === 'PRODUCT' ? ni[idx].productId : '',
+                              serviceName: itemType === 'SERVICE' ? (ni[idx].serviceName || ni[idx].description || '') : '',
+                              description: itemType === 'SERVICE' ? (ni[idx].serviceName || ni[idx].description || '') : ni[idx].description,
+                            };
+                            setLocalDoc({ ...localDoc, items: ni });
+                          }}
+                        />
+                        {(item.itemType || 'PRODUCT').toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'}
+                      </label>
+                    </div>
                   </div>
-                  <div className="col-span-3">
+                  
+                  <div className="w-full md:col-span-3 space-y-1">
+                    <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Producto / Servicio</label>
                     {(item.itemType || 'PRODUCT').toUpperCase() === 'SERVICE' ? (
                       <Input
                         value={item.serviceName || item.description || ''}
@@ -433,7 +440,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                           ni[idx] = { ...ni[idx], serviceName: e.target.value, description: e.target.value, productId: '' };
                           setLocalDoc({ ...localDoc, items: ni });
                         }}
-                        className="h-8 text-xs"
+                        className="h-9 md:h-8 text-xs font-bold"
                         placeholder="Nombre del servicio"
                       />
                     ) : (
@@ -443,15 +450,38 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                           const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }} placeholder="Producto..." />
                     )}
                   </div>
-                  <div className="col-span-2"><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
-                    const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };
-                    const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }} className="h-8 text-xs text-right" /></div>
-                  <div className="col-span-2"><Input type="number" min="0" value={Number(item.unitPrice) || ''} onChange={(e) => {
-                    const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
-                    const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }} className="h-8 text-xs text-right" /></div>
-                  <div className="col-span-2 text-right"><span className="text-xs font-black">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
-                  <div className="col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
-                    onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }}><Trash2 className="size-3" /></Button></div>
+
+                  <div className="flex gap-4 w-full md:contents">
+                    <div className="flex-1 md:col-span-2 space-y-1">
+                      <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Cant.</label>
+                      <Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
+                        const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };
+                        const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }} className="h-9 md:h-8 text-xs md:text-right font-bold" />
+                    </div>
+                    <div className="flex-1 md:col-span-2 space-y-1">
+                      <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Precio U.</label>
+                      <Input type="number" min="0" value={Number(item.unitPrice) || ''} onChange={(e) => {
+                        const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
+                        const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }} className="h-9 md:h-8 text-xs md:text-right font-bold" />
+                    </div>
+                  </div>
+
+                  <div className="w-full md:col-span-2 flex items-center justify-between md:justify-end gap-2 border-t md:border-none pt-3 md:pt-0 mt-2 md:mt-0">
+                    <div className="md:hidden">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 leading-none mb-1">Total Ciclo</p>
+                       <p className="text-sm font-black text-primary">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</p>
+                    </div>
+                    <span className="hidden md:block text-xs font-black w-24 text-right tabular-nums">
+                      {formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}
+                    </span>
+                  </div>
+
+                  <div className="absolute top-2 right-2 md:relative md:top-0 md:right-0 md:col-span-1 flex justify-end">
+                    <Button variant="ghost" size="icon" className="size-8 md:size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-lg md:rounded-md"
+                      onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }}>
+                      <Trash2 className="size-4 md:size-3" />
+                    </Button>
+                  </div>
                 </div>
               ))}
               {(!localDoc.items || localDoc.items.length === 0) && <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">Sin ítems. Haz clic en "Agregar Item".</div>}
@@ -480,15 +510,13 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground">Facturación Recurrente</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de contratos, igualas y servicios por suscripción.</p></div>
           <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input placeholder="Buscar suscripción..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
             {canPerform('SALES_RECURRING', 'create') && (
               <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Agregar Factura Recurrente</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered}
+        <EditableDataTable data={data}
           allowAddRow={false}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch { toast.error('Error al eliminar'); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}

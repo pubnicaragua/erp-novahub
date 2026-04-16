@@ -16,7 +16,6 @@ export interface Module {
 
 // Submódulos de Ventas (alineados con sidebar)
 export const SALES_SUBMODULES: Submodule[] = [
-  { id: 'SALES_DASHBOARD', label: 'Dashboard', description: 'Vista general de ventas' },
   { id: 'SALES_CLIENTS', label: 'Clientes', description: 'Gestión de clientes y CRM' },
   { id: 'SALES_QUOTES', label: 'Estimaciones', description: 'Cotizaciones comerciales' },
   { id: 'SALES_ORDERS', label: 'Órdenes de Venta', description: 'Pedidos por procesar' },
@@ -29,7 +28,6 @@ export const SALES_SUBMODULES: Submodule[] = [
 
 // Submódulos de Compras (alineados con sidebar)
 export const PURCHASES_SUBMODULES: Submodule[] = [
-  { id: 'PURCHASES_DASHBOARD', label: 'Dashboard', description: 'Vista general de compras' },
   { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', description: 'Gestión de proveedores' },
   { id: 'PURCHASES_EXPENSES', label: 'Gastos', description: 'Registro de gastos' },
   { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos Recurrentes', description: 'Gastos periódicos' },
@@ -63,7 +61,7 @@ export const FINANCIAL_SUBMODULES: Submodule[] = [
 
 // Submódulos de Recursos Humanos
 export const HR_SUBMODULES: Submodule[] = [
-  { id: 'HR_DASHBOARD', label: 'Dashboard', description: 'Dashboard y Estadísticas' },
+  { id: 'HR_DASHBOARD', label: 'Dashboard y Estadísticas', description: 'Vista General de RRHH' },
   { id: 'HR_EMPLOYEES', label: 'Empleados', description: 'Gestión de empleados' },
   { id: 'HR_PAYROLL', label: 'Nóminas', description: 'Procesamiento de nómina' },
   { id: 'HR_ATTENDANCE', label: 'Asistencia', description: 'Control de asistencia' },
@@ -102,11 +100,18 @@ export const DOCUMENTS_SUBMODULES: Submodule[] = [
 
 // Submódulos de Configuración
 export const CONFIGURATION_SUBMODULES: Submodule[] = [
-  { id: 'CONFIG_COMPANY', label: 'Empresa', description: 'Datos y branding de la empresa' },
-  { id: 'CONFIG_USERS', label: 'Usuarios', description: 'Gestión de accesos y perfiles' },
+  { id: 'CONFIG_COMPANY', label: 'Empresa', description: 'Datos fiscales y generales' },
+  { id: 'CONFIG_BRANDING', label: 'Marca y Tema', description: 'Colores, logo y personalización' },
+  { id: 'CONFIG_USERS', label: 'Usuarios', description: 'Gestión de accesos de usuarios' },
   { id: 'CONFIG_ROLES', label: 'Roles y Permisos', description: 'Control de acceso granular' },
+  { id: 'CONFIG_SECURITY', label: 'Seguridad', description: '2FA, Auditoría y Sesiones' },
+  { id: 'CONFIG_CURRENCY', label: 'Moneda', description: 'Tipo de cambio y moneda base' },
   { id: 'CONFIG_SUBSCRIPTION', label: 'Suscripción', description: 'Estado y planes de servicio' },
+  { id: 'CONFIG_TENANCY', label: 'Multi-Tenancy', description: 'Configuración de tenencia' },
+  { id: 'CONFIG_PLATFORM', label: 'Plataforma', description: 'Ajustes globales de sistema' },
+  { id: 'CONFIG_DOMAINS', label: 'Dominios', description: 'Configuración de dominios y URLs' },
 ];
+
 
 // Submódulos de Reportes
 export const REPORTS_SUBMODULES: Submodule[] = [

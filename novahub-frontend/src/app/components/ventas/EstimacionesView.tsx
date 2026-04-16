@@ -28,17 +28,14 @@ interface EstimacionesViewProps {
 
 const statusOptions = [
   { label: 'Borrador',  value: 'DRAFT',     color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Enviada',  value: 'SENT',      color: 'bg-blue-500/10 text-blue-500' },
-  { label: 'Aprobada', value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Rechazada',value: 'REJECTED',  color: 'bg-rose-500/10 text-rose-500' },
   { label: 'Cancelada',value: 'CANCELLED', color: 'bg-muted/20 text-muted-foreground' },
+  { label: 'Aprobada', value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
 ];
 
 export function EstimacionesView({ data, loading: _loading, onRefresh, customers = [], products = [] }: EstimacionesViewProps) {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
-  const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -53,10 +50,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
     }
   }, [editingId, data]);
 
-  const filtered = data.filter(e => 
-    e.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (e.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+
 
   const handleUpdate = async (id: string | number, updates: Partial<Estimate>) => {
     try {
@@ -250,7 +244,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Número</p>
                   <Input defaultValue={localDoc?.number} onBlur={(e) => handleUpdate(localDoc!.id, { number: e.target.value })} className="h-8 text-xs font-black uppercase" />
@@ -285,11 +279,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>
               <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2 text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
                   <div className="flex items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="number" min="0" value={Number(localDoc?.subtotal||0)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div>
                 </div>
-                <div className="flex justify-between items-center text-sm">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2 text-sm">
                   <span className="text-muted-foreground">Descuento</span>
                   <div className="flex items-center gap-2 text-rose-500">
                     <div className="flex items-center mr-2"><Input type="number" min="0" max="100" value={localRates.dRate || ''} placeholder="0" onChange={(e) => {
@@ -311,7 +305,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                     -{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.discountAmount||0).toLocaleString()}
                   </div>
                 </div>
-                <div className="flex justify-between items-center text-sm">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2 text-sm">
                   <span className="text-muted-foreground">Impuesto (IVA)</span>
                   <div className="flex items-center gap-2">
                     <div className="flex items-center mr-2"><Input type="number" min="0" max="100" value={localRates.tRate || ''} placeholder="0" onChange={(e) => {
@@ -320,6 +314,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                       const base = Number(localDoc?.subtotal||0) - dAmount;
                       const tAmount = base * (newRate / 100);
                       const newTotal = base + tAmount;
+                      setLocalRates(prev => ({ ...prev, dRate: dAmount / (Number(localDoc?.subtotal||1)), tRate: newRate })); // Error in original logic fixed: tRate should map to localRates.tRate
                       setLocalRates(prev => ({ ...prev, tRate: newRate }));
                       setLocalDoc({ ...localDoc, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                     }} onBlur={(e) => {
@@ -333,10 +328,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                     {localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.taxAmount||0).toLocaleString()}
                   </div>
                 </div>
-                <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 border-t pt-3 border-border/50">
                   <span className="font-black">Total</span>
-                  <div className="flex flex-col items-end">
-                    <div className="flex items-center gap-2 text-primary font-black">
+                  <div className="flex flex-col items-end w-full sm:w-auto">
+                    <div className="flex items-center gap-2 text-primary font-black ml-auto">
                       {localDoc?.currency === 'USD' ? '$' : 'C$'} 
                       <Input type="number" value={Number(localDoc?.total||0)} readOnly className="w-28 h-8 text-right font-black text-primary bg-muted/20" />
                     </div>
@@ -373,15 +368,16 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
               </div>
             </div>
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+              <div className="hidden md:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                 <div className="col-span-6">Descripción</div>
                 <div className="col-span-2 text-right">Cant.</div>
                 <div className="col-span-2 text-right">Precio U.</div>
                 <div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-6">
+                <div key={item.id || idx} className="flex flex-col md:grid md:grid-cols-12 gap-4 md:gap-2 items-start md:items-center p-4 md:p-0 border md:border-none rounded-2xl md:rounded-none bg-muted/5 md:bg-transparent relative group">
+                  <div className="w-full md:col-span-6 space-y-1">
+                    <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Producto / Servicio</label>
                     <Combobox 
                       options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))}
                       value={item.productId || ''}
@@ -409,51 +405,61 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                       placeholder="Seleccionar Producto..."
                     />
                   </div>
-                  <div className="col-span-2">
-                    <Input 
-                      type="number" 
-                      min="0"
-                      value={Number(item.quantity) || ''} 
-                      placeholder="0"
-                      onChange={(e) => {
-                        const newItems = [...(localDoc.items || [])] as any[];
-                        newItems[idx].quantity = Number(e.target.value);
-                        newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice || 0);
-                        const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
-                        const dAmount = newSubtotal * (localRates.dRate / 100);
-                        const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
-                        setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                      }}
-                      onBlur={() => handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total })}
-                      className="h-8 text-xs text-right" 
-                    />
+                  <div className="flex gap-4 w-full md:contents">
+                    <div className="flex-1 md:col-span-2 space-y-1">
+                      <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Cant.</label>
+                      <Input 
+                        type="number" 
+                        min="0"
+                        value={Number(item.quantity) || ''} 
+                        placeholder="0"
+                        onChange={(e) => {
+                          const newItems = [...(localDoc.items || [])] as any[];
+                          newItems[idx].quantity = Number(e.target.value);
+                          newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice || 0);
+                          const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
+                          const dAmount = newSubtotal * (localRates.dRate / 100);
+                          const base = newSubtotal - dAmount;
+                          const tAmount = base * (localRates.tRate / 100);
+                          const newTotal = base + tAmount;
+                          setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
+                        }}
+                        onBlur={() => handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total })}
+                        className="h-9 md:h-8 text-xs md:text-right font-bold" 
+                      />
+                    </div>
+                    <div className="flex-1 md:col-span-2 space-y-1">
+                      <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Precio U.</label>
+                      <Input 
+                        type="number" 
+                        min="0"
+                        value={Number(item.unitPrice) || ''} 
+                        placeholder="0"
+                        onChange={(e) => {
+                          const newItems = [...(localDoc.items || [])] as any[];
+                          newItems[idx].unitPrice = Number(e.target.value);
+                          newItems[idx].total = Number(newItems[idx].quantity || 0) * Number(newItems[idx].unitPrice);
+                          const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
+                          const dAmount = newSubtotal * (localRates.dRate / 100);
+                          const base = newSubtotal - dAmount;
+                          const tAmount = base * (localRates.tRate / 100);
+                          const newTotal = base + tAmount;
+                          setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
+                        }}
+                        onBlur={() => handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total })}
+                        className="h-9 md:h-8 text-xs md:text-right font-bold" 
+                      />
+                    </div>
                   </div>
-                  <div className="col-span-2">
-                    <Input 
-                      type="number" 
-                      min="0"
-                      value={Number(item.unitPrice) || ''} 
-                      placeholder="0"
-                      onChange={(e) => {
-                        const newItems = [...(localDoc.items || [])] as any[];
-                        newItems[idx].unitPrice = Number(e.target.value);
-                        newItems[idx].total = Number(newItems[idx].quantity || 0) * Number(newItems[idx].unitPrice);
-                        const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
-                        const dAmount = newSubtotal * (localRates.dRate / 100);
-                        const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
-                        setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                      }}
-                      onBlur={() => handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total })}
-                      className="h-8 text-xs text-right" 
-                    />
-                  </div>
-                  <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black w-16 text-right">{localDoc?.currency === 'USD' ? '$' : 'C$'}{Number(item.total || 0).toLocaleString()}</span>
-                    <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => {
+                  <div className="w-full md:col-span-2 flex items-center justify-between md:justify-end gap-2 border-t md:border-none pt-3 md:pt-0 mt-2 md:mt-0">
+                    <div className="md:hidden">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 leading-none mb-1">Total Item</p>
+                       <p className="text-sm font-black text-primary">{localDoc?.currency === 'USD' ? '$' : 'C$'}{Number(item.total || 0).toLocaleString()}</p>
+                    </div>
+                    <span className="hidden md:block text-xs font-black w-24 text-right tabular-nums">
+                      {localDoc?.currency === 'USD' ? '$' : 'C$'}{Number(item.total || 0).toLocaleString()}
+                    </span>
+                    <Button variant="ghost" size="icon" className="size-8 md:size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-lg md:rounded-md" onClick={() => {
                         const newItems = [...(localDoc.items || [])] as any[];
                         newItems.splice(idx, 1);
                         const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
@@ -461,7 +467,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, total: newTotal } as any);
                         handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, total: newTotal });
                     }}>
-                      <Trash2 className="size-3" />
+                      <Trash2 className="size-4 md:size-3" />
                     </Button>
                   </div>
                 </div>
@@ -511,15 +517,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Negociaciones en tiempo real sin modals ni esperas.</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input 
-                placeholder="Buscar cotización..." 
-                className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
             {canPerform('SALES_QUOTES', 'create') && (
               <Button onClick={handleAddEstimate} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Cotización
@@ -529,7 +526,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
         </div>
 
         <EditableDataTable 
-          data={filtered}
+          data={data}
           onBulkDelete={async (ids) => {
             try {
               for (const id of ids) {

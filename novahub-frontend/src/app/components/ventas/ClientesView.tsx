@@ -25,20 +25,10 @@ interface ClientesViewProps {
 export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
   const { formatConvertedAmount } = useCurrency();
   const { canPerform } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
-  const filtered = data.filter(c => {
-    const search = searchTerm.toLowerCase();
-    return (
-      c.name.toLowerCase().includes(search) || 
-      (c.email || '').toLowerCase().includes(search) ||
-      (c.code || '').toLowerCase().includes(search) ||
-      (c.phone || '').toLowerCase().includes(search)
-    );
-  });
 
   const handleUpdate = async (id: string | number, updates: Partial<Customer>) => {
     try {
@@ -215,15 +205,6 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión integral Excel-like sin interrupciones.</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input 
-                placeholder="Buscar cliente..." 
-                className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
             {canPerform('SALES_CLIENTS', 'create') && (
               <Button 
                 onClick={handleAddClient}
@@ -236,7 +217,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
         </div>
 
         <EditableDataTable 
-          data={filtered}
+          data={data}
           onBulkDelete={async (ids) => {
             try {
               for (const id of ids) {

@@ -365,13 +365,12 @@ export function SuscripcionesPage() {
     }
     
     try {
-      const res = await subscriptionsService.createRequest({
+      await subscriptionsService.toggleModuleStatus({
         clientTenantId: tenantId,
-        requestedModule: moduleName,
-        customPrice: 0,
+        module: moduleName,
+        isActive: true,
         notes: 'Activación directa por Super Admin'
       });
-      await subscriptionsService.updateRequestStatus(res.id, { status: 'APPROVED' });
       toast.success(`Módulo activado exitosamente`);
       fetchData();
       refreshEnabledModules();
@@ -380,6 +379,7 @@ export function SuscripcionesPage() {
       toast.error(error.response?.data?.message || 'Error al activar módulo');
       fetchData();
     }
+
   };
 
   const handleDirectDisable = async (tenantId: string, moduleName: string) => {
@@ -415,16 +415,14 @@ export function SuscripcionesPage() {
     try {
       toast.loading(currentlyAllActive ? 'Desactivando catálogo...' : 'Activando catálogo...', { id: 'batch-toggle' });
       for (const sub of submodules) {
-        if (currentlyAllActive) {
-          await subscriptionsService.toggleModuleStatus({ clientTenantId: tenantId, module: sub.id, isActive: false, notes: 'Desactivación masiva' });
-        } else {
-          const isAlreadyActive = tenants.find((t: any) => t.id === tenantId)?.subscriptions?.some((s: any) => s.module === sub.id && s.isActive);
-          if (!isAlreadyActive) {
-             const res = await subscriptionsService.createRequest({ clientTenantId: tenantId, requestedModule: sub.id, customPrice: 0, notes: 'Activación masiva por admin' });
-             await subscriptionsService.updateRequestStatus(res.id, { status: 'APPROVED' });
-          }
-        }
+        await subscriptionsService.toggleModuleStatus({ 
+          clientTenantId: tenantId, 
+          module: sub.id, 
+          isActive: !currentlyAllActive, 
+          notes: currentlyAllActive ? 'Desactivación masiva' : 'Activación masiva por admin' 
+        });
       }
+
       toast.success(currentlyAllActive ? 'Catálogo desactivado exitosamente' : 'Catálogo activado exitosamente', { id: 'batch-toggle' });
       fetchData();
       refreshEnabledModules();

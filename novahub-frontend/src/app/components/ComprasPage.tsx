@@ -79,7 +79,11 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
     return map[s] || s;
   };
 
-  const [activeSection, setActiveSection] = useState(normalize(activeSubModule));
+  const [activeSection, setActiveSection] = useState(() => {
+    const normalized = normalize(activeSubModule);
+    const exists = COMPRAS_SECTIONS.some(s => s.id === normalized);
+    return exists ? normalized : 'proveedores';
+  });
   const [draftInvoiceFromOrder, setDraftInvoiceFromOrder] = useState<any>(null);
   const [draftPaymentFromInvoice, setDraftPaymentFromInvoice] = useState<any>(null);
   const [loading, setLoading] = useState(true);

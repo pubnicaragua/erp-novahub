@@ -71,6 +71,7 @@ export const salesReturnsService = {
   create: (data: Partial<SalesReturn>) => api.post<SalesReturn>('/sales/returns', data),
   update: (id: string, data: Partial<SalesReturn>) => api.patch<SalesReturn>(`/sales/returns/${id}`, data),
   approve: (id: string) => api.patch<SalesReturn>(`/sales/returns/${id}/approve`, {}),
+  reject: (id: string) => api.patch<SalesReturn>(`/sales/returns/${id}/reject`, {}),
   delete: (id: string) => api.delete<void>(`/sales/returns/${id}`),
 };
 
@@ -81,5 +82,6 @@ export const creditNotesService = {
   create: (data: Partial<CreditNote>) => api.post<CreditNote>('/sales/credit-notes', data),
   update: (id: string, data: Partial<CreditNote>) => api.patch<CreditNote>(`/sales/credit-notes/${id}`, data),
   issue: (id: string) => api.patch<CreditNote>(`/sales/credit-notes/${id}/issue`, {}),
+  apply: (id: string) => api.patch<CreditNote>(`/sales/credit-notes/${id}/apply`, {}),
   delete: (id: string) => api.delete<void>(`/sales/credit-notes/${id}`),
 };

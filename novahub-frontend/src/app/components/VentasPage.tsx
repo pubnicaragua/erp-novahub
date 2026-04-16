@@ -58,7 +58,10 @@ interface VentasPageProps {
 
 export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPageProps) {
   const { user } = useAuth();
-  const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
+  const [activeSection, setActiveSection] = useState(() => {
+    const exists = SALES_SECTIONS.some(s => s.id === activeSubModule);
+    return exists ? activeSubModule : 'clientes';
+  });
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
 
   // Sync section with Sidebar prop

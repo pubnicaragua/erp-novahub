@@ -125,10 +125,16 @@ export const SUBMODULES_FOR_PERMS = [
   // Configuración
   { id: 'CONFIG_COMPANY', label: 'Empresa', parent: 'CONFIGURATION' },
   { id: 'CONFIG_BRANDING', label: 'Marca y Tema', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_USERS', label: 'Usuarios', parent: 'CONFIGURATION' },
   { id: 'CONFIG_ROLES', label: 'Roles y Permisos', parent: 'CONFIGURATION' },
   { id: 'CONFIG_SECURITY', label: 'Seguridad', parent: 'CONFIGURATION' },
   { id: 'CONFIG_CURRENCY', label: 'Moneda', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_SUBSCRIPTION', label: 'Suscripción', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_TENANCY', label: 'Multi-Tenancy', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_PLATFORM', label: 'Plataforma', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_DOMAINS', label: 'Dominios', parent: 'CONFIGURATION' },
 ];
+
 
 // Fusionar para la lista de permisos anidando los submódulos justo debajo de sus padres
 export const ALL_PERM_MODULES = AVAILABLE_MODULES.flatMap(mod => [

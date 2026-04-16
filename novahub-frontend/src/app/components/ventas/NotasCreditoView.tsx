@@ -34,9 +34,10 @@ const statusOptions = [
 export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: NotasCreditoViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [applyLoading, setApplyLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -50,11 +51,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
     }
   }, [editingId]);
 
-  const filtered = data.filter(cn => 
-    cn.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (cn.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cn.reason.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+
 
   const recalcTotal = (items: any[]) => items.reduce((acc: number, it: any) => acc + Number(it.total || 0), 0);
 
@@ -109,6 +106,10 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
       toast.success('Nota de crédito emitida — Balance del cliente actualizado');
       setEditingId(null); onRefresh();
     } catch { toast.error('Error al emitir nota de crédito'); }
+  };
+
+  const handleApply = async (id: string) => {
+    setPendingApplyId(id);
   };
 
   const handleExportPDF = async (row: CreditNote) => {
@@ -184,6 +185,10 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
                   onClick={async () => { await creditNotesService.delete(localDoc.id); setEditingId(null); onRefresh(); }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
                 {canIssue && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => handleIssue(localDoc.id)}><Send className="size-3 mr-2" /> Emitir NC</Button>}
+                {!isCreating && (localDoc?.status || '').toUpperCase() === 'ISSUED' && (
+                  <Button variant="outline" className="rounded-xl border-blue-500/50 text-blue-500 hover:bg-blue-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                    onClick={() => handleApply(localDoc.id)}><CheckCircle2 className="size-3 mr-2" /> Crédito pagado por el cliente</Button>
+                )}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   {isCreating ? 'Crear Nota' : 'Guardar'}
                 </Button>
@@ -196,7 +201,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información de la Nota</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
                     options={(customers || [])
@@ -221,9 +226,9 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen</p>
-              <div className="flex justify-between items-center text-base border-b pb-3 border-border/50">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 border-b pb-3 border-border/50">
                 <span className="font-black">Total Nota de Crédito</span>
-                <span className="text-rose-500 font-black text-lg">{formatConvertedAmount(Number(localDoc?.total||0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
+                <span className="text-rose-500 font-black text-lg text-right">{formatConvertedAmount(Number(localDoc?.total||0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
               </div>
               <p className="text-[10px] text-muted-foreground italic">Al emitir esta nota, el balance del cliente se reducirá por el monto total.</p>
             </CardContent>
@@ -240,24 +245,45 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
               }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar Item</Button>
             </div>
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+              <div className="hidden md:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                 <div className="col-span-6">Descripción</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-6"><Input value={item.description || ''} onChange={(e) => {
-                    const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], description: e.target.value };
-                    setLocalDoc({ ...localDoc, items: ni }); }} className="h-8 text-xs" placeholder="Descripción del concepto..." /></div>
-                  <div className="col-span-2"><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
-                    const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };
-                    setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-8 text-xs text-right" /></div>
-                  <div className="col-span-2"><Input type="number" min="0" value={Number(item.unitPrice) || ''} onChange={(e) => {
-                    const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
-                    setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-8 text-xs text-right" /></div>
-                  <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black text-rose-500">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
-                    <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
-                      onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }}><Trash2 className="size-3" /></Button>
+                <div key={item.id || idx} className="flex flex-col md:grid md:grid-cols-12 gap-4 md:gap-2 items-start md:items-center p-4 md:p-0 border md:border-none rounded-2xl md:rounded-none bg-muted/5 md:bg-transparent relative group">
+                  <div className="w-full md:col-span-6 space-y-1">
+                    <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Descripción</label>
+                    <Input value={item.description || ''} onChange={(e) => {
+                      const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], description: e.target.value };
+                      setLocalDoc({ ...localDoc, items: ni }); }} className="h-9 md:h-8 text-xs font-bold" placeholder="Descripción del concepto..." />
+                  </div>
+                  
+                  <div className="flex gap-4 w-full md:contents">
+                    <div className="flex-1 md:col-span-2 space-y-1">
+                      <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Cant.</label>
+                      <Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
+                        const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };
+                        setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-9 md:h-8 text-xs md:text-right font-bold" />
+                    </div>
+                    <div className="flex-1 md:col-span-2 space-y-1">
+                      <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Precio U.</label>
+                      <Input type="number" min="0" value={Number(item.unitPrice) || ''} onChange={(e) => {
+                        const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
+                        setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-9 md:h-8 text-xs md:text-right font-bold" />
+                    </div>
+                  </div>
+
+                  <div className="w-full md:col-span-2 flex items-center justify-between md:justify-end gap-2 border-t md:border-none pt-3 md:pt-0 mt-2 md:mt-0">
+                    <div className="md:hidden">
+                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 leading-none mb-1">Total</p>
+                       <p className="text-sm font-black text-rose-500">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</p>
+                    </div>
+                    <span className="hidden md:block text-xs font-black text-rose-500 w-24 text-right tabular-nums">
+                      {formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}
+                    </span>
+                    <Button variant="ghost" size="icon" className="size-8 md:size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-lg md:rounded-md"
+                      onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }}>
+                      <Trash2 className="size-4 md:size-3" />
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -285,15 +311,13 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground">Notas de Crédito</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Registros de crédito emitidos a clientes.</p></div>
           <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input placeholder="Buscar nota..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
             {canPerform('SALES_CREDIT_NOTES', 'create') && (
               <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva NC</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered}
+        <EditableDataTable data={data}
           allowAddRow={false}
           onBulkDelete={async (ids) => { try { for (const id of ids) { await creditNotesService.delete(id as string); } toast.success('Eliminadas'); onRefresh(); } catch { toast.error('Error'); } }}
           columns={columns} onRowUpdate={async () => {}} isLoading={loading}
@@ -301,6 +325,9 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
             <div className="flex items-center gap-1">
                {canPerform('SALES_CREDIT_NOTES', 'edit') && (row.status||'').toUpperCase() === 'DRAFT' && (
                  <Button title="Emitir" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleIssue(row.id)}><Send className="size-4" /></Button>
+               )}
+               {canPerform('SALES_CREDIT_NOTES', 'edit') && (row.status||'').toUpperCase() === 'ISSUED' && (
+                 <Button title="Liquidar Crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors" onClick={() => handleApply(row.id)}><CheckCircle2 className="size-4" /></Button>
                )}
                <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
                <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
@@ -332,6 +359,31 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           } finally {
             setDeleteLoading(false);
             setPendingDeleteId(null);
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingApplyId !== null}
+        onOpenChange={(open) => { if (!open) setPendingApplyId(null); }}
+        title={"¿Liquidar crédito del cliente?"}
+        description="¿Confirmas que el cliente ha pagado este crédito? Esto registrará un ingreso en finanzas y cancelará el crédito vivo."
+        confirmLabel="Confirmar Pago"
+        variant="default"
+        loading={applyLoading}
+        onConfirm={async () => {
+          if (!pendingApplyId) return;
+          try {
+            setApplyLoading(true);
+            await creditNotesService.apply(pendingApplyId);
+            toast.success('Crédito liquidado (Pagado por el cliente)');
+            setEditingId(null); 
+            onRefresh();
+          } catch (error: any) {
+            toast.error(error?.message || 'Error al liquidar crédito');
+          } finally {
+            setApplyLoading(false);
+            setPendingApplyId(null);
           }
         }}
       />

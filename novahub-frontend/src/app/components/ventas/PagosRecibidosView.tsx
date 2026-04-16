@@ -35,17 +35,11 @@ const methodOptions = [
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [] }: PagosRecibidosViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [localDoc, setLocalDoc] = useState<any>(null);
 
-  const filtered = data.filter(p =>
-    p.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.invoice?.number || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const handleUpdate = async (id: string | number, updates: Partial<PaymentReceived>) => {
     try {
@@ -190,7 +184,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Pago</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
                     options={(customers || [])
@@ -216,7 +210,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                     {methodOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select></div>
 
-                <div><p className="text-[10px] text-muted-foreground mb-1">Referencia Bancaria</p>
+                <div className="sm:col-span-2"><p className="text-[10px] text-muted-foreground mb-1">Referencia Bancaria</p>
                   <Input value={localDoc.reference} onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} className="h-8 text-xs" placeholder="Nº transferencia, cheque..." /></div>
               </div>
             </CardContent>
@@ -267,15 +261,13 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground">Pagos Recibidos</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Historial de cobranza y conciliación de ingresos.</p></div>
           <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input placeholder="Buscar pago..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
             {canPerform('SALES_PAYMENTS', 'create') && (
               <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Registrar Pago</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered}
+        <EditableDataTable data={data}
           allowAddRow={false}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch { toast.error('Error al eliminar'); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}

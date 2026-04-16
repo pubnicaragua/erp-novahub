@@ -659,25 +659,29 @@ export const generateCustomerStatementPDF = async ({
   let titleY = 25;
   if (tenantLogo) {
      try {
-       doc.addImage(tenantLogo, 'PNG', 14, 15, 30, 15);
+       // Intento de cargar el logo (asumiendo formato compatible o detectado)
+       doc.addImage(tenantLogo, 'JPEG', 14, 15, 30, 15);
        titleY = 38;
-     } catch (e) { doc.setFontSize(22); }
+     } catch (e) { 
+       console.error("PDF Logo load error:", e);
+       doc.setFontSize(22); 
+     }
   } else { doc.setFontSize(22); }
 
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nova Hub', 14, titleY);
+  doc.text((tenantName || 'Nova Hub').toUpperCase(), 14, titleY);
 
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
   doc.setFont('helvetica', 'normal');
-  doc.text('Estado de Cuenta Mensual / Histórico', 14, titleY + 7);
+  doc.text('Registro Histórico de Transacciones', 14, titleY + 7);
 
   // 2. Título General
   doc.setFontSize(18);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text('ESTADO DE CUENTA', 196, 25, { align: 'right' });
+  doc.text('HISTORIAL DE CLIENTE', 196, 25, { align: 'right' });
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
