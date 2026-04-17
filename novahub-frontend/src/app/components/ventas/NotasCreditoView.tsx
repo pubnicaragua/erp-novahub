@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  FileMinus, Plus, Search, TrendingUp, Clock, CheckCircle2, Eye, Trash2, ChevronLeft, Send, FileDown
+  FileMinus, Plus, Search, TrendingUp, TrendingDown, Clock, CheckCircle2, Eye, Trash2, ChevronLeft, Send, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -29,6 +29,7 @@ const statusOptions = [
   { label: 'Borrador', value: 'DRAFT',   color: 'bg-muted/20 text-muted-foreground' },
   { label: 'Emitida',  value: 'ISSUED',  color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Aplicada', value: 'APPLIED', color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Pagada',   value: 'PAID',    color: 'bg-indigo-500/10 text-indigo-500' },
   { label: 'Anulada',  value: 'VOIDED',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
@@ -43,6 +44,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER'>('TRANSFER');
 
   useEffect(() => {
     if (editingId) {
@@ -158,7 +160,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
     .filter(cn => (cn.status||'').toUpperCase() === 'ISSUED')
     .reduce((acc, cn) => acc + convertAmount(cn.total || 0, (cn as any).currency, (cn as any).exchangeRate), 0);
   const liveCreditInDisplayCurrency = data
-    .filter(cn => ['ISSUED','APPLIED'].includes((cn.status||'').toUpperCase()))
+    .filter(cn => (cn.status||'').toUpperCase() === 'ISSUED')
     .reduce((acc, cn) => acc + convertAmount(cn.total || 0, (cn as any).currency, (cn as any).exchangeRate), 0);
 
   const kpis = [
@@ -191,7 +193,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
                   onClick={() => handleIssue(localDoc.id)}><Send className="size-3 mr-2" /> Emitir NC</Button>}
                 {!isCreating && (localDoc?.status || '').toUpperCase() === 'ISSUED' && (
                   <Button variant="outline" className="rounded-xl border-blue-500/50 text-blue-500 hover:bg-blue-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                    onClick={() => handleApply(localDoc.id)}><CheckCircle2 className="size-3 mr-2" /> Crédito pagado por el cliente</Button>
+                    onClick={() => handleApply(localDoc.id)}><CheckCircle2 className="size-3 mr-2" /> Liquidar / Pagar Crédito</Button>
                 )}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   {isCreating ? 'Crear Nota' : 'Guardar'}
@@ -370,17 +372,17 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
       <ConfirmDialog
         open={pendingApplyId !== null}
         onOpenChange={(open) => { if (!open) setPendingApplyId(null); }}
-        title={"¿Liquidar crédito del cliente?"}
-        description="¿Confirmas que el cliente ha pagado este crédito? Esto registrará un ingreso en finanzas y cancelará el crédito vivo."
-        confirmLabel="Confirmar Pago"
+        title={"¿Liquidar saldo a favor?"}
+        description="Selecciona el método de pago para registrar esta liquidación en el historial."
+        confirmLabel="Confirmar Liquidación"
         variant="default"
         loading={applyLoading}
         onConfirm={async () => {
           if (!pendingApplyId) return;
           try {
             setApplyLoading(true);
-            await creditNotesService.apply(pendingApplyId);
-            toast.success('Crédito liquidado (Pagado por el cliente)');
+            await creditNotesService.apply(pendingApplyId, { paymentMethod });
+            toast.success('Crédito liquidado exitosamente');
             setEditingId(null); 
             onRefresh();
           } catch (error: any) {
@@ -390,8 +392,39 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
             setPendingApplyId(null);
           }
         }}
-      />
-    </div>
+      >
+        <div className="grid grid-cols-2 gap-3 mt-4">
+          <button 
+            onClick={() => setPaymentMethod('CASH')}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all duration-300",
+              paymentMethod === 'CASH' 
+                ? "bg-primary/5 border-primary shadow-[0_0_20px_rgba(var(--primary),0.1)] scale-[1.02]" 
+                : "border-border/40 hover:bg-muted text-muted-foreground opacity-60"
+            )}
+          >
+            <div className={cn("p-2 rounded-lg", paymentMethod === 'CASH' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+              <TrendingDown className="size-5" />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest">Efectivo</span>
+          </button>
+          <button 
+            onClick={() => setPaymentMethod('TRANSFER')}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all duration-300",
+              paymentMethod === 'TRANSFER' 
+                ? "bg-primary/5 border-primary shadow-[0_0_20px_rgba(var(--primary),0.1)] scale-[1.02]" 
+                : "border-border/40 hover:bg-muted text-muted-foreground opacity-60"
+            )}
+          >
+            <div className={cn("p-2 rounded-lg", paymentMethod === 'TRANSFER' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+              <TrendingUp className="size-5" />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest">Transferencia</span>
+          </button>
+        </div>
+      </ConfirmDialog>
+      </div>
   );
 }
 

@@ -120,7 +120,21 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const columns: ColumnDef<PaymentReceived>[] = [
     { key: 'number', header: 'ID Pago', width: '120px', render: (val) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val}</span> },
     { key: 'customer', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
-    { key: 'reference', header: 'Referencia / Factura', render: (val, row) => <span className="text-xs font-bold text-primary">{row.invoice?.number || val || 'Anticipo'}</span> },
+    { 
+      key: 'reference', header: 'Referencia / Factura', 
+      render: (val, row) => {
+        const isUUID = val && /NC-[0-9a-f]{8}-[0-9a-f]{4}/i.test(val);
+        const displayVal = row.invoice?.number || (isUUID ? 'Nota de Crédito' : val) || 'Anticipo';
+        return (
+          <div className="flex flex-col">
+            <span className="text-xs font-bold text-rose-500">{displayVal}</span>
+            {row.notes && row.notes.includes('Nota de Crédito') && (
+              <span className="text-[9px] text-muted-foreground/60 italic truncate max-w-[150px]">{row.notes}</span>
+            )}
+          </div>
+        );
+      } 
+    },
     { key: 'date', header: 'Fecha', render: (val) => {
       if (!val) return <span className="text-xs text-muted-foreground">N/A</span>;
       const clean = String(val).includes('T') ? String(val).split('T')[0] : String(val);

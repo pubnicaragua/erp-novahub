@@ -63,6 +63,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
   const [isCreating, setIsCreating] = useState(false);
   const [auditInvoiceId, setAuditInvoiceId] = useState<string | null>(null);
+  const [pendingPaidInvoice, setPendingPaidInvoice] = useState<Invoice | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER'>('TRANSFER');
+  const [statusLoading, setStatusLoading] = useState(false);
 
   const isSerialTracked = (product: any) =>
     Boolean(
@@ -144,29 +147,21 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   const handleStatusChange = async (newStatus: string, invoiceId?: string, currentInvoiceData?: Invoice) => {
     const targetId = invoiceId || localDoc?.id;
-    const targetDoc = currentInvoiceData || localDoc;
+    const targetDoc = currentInvoiceData || data.find(i => i.id === targetId) || localDoc;
     if (!targetId || !targetDoc) return;
 
     const upperStatus = newStatus.toUpperCase();
     const statusLabel = statusOptions.find(o => o.value === upperStatus)?.label || newStatus;
 
+    // Si el nuevo estado es PAGADA, abrimos el diálogo de método de pago
+    if (upperStatus === 'PAID') {
+      setPendingPaidInvoice(targetDoc);
+      return;
+    }
+
     try {
-      if (upperStatus === 'PAID') {
-        // PAID: crear pago → el servidor cambia el estado automáticamente
-        await paymentsService.create({ 
-          customerId: targetDoc.customerId, 
-          invoiceId: targetId, 
-          date: new Date().toISOString(), 
-          amount: Number(targetDoc.total), 
-          currency: targetDoc.currency, 
-          exchangeRate: targetDoc.exchangeRate || globalRate, 
-          method: 'TRANSFER', 
-          notes: `Cobro automático (Factura ${targetDoc.number})` 
-        } as any);
-      } else {
-        // DRAFT, PENDING, CANCELLED, OVERDUE, REFUNDED: enviar SOLO el campo status
-        await invoicesService.update(targetId.toString(), { status: upperStatus } as any);
-      }
+      // DRAFT, PENDING, CANCELLED, OVERDUE, REFUNDED: enviar SOLO el campo status
+      await invoicesService.update(targetId.toString(), { status: upperStatus } as any);
       
       // Sincronizar UI local
       if (localDoc && localDoc.id === targetId) {
@@ -179,6 +174,32 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       console.error('Error in status transition:', e);
       const msg = e.response?.data?.message || e.message || '';
       toast.error(`Error al cambiar a ${statusLabel}: ${Array.isArray(msg) ? msg[0] : msg}`);
+    }
+  };
+
+  const processPaidStatus = async () => {
+    if (!pendingPaidInvoice) return;
+    try {
+      setStatusLoading(true);
+      await paymentsService.create({ 
+        customerId: pendingPaidInvoice.customerId, 
+        invoiceId: pendingPaidInvoice.id, 
+        date: new Date().toISOString(), 
+        amount: Number(pendingPaidInvoice.total), 
+        currency: pendingPaidInvoice.currency, 
+        exchangeRate: pendingPaidInvoice.exchangeRate || globalRate, 
+        method: paymentMethod, 
+        notes: `Cobro automático (${paymentMethod === 'CASH' ? 'Efectivo' : 'Transferencia'}) - Factura ${pendingPaidInvoice.number}` 
+      } as any);
+
+      toast.success(`Factura ${pendingPaidInvoice.number} marcada como pagada`);
+      setPendingPaidInvoice(null);
+      onRefresh();
+    } catch (e: any) {
+      const msg = e.response?.data?.message || e.message || '';
+      toast.error(`Error al procesar pago: ${Array.isArray(msg) ? msg[0] : msg}`);
+    } finally {
+      setStatusLoading(false);
     }
   };
 
@@ -876,7 +897,48 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         entityId={auditInvoiceId || ''}
         title="Historial de la Factura"
       />
-    </div>
+      <ConfirmDialog
+        open={pendingPaidInvoice !== null}
+        onOpenChange={(open) => { if (!open) setPendingPaidInvoice(null); }}
+        title={"Confirmar Pago de Factura"}
+        description={`Selecciona cómo se recibió el pago de la factura ${pendingPaidInvoice?.number}.`}
+        confirmLabel="Marcar como Pagada"
+        variant="default"
+        loading={statusLoading}
+        onConfirm={processPaidStatus}
+      >
+        <div className="grid grid-cols-2 gap-3 mt-4">
+          <button 
+            onClick={() => setPaymentMethod('CASH')}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all duration-300",
+              paymentMethod === 'CASH' 
+                ? "bg-primary/5 border-primary shadow-[0_0_20px_rgba(var(--primary),0.1)] scale-[1.02]" 
+                : "border-border/40 hover:bg-muted text-muted-foreground opacity-60"
+            )}
+          >
+            <div className={cn("p-2 rounded-lg", paymentMethod === 'CASH' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+              <History className="size-5" />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest">Efectivo</span>
+          </button>
+          <button 
+            onClick={() => setPaymentMethod('TRANSFER')}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all duration-300",
+              paymentMethod === 'TRANSFER' 
+                ? "bg-primary/5 border-primary shadow-[0_0_20px_rgba(var(--primary),0.1)] scale-[1.02]" 
+                : "border-border/40 hover:bg-muted text-muted-foreground opacity-60"
+            )}
+          >
+            <div className={cn("p-2 rounded-lg", paymentMethod === 'TRANSFER' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+              <TrendingUp className="size-5" />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest">Transferencia</span>
+          </button>
+        </div>
+      </ConfirmDialog>
+      </div>
   );
 }
 

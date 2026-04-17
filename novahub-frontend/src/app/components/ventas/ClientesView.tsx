@@ -108,7 +108,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           "text-[13px] font-black tabular-nums",
           (val || 0) > 0 ? "text-rose-500" : "text-emerald-500"
         )}>
-          {formatConvertedAmount(val || 0)}
+          {formatConvertedAmount(val || 0, 'NIO')}
         </span>
       )
     },
@@ -165,8 +165,8 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
     },
     { 
       title: 'Saldo Pendiente', 
-      value: formatConvertedAmount(totalBalance), 
-      subValue: `${formatConvertedAmount(activeBalance)} activos`,
+      value: formatConvertedAmount(totalBalance, 'NIO'), 
+      subValue: `${formatConvertedAmount(activeBalance, 'NIO')} activos`,
       icon: CreditCard, 
       color: 'text-rose-500', 
       bg: 'bg-rose-500/10' 

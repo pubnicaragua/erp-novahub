@@ -287,19 +287,64 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                   <BarChart data={monthlyData} barGap={6}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
                     <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11, fontWeight: 600 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
-                    <Tooltip 
-                      cursor={{ fill: 'rgba(0,0,0,0.04)' }}
-                      contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                      formatter={(value: number, name: string) => [`${currencySymbol}${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, name]}
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 500 }} 
+                      tickFormatter={(v) => fmtShort(v)} 
+                      width={40}
                     />
-                    <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 700 }} />
-                    <Bar dataKey="ingresos" name="Ingresos" fill="#10b981" radius={[6, 6, 0, 0]}>
-                      <LabelList dataKey="ingresos" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 9, fill: '#10b981', fontWeight: 700 }} />
-                    </Bar>
-                    <Bar dataKey="gastos" name="Gastos" fill="#ef4444" radius={[6, 6, 0, 0]}>
-                      <LabelList dataKey="gastos" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 9, fill: '#ef4444', fontWeight: 700 }} />
-                    </Bar>
+                    <Tooltip 
+                      cursor={{ fill: 'rgba(0,0,0,0.02)', radius: 8 }}
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-white/95 backdrop-blur-md border border-border/50 p-4 rounded-2xl shadow-2xl shadow-primary/10 animate-in zoom-in-95 duration-200">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3 border-b pb-2">{label}</p>
+                              <div className="space-y-2">
+                                {payload.map((entry: any, index: number) => (
+                                  <div key={index} className="flex items-center justify-between gap-8">
+                                    <div className="flex items-center gap-2">
+                                      <div className="size-2 rounded-full" style={{ backgroundColor: entry.fill }} />
+                                      <span className="text-xs font-bold text-muted-foreground">{entry.name}:</span>
+                                    </div>
+                                    <span className="text-xs font-black" style={{ color: entry.fill }}>
+                                      {formatConvertedAmount(entry.value, displayCurrency)}
+                                    </span>
+                                  </div>
+                                ))}
+                                <div className="pt-2 mt-2 border-t flex items-center justify-between gap-8">
+                                  <span className="text-xs font-black text-foreground uppercase tracking-tighter">Balance:</span>
+                                  <span className={cn("text-xs font-black", (payload[0].value - payload[1].value) >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                                    {formatConvertedAmount(payload[0].value - payload[1].value, displayCurrency)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Legend 
+                      verticalAlign="top" 
+                      align="right" 
+                      iconType="circle" 
+                      iconSize={8}
+                      wrapperStyle={{ paddingBottom: '20px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px' }} 
+                    />
+                    <Bar dataKey="ingresos" name="Ingresos" fill="url(#ingresosGrad)" radius={[4, 4, 0, 0]} barSize={32} />
+                    <Bar dataKey="gastos" name="Gastos" fill="url(#gastosGrad)" radius={[4, 4, 0, 0]} barSize={32} />
+                    <defs>
+                      <linearGradient id="ingresosGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={1} />
+                        <stop offset="100%" stopColor="#059669" stopOpacity={0.8} />
+                      </linearGradient>
+                      <linearGradient id="gastosGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#ef4444" stopOpacity={1} />
+                        <stop offset="100%" stopColor="#dc2626" stopOpacity={0.8} />
+                      </linearGradient>
+                    </defs>
                   </BarChart>
                 </ResponsiveContainer>
               ) : (

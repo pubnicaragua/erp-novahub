@@ -41,6 +41,9 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingPaidBill, setPendingPaidBill] = useState<SupplierInvoice | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER'>('TRANSFER');
+  const [statusLoading, setStatusLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   
@@ -124,7 +127,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     return total;
   };
 
-  const ensureFinanceExpenseForInvoice = async (invoice: Partial<SupplierInvoice>) => {
+  const ensureFinanceExpenseForInvoice = async (invoice: Partial<SupplierInvoice>, method: 'CASH' | 'TRANSFER' = 'TRANSFER') => {
     const nextStatus = String(invoice.status || '').toUpperCase();
     if (!['PAID', 'PARTIAL'].includes(nextStatus)) return;
     if (!invoice.id || !invoice.supplierId) return;
@@ -152,9 +155,9 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         amount,
         currency: (invoice.currency as any) || displayCurrency,
         exchangeRate: invoice.exchangeRate || globalRate,
-        method: 'TRANSFER',
+        method: method,
         reference: syncReference,
-        notes: `Pago automático por factura ${invoice.number || invoice.id}`,
+        notes: `Pago automático (${method === 'CASH' ? 'Efectivo' : 'Transferencia'}) por factura ${invoice.number || invoice.id}`,
       } as any);
     }
 
@@ -197,32 +200,58 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   const handleUpdate = async (id: string | number, updates: Partial<SupplierInvoice>) => {
     const currentInvoice = data.find((x) => x.id === id);
-    const previousStatus = String(currentInvoice?.status || '').toUpperCase();
-    const statusToApply = (updates.status || currentInvoice?.status || '').toString();
-    if (isPayingStatus(statusToApply) && currentInvoice?.supplierId && !isSupplierActive(currentInvoice.supplierId)) {
-      toast.error('No se puede registrar pago en facturas de proveedores inactivos');
+    if (!currentInvoice) return;
+
+    const statusToApply = (updates.status || currentInvoice.status || '').toString().toUpperCase();
+
+    // Interceptar estado PAGADA
+    if (statusToApply === 'PAID' && currentInvoice.status !== 'PAID') {
+      setPendingPaidBill({ ...currentInvoice, ...updates });
       return;
     }
+
     try {
-      const updatedResponse = await billsService.update(id as string, updates);
-      const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
-      const nextStatus = String(updatedInvoice?.status || updates.status || previousStatus).toUpperCase();
-      if (!isPayingStatus(previousStatus) && isPayingStatus(nextStatus)) {
-        try {
-          await ensureFinanceExpenseForInvoice({
-            ...(currentInvoice || {}),
-            ...(updatedInvoice || {}),
-            id: String(id),
-            status: nextStatus,
-          });
-        } catch (syncError: any) {
-          toast.warning(`Factura actualizada, pero no se pudo sincronizar pago/finanzas: ${syncError?.message || 'Error de sincronización'}`);
-        }
-      }
+      await billsService.update(id as string, updates);
       toast.success('Factura actualizada');
       onRefresh();
     }
     catch { toast.error('Error al actualizar'); }
+  };
+
+  const processPaidStatus = async () => {
+    if (!pendingPaidBill) return;
+    const id = pendingPaidBill.id;
+    if (!id) return;
+
+    try {
+      setStatusLoading(true);
+      if (pendingPaidBill.supplierId && !isSupplierActive(pendingPaidBill.supplierId)) {
+        toast.error('No se puede registrar pago en facturas de proveedores inactivos');
+        return;
+      }
+
+      const updatedResponse = await billsService.update(id, { status: 'PAID' });
+      const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
+      
+      try {
+        await ensureFinanceExpenseForInvoice({
+          ...pendingPaidBill,
+          ...updatedInvoice,
+          id: String(id),
+          status: 'PAID',
+        }, paymentMethod);
+      } catch (syncError: any) {
+        toast.warning(`Factura actualizada, pero no se pudo sincronizar pago/finanzas: ${syncError?.message || 'Error de sincronización'}`);
+      }
+
+      toast.success('Factura marcada como pagada');
+      setPendingPaidBill(null);
+      onRefresh();
+    } catch (e: any) {
+      toast.error('Error al procesar pago: ' + (e.response?.data?.message || 'Error'));
+    } finally {
+      setStatusLoading(false);
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -263,17 +292,22 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           }
         }
 
+        // Si se crea como PAGADA, primero guardamos y luego procesamos el pago (pedirá el método)
         const createdResponse = await billsService.create({
           ...payloadToSave,
           number: payloadToSave.number || generateSupplierInvoiceNumber(),
         });
         const created = (createdResponse as any)?.data || createdResponse;
+        
         if (isPayingStatus(String(created?.status || localDoc.status || ''))) {
-          try {
-            await ensureFinanceExpenseForInvoice(created);
-          } catch (syncError: any) {
-            toast.warning(`Factura creada, pero no se pudo sincronizar pago/finanzas: ${syncError?.message || 'Error de sincronización'}`);
-          }
+          setPendingPaidBill(created);
+          setIsCreating(false);
+          setEditingId(null);
+          setLocalDoc(null);
+        } else {
+          toast.success('Factura creada exitosamente');
+          setEditingId(null);
+          setLocalDoc(null);
         }
         
         if ((localDoc as any)._sourceOrderId) {
@@ -283,31 +317,22 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             console.error('Failed to update source order status', err);
           }
         }
-        
-        toast.success('Factura creada exitosamente');
-        setEditingId(null);
-        setLocalDoc(null);
       } else {
         const existingInvoice = data.find((x) => x.id === editingId);
-        const previousStatus = String(existingInvoice?.status || '').toUpperCase();
-        const updatedResponse = await billsService.update(editingId!, localDoc as any);
-        const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
-        const nextStatus = String(updatedInvoice?.status || localDoc.status || '').toUpperCase();
-        if (!isPayingStatus(previousStatus) && isPayingStatus(nextStatus)) {
-          try {
-            await ensureFinanceExpenseForInvoice({
-              ...(existingInvoice || {}),
-              ...(updatedInvoice || {}),
-              id: editingId!,
-              status: nextStatus,
-            });
-          } catch (syncError: any) {
-            toast.warning(`Factura guardada, pero no se pudo sincronizar pago/finanzas: ${syncError?.message || 'Error de sincronización'}`);
-          }
+        if (!existingInvoice) return;
+
+        const previousStatus = String(existingInvoice.status || '').toUpperCase();
+        const nextStatus = String(localDoc.status || '').toUpperCase();
+
+        if (nextStatus === 'PAID' && previousStatus !== 'PAID') {
+          setPendingPaidBill({ ...existingInvoice, ...localDoc });
+          return;
         }
+
+        await billsService.update(editingId!, localDoc as any);
         toast.success('Factura guardada');
-        setLocalDoc((prev) => prev ? { ...prev } : prev);
-        setEditingId(editingId);
+        setEditingId(null);
+        setLocalDoc(null);
       }
       onRefresh();
     } catch (e: any) {
@@ -717,16 +742,58 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             )}
           />
         </div>
-        <ConfirmDialog
-          open={!!pendingDeleteId}
-          onOpenChange={(open) => !open && setPendingDeleteId(null)}
-          title="Eliminar Factura"
-          description="¿Estás seguro de que deseas eliminar esta factura? Esta acción no se puede deshacer."
-          confirmLabel="Eliminar Factura"
-          onConfirm={handleDeleteConfirm}
-          loading={deleteLoading}
-        />
       </div>
+
+      <ConfirmDialog
+        open={!!pendingPaidBill}
+        onOpenChange={(open) => !open && setPendingPaidBill(null)}
+        title="Confirmar Pago a Proveedor"
+        description={`Selecciona el método utilizado para pagar la factura ${pendingPaidBill?.number}.`}
+        confirmLabel="Confirmar Pago"
+        onConfirm={processPaidStatus}
+        loading={statusLoading}
+      >
+        <div className="grid grid-cols-2 gap-3 mt-4">
+          <button 
+            onClick={() => setPaymentMethod('CASH')}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all duration-300",
+              paymentMethod === 'CASH' 
+                ? "bg-primary/5 border-primary shadow-[0_0_20px_rgba(var(--primary),0.1)] scale-[1.02]" 
+                : "border-border/40 hover:bg-muted text-muted-foreground opacity-60"
+            )}
+          >
+            <div className={cn("p-2 rounded-lg", paymentMethod === 'CASH' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+              <Banknote className="size-5" />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest">Efectivo</span>
+          </button>
+          <button 
+            onClick={() => setPaymentMethod('TRANSFER')}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all duration-300",
+              paymentMethod === 'TRANSFER' 
+                ? "bg-primary/5 border-primary shadow-[0_0_20px_rgba(var(--primary),0.1)] scale-[1.02]" 
+                : "border-border/40 hover:bg-muted text-muted-foreground opacity-60"
+            )}
+          >
+            <div className={cn("p-2 rounded-lg", paymentMethod === 'TRANSFER' ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+              <Clock className="size-5" />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest">Transferencia</span>
+          </button>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={!!pendingDeleteId}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="Eliminar Factura"
+        description="¿Estás seguro de que deseas eliminar esta factura? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar Factura"
+        onConfirm={handleDeleteConfirm}
+        loading={deleteLoading}
+      />
     </div>
   );
 }

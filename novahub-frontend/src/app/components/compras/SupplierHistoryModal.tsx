@@ -31,7 +31,7 @@ interface SupplierHistoryModalProps {
 }
 
 export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierHistoryModalProps) {
-  const { formatConvertedAmount } = useCurrency();
+  const { formatConvertedAmount, displayCurrency, convertAmount } = useCurrency();
   const { user } = useAuth();
   const { themeConfig } = useTheme();
   const [loading, setLoading] = useState(false);
@@ -79,7 +79,11 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
         ...payments.map(x => ({ ...x, type: 'PAYMENT', label: 'Pago Realizado', color: 'text-emerald-500', bg: 'bg-emerald-500/10', icon: CreditCard, total: x.amount }))
       ];
 
-      all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      all.sort((a, b) => {
+        const timeA = new Date(a.createdAt || a.date).getTime();
+        const timeB = new Date(b.createdAt || b.date).getTime();
+        return timeB - timeA;
+      });
       setTransactions(all);
     } catch (error) {
       console.error('Error fetching supplier history:', error);
@@ -155,7 +159,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                     <div>
                       <p className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">Saldo Pendiente</p>
                       <p className="text-2xl font-black text-rose-500 tabular-nums tracking-tighter leading-none">
-                        {formatConvertedAmount(supplier.balance || 0)}
+                        {formatConvertedAmount(supplier.balance || 0, 'NIO')}
                       </p>
                     </div>
                   </div>
@@ -173,8 +177,8 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                       <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter leading-none">
                         {formatConvertedAmount(transactions.reduce((acc, t) => {
                           const isPurchase = ['INVOICE', 'ORDER'].includes(t.type);
-                          return acc + (isPurchase ? Number(t.total || 0) : 0);
-                        }, 0))}
+                          return acc + (isPurchase ? convertAmount(t.total, t.currency, t.exchangeRate) : 0);
+                        }, 0), displayCurrency)}
                       </p>
                     </div>
                   </div>
@@ -253,9 +257,25 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                       <p className="sm:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">Monto</p>
                       <p className={cn(
                         "text-[16px] sm:text-[18px] font-black tabular-nums tracking-tighter", 
-                        it.type === 'PAYMENT' || it.type === 'CREDIT' ? 'text-emerald-500' : 'text-foreground'
+                        (it.type === 'INVOICE' || (it.type === 'PAYMENT' && it.reference?.startsWith('SC-'))) 
+                          ? 'text-rose-500' 
+                          : (it.type === 'PAYMENT' || it.type === 'CREDIT')
+                            ? 'text-emerald-500'
+                            : 'text-muted-foreground/50'
                       )}>
-                        {it.type === 'PAYMENT' || it.type === 'CREDIT' ? '-' : ''}{formatConvertedAmount(it.total, it.currency, it.exchangeRate)}
+                        {/* 
+                          Facturas / Liquidación Crédito: (+)
+                          Pagos / Crédito Emitido: (-)
+                          Órdenes / Recepciones / Recurrentes: (Sin Signo)
+                        */}
+                        {
+                          (it.type === 'INVOICE' || (it.type === 'PAYMENT' && it.reference?.startsWith('SC-'))) 
+                          ? '+' 
+                          : (it.type === 'PAYMENT' || it.type === 'CREDIT')
+                            ? '-'
+                            : ''
+                        }
+                        {formatConvertedAmount(it.total, it.currency, it.exchangeRate)}
                       </p>
                     </div>
                   </div>

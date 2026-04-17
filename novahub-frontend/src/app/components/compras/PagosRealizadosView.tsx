@@ -140,7 +140,21 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   });
 
   const columns: ColumnDef<PaymentMade>[] = [
-    { key: 'reference', header: 'Referencia', width: '130px', editable: canPerform('compras', 'edit') },
+    { 
+      key: 'reference', header: 'Referencia', width: '130px', 
+      render: (val, row) => {
+        const isUUID = val && /SC-[0-9a-f]{8}-[0-9a-f]{4}/i.test(val);
+        const displayVal = isUUID ? 'Crédito Proveedor' : (val || '-');
+        return (
+          <div className="flex flex-col">
+            <span className="text-xs font-bold text-rose-500">{displayVal}</span>
+            {row.notes && row.notes.includes('Crédito') && (
+              <span className="text-[9px] text-muted-foreground/60 italic truncate max-w-[120px]">{row.notes}</span>
+            )}
+          </div>
+        );
+      }
+    },
     { key: 'supplierInvoiceId', header: 'Factura #', width: '120px',
       render: (val) => {
         const invoice = bills.find((bill) => bill.id === val);

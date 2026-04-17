@@ -1079,18 +1079,57 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
             {monthlyData.length === 0 ? (
               <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Sin datos para el rango seleccionado</div>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={monthlyData} barGap={4}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.3} />
-                  <XAxis dataKey="month" tick={{fontSize:11, fill:'#6b7280'}} />
-                  <YAxis tick={{fontSize:11, fill:'#6b7280'}} />
-                  <Tooltip contentStyle={{background:'#ffffff', border:'1px solid #e5e7eb', borderRadius:'8px', fontSize:'12px'}} formatter={(v:any) => `${sym}${Number(v).toLocaleString()}`} />
-                  {(viewType !== 'solo-gastos') && <Bar dataKey="ingresos" fill="#10b981" radius={[4,4,0,0]} name="Ingresos">
-                    <LabelList dataKey="ingresos" position="top" formatter={(v: number) => v > 0 ? `${sym}${v.toLocaleString(undefined,{maximumFractionDigits:0})}` : ''} style={{ fontSize: 10, fill: '#10b981', fontWeight: 700 }} />
-                  </Bar>}
-                  {(viewType !== 'solo-ingresos') && <Bar dataKey="gastos" fill="#ef4444" radius={[4,4,0,0]} name="Gastos">
-                    <LabelList dataKey="gastos" position="top" formatter={(v: number) => v > 0 ? `${sym}${v.toLocaleString(undefined,{maximumFractionDigits:0})}` : ''} style={{ fontSize: 10, fill: '#ef4444', fontWeight: 700 }} />
-                  </Bar>}
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={monthlyData} barGap={6}>
+                  <defs>
+                    <linearGradient id="ingresosGradB" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity={1} />
+                      <stop offset="100%" stopColor="#059669" stopOpacity={0.8} />
+                    </linearGradient>
+                    <linearGradient id="gastosGradB" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#ef4444" stopOpacity={1} />
+                      <stop offset="100%" stopColor="#dc2626" stopOpacity={0.8} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize:11, fill:'#64748b', fontWeight: 600}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fontSize:11, fill:'#64748b'}} tickFormatter={(v) => v >= 1000 ? `${v/1000}k` : v} />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(0,0,0,0.02)', radius: 8 }}
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="bg-white/95 backdrop-blur-md border border-border/50 p-4 rounded-2xl shadow-2xl shadow-primary/10 animate-in zoom-in-95 duration-200">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3 border-b pb-2">{label}</p>
+                            <div className="space-y-2">
+                              {payload.map((entry: any, index: number) => (
+                                <div key={index} className="flex items-center justify-between gap-8">
+                                  <div className="flex items-center gap-2">
+                                    <div className="size-2 rounded-full" style={{ backgroundColor: entry.fill }} />
+                                    <span className="text-xs font-bold text-muted-foreground">{entry.name}:</span>
+                                  </div>
+                                  <span className="text-xs font-black" style={{ color: entry.fill }}>
+                                    {formatConvertedAmount(entry.value, displayCurrency)}
+                                  </span>
+                                </div>
+                              ))}
+                              {payload.length > 1 && (
+                                <div className="pt-2 mt-2 border-t flex items-center justify-between gap-8">
+                                  <span className="text-xs font-black text-foreground uppercase tracking-tighter">Balance:</span>
+                                  <span className={cn("text-xs font-black", (payload[0].value - payload[1].value) >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                                    {formatConvertedAmount(payload[0].value - payload[1].value, displayCurrency)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  {(viewType !== 'solo-gastos') && <Bar dataKey="ingresos" fill="url(#ingresosGradB)" radius={[4,4,0,0]} barSize={32} name="Ingresos" />}
+                  {(viewType !== 'solo-ingresos') && <Bar dataKey="gastos" fill="url(#gastosGradB)" radius={[4,4,0,0]} barSize={32} name="Gastos" />}
                 </BarChart>
               </ResponsiveContainer>
             )}

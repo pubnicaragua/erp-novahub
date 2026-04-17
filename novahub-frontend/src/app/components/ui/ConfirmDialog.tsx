@@ -21,6 +21,7 @@ interface ConfirmDialogProps {
   variant?: 'destructive' | 'warning' | 'default';
   onConfirm: () => void | Promise<void>;
   loading?: boolean;
+  children?: React.ReactNode;
 }
 
 const variantConfig = {
@@ -51,6 +52,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   variant = 'destructive',
   onConfirm,
   loading = false,
+  children,
 }) => {
   const config = variantConfig[variant];
 
@@ -86,6 +88,12 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             </DialogDescription>
           </DialogHeader>
         </div>
+
+        {children && (
+          <div className="px-6 pb-4 -mt-2">
+            {children}
+          </div>
+        )}
 
         <DialogFooter className="px-6 pb-6 pt-2 flex gap-3 sm:gap-3">
           <Button

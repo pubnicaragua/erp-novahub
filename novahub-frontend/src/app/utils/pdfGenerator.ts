@@ -54,7 +54,7 @@ export const hexToRgb = (color?: string): [number, number, number] => {
 };
 
 const statusTranslations: Record<string, string> = {
-  'PAID': 'PAGADO',
+  'PAID': 'PAGADA',
   'PENDING': 'PENDIENTE',
   'CANCELLED': 'CANCELADO',
   'DRAFT': 'BORRADOR',
@@ -72,7 +72,8 @@ const statusTranslations: Record<string, string> = {
   'CLOSED': 'CERRADO',
   'VOID': 'ANULADO',
   'ACTIVE': 'ACTIVO',
-  'INACTIVE': 'INACTIVO'
+  'INACTIVE': 'INACTIVO',
+  'APPLIED': 'PAGADA'
 };
 
 export const translateStatus = (status: string | undefined): string => {
@@ -921,13 +922,23 @@ export const generateCustomerStatementPDF = async ({
   doc.text(formatAmount(customer.creditLimit || 0), 196, 80, { align: 'right' });
 
   // 6. Tabla de Transacciones
-  const tableData = transactions.map((t: any) => [
-    new Date(t.date).toLocaleDateString(),
-    t.label,
-    t.number,
-    translateStatus(t.status),
-    `${['PAYMENT', 'CREDIT_NOTE', 'RETURN'].includes(t.type) ? '-' : ''}${formatAmount(t.total, t.currency, t.exchangeRate)}`
-  ]);
+  const tableData = transactions.map((t: any) => {
+    let sign = '';
+    const isNeutral = ['ESTIMATE', 'ORDER', 'RECURRING'].includes(t.type);
+    
+    if (!isNeutral) {
+      const isPositive = (t.type === 'INVOICE' || (t.type === 'RETURN' && t.status === 'PAID') || (t.type === 'PAYMENT' && t.reference?.startsWith('NC-')));
+      sign = isPositive ? '+' : '-';
+    }
+
+    return [
+      new Date(t.date).toLocaleDateString(),
+      t.label,
+      t.number,
+      translateStatus(t.status),
+      `${sign}${formatAmount(t.total, t.currency, t.exchangeRate)}`
+    ];
+  });
 
   autoTable(doc, {
     startY: 95,
@@ -1114,7 +1125,7 @@ export const generatePlatformDocumentPDF = async ({
 
   if (needsNewPage) {
     doc.addPage();
-    doc.setPage(doc.internal.getNumberOfPages());
+    doc.setPage(doc.getNumberOfPages());
   }
 
   const termsY = needsNewPage ? 30 : finalTableY + 35;
@@ -1130,7 +1141,7 @@ export const generatePlatformDocumentPDF = async ({
   doc.text(isQuote ? 'Esta cotización tiene una validez de 15 días calendario.' : 'Pago inmediato al recibir esta factura para mantener la continuidad de los servicios.', 14, termsY + 6);
 
   // 9. Footer (En todas las páginas)
-  const pageCount = doc.internal.getNumberOfPages();
+  const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     const pageHeight = doc.internal.pageSize.height;
@@ -1226,13 +1237,23 @@ export const generateSupplierStatementPDF = async ({
   }, 0);
   doc.text(formatAmount(totalPurchasesValue), 196, 80, { align: 'right' });
 
-  const tableData = transactions.map((t: any) => [
-    new Date(t.date).toLocaleDateString(),
-    t.label,
-    t.number,
-    translateStatus(t.status),
-    `${['PAYMENT', 'CREDIT'].includes(t.type) ? '-' : ''}${formatAmount(t.total, t.currency, t.exchangeRate)}`
-  ]);
+  const tableData = transactions.map((t: any) => {
+    let sign = '';
+    const isNeutral = ['ORDER', 'RECEPTION', 'RECURRING'].includes(t.type);
+    
+    if (!isNeutral) {
+      const isPositive = (t.type === 'INVOICE' || (t.type === 'PAYMENT' && t.reference?.startsWith('SC-')));
+      sign = isPositive ? '+' : '-';
+    }
+
+    return [
+      new Date(t.date).toLocaleDateString(),
+      t.label,
+      t.number,
+      translateStatus(t.status),
+      `${sign}${formatAmount(t.total, t.currency, t.exchangeRate)}`
+    ];
+  });
 
   autoTable(doc, {
     startY: 95,

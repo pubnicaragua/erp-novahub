@@ -84,12 +84,23 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
         ...recurring.map(x => ({ ...x, type: 'RECURRING', label: 'F. Recurrente', color: 'text-indigo-500', bg: 'bg-indigo-500/10', icon: RefreshCw })),
         ...payments.map(x => ({ ...x, type: 'PAYMENT', label: 'Pago', color: 'text-emerald-500', bg: 'bg-emerald-500/10', icon: CreditCard, total: x.amount })),
         ...returns.map(x => ({ ...x, type: 'RETURN', label: 'Devolución', color: 'text-rose-500', bg: 'bg-rose-500/10', icon: CornerUpLeft })),
-        ...creditNotes.map(x => ({ ...x, type: 'CREDIT_NOTE', label: 'Nota Crédito', color: 'text-orange-500', bg: 'bg-orange-500/10', icon: StickyNote })),
+        ...creditNotes.map(x => ({ 
+          ...x, 
+          type: 'CREDIT_NOTE', 
+          label: 'Nota Crédito', 
+          color: 'text-orange-500', 
+          bg: 'bg-orange-500/10', 
+          icon: StickyNote
+        })),
         ...estimates.map(x => ({ ...x, type: 'ESTIMATE', label: 'Cotización', color: 'text-amber-500', bg: 'bg-amber-500/10', icon: Receipt })),
         ...orders.map(x => ({ ...x, type: 'ORDER', label: 'Orden', color: 'text-violet-500', bg: 'bg-violet-500/10', icon: ShoppingCart }))
       ];
 
-      all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      all.sort((a, b) => {
+        const timeA = new Date(a.createdAt || a.date).getTime();
+        const timeB = new Date(b.createdAt || b.date).getTime();
+        return timeB - timeA;
+      });
       setTransactions(all);
     } catch (error) {
       console.error('Error fetching customer history:', error);
@@ -165,7 +176,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                     <div>
                       <p className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">Saldo Deudor</p>
                       <p className="text-2xl font-black text-rose-500 tabular-nums tracking-tighter leading-none">
-                        {formatConvertedAmount(customer.balance || 0)}
+                        {formatConvertedAmount(customer.balance || 0, 'NIO')}
                       </p>
                     </div>
                   </div>
@@ -181,7 +192,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                     <div>
                       <p className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">Límite de Crédito</p>
                       <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter leading-none">
-                        {formatConvertedAmount(customer.creditLimit || 0)}
+                        {formatConvertedAmount(customer.creditLimit || 0, 'NIO')}
                       </p>
                     </div>
                   </div>
@@ -261,9 +272,25 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                       <p className="sm:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">Monto Total</p>
                       <p className={cn(
                         "text-[16px] sm:text-[18px] font-black tabular-nums tracking-tighter", 
-                        it.type === 'PAYMENT' || it.type === 'CREDIT_NOTE' ? 'text-emerald-500' : 'text-foreground'
+                        (it.type === 'INVOICE' || (it.type === 'RETURN' && it.status === 'PAID') || (it.type === 'PAYMENT' && it.reference?.startsWith('NC-'))) 
+                          ? 'text-rose-500' 
+                          : (it.type === 'PAYMENT' || it.type === 'CREDIT_NOTE' || (it.type === 'RETURN' && it.status === 'PENDING'))
+                            ? 'text-emerald-500'
+                            : 'text-muted-foreground/50'
                       )}>
-                        {it.type === 'PAYMENT' || it.type === 'CREDIT_NOTE' ? '-' : ''}{formatConvertedAmount(it.total, it.currency, it.exchangeRate)}
+                        {/* 
+                          Facturas / Devolución Pagada / Pago NC: (+)
+                          Pagos / NC Emitida / Devolución Pendiente: (-)
+                          Cotizaciones / Órdenes / Recurrentes: (Sin Signo)
+                        */}
+                        {
+                          (it.type === 'INVOICE' || (it.type === 'RETURN' && it.status === 'PAID') || (it.type === 'PAYMENT' && it.reference?.startsWith('NC-'))) 
+                          ? '+' 
+                          : (it.type === 'PAYMENT' || it.type === 'CREDIT_NOTE' || (it.type === 'RETURN' && it.status === 'PENDING'))
+                            ? '-'
+                            : ''
+                        }
+                        {formatConvertedAmount(it.total, it.currency, it.exchangeRate)}
                       </p>
                     </div>
                   </div>

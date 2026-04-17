@@ -64,6 +64,8 @@ export const supplierCreditsService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<SupplierCredit>>('/purchases/credits', filters as any),
   create: (data: Partial<SupplierCredit>) => api.post<SupplierCredit>('/purchases/credits', data),
   update: (id: string, data: Partial<SupplierCredit>) => api.patch<SupplierCredit>(`/purchases/credits/${id}`, data),
+  issue: (id: string) => api.post<SupplierCredit>(`/purchases/credits/${id}/issue`, {}),
+  apply: (id: string, data: any = {}) => api.post<SupplierCredit>(`/purchases/credits/${id}/apply`, data),
   delete: (id: string) => api.delete<void>(`/purchases/credits/${id}`),
 };
 

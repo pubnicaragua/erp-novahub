@@ -83,6 +83,6 @@ export const creditNotesService = {
   create: (data: Partial<CreditNote>) => api.post<CreditNote>('/sales/credit-notes', data),
   update: (id: string, data: Partial<CreditNote>) => api.patch<CreditNote>(`/sales/credit-notes/${id}`, data),
   issue: (id: string) => api.patch<CreditNote>(`/sales/credit-notes/${id}/issue`, {}),
-  apply: (id: string) => api.patch<CreditNote>(`/sales/credit-notes/${id}/apply`, {}),
+  apply: (id: string, data: any = {}) => api.patch<CreditNote>(`/sales/credit-notes/${id}/apply`, data),
   delete: (id: string) => api.delete<void>(`/sales/credit-notes/${id}`),
 };
