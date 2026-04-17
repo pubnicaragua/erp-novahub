@@ -7,13 +7,85 @@ interface PDFGeneratorParams {
   formatAmount: (amount: number, currency: string, rate: number) => string;
   tenantLogo?: string;
   documentType?: 'estimate' | 'order' | 'invoice' | 'recurring' | 'payment' | 'return' | 'credit-note';
+  primaryColor?: string;
 }
 
-export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, tenantLogo, documentType = 'estimate' }: PDFGeneratorParams) => {
+export const hexToRgb = (color?: string): [number, number, number] => {
+  if (!color) return [16, 185, 129];
+  
+  // Handle oklch(...) from theme context
+  if (color.startsWith('oklch')) {
+    const match = color.match(/oklch\(([\d.]+)\s+([\d.]+)\s+([\d.]+)\)/);
+    if (match) {
+      const L = parseFloat(match[1]);
+      const C = parseFloat(match[2]);
+      const h = parseFloat(match[3]);
+      
+      const hRad = h * Math.PI / 180;
+      const a = C * Math.cos(hRad);
+      const b = C * Math.sin(hRad);
+      
+      const l = L + 0.3963377774 * a + 0.2158037573 * b;
+      const m = L - 0.1055613458 * a - 0.0638541728 * b;
+      const s = L - 0.0894841775 * a - 1.2914855480 * b;
+      
+      const l3 = l * l * l, m3 = m * m * m, s3 = s * s * s;
+      
+      let rr = 4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3;
+      let gg = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3;
+      let bb = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3;
+      
+      const delinearize = (c: number) => c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+      
+      return [
+        Math.round(Math.min(255, Math.max(0, delinearize(rr) * 255))),
+        Math.round(Math.min(255, Math.max(0, delinearize(gg) * 255))),
+        Math.round(Math.min(255, Math.max(0, delinearize(bb) * 255)))
+      ];
+    }
+  }
+
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
+  return result ? [
+    parseInt(result[1], 16),
+    parseInt(result[2], 16),
+    parseInt(result[3], 16)
+  ] : [16, 185, 129];
+};
+
+const statusTranslations: Record<string, string> = {
+  'PAID': 'PAGADO',
+  'PENDING': 'PENDIENTE',
+  'CANCELLED': 'CANCELADO',
+  'DRAFT': 'BORRADOR',
+  'PARTIAL': 'PARCIAL',
+  'APPROVED': 'APROBADO',
+  'REJECTED': 'RECHAZADO',
+  'SENT': 'ENVIADO',
+  'OVERDUE': 'VENCIDO',
+  'RECEIVED': 'RECIBIDO',
+  'IN_PROGRESS': 'EN PROGRESO',
+  'SHIPPED': 'ENVIADO',
+  'DELIVERED': 'ENTREGADO',
+  'COMPLETED': 'COMPLETADO',
+  'OPEN': 'ABIERTO',
+  'CLOSED': 'CERRADO',
+  'VOID': 'ANULADO',
+  'ACTIVE': 'ACTIVO',
+  'INACTIVE': 'INACTIVO'
+};
+
+export const translateStatus = (status: string | undefined): string => {
+  if (!status) return 'COMPLETADO';
+  const up = status.toUpperCase();
+  return statusTranslations[up] || up;
+};
+
+export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, tenantLogo, documentType = 'estimate', primaryColor: themePrimary }: PDFGeneratorParams) => {
   const doc = new jsPDF();
   
   // 1. Configuraciones iniciales y estilos base
-  const primaryColor = [16, 185, 129] as [number, number, number]; // Emerald 500 para la identidad corporativa básica
+  const primaryColor = hexToRgb(themePrimary); 
   const textColor = [51, 65, 85] as [number, number, number]; // Slate 700
   
   // 2. Head - Top Left (Logo y Nombre de la Institución/Tenant)
@@ -47,7 +119,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   else if (documentType === 'payment') docTypeStr = 'Comprobante de Pago';
   else if (documentType === 'return') docTypeStr = 'Devolución de Venta';
   else if (documentType === 'credit-note') docTypeStr = 'Nota de Crédito';
-  doc.text(docTypeStr, 14, titleY + 7);
+  doc.text(docTypeStr.toUpperCase(), 14, titleY + 7);
   
   // 3. Head - Top Right (Info de la Cotización)
   doc.setFontSize(18);
@@ -87,12 +159,15 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   const clienteNombre = estimate.customer?.name || 'Cliente sin registrar';
+  const clienteContacto = estimate.customer?.contactName || '';
   const clienteEmail = estimate.customer?.email || '';
   const clienteTelf = estimate.customer?.phone || '';
   
-  doc.text(clienteNombre, 14, 68);
-  if (clienteEmail) doc.text(clienteEmail, 14, 73);
-  if (clienteTelf) doc.text(clienteTelf, 14, 78);
+  let currentInfoY = 68;
+  doc.text(clienteNombre, 14, currentInfoY);
+  if (clienteContacto) { currentInfoY += 5; doc.text(`Contacto: ${clienteContacto}`, 14, currentInfoY); }
+  if (clienteEmail) { currentInfoY += 5; doc.text(`Email: ${clienteEmail}`, 14, currentInfoY); }
+  if (clienteTelf) { currentInfoY += 5; doc.text(`Tel: ${clienteTelf}`, 14, currentInfoY); }
 
   // 6. Configuración de ítems (Tabla)
   const tableData = (estimate.items || []).map((item: any) => [
@@ -195,10 +270,10 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   doc.save(`${estimate.number || 'Cotizacion'}.pdf`);
 };
 
-export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, formatAmount, tenantLogo }: any) => {
+export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, formatAmount, tenantLogo, primaryColor: themePrimary }: any) => {
   const doc = new jsPDF();
   
-  const primaryColor = [16, 185, 129] as [number, number, number];
+  const primaryColor = hexToRgb(themePrimary);
   const textColor = [51, 65, 85] as [number, number, number];
   
   let titleY = 25;
@@ -220,7 +295,7 @@ export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, 
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
   doc.setFont('helvetica', 'normal');
-  doc.text('Historial de Compras (Productos y Servicios)', 14, titleY + 7);
+  doc.text('HISTORIAL DE COMPRAS (PRODUCTOS Y SERVICIOS)', 14, titleY + 7);
   
   doc.setFontSize(18);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
@@ -279,57 +354,105 @@ export const generateExpensePDF = async ({
   expense,
   tenantName,
   formatAmount,
+  tenantLogo,
+  primaryColor: themePrimary
 }: {
   expense: any;
   tenantName: string;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  tenantLogo?: string;
+  primaryColor?: string;
 }) => {
   const doc = new jsPDF();
-  const primaryColor = [16, 185, 129] as [number, number, number];
+  const primaryColor = hexToRgb(themePrimary);
   const textColor = [51, 65, 85] as [number, number, number];
+  
+  let titleY = 25;
+  if (tenantLogo) {
+     try {
+       doc.addImage(tenantLogo, 'PNG', 14, 15, 30, 15);
+       titleY = 38;
+       doc.setFontSize(14);
+     } catch (e) { doc.setFontSize(22); }
+  } else { doc.setFontSize(22); }
 
-  doc.setFontSize(20);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nova Hub', 14, 22);
+  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'normal');
+  doc.text('COMPROBANTE DE GASTO', 14, titleY + 7);
 
-  doc.setFontSize(12);
+  doc.setFontSize(18);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-  doc.text('Comprobante de Gasto', 14, 30);
-
+  doc.setFont('helvetica', 'bold');
+  doc.text('GASTO', 196, 25, { align: 'right' });
+  
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`N°: ${expense.number || expense.id || 'N/A'}`, 196, 22, { align: 'right' });
-  doc.text(`Fecha: ${expense.date ? new Date(expense.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
-  doc.text(`Hora: ${expense.time || (expense.date ? new Date(expense.date).toLocaleTimeString() : 'N/A')}`, 196, 34, { align: 'right' });
+  doc.text(`Nº: ${expense.number || expense.id || 'N/A'}`, 196, 32, { align: 'right' });
+  doc.text(`Fecha: ${expense.date ? new Date(expense.date).toLocaleDateString() : 'N/A'}`, 196, 38, { align: 'right' });
+
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(14, 46, 196, 46);
+
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Detalle del Gasto:', 14, 56);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  let currentInfoY = 62;
+  doc.text(`Pagado a: ${expense.paidTo || (expense.supplier?.name) || 'No especificado'}`, 14, currentInfoY);
+  if (expense.supplier?.contactName) { currentInfoY += 5; doc.text(`Contacto: ${expense.supplier.contactName}`, 14, currentInfoY); }
+  if (expense.supplier?.email) { currentInfoY += 5; doc.text(`Email: ${expense.supplier.email}`, 14, currentInfoY); }
+  if (expense.supplier?.phone) { currentInfoY += 5; doc.text(`Tel: ${expense.supplier.phone}`, 14, currentInfoY); }
+  currentInfoY += 5;
+  doc.text(`Categoría: ${expense.category === 'OTRO' ? (expense.categoryCustom || 'OTRO') : (expense.category || '-')}`, 14, currentInfoY);
+  currentInfoY += 5;
+  doc.text(`Referencia: ${expense.reference || '-'}`, 14, currentInfoY);
+
+  const tableData = [
+    [
+      expense.description || '-',
+      formatAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate)
+    ]
+  ];
 
   autoTable(doc, {
-    startY: 45,
-    head: [['Campo', 'Detalle']],
-    body: [
-      ['Descripción', expense.description || '-'],
-      ['Categoría', expense.category === 'OTRO' ? (expense.categoryCustom || 'OTRO') : (expense.category || '-')],
-      ['Monto', formatAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate)],
-      ['Pagado a', expense.paidTo || '-'],
-      ['Cuenta de origen', expense.paymentSource || '-'],
-      ['Referencia', expense.reference || '-'],
-      ['Estado', expense.status || '-'],
-      ['Evidencia', expense.evidenceFileName || 'No adjunta'],
-    ],
+    startY: currentInfoY + 10,
+    head: [['Descripción', 'Monto']],
+    body: tableData,
     theme: 'grid',
-    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold' },
-    bodyStyles: { textColor },
-    columnStyles: {
-      0: { cellWidth: 50, fontStyle: 'bold' },
-      1: { cellWidth: 'auto' },
-    },
-    styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak' },
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 10, fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { textColor, fontSize: 9 },
+    columnStyles: { 0: { cellWidth: 'auto', halign: 'left' }, 1: { cellWidth: 40, halign: 'right' } },
+    styles: { overflow: 'linebreak', cellPadding: 5 }
   });
 
+  const finalY = (doc as any).lastAutoTable.finalY || 82;
+  const rightX = 196;
+  const labelX = 140;
+  let currentY = finalY + 10;
+  
+  doc.setDrawColor(226, 232, 240);
+  doc.line(labelX, currentY - 3, rightX, currentY - 3);
+  
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.text('TOTAL:', labelX, currentY + 3);
+  doc.text(formatAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate), rightX, currentY + 3, { align: 'right' });
+
+  const pageHeight = doc.internal.pageSize.height;
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Generado por ${tenantName} - Módulo de Compras`, 14, doc.internal.pageSize.height - 10);
+  doc.text(`Documento generado por el módulo de Compras. Generado por ${tenantName}`, 14, pageHeight - 10);
 
   doc.save(`${expense.number || expense.id || 'gasto'}.pdf`);
 };
@@ -338,101 +461,125 @@ export const generatePurchaseOrderPDF = async ({
   order,
   tenantName,
   formatAmount,
+  tenantLogo,
+  primaryColor: themePrimary
 }: {
   order: any;
   tenantName: string;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  tenantLogo?: string;
+  primaryColor?: string;
 }) => {
   const doc = new jsPDF();
-  const primaryColor = [16, 185, 129] as [number, number, number];
+  const primaryColor = hexToRgb(themePrimary);
   const textColor = [51, 65, 85] as [number, number, number];
+  
+  let titleY = 25;
+  if (tenantLogo) {
+     try {
+       doc.addImage(tenantLogo, 'PNG', 14, 15, 30, 15);
+       titleY = 38;
+       doc.setFontSize(14);
+     } catch (e) { doc.setFontSize(22); }
+  } else { doc.setFontSize(22); }
 
-  doc.setFontSize(20);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nova Hub', 14, 22);
+  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'normal');
+  doc.text('ORDEN DE COMPRA', 14, titleY + 7);
 
-  doc.setFontSize(12);
+  doc.setFontSize(18);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-  doc.text('Orden de Compra', 14, 30);
-
+  doc.setFont('helvetica', 'bold');
+  doc.text('ORDEN DE COMPRA', 196, 25, { align: 'right' });
+  
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`N°: ${order.number || order.id || 'N/A'}`, 196, 22, { align: 'right' });
-  doc.text(`Fecha: ${order.date ? new Date(order.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
-  doc.text(`Entrega: ${order.expectedDelivery ? new Date(order.expectedDelivery).toLocaleDateString() : 'N/A'}`, 196, 34, { align: 'right' });
+  doc.text(`Nº: ${order.number || order.id || 'N/A'}`, 196, 32, { align: 'right' });
+  doc.text(`Fecha: ${order.date ? new Date(order.date).toLocaleDateString() : 'N/A'}`, 196, 38, { align: 'right' });
+  doc.text(`Entrega: ${order.expectedDelivery ? new Date(order.expectedDelivery).toLocaleDateString() : 'N/A'}`, 196, 44, { align: 'right' });
 
-  autoTable(doc, {
-    startY: 45,
-    head: [['Campo', 'Detalle']],
-    body: [
-      ['Proveedor', order.supplier?.name || '-'],
-      ['Dirección', order.address || '-'],
-      ['Estado', order.status || '-'],
-      ['Moneda', order.currency || '-'],
-      ['Evidencia', order.evidenceFileName || 'No adjunta'],
-    ],
-    theme: 'grid',
-    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold' },
-    bodyStyles: { textColor },
-    columnStyles: { 0: { cellWidth: 50, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
-    styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak' },
-  });
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(14, 52, 196, 52);
 
-  const itemsRows = (order.items || []).map((item: any) => [
-    item.code || '-',
-    item.name || item.description || '-',
-    item.category || '-',
-    item.stockApplies ? Number(item.stock || 0).toString() : '-',
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Proveedor:', 14, 62);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  const supp = order.supplier || {};
+  let currentInfoY = 68;
+  doc.text(supp.name || 'Proveedor no especificado', 14, currentInfoY);
+  if (supp.contactName) { currentInfoY += 5; doc.text(`Contacto: ${supp.contactName}`, 14, currentInfoY); }
+  if (supp.email) { currentInfoY += 5; doc.text(`Email: ${supp.email}`, 14, currentInfoY); }
+  if (supp.phone) { currentInfoY += 5; doc.text(`Tel: ${supp.phone}`, 14, currentInfoY); }
+  if (order.address) { currentInfoY += 5; doc.text(`Dirección: ${order.address}`, 14, currentInfoY); }
+
+  const tableData = (order.items || []).map((item: any) => [
+    item.name || item.description || item.code || 'Producto',
     Number(item.quantity || 0).toString(),
     formatAmount(Number(item.unitPrice || 0), order.currency, order.exchangeRate),
-    formatAmount(Number(item.total || 0), order.currency, order.exchangeRate),
+    formatAmount(Number(item.total || 0), order.currency, order.exchangeRate)
   ]);
 
   autoTable(doc, {
-    startY: ((doc as any).lastAutoTable?.finalY || 45) + 8,
-    head: [['Código', 'Nombre', 'Categoría', 'Stock', 'Cant.', 'Precio U.', 'Total']],
-    body: itemsRows.length > 0 ? itemsRows : [['-', '-', '-', '-', '-', '-', '-']],
+    startY: 85,
+    head: [['Descripción', 'Cantidad', 'Precio U.', 'Total']],
+    body: tableData,
     theme: 'grid',
-    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold', halign: 'center' },
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 10, fontStyle: 'bold', halign: 'center' },
     bodyStyles: { textColor, fontSize: 9 },
-    columnStyles: {
-      0: { cellWidth: 20, halign: 'left' },
-      1: { cellWidth: 'auto', halign: 'left' },
-      2: { cellWidth: 25, halign: 'left' },
-      3: { cellWidth: 15, halign: 'right' },
-      4: { cellWidth: 15, halign: 'right' },
-      5: { cellWidth: 25, halign: 'right' },
-      6: { cellWidth: 25, halign: 'right' },
-    },
-    styles: { cellPadding: 3, overflow: 'linebreak' },
+    columnStyles: { 0: { cellWidth: 'auto', halign: 'left' }, 1: { cellWidth: 25, halign: 'center' }, 2: { cellWidth: 35, halign: 'right' }, 3: { cellWidth: 35, halign: 'right' } },
+    styles: { overflow: 'linebreak', cellPadding: 5 }
   });
 
-  const baseY = ((doc as any).lastAutoTable?.finalY || 140) + 10;
+  const finalY = (doc as any).lastAutoTable.finalY || 85;
+  const rightX = 196;
   const labelX = 140;
-  const valueX = 196;
+  let currentY = finalY + 10;
+  
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-  doc.text('Subtotal:', labelX, baseY);
-  doc.text(formatAmount(Number(order.subtotal || 0), order.currency, order.exchangeRate), valueX, baseY, { align: 'right' });
-  doc.text(`IVA (${Number(order.taxRate || 0)}%):`, labelX, baseY + 7);
-  doc.text(formatAmount(Number(order.taxAmount || 0), order.currency, order.exchangeRate), valueX, baseY + 7, { align: 'right' });
-  doc.text(`Retención IR (${Number(order.withholdingRate || 0)}%):`, labelX, baseY + 14);
-  doc.text(`-${formatAmount(Number(order.withholdingAmount || 0), order.currency, order.exchangeRate)}`, valueX, baseY + 14, { align: 'right' });
+  doc.text('Subtotal:', labelX, currentY);
+  doc.text(formatAmount(Number(order.subtotal || 0), order.currency, order.exchangeRate), rightX, currentY, { align: 'right' });
+  currentY += 7;
 
+  if (Number(order.taxAmount) > 0) {
+    doc.text(`IVA (${Number(order.taxRate || 0)}%):`, labelX, currentY);
+    doc.text(formatAmount(Number(order.taxAmount || 0), order.currency, order.exchangeRate), rightX, currentY, { align: 'right' });
+    currentY += 7;
+  }
+
+  if (Number(order.withholdingAmount) > 0) {
+    doc.text(`Retención IR:`, labelX, currentY);
+    doc.setTextColor(239, 68, 68);
+    doc.text(`-${formatAmount(Number(order.withholdingAmount || 0), order.currency, order.exchangeRate)}`, rightX, currentY, { align: 'right' });
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    currentY += 7;
+  }
+  
   doc.setDrawColor(226, 232, 240);
-  doc.line(labelX, baseY + 19, valueX, baseY + 19);
+  doc.line(labelX, currentY - 3, rightX, currentY - 3);
+  
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.text('TOTAL:', labelX, baseY + 25);
-  doc.text(formatAmount(Number(order.total || 0), order.currency, order.exchangeRate), valueX, baseY + 25, { align: 'right' });
+  doc.text('TOTAL:', labelX, currentY + 3);
+  doc.text(formatAmount(Number(order.total || 0), order.currency, order.exchangeRate), rightX, currentY + 3, { align: 'right' });
 
+  const pageHeight = doc.internal.pageSize.height;
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Generado por ${tenantName} - Módulo de Compras`, 14, doc.internal.pageSize.height - 10);
+  doc.text(`Documento generado por el módulo de Compras. Generado por ${tenantName}`, 14, pageHeight - 10);
 
   doc.save(`${order.number || order.id || 'orden_compra'}.pdf`);
 };
@@ -441,23 +588,34 @@ export const generateRecurringInvoicePDF = async ({
   recurringInvoice,
   tenantName,
   formatAmount,
+  tenantLogo,
+  primaryColor: themePrimary
 }: {
   recurringInvoice: any;
   tenantName: string;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  tenantLogo?: string;
+  primaryColor?: string;
 }) => {
   const doc = new jsPDF();
-  const primaryColor = [16, 185, 129] as [number, number, number];
+  const primaryColor = hexToRgb(themePrimary);
   const textColor = [51, 65, 85] as [number, number, number];
 
-  doc.setFontSize(20);
+  let titleY = 25;
+  if (tenantLogo) {
+     try {
+       doc.addImage(tenantLogo, 'JPEG', 14, 15, 30, 15);
+       titleY = 38;
+     } catch (e) { doc.setFontSize(22); }
+  } else { doc.setFontSize(22); }
+
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nova Hub', 14, 22);
+  doc.text(tenantName || 'Nova Hub', 14, titleY);
 
   doc.setFontSize(12);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-  doc.text('Factura Recurrente', 14, 30);
+  doc.text('FACTURA RECURRENTE', 14, titleY + 8);
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
@@ -474,12 +632,15 @@ export const generateRecurringInvoicePDF = async ({
   const freqLabel = frequencyMap[String(recurringInvoice.frequency || '').toUpperCase()] || recurringInvoice.frequency || '-';
 
   autoTable(doc, {
-    startY: 45,
+    startY: titleY + 18,
     head: [['Campo', 'Detalle']],
     body: [
       ['Cliente', recurringInvoice.customer?.name || '-'],
+      ['Contacto', recurringInvoice.customer?.contactName || '-'],
+      ['Email', recurringInvoice.customer?.email || '-'],
+      ['Teléfono', recurringInvoice.customer?.phone || '-'],
       ['Frecuencia', freqLabel],
-      ['Estado', String(recurringInvoice.status || '-').toUpperCase()],
+      ['Estado', translateStatus(recurringInvoice.status || '-')],
       ['Moneda', recurringInvoice.currency || '-'],
       ['Fin', recurringInvoice.endDate ? new Date(recurringInvoice.endDate).toLocaleDateString() : 'Sin fin'],
     ],
@@ -546,94 +707,131 @@ export const generateSupplierInvoicePDF = async ({
   invoice,
   tenantName,
   formatAmount,
+  tenantLogo,
+  primaryColor: themePrimary
 }: {
   invoice: any;
   tenantName: string;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  tenantLogo?: string;
+  primaryColor?: string;
 }) => {
   const doc = new jsPDF();
-  const primaryColor = [16, 185, 129] as [number, number, number];
+  const primaryColor = hexToRgb(themePrimary);
   const textColor = [51, 65, 85] as [number, number, number];
+  
+  let titleY = 25;
+  if (tenantLogo) {
+     try {
+       doc.addImage(tenantLogo, 'PNG', 14, 15, 30, 15);
+       titleY = 38;
+       doc.setFontSize(14);
+     } catch (e) { doc.setFontSize(22); }
+  } else { doc.setFontSize(22); }
 
-  doc.setFontSize(20);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nova Hub', 14, 22);
+  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'normal');
+  doc.text('FACTURA DE PROVEEDOR', 14, titleY + 7);
 
-  doc.setFontSize(12);
+  doc.setFontSize(18);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-  doc.text('Factura de Proveedor', 14, 30);
-
+  doc.setFont('helvetica', 'bold');
+  doc.text('FACTURA DE PROVEEDOR', 196, 25, { align: 'right' });
+  
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`N°: ${invoice.number || invoice.id || 'N/A'}`, 196, 22, { align: 'right' });
-  doc.text(`Emisión: ${invoice.date ? new Date(invoice.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
-  doc.text(`Vence: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'}`, 196, 34, { align: 'right' });
+  doc.text(`Nº: ${invoice.number || invoice.id || 'N/A'}`, 196, 32, { align: 'right' });
+  doc.text(`Emisión: ${invoice.date ? new Date(invoice.date).toLocaleDateString() : 'N/A'}`, 196, 38, { align: 'right' });
+  doc.text(`Vence: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'}`, 196, 44, { align: 'right' });
 
-  autoTable(doc, {
-    startY: 45,
-    head: [['Campo', 'Detalle']],
-    body: [
-      ['Proveedor', invoice.supplier?.name || '-'],
-      ['Estado', invoice.status || '-'],
-      ['Moneda', invoice.currency || '-'],
-      ['Notas', invoice.notes || '-'],
-    ],
-    theme: 'grid',
-    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold' },
-    bodyStyles: { textColor },
-    columnStyles: { 0: { cellWidth: 50, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
-    styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak' },
-  });
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(14, 52, 196, 52);
 
-  const itemsRows = (invoice.items || []).map((item: any) => [
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Proveedor:', 14, 62);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  const supp = invoice.supplier || {};
+  let currentInfoY = 68;
+  doc.text(supp.name || 'Proveedor no especificado', 14, currentInfoY);
+  if (supp.contactName) { currentInfoY += 5; doc.text(`Contacto: ${supp.contactName}`, 14, currentInfoY); }
+  if (supp.email) { currentInfoY += 5; doc.text(`Email: ${supp.email}`, 14, currentInfoY); }
+  if (supp.phone) { currentInfoY += 5; doc.text(`Tel: ${supp.phone}`, 14, currentInfoY); }
+
+  const tableData = (invoice.items || []).map((item: any) => [
     item.description || '-',
     Number(item.quantity || 0).toString(),
     formatAmount(Number(item.unitPrice || 0), invoice.currency, invoice.exchangeRate),
-    `${Number(item.taxRate || 0).toFixed(2)}%`,
-    formatAmount(Number(item.total || 0), invoice.currency, invoice.exchangeRate),
+    `${Number(item.taxRate || 0).toFixed(1)}%`,
+    formatAmount(Number(item.total || 0), invoice.currency, invoice.exchangeRate)
   ]);
 
   autoTable(doc, {
-    startY: ((doc as any).lastAutoTable?.finalY || 45) + 8,
-    head: [['Descripción', 'Cant.', 'Precio U.', 'Imp. %', 'Total']],
-    body: itemsRows.length > 0 ? itemsRows : [['-', '-', '-', '-', '-']],
+    startY: 85,
+    head: [['Descripción', 'Cantidad', 'Precio U.', 'Imp. %', 'Total']],
+    body: tableData.length > 0 ? tableData : [['-', '-', '-', '-', '-']],
     theme: 'grid',
-    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold', halign: 'center' },
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 10, fontStyle: 'bold', halign: 'center' },
     bodyStyles: { textColor, fontSize: 9 },
-    columnStyles: {
-      0: { cellWidth: 'auto', halign: 'left' },
-      1: { cellWidth: 18, halign: 'right' },
-      2: { cellWidth: 30, halign: 'right' },
-      3: { cellWidth: 18, halign: 'right' },
-      4: { cellWidth: 30, halign: 'right' },
-    },
-    styles: { cellPadding: 3, overflow: 'linebreak' },
+    columnStyles: { 0: { cellWidth: 'auto', halign: 'left' }, 1: { cellWidth: 20, halign: 'center' }, 2: { cellWidth: 35, halign: 'right' }, 3: { cellWidth: 20, halign: 'center' }, 4: { cellWidth: 35, halign: 'right' } },
+    styles: { overflow: 'linebreak', cellPadding: 5 }
   });
 
-  const baseY = ((doc as any).lastAutoTable?.finalY || 140) + 10;
+  const finalY = (doc as any).lastAutoTable.finalY || 85;
+  const rightX = 196;
   const labelX = 140;
-  const valueX = 196;
+  let currentY = finalY + 10;
+  
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-  doc.text('Subtotal:', labelX, baseY);
-  doc.text(formatAmount(Number(invoice.subtotal || 0), invoice.currency, invoice.exchangeRate), valueX, baseY, { align: 'right' });
-  doc.text('Impuesto:', labelX, baseY + 7);
-  doc.text(formatAmount(Number(invoice.taxAmount || 0), invoice.currency, invoice.exchangeRate), valueX, baseY + 7, { align: 'right' });
+  doc.text('Subtotal:', labelX, currentY);
+  doc.text(formatAmount(Number(invoice.subtotal || 0), invoice.currency, invoice.exchangeRate), rightX, currentY, { align: 'right' });
+  currentY += 7;
 
+  if (Number(invoice.taxAmount) > 0) {
+    doc.text(`IVA:`, labelX, currentY);
+    doc.text(formatAmount(Number(invoice.taxAmount || 0), invoice.currency, invoice.exchangeRate), rightX, currentY, { align: 'right' });
+    currentY += 7;
+  }
+  
   doc.setDrawColor(226, 232, 240);
-  doc.line(labelX, baseY + 12, valueX, baseY + 12);
+  doc.line(labelX, currentY - 3, rightX, currentY - 3);
+  
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.text('TOTAL:', labelX, baseY + 18);
-  doc.text(formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate), valueX, baseY + 18, { align: 'right' });
+  doc.text('TOTAL:', labelX, currentY + 3);
+  doc.text(formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate), rightX, currentY + 3, { align: 'right' });
 
+  if (invoice.notes) {
+     const notesY = Math.max(currentY + 20, finalY + 15);
+     doc.setFontSize(10);
+     doc.setFont('helvetica', 'bold');
+     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+     doc.text('Notas:', 14, notesY);
+     
+     doc.setFontSize(9);
+     doc.setFont('helvetica', 'normal');
+     doc.setTextColor(100, 116, 139);
+     const splitNotes = doc.splitTextToSize(invoice.notes, 100);
+     doc.text(splitNotes, 14, notesY + 6);
+  }
+
+  const pageHeight = doc.internal.pageSize.height;
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Generado por ${tenantName} - Módulo de Compras`, 14, doc.internal.pageSize.height - 10);
+  doc.text(`Documento generado por el módulo de Compras. Generado por ${tenantName}`, 14, pageHeight - 10);
 
   doc.save(`${invoice.number || invoice.id || 'factura_proveedor'}.pdf`);
 };
@@ -643,16 +841,18 @@ export const generateCustomerStatementPDF = async ({
   transactions, 
   tenantName, 
   tenantLogo, 
-  formatAmount 
+  formatAmount,
+  primaryColor: themePrimary
 }: {
   customer: any;
   transactions: any[];
   tenantName: string;
   tenantLogo?: string;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  primaryColor?: string;
 }) => {
   const doc = new jsPDF();
-  const primaryColor = [16, 185, 129] as [number, number, number];
+  const primaryColor = hexToRgb(themePrimary);
   const textColor = [51, 65, 85] as [number, number, number];
 
   // 1. Identidad Corporativa
@@ -675,7 +875,7 @@ export const generateCustomerStatementPDF = async ({
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
   doc.setFont('helvetica', 'normal');
-  doc.text('Registro Histórico de Transacciones', 14, titleY + 7);
+  doc.text('REGISTRO HISTÓRICO DE TRANSACCIONES', 14, titleY + 7);
 
   // 2. Título General
   doc.setFontSize(18);
@@ -701,13 +901,15 @@ export const generateCustomerStatementPDF = async ({
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(`${customer.name} (Cód: ${customer.code})`, 14, 68);
-  if (customer.taxId) doc.text(`RUC/Tax ID: ${customer.taxId}`, 14, 73);
-  if (customer.email) doc.text(`Email: ${customer.email}`, 14, 78);
-  if (customer.phone) doc.text(`Tel: ${customer.phone}`, 14, 83);
+  let infoY = 73;
+  if (customer.contactName) { doc.text(`Contacto: ${customer.contactName}`, 14, infoY); infoY += 5; }
+  if (customer.taxId) { doc.text(`RUC/Tax ID: ${customer.taxId}`, 14, infoY); infoY += 5; }
+  if (customer.email) { doc.text(`Email: ${customer.email}`, 14, infoY); infoY += 5; }
+  if (customer.phone) { doc.text(`Tel: ${customer.phone}`, 14, infoY); infoY += 5; }
 
   // 5. Resumen de Saldo
   doc.setFont('helvetica', 'bold');
-  doc.text('SALDO PENDIENTE:', 140, 68);
+  doc.text('SALDO PENDIENTE:', 130, 68);
   doc.setFontSize(14);
   doc.setTextColor(239, 68, 68); // Rose 500
   doc.text(formatAmount(customer.balance || 0), 196, 68, { align: 'right' });
@@ -715,16 +917,16 @@ export const generateCustomerStatementPDF = async ({
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text('Límite de Crédito:', 140, 75);
-  doc.text(formatAmount(customer.creditLimit || 0), 196, 75, { align: 'right' });
+  doc.text('Límite de Crédito:', 130, 80);
+  doc.text(formatAmount(customer.creditLimit || 0), 196, 80, { align: 'right' });
 
   // 6. Tabla de Transacciones
   const tableData = transactions.map((t: any) => [
     new Date(t.date).toLocaleDateString(),
     t.label,
     t.number,
-    t.status || 'Completado',
-    formatAmount(t.total, t.currency, t.exchangeRate)
+    translateStatus(t.status),
+    `${['PAYMENT', 'CREDIT_NOTE', 'RETURN'].includes(t.type) ? '-' : ''}${formatAmount(t.total, t.currency, t.exchangeRate)}`
   ]);
 
   autoTable(doc, {
@@ -761,7 +963,7 @@ export const generateCustomerStatementPDF = async ({
   doc.text(`Documento administrativo de uso interno. Generado por la plataforma ERP Nova Hub para ${tenantName}.`, 14, pageHeight - 10);
 
   // 8. Descarga
-  doc.save(`Estado_Cuenta_${customer.name.replace(/\s+/g, '_')}.pdf`);
+  doc.save(`Historial_Cliente_${customer.name.replace(/\s+/g, '_')}.pdf`);
 };
 
 export const generatePlatformDocumentPDF = async ({
@@ -943,3 +1145,403 @@ export const generatePlatformDocumentPDF = async ({
   const fileName = `${prefix}_NovaHub_${tenantName.replace(/\s+/g, '_')}.pdf`;
   doc.save(fileName);
 };
+
+export const generateSupplierStatementPDF = async ({ 
+  supplier, 
+  transactions, 
+  tenantName, 
+  tenantLogo, 
+  formatAmount,
+  primaryColor: themePrimary
+}: {
+  supplier: any;
+  transactions: any[];
+  tenantName: string;
+  tenantLogo?: string;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  primaryColor?: string;
+}) => {
+  const doc = new jsPDF();
+  const primaryColor = hexToRgb(themePrimary);
+  const textColor = [51, 65, 85] as [number, number, number];
+
+  let titleY = 25;
+  if (tenantLogo) {
+     try {
+       doc.addImage(tenantLogo, 'JPEG', 14, 15, 30, 15);
+       titleY = 38;
+     } catch (e) { doc.setFontSize(22); }
+  } else { doc.setFontSize(22); }
+
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text((tenantName || 'Nova Hub').toUpperCase(), 14, titleY);
+
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'normal');
+  doc.text('HISTORIAL DE PROVEEDOR', 14, titleY + 7);
+
+  doc.setFontSize(18);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text('HISTORIAL DE PROVEEDOR', 196, 25, { align: 'right' });
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Emisión: ${new Date().toLocaleDateString()}`, 196, 32, { align: 'right' });
+
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(14, 52, 196, 52);
+
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Información del Proveedor:', 14, 62);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${supplier.name} (Cód: ${supplier.code})`, 14, 68);
+  let infoY = 73;
+  if (supplier.contactName) { doc.text(`Contacto: ${supplier.contactName}`, 14, infoY); infoY += 5; }
+  if (supplier.email) { doc.text(`Email: ${supplier.email}`, 14, infoY); infoY += 5; }
+  if (supplier.phone) { doc.text(`Tel: ${supplier.phone}`, 14, infoY); infoY += 5; }
+
+  // 5. Resumen de Saldo y Compras
+  doc.setFont('helvetica', 'bold');
+  doc.text('SALDO PENDIENTE:', 130, 68);
+  doc.setFontSize(14);
+  doc.setTextColor(239, 68, 68); // Rose 500
+  doc.text(formatAmount(supplier.balance || 0), 196, 68, { align: 'right' });
+  
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Total Compras:', 130, 80);
+  // Unificar lógica de cálculo con el modal (Solo Órdenes y Facturas)
+  const totalPurchasesValue = transactions.reduce((acc, t) => {
+    const isPurchase = ['ORDER', 'INVOICE'].includes(t.type);
+    return acc + (isPurchase ? Number(t.total || 0) : 0);
+  }, 0);
+  doc.text(formatAmount(totalPurchasesValue), 196, 80, { align: 'right' });
+
+  const tableData = transactions.map((t: any) => [
+    new Date(t.date).toLocaleDateString(),
+    t.label,
+    t.number,
+    translateStatus(t.status),
+    `${['PAYMENT', 'CREDIT'].includes(t.type) ? '-' : ''}${formatAmount(t.total, t.currency, t.exchangeRate)}`
+  ]);
+
+  autoTable(doc, {
+    startY: 95,
+    head: [['Fecha', 'Tipo', 'Documento', 'Estado', 'Monto']],
+    body: tableData,
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 10, fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { textColor: textColor, fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 25, halign: 'center' },
+      1: { cellWidth: 35, halign: 'center' },
+      2: { cellWidth: 'auto', halign: 'left' },
+      3: { cellWidth: 30, halign: 'center' },
+      4: { cellWidth: 35, halign: 'right' }
+    },
+    styles: { overflow: 'linebreak', cellPadding: 4 }
+  });
+
+  const pageHeight = doc.internal.pageSize.height;
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'italic');
+  doc.text(`Documento administrativo de uso interno - Módulo de Compras. Generado por ${tenantName}.`, 14, pageHeight - 10);
+
+  doc.save(`Historial_Proveedor_${supplier.name.replace(/\s+/g, '_')}.pdf`);
+};
+
+export const generatePurchaseReceptionPDF = async ({
+  reception,
+  tenantName,
+  formatAmount,
+  tenantLogo,
+  primaryColor: themePrimary
+}: any) => {
+  const doc = new jsPDF();
+  const primaryColor = hexToRgb(themePrimary);
+  const textColor = [51, 65, 85] as [number, number, number];
+
+  let titleY = 25;
+  if (tenantLogo) {
+     try {
+       doc.addImage(tenantLogo, 'PNG', 14, 15, 30, 15);
+       titleY = 38;
+       doc.setFontSize(14);
+     } catch (e) { doc.setFontSize(22); }
+  } else { doc.setFontSize(22); }
+
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'normal');
+  doc.text('RECEPCIÓN DE COMPRA', 14, titleY + 7);
+
+  doc.setFontSize(18);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RECEPCIÓN DE COMPRA', 196, 25, { align: 'right' });
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`N°: ${reception.number || reception.id || 'N/A'}`, 196, 32, { align: 'right' });
+  doc.text(`Fecha: ${reception.date ? new Date(reception.date).toLocaleDateString() : 'N/A'}`, 196, 38, { align: 'right' });
+
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(14, 52, 196, 52);
+
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Proveedor:', 14, 62);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  const supp = reception.supplier || {};
+  let currentInfoY = 68;
+  doc.text(supp.name || 'Proveedor no especificado', 14, currentInfoY);
+  if (supp.contactName) { currentInfoY += 5; doc.text(`Contacto: ${supp.contactName}`, 14, currentInfoY); }
+  if (supp.email) { currentInfoY += 5; doc.text(`Email: ${supp.email}`, 14, currentInfoY); }
+  if (supp.phone) { currentInfoY += 5; doc.text(`Tel: ${supp.phone}`, 14, currentInfoY); }
+  if (reception.purchaseOrderNumber) { currentInfoY += 5; doc.text(`Orden: ${reception.purchaseOrderNumber}`, 14, currentInfoY); }
+  if (reception.warehouse) { currentInfoY += 5; doc.text(`Almacén: ${reception.warehouse}`, 14, currentInfoY); }
+
+  const itemsRows = (reception.items || []).map((item: any) => [
+    item.code || '-',
+    item.name || item.description || '-',
+    Number(item.quantityOrdered || 0).toString(),
+    Number(item.quantityReceived || 0).toString(),
+  ]);
+
+  autoTable(doc, {
+    startY: 85,
+    head: [['Código', 'Producto', 'Cant. Pedida', 'Cant. Recibida']],
+    body: itemsRows.length > 0 ? itemsRows : [['-', '-', '-', '-']],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 10, fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { textColor, fontSize: 9 },
+    columnStyles: { 0: { cellWidth: 30, halign: 'left' }, 1: { cellWidth: 'auto', halign: 'left' }, 2: { cellWidth: 35, halign: 'center' }, 3: { cellWidth: 35, halign: 'center' } },
+    styles: { overflow: 'linebreak', cellPadding: 5 }
+  });
+
+  const pageHeight = doc.internal.pageSize.height;
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'italic');
+  doc.text(`Documento generado por el módulo de Compras. Generado por ${tenantName}`, 14, pageHeight - 10);
+
+  doc.save(`${reception.number || 'recepcion'}.pdf`);
+};
+
+export const generateSupplierCreditPDF = async ({
+  credit,
+  tenantName,
+  formatAmount,
+  tenantLogo,
+  primaryColor: themePrimary
+}: any) => {
+  const doc = new jsPDF();
+  const primaryColor = hexToRgb(themePrimary);
+  const textColor = [51, 65, 85] as [number, number, number];
+
+  let titleY = 25;
+  if (tenantLogo) {
+     try {
+       doc.addImage(tenantLogo, 'JPEG', 14, 15, 30, 15);
+       titleY = 38;
+       doc.setFontSize(14);
+     } catch (e) { doc.setFontSize(22); }
+  } else { doc.setFontSize(22); }
+
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'normal');
+  doc.text('NOTA DE CRÉDITO DE PROVEEDOR', 14, titleY + 7);
+
+  doc.setFontSize(18);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text('NOTA DE CRÉDITO', 196, 25, { align: 'right' });
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`N°: ${credit.number || credit.id || 'N/A'}`, 196, 32, { align: 'right' });
+  doc.text(`Fecha: ${credit.date ? new Date(credit.date).toLocaleDateString() : 'N/A'}`, 196, 38, { align: 'right' });
+
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(14, 52, 196, 52);
+
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Proveedor:', 14, 62);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  const supp = credit.supplier || {};
+  let currentInfoY = 68;
+  doc.text(supp.name || 'Proveedor no especificado', 14, currentInfoY);
+  if (supp.contactName) { currentInfoY += 5; doc.text(`Contacto: ${supp.contactName}`, 14, currentInfoY); }
+  if (supp.email) { currentInfoY += 5; doc.text(`Email: ${supp.email}`, 14, currentInfoY); }
+  if (supp.phone) { currentInfoY += 5; doc.text(`Tel: ${supp.phone}`, 14, currentInfoY); }
+
+  const tableData = [
+    [
+      'Monto Original',
+      formatAmount(credit.total, credit.currency, credit.exchangeRate)
+    ],
+    [
+      'Saldo Disponible',
+      formatAmount(credit.balance, credit.currency, credit.exchangeRate)
+    ]
+  ];
+
+  autoTable(doc, {
+    startY: 85,
+    head: [['Concepto', 'Monto']],
+    body: tableData,
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 10, fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { textColor, fontSize: 9 },
+    columnStyles: { 0: { cellWidth: 'auto', halign: 'left' }, 1: { cellWidth: 50, halign: 'right' } },
+    styles: { overflow: 'linebreak', cellPadding: 5 }
+  });
+
+  if (credit.notes) {
+     const finalY = (doc as any).lastAutoTable.finalY || 85;
+     const notesY = finalY + 15;
+     doc.setFontSize(10);
+     doc.setFont('helvetica', 'bold');
+     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+     doc.text('Notas:', 14, notesY);
+     
+     doc.setFontSize(9);
+     doc.setFont('helvetica', 'normal');
+     doc.setTextColor(100, 116, 139);
+     const splitNotes = doc.splitTextToSize(credit.notes, 100);
+     doc.text(splitNotes, 14, notesY + 6);
+  }
+
+  const pageHeight = doc.internal.pageSize.height;
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'italic');
+  doc.text(`Documento generado por el módulo de Compras. Generado por ${tenantName}`, 14, pageHeight - 10);
+
+  doc.save(`${credit.number || 'nota_credito'}.pdf`);
+};
+
+export const generateRecurringExpensePDF = async ({
+  recurring,
+  tenantName,
+  formatAmount,
+  tenantLogo,
+  primaryColor: themePrimary
+}: any) => {
+  const doc = new jsPDF();
+  const primaryColor = hexToRgb(themePrimary);
+  const textColor = [51, 65, 85] as [number, number, number];
+
+  let titleY = 25;
+  if (tenantLogo) {
+     try {
+       doc.addImage(tenantLogo, 'JPEG', 14, 15, 30, 15);
+       titleY = 38;
+       doc.setFontSize(14);
+     } catch (e) { doc.setFontSize(22); }
+  } else { doc.setFontSize(22); }
+
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'normal');
+  doc.text('FACTURA RECURRENTE DE PROVEEDOR', 14, titleY + 7);
+
+  doc.setFontSize(18);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text('FACTURA RECURRENTE', 196, 25, { align: 'right' });
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Próxima: ${recurring.nextInvoiceDate ? new Date(recurring.nextInvoiceDate).toLocaleDateString() : 'N/A'}`, 196, 32, { align: 'right' });
+  doc.text(`Frecuencia: ${recurring.frequency || 'N/A'}`, 196, 38, { align: 'right' });
+
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(14, 52, 196, 52);
+
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Proveedor:', 14, 62);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  const supp = recurring.supplier || {};
+  let currentInfoY = 68;
+  doc.text(supp.name || 'Proveedor no especificado', 14, currentInfoY);
+  if (supp.contactName) { currentInfoY += 5; doc.text(`Contacto: ${supp.contactName}`, 14, currentInfoY); }
+  if (supp.email) { currentInfoY += 5; doc.text(`Email: ${supp.email}`, 14, currentInfoY); }
+  if (supp.phone) { currentInfoY += 5; doc.text(`Tel: ${supp.phone}`, 14, currentInfoY); }
+  if (recurring.description) { currentInfoY += 5; doc.text(`Descripción: ${recurring.description}`, 14, currentInfoY); }
+
+  const itemsRows = (recurring.items || []).map((item: any) => [
+    item.description || '-',
+    Number(item.quantity || 0).toString(),
+    formatAmount(item.unitPrice || 0, recurring.currency, recurring.exchangeRate),
+    formatAmount((item.quantity || 0) * (item.unitPrice || 0), recurring.currency, recurring.exchangeRate),
+  ]);
+
+  autoTable(doc, {
+    startY: 85,
+    head: [['Descripción', 'Cant.', 'Precio Unit.', 'Subtotal']],
+    body: itemsRows.length > 0 ? itemsRows : [['-', '-', '-', '-']],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 10, fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { textColor, fontSize: 9 },
+    columnStyles: { 0: { cellWidth: 'auto', halign: 'left' }, 1: { cellWidth: 20, halign: 'center' }, 2: { cellWidth: 35, halign: 'right' }, 3: { cellWidth: 35, halign: 'right' } },
+    styles: { overflow: 'linebreak', cellPadding: 5 }
+  });
+
+  const finalY = (doc as any).lastAutoTable.finalY || 85;
+  const rightX = 196;
+  const labelX = 140;
+  let currentY = finalY + 10;
+  
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.text('TOTAL ESTIMADO:', labelX, currentY + 3);
+  doc.text(formatAmount(Number(recurring.total || recurring.amount || 0), recurring.currency, recurring.exchangeRate), rightX, currentY + 3, { align: 'right' });
+
+  const pageHeight = doc.internal.pageSize.height;
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'italic');
+  doc.text(`Documento generado por el módulo de Compras. Generado por ${tenantName}`, 14, pageHeight - 10);
+
+  doc.save(`Recurrente_${recurring.description?.replace(/\s+/g, '_') || 'doc'}.pdf`);
+};
+

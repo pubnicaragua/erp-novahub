@@ -105,30 +105,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
     if (exists) setActiveTab(activeSubModule);
   }, [activeSubModule]);
 
-  const handleExportData = async () => {
-    try {
-      const csvContent = [
-        ['Código', 'Nombre', 'Categoría', 'Stock', 'Precio Venta', 'Precio Costo'].join(','),
-        ...data.products.map((p: any) => [
-          p.code,
-          `"${p.name}"`,
-          p.category?.name || '',
-          p.stock || 0,
-          p.salePrice || 0,
-          p.costPrice || 0
-        ].join(','))
-      ].join('\n');
-      
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `inventario_${new Date().toISOString().split('T')[0]}.csv`;
-      link.click();
-      toast.success('Archivo CSV descargado');
-    } catch (e) {
-      toast.error('Error al exportar datos');
-    }
-  };
 
   return (
     <div className="space-y-4 p-4 md:p-6 pb-20 max-w-[1800px] mx-auto">
@@ -150,17 +126,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={handleExportData}
-            className="rounded-xl font-bold"
-          >
-            <Download className="size-4 mr-2" />
-            Exportar CSV
-          </Button>
-        </div>
       </div>
 
       {/* Main Navigation Tabs */}

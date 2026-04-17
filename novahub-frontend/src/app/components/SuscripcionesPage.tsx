@@ -1017,20 +1017,23 @@ export function SuscripcionesPage() {
                                             <button
                                               key={sub.id}
                                               onClick={() => handleToggleModule(tenant.id, sub.id, subIsActive)}
-                                              disabled={subIsPending}
+                                              disabled={subIsPending || sub.status === 'pending'}
                                               className={cn(
                                                 "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-tight transition-all",
-                                                subIsActive 
-                                                  ? "bg-primary/80 text-primary-foreground border-primary/40" 
-                                                  : subIsPending
-                                                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-500 border-amber-500/20 animate-pulse"
-                                                    : "bg-muted/30 text-muted-foreground/50 border-border/30 hover:border-primary/20 hover:text-foreground/70"
+                                                sub.status === 'pending'
+                                                  ? "bg-muted/20 text-muted-foreground/30 border-dashed border-border/30 cursor-not-allowed opacity-60"
+                                                  : subIsActive 
+                                                    ? "bg-primary/80 text-primary-foreground border-primary/40" 
+                                                    : subIsPending
+                                                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-500 border-amber-500/20 animate-pulse"
+                                                      : "bg-muted/30 text-muted-foreground/50 border-border/30 hover:border-primary/20 hover:text-foreground/70"
                                               )}
                                               title={sub.description}
                                             >
                                               <span className="size-1.5 rounded-full bg-current" />
                                               {sub.label}
-                                              {subIsActive && <Check className="size-2.5 ml-auto" />}
+                                              {sub.status === 'pending' && <Badge variant="outline" className="ml-auto text-[7px] py-0 px-1 border-muted-foreground/30 text-muted-foreground/50">Próximamente</Badge>}
+                                              {subIsActive && !sub.status && <Check className="size-2.5 ml-auto" />}
                                               {subIsPending && <Clock className="size-2.5 ml-auto" />}
                                             </button>
                                           );

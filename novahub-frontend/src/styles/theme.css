@@ -121,26 +121,49 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+.disable-transitions,
+.disable-transitions *:not(.theme-toggle-btn):not(.theme-toggle-btn *),
+.disable-transitions *:not(.theme-toggle-btn):not(.theme-toggle-btn *)::before,
+.disable-transitions *:not(.theme-toggle-btn):not(.theme-toggle-btn *)::after {
+  transition: none !important;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
 
   body {
-    @apply text-foreground min-h-screen bg-transparent;
+    @apply text-foreground min-h-screen bg-background relative overflow-x-hidden;
     font-family: 'Inter', sans-serif;
   }
 
-  html.dark body {
-    background: radial-gradient(circle at 0% 0%, #04883355 0%, #0a0e17 50%, #0a0e17 100%);
-    background-color: #0a0e17;
-    background-attachment: fixed;
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
   }
 
-  html:not(.dark) body {
-    background: radial-gradient(circle at 100% 0%, #04883333 0%, #f8fafc 40%, #ffffff 100%);
-    background-color: #ffffff;
-    background-attachment: fixed;
+  /* Light mode gradient */
+  body::before {
+    background: radial-gradient(circle at 100% 0%, #04883311 0%, #f8fafc 40%, #ffffff 100%);
+    opacity: 1;
+  }
+
+  html.dark body::before {
+    opacity: 0;
+  }
+
+  /* Dark mode gradient */
+  body::after {
+    background: radial-gradient(circle at 0% 0%, #04883333 0%, #0a0e17 50%, #0a0e17 100%);
+    opacity: 0;
+  }
+
+  html.dark body::after {
+    opacity: 1;
   }
 
   /* Dark mode: fix native select/option elements */

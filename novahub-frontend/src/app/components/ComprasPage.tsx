@@ -38,7 +38,7 @@ const COMPRAS_SECTIONS = [
   { id: 'gastos',        label: 'Gastos',                icon: Wallet,         description: 'Registro de gastos', requiredModules: ['PURCHASES_EXPENSES'] },
   { id: 'gastos-rec',    label: 'Gastos Recurrentes',    icon: CalendarClock,  description: 'Gastos fijos periódicos', requiredModules: ['PURCHASES_EXPENSES_REC'] },
   { id: 'ordenes',       label: 'Orden de Compra',       icon: ClipboardList,  description: 'Pedidos a proveedores', requiredModules: ['PURCHASES_ORDERS'] },
-  { id: 'recepciones',   label: 'Recepciones',           icon: PackageCheck,   description: 'Entrada de mercancía', requiredModules: ['PURCHASES_RECEIPTS'] },
+  // { id: 'recepciones',   label: 'Recepciones',           icon: PackageCheck,   description: 'Entrada de mercancía', requiredModules: ['PURCHASES_RECEIPTS'] },
   { id: 'facturas-prov', label: 'Facturas Proveedor',    icon: FileInput,      description: 'Cuentas por pagar', requiredModules: ['PURCHASES_INVOICES'] },
   { id: 'facturas-rec',  label: 'Facturas Recurrentes',  icon: RotateCcw,      description: 'Contratos periódicos', requiredModules: ['PURCHASES_INVOICES_REC'] },
   { id: 'pagos',         label: 'Pagos Realizados',      icon: Banknote,       description: 'Histórico de pagos', requiredModules: ['PURCHASES_PAYMENTS'] },
@@ -146,8 +146,8 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <main className="flex-1 overflow-y-auto custom-scrollbar relative">
-        <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar relative">
+        <div className="p-4 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-primary/10 rounded-xl">
@@ -204,7 +204,7 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
                    {section.id === 'gastos'        && <GastosView         {...commonProps} data={data.gastos} />}
                    {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} data={data.gastosRec} />}
                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} data={data.ordenes} supplierInvoices={data.facturasProv} onConvertToInvoice={handleConvertToInvoice} />}
-                   {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} data={data.recepciones} />}
+                   // {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} data={data.recepciones} />}
                    {section.id === 'facturas-prov' && (
                      <FacturasProveedorView
                        {...commonProps}

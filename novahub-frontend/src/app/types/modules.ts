@@ -4,6 +4,7 @@ export interface Submodule {
   id: string;
   label: string;
   description: string;
+  status?: 'active' | 'pending' | 'deprecated';
 }
 
 export interface Module {
@@ -32,7 +33,7 @@ export const PURCHASES_SUBMODULES: Submodule[] = [
   { id: 'PURCHASES_EXPENSES', label: 'Gastos', description: 'Registro de gastos' },
   { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos Recurrentes', description: 'Gastos periódicos' },
   { id: 'PURCHASES_ORDERS', label: 'Órdenes de Compra', description: 'Órdenes de compra' },
-  { id: 'PURCHASES_RECEIPTS', label: 'Recepciones de Compra', description: 'Recepción de mercancía' },
+  { id: 'PURCHASES_RECEIPTS', label: 'Recepciones de Compra', description: 'Recepción de mercancía', status: 'pending' },
   { id: 'PURCHASES_INVOICES', label: 'Facturas de Proveedor', description: 'Facturas de proveedores' },
   { id: 'PURCHASES_INVOICES_REC', label: 'Facturas Proveedor Rec.', description: 'Facturas recurrentes de proveedores' },
   { id: 'PURCHASES_PAYMENTS', label: 'Pagos Realizados', description: 'Pagos a proveedores' },

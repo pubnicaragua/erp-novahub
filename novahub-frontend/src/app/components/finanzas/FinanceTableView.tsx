@@ -697,12 +697,12 @@ export function FinanceTableView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 xs:grid-cols-2 gap-y-4 gap-x-6 relative">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-4 relative">
                 {columns.map(col => (
-                  <div key={col.key} className={cn("space-y-1", col.type === 'currency' ? "col-span-2 bg-primary/5 -mx-5 px-5 py-3 border-y border-primary/10 mt-1" : "")}>
-                    <p className="text-[9px] font-black uppercase text-muted-foreground/50 tracking-[0.15em]">{col.label}</p>
+                  <div key={col.key} className={cn("space-y-1 min-w-0 break-words", col.type === 'currency' ? "col-span-1 sm:col-span-2 bg-primary/5 -mx-5 px-5 py-3 border-y border-primary/10 mt-1" : "")}>
+                    <p className="text-[9px] font-black uppercase text-muted-foreground/50 tracking-[0.15em] truncate">{col.label}</p>
                     <div className={cn(
-                      "transition-all",
+                      "transition-all break-words whitespace-normal",
                       col.type === 'currency' ? "text-lg font-black" : "text-sm font-semibold text-foreground/90"
                     )} onDoubleClick={() => canEdit && col.editable && setEditingCell({ id: item.id, key: col.key })}>
                       {renderCellContent(item, col)}

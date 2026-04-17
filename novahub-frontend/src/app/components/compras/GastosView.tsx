@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Wallet, Plus, Search, Eye, Trash2, TrendingDown, Clock, Tag, ChevronLeft, Calendar as CalendarIcon, FileText, Download
+  Wallet, Plus, Search, Eye, Trash2, TrendingDown, Clock, Tag, ChevronLeft, Calendar as CalendarIcon, FileText, Download, PlusCircle
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -148,11 +148,11 @@ export function GastosView({ data, loading, onRefresh }: Props) {
   const columns: ColumnDef<Expense>[] = [
     { key: 'date',        header: 'Fecha',     width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
-    { key: 'category',    header: 'Categoría', width: '130px', editable: canPerform('PURCHASES_EXPENSES', 'edit'), type: 'select', options: [
+    { key: 'category',    header: 'Categoría', width: '130px', editable: canPerform('compras', 'edit'), type: 'select', options: [
         {label: 'Operacional', value: 'OPERATIVO'}, {label: 'Administrativo', value: 'ADMINISTRATIVO'}, {label: 'Ventas', value: 'VENTAS'}, {label: 'Financiero', value: 'FINANCIERO'}, {label: 'Otro', value: 'OTRO'}
       ],
       render: (val, row) => <Badge variant="outline" className="text-[9px] uppercase bg-primary/5 text-primary border-none">{String(val || '').toUpperCase() === 'OTRO' ? (row.categoryCustom || 'OTRO') : (val || '-')}</Badge> },
-    { key: 'description', header: 'Descripción', editable: canPerform('PURCHASES_EXPENSES', 'edit') },
+    { key: 'description', header: 'Descripción', editable: canPerform('compras', 'edit') },
     { key: 'paidTo',      header: 'Pagado a', width: '170px',
       render: (val) => <span className="text-xs font-medium text-foreground">{val || '-'}</span> },
     { key: 'paymentSource', header: 'Cuenta Origen', width: '130px',
@@ -164,7 +164,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
 
         </span>
       ) },
-    { key: 'status',      header: 'Estado',    width: '120px', editable: canPerform('PURCHASES_EXPENSES', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status',      header: 'Estado',    width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -244,7 +244,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
-    const canMutate = isNew ? canPerform('PURCHASES_EXPENSES', 'create') : canPerform('PURCHASES_EXPENSES', 'edit');
+    const canMutate = isNew ? canPerform('compras', 'create') : canPerform('compras', 'edit');
     const resolvedHour = localDoc.time || (localDoc.date ? new Date(localDoc.date).toTimeString().slice(0, 5) : '');
 
     return (
@@ -260,13 +260,13 @@ export function GastosView({ data, loading, onRefresh }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-             {!isNew && canPerform('PURCHASES_EXPENSES', 'delete') && (
+             {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
-            {((isNew && canPerform('PURCHASES_EXPENSES', 'create')) || (!isNew && canPerform('PURCHASES_EXPENSES', 'edit'))) && (
+            {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Gasto
               </Button>
@@ -276,9 +276,11 @@ export function GastosView({ data, loading, onRefresh }: Props) {
               className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
               onClick={() => generateExpensePDF({
                 expense: localDoc,
-                tenantName: 'Nova Hub',
+                tenantName: user?.tenantName || 'Empresa',
+                tenantLogo: themeConfig?.logo,
                 formatAmount: (amount: number, currency?: string, rate?: number) =>
                   formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
+                primaryColor: themeConfig?.colors.primary
               })}
             >
               <Download className="size-3 mr-2" /> Exportar PDF
@@ -295,7 +297,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Descripción / Concepto</p>
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={localDoc.description || ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, description: e.target.value })} 
                       className="h-8 text-xs font-bold" 
@@ -305,7 +307,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Categoría</p>
                     <select
-                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={localDoc.category || 'OPERATIVO'}
                       onChange={(e) => setLocalDoc({ ...localDoc, category: e.target.value })}
                       className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs uppercase"
@@ -320,7 +322,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Fecha del Gasto</p>
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       type="date" 
                       value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
@@ -338,7 +340,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Proveedor (Opcional)</p>
                     <Combobox
-                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       options={suppliers
                         .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
                         .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
@@ -385,7 +387,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                     <select
-                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={localDoc.status || 'PENDING'}
                       onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                       className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
@@ -396,7 +398,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Referencia (Factura/Recibo)</p>
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={localDoc.reference || ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} 
                       className="h-8 text-xs" 
@@ -433,7 +435,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                    <div className="w-1/2">
                       <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
                       <select
-                        disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                        disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                         value={localDoc.currency || 'NIO'}
                         onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
                         className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
@@ -445,7 +447,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                    <div className="w-1/2 flex flex-col items-end">
                       <p className="text-[10px] text-muted-foreground mb-1">Monto Total</p>
                       <Input 
-                        disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                        disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                         type="number" 
                         min="0" 
                         value={localDoc.amount || ''} 
@@ -527,98 +529,139 @@ export function GastosView({ data, loading, onRefresh }: Props) {
         )})}
       </div>
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Gastos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Egresos operativos y administrativos</p></div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/60 p-1">
-              <Button variant={datePreset === 'last4' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('last4')}>4 días</Button>
-              <Button variant={datePreset === 'last9' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('last9')}>9 días</Button>
-              <Button variant={datePreset === 'month' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('month')}>Mes</Button>
-              <Button variant={datePreset === 'year' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('year')}>Año</Button>
-            </div>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant={datePreset === 'specific' ? 'default' : 'outline'} className="h-10 rounded-xl text-[10px] font-black uppercase tracking-widest gap-2">
-                  <CalendarIcon className="size-4" />
-                  {datePreset === 'specific' && specificDate ? specificDate.toLocaleDateString() : 'Fecha específica'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  mode="single"
-                  selected={specificDate}
-                  onSelect={(date) => {
-                    setSpecificDate(date);
-                    if (date) setDatePreset('specific');
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-            {datePreset !== 'all' && (
-              <Button
-                variant="outline"
-                className="h-10 rounded-xl text-[10px] font-black uppercase tracking-widest"
-                onClick={() => {
-                  setDatePreset('all');
-                  setSpecificDate(undefined);
-                }}
-              >
-                Todo
-              </Button>
-            )}
-            {activeKpiFilter.type === 'category' && (
-              <select
-                value={selectedCategory}
-                onChange={(e) => {
-                  const category = e.target.value;
-                  setSelectedCategory(category);
-                  setActiveKpiFilter({ type: 'category', category });
-                }}
-                className="h-10 rounded-xl border border-input bg-background px-3 text-xs font-bold uppercase"
-              >
-                {uniqueCategories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            )}
-            {activeKpiFilter.type !== 'none' && (
-              <Button
-                variant="outline"
-                className="h-10 rounded-xl text-[10px] font-black uppercase tracking-widest"
-                onClick={() => setActiveKpiFilter({ type: 'none' })}
-              >
-                Limpiar filtro
-              </Button>
-            )}
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerform('PURCHASES_EXPENSES', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Gasto</Button>
-            )}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+          <div>
+            <h2 className="text-xl font-black uppercase tracking-tight">Gastos</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 text-left">Egresos operativos y administrativos</p>
           </div>
+          {canPerform('compras', 'create') && (
+            <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-lg shadow-primary/20 transition-all active:scale-[0.98]">
+              <PlusCircle className="size-4" /> Registrar Gasto
+            </Button>
+          )}
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
-            try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await expensesService.delete(id as string);
-              }
-              toast.success('Elementos eliminados');
-              onRefresh();
-            } catch (e) {
-              toast.error('Error al eliminar');
-            }
-          } : undefined}
-          actions={(row) => (
-            <div className="flex gap-1">
-              <Button title={canPerform('PURCHASES_EXPENSES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_EXPENSES', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-muted/5 p-2 rounded-2xl border border-border/40">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/60 p-1 overflow-x-auto hide-scrollbar max-w-full sm:max-w-none">
+              <Button variant={datePreset === 'last4' ? 'default' : 'ghost'} size="sm" className="h-7 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest flex-shrink-0" onClick={() => setDatePreset('last4')}>4 días</Button>
+              <Button variant={datePreset === 'last9' ? 'default' : 'ghost'} size="sm" className="h-7 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest flex-shrink-0" onClick={() => setDatePreset('last9')}>9 días</Button>
+              <Button variant={datePreset === 'month' ? 'default' : 'ghost'} size="sm" className="h-7 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest flex-shrink-0" onClick={() => setDatePreset('month')}>Mes</Button>
+              <Button variant={datePreset === 'year' ? 'default' : 'ghost'} size="sm" className="h-7 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest flex-shrink-0" onClick={() => setDatePreset('year')}>Año</Button>
+            </div>
+            
+            <div className="flex items-center gap-2 w-full xs:w-auto">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant={datePreset === 'specific' ? 'default' : 'outline'} className="h-9 rounded-xl text-[9px] font-black uppercase tracking-widest gap-2 flex-1 sm:flex-none px-3">
+                    <CalendarIcon className="size-3" />
+                    {datePreset === 'specific' && specificDate ? specificDate.toLocaleDateString() : 'Específica'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="single"
+                    selected={specificDate}
+                    onSelect={(date) => {
+                      setSpecificDate(date);
+                      if (date) setDatePreset('specific');
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+
+              {datePreset !== 'all' && (
+                <Button
+                  variant="outline"
+                  className="h-9 rounded-xl text-[9px] font-black uppercase tracking-widest px-3"
+                  onClick={() => {
+                    setDatePreset('all');
+                    setSpecificDate(undefined);
+                  }}
+                >
+                  Todo
+                </Button>
               )}
             </div>
-          )}
-        />
+
+            <div className="flex items-center gap-2 w-full xs:w-auto">
+              {activeKpiFilter.type === 'category' && (
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => {
+                    const category = e.target.value;
+                    setSelectedCategory(category);
+                    setActiveKpiFilter({ type: 'category', category });
+                  }}
+                  className="h-9 rounded-xl border border-input bg-background px-3 text-[10px] font-black uppercase flex-1 sm:flex-none"
+                >
+                  {uniqueCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              )}
+              {activeKpiFilter.type !== 'none' && (
+                <Button
+                  variant="outline"
+                  className="h-9 rounded-xl text-[9px] font-black uppercase tracking-widest px-3 flex-1 sm:flex-none"
+                  onClick={() => setActiveKpiFilter({ type: 'none' })}
+                >
+                  Filtros <RotateCcw className="size-3 ml-1" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="relative w-full lg:w-72">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+            <Input 
+              placeholder="Buscar..." 
+              className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs" 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)} 
+            />
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border/50 bg-card/50 overflow-hidden">
+          <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} allowAddRow={false}
+            onBulkDelete={canPerform('compras', 'delete') ? async (ids) => {
+              try {
+                for (const id of ids) {
+                  if (String(id).startsWith('new-')) continue;
+                  await expensesService.delete(id as string);
+                }
+                toast.success('Elementos eliminados');
+                onRefresh();
+              } catch (e) {
+                toast.error('Error al eliminar');
+              }
+            } : undefined}
+            actions={(row) => (
+              <div className="flex gap-1">
+                <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
+                  try {
+                    await toast.promise(generateExpensePDF({
+                      expense: row,
+                      tenantName: user?.tenantName || 'Empresa',
+                      tenantLogo: themeConfig?.logo,
+                      formatAmount: formatConvertedAmount,
+                      primaryColor: themeConfig?.colors.primary
+                    }), {
+                      loading: 'Generando PDF...',
+                      success: 'PDF generado exitosamente',
+                      error: 'Error al generar PDF'
+                    });
+                  } catch(e) { console.error(e) }
+                }}><Download className="size-4" /></Button>
+                {canPerform('compras', 'delete') && (
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                )}
+              </div>
+            )}
+          />
+        </div>
         <ConfirmDialog
           open={!!pendingDeleteId}
           onOpenChange={(open) => !open && setPendingDeleteId(null)}

@@ -387,9 +387,9 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'FINANCIAL_DASHBOARD' },
             { id: 'ingresos', label: 'Ingresos', icon: TrendingUp, module: 'FINANCIAL_INCOMES' },
+            { id: 'ingresos-rec', label: 'Ingresos Rec.', icon: RotateCcw, module: 'FINANCIAL_INCOMES_REC' },
             { id: 'gastos', label: 'Gastos', icon: TrendingDown, module: 'FINANCIAL_EXPENSES' },
             { id: 'gastos-rec', label: 'Gastos Rec.', icon: CalendarClock, module: 'FINANCIAL_EXPENSES_REC' },
-            { id: 'ingresos-rec', label: 'Ingresos Rec.', icon: RotateCcw, module: 'FINANCIAL_INCOMES_REC' },
             { id: 'balance', label: 'Balance', icon: Landmark, module: 'FINANCIAL_BALANCE' }
           ].map((tab) => {
             if (!hasAccess(tab.module)) return null;

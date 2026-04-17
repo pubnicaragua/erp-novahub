@@ -16,6 +16,7 @@ import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateRecurringInvoicePDF } from '../../utils/pdfGenerator';
+import { useTheme } from '../../contexts/ThemeContext';
 import { recurringExpensesService } from '../../services/finanzas.service';
 
 interface FacturasRecurrentesViewProps {
@@ -75,6 +76,7 @@ const calculateNextInvoiceDate = (frequency: string, startDate: string) => {
 export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [] }: FacturasRecurrentesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
+  const { themeConfig } = useTheme();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -145,11 +147,13 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
 
   const handleExportPDF = async (row: RecurringInvoice) => {
     try {
-      const tenantName = user?.tenantName || 'Mi Empresa';
+      const tenantName = user?.tenantName || 'Empresa';
       await generateRecurringInvoicePDF({
         recurringInvoice: { ...row, number: `REC-${row.id.slice(0, 8)}`, customer: row.customer },
         tenantName,
+        tenantLogo: themeConfig?.logo,
         formatAmount: formatConvertedAmount,
+        primaryColor: themeConfig?.colors.primary
       });
       toast.success('PDF generado exitosamente');
     } catch { toast.error('Error al generar PDF'); }
@@ -506,13 +510,13 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         ))}
       </div>
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground">Facturación Recurrente</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de contratos, igualas y servicios por suscripción.</p></div>
           <div className="flex items-center gap-3">
             {canPerform('SALES_RECURRING', 'create') && (
-              <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
-                <Plus className="size-4" /> Agregar Factura Recurrente</Button>
+              <Button onClick={startNew} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+                <RotateCcw className="size-4" /> Agregar Factura Recurrente</Button>
             )}
           </div>
         </div>

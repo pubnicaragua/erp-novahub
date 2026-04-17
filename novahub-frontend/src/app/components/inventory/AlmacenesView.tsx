@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2 } from 'lucide-react';
+import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2, PlusCircle, FilePlus } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { cn } from '../ui/utils';
 
 interface AlmacenesViewProps {
   warehouses: any[];
@@ -231,32 +232,123 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   };
 
   return (
-    <Card className="p-4 border bg-card rounded-xl">
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
         <div>
-          <h3 className="font-black text-lg uppercase tracking-tight italic">Almacenes y Sucursales</h3>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-            {warehouses.length} ubicaciones · {warehouses.filter((w: any) => String(w.type || '').toUpperCase() === 'STORE').length} sucursales
+          <h3 className="text-xl font-black uppercase tracking-tight italic">Almacenes y Sucursales</h3>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-[0.2em] mt-1">
+            {warehouses.length} ubicaciones registradas · {warehouses.filter((w: any) => String(w.type || '').toUpperCase() === 'STORE').length} sucursales activas
           </p>
         </div>
         <Button 
-          size="sm" 
-          className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6" 
           onClick={handleAddNewRow}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 w-full sm:w-auto"
         >
-          <Plus className="size-4" />
-          Agregar Almacén/Sucursal
+          <PlusCircle className="size-4" /> Agregar Almacén/Sucursal
         </Button>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      {/* Mobile View (Cards) */}
+      <div className="md:hidden space-y-4">
+        {Array.from(editingRows.values()).filter(w => w.isNew).map(wh => (
+          <Card key={wh.id} className="p-4 border-2 border-primary/20 bg-primary/5 rounded-2xl space-y-3 shadow-xl">
+             <div className="space-y-3">
+                <div>
+                   <p className="text-[10px] font-black uppercase text-muted-foreground/60 mb-1">Nombre</p>
+                   <Input value={wh.name} onChange={e => handleUpdateField(wh.id, 'name', e.target.value)} className="h-9 text-xs font-bold uppercase" placeholder="NOMBRE DEL ALMACÉN" />
+                </div>
+                <div>
+                   <p className="text-[10px] font-black uppercase text-muted-foreground/60 mb-1">Ubicación</p>
+                   <Input value={wh.location} onChange={e => handleUpdateField(wh.id, 'location', e.target.value)} className="h-9 text-xs" placeholder="DIRECCIÓN / CIUDAD" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-muted-foreground/60 mb-1">Tipo</p>
+                    <Select value={wh.type} onValueChange={v => handleUpdateField(wh.id, 'type', v)}>
+                       <SelectTrigger className="h-9 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                       <SelectContent>{WAREHOUSE_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label.toUpperCase()}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-muted-foreground/60 mb-1">Padre</p>
+                    <Select value={wh.parentId || 'none'} onValueChange={v => handleUpdateField(wh.id, 'parentId', v === 'none' ? null : v)}>
+                       <SelectTrigger className="h-9 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                       <SelectContent>
+                          <SelectItem value="none">NINGUNO</SelectItem>
+                          {warehouses.filter(w => w.id !== wh.id).map(w => <SelectItem key={w.id} value={w.id}>{w.name.toUpperCase()}</SelectItem>)}
+                       </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+             </div>
+             <div className="flex gap-2 pt-2 border-t border-border/20">
+                <Button className="flex-1 bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest h-9 rounded-xl shadow-lg shadow-primary/20" onClick={() => handleSaveRow(wh.id)}>Guardar</Button>
+                <Button variant="ghost" className="size-9 rounded-xl text-rose-500 hover:bg-rose-500/10" onClick={() => handleCancelEdit(wh.id)}><X className="size-4" /></Button>
+             </div>
+          </Card>
+        ))}
+
+        {warehouses.length === 0 && editingRows.size === 0 ? (
+          <div className="text-center py-20 bg-muted/5 rounded-3xl border border-dashed border-border/50">
+            <Warehouse className="size-12 mx-auto mb-4 text-muted-foreground/20" />
+            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/40">No hay almacenes configurados</p>
+          </div>
+        ) : (
+          warehouses.map(wh => {
+            const isEditing = editingRows.has(wh.id);
+            if (isEditing) {
+              const editData = editingRows.get(wh.id)!;
+              return (
+                <Card key={wh.id} className="p-4 border-2 border-primary/20 bg-primary/5 rounded-2xl space-y-3">
+                   <Input value={editData.name} onChange={e => handleUpdateField(wh.id, 'name', e.target.value)} className="h-9 text-xs font-black uppercase" />
+                   <div className="flex gap-2">
+                      <Button className="flex-1 bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest h-9 rounded-xl" onClick={() => handleSaveRow(wh.id)}>Listo</Button>
+                      <Button variant="ghost" className="size-9 rounded-xl" onClick={() => handleCancelEdit(wh.id)}><X className="size-4" /></Button>
+                   </div>
+                </Card>
+              );
+            }
+            const stockCount = getStockCount(wh);
+            return (
+              <Card key={wh.id} className="p-4 border-border/50 rounded-2xl shadow-sm" onDoubleClick={() => handleEditRow(wh)}>
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Warehouse className="size-4 text-primary" />
+                      <h4 className="font-black text-sm uppercase text-foreground leading-none">{wh.name}</h4>
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] font-black text-muted-foreground/40 uppercase tracking-tighter">
+                      <MapPin className="size-3" />
+                      {wh.location || 'SIN UBICACIÓN'}
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] font-black uppercase px-2 py-0.5 border-border/50 bg-muted/5">STOCK: {stockCount}</Badge>
+                </div>
+                
+                <div className="flex items-center justify-between pt-3 border-t border-border/40">
+                  <Badge className="bg-primary/5 text-primary border-none text-[9px] font-black uppercase">
+                    {WAREHOUSE_TYPES.find(t => t.value === wh.type)?.label || wh.type}
+                  </Badge>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleEditRow(wh)}><Edit2 className="size-4" /></Button>
+                    <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => handleDeleteWarehouse(wh.id)}><Trash2 className="size-4" /></Button>
+                  </div>
+                </div>
+              </Card>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop View (Table) */}
+      <div className="hidden md:block rounded-2xl border border-border/50 bg-card/50 overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Nombre</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Ubicación</TableHead>
                <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Tipo</TableHead>
-               <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Ubicación Padre</TableHead>
+               <TableHead className="font-black text-[10px] uppercase tracking-widest w-40">Padre</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
@@ -268,10 +360,9 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             
             {warehouses.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                  <Warehouse className="size-10 mx-auto mb-2 opacity-20" />
-                  <p className="font-medium">No hay almacenes</p>
-                  <p className="text-sm">Haz clic en "Agregar Almacén" para comenzar</p>
+                <TableCell colSpan={6} className="text-center py-16">
+                  <Warehouse className="size-12 mx-auto mb-4 text-muted-foreground/20" />
+                  <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/40">No hay almacenes registrados</p>
                 </TableCell>
               </TableRow>
             ) : (
@@ -285,42 +376,44 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                 return (
                   <TableRow 
                     key={wh.id} 
-                    className="group hover:bg-muted/30 cursor-pointer"
+                    className="group hover:bg-muted/30 cursor-pointer transition-colors"
                     onDoubleClick={() => handleEditRow(wh)}
                   >
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Warehouse className="size-4 text-muted-foreground" />
-                        <span className="font-medium text-sm">{wh.name}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="size-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                          <Warehouse className="size-4" />
+                        </div>
+                        <span className="font-black text-xs uppercase tracking-tight">{wh.name}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <MapPin className="size-3" />
+                      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-muted-foreground/60 tracking-widest">
+                        <MapPin className="size-3 text-primary/40" />
                         {wh.location || '-'}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-[9px] font-black uppercase border-border/50 bg-background/50 text-muted-foreground/60">
                         {WAREHOUSE_TYPES.find(t => t.value === wh.type)?.label || wh.type}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="text-[10px] font-black uppercase text-muted-foreground/40 tracking-widest">
                       {wh.parent?.name || '-'}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{stockCount}</TableCell>
+                    <TableCell className="text-right font-black tabular-nums text-primary">{stockCount}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1 transition-opacity">
-                        <Button variant="ghost" size="icon" className="size-7" onClick={() => handleEditRow(wh)}>
-                          <Edit2 className="size-3.5" />
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleEditRow(wh)}>
+                          <Edit2 className="size-4" />
                         </Button>
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="size-7 text-red-600 hover:text-white hover:bg-red-500"
+                          className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500"
                           onClick={() => handleDeleteWarehouse(wh.id)}
                         >
-                          <Trash2 className="size-3.5" />
+                          <Trash2 className="size-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -332,19 +425,22 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         </Table>
       </div>
 
-      <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-        Doble clic en una fila para editar · Enter para guardar · Esc para cancelar
+      <div className="flex items-center justify-between px-2 text-[10px] text-muted-foreground font-black uppercase tracking-widest">
+        <span>{warehouses.length} almacenes totales</span>
+        <span className="hidden sm:block">Doble clic para editar · Enter para guardar · Esc para cancelar</span>
       </div>
+
       <ConfirmDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => !open && setPendingDeleteId(null)}
         title="¿Eliminar almacén?"
-        description="Esta acción eliminará el almacén seleccionado."
-        confirmLabel="Eliminar"
+        description="Esta acción eliminará el almacén seleccionado de forma permanente."
+        confirmLabel="Eliminar Almacén"
+        variant="destructive"
         loading={deleteLoading}
         onConfirm={handleConfirmDeleteWarehouse}
       />
-    </Card>
+    </div>
   );
 }
 

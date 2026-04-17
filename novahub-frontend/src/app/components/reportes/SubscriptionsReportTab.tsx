@@ -137,7 +137,9 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
       toast.info("Generando PDF (Suscripciones)...");
       try {
         const doc = new jsPDF();
-        const primaryHex = themeConfig.colors.primary.startsWith('#') ? themeConfig.colors.primary : '#10b981';
+        const primaryColor = themeConfig.colors.primary || '#10b981';
+        const rgbPrimary = hexToRgb(primaryColor);
+        const primaryHex = '#' + rgbPrimary.map(x => x.toString(16).padStart(2, '0')).join('');
         let currentY = 20;
 
         doc.setFontSize(18);
@@ -174,7 +176,9 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
       try {
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Suscripciones');
-        const primaryHex = themeConfig.colors.primary.replace('#', '');
+        const primaryColor = themeConfig.colors.primary || '#10b981';
+        const rgbPrimary = hexToRgb(primaryColor);
+        const primaryHex = rgbPrimary.map(x => x.toString(16).padStart(2, '0')).join('');
         
         ws.columns = [
           { header: 'Métrica', key: 'metric', width: 30 },
@@ -396,4 +400,6 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
   );
 });
 SubscriptionsReportTab.displayName = 'SubscriptionsReportTab';
+
+
 

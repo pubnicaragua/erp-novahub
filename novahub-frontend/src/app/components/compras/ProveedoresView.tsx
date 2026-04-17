@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw } from 'lucide-react';
+import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, UserX, RefreshCw, UserPlus } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -75,7 +75,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
     }
     catch (e: any) { 
       toast.error('Error al actualizar: ' + (e.response?.data?.message || e.message)); 
-      throw e; // To trigger rollback in EditableDataTable
+      throw e; 
     }
   };
 
@@ -98,6 +98,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
     { title: 'Total',     value: data.length,                                                                              icon: Truck,         color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Activos',   value: data.filter(s => (s.status||'').toUpperCase() === 'ACTIVE').length,                       icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Saldo Total', value: formatConvertedAmount(data.reduce((a, s) => a + Number(s.balance||0), 0)),              icon: TrendingDown,  color: 'text-rose-500',    bg: 'bg-rose-500/10'    },
+    { title: 'Inactivos', value: data.filter(s => (s.status||'').toUpperCase() === 'INACTIVE').length,                     icon: UserX,         color: 'text-amber-500',   bg: 'bg-amber-500/10'   },
   ];
 
   return (
@@ -105,83 +106,93 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((k, i) => (
           <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
-            <CardContent className="p-5"><div className="flex items-center gap-4">
-              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p>
-                <p className="text-2xl font-black tabular-nums">{k.value}</p>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-4">
+                <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p>
+                  <p className="text-2xl font-black tabular-nums">{k.value}</p>
+                </div>
               </div>
-            </div></CardContent>
+            </CardContent>
           </Card>
         ))}
-        <Card className="bg-card border-border/50 rounded-2xl shadow-sm">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-amber-500/10 text-amber-500">
-                <ArrowUpDown className="size-5" />
-              </div>
-              <div className="flex-1">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Filtro Saldo</p>
-                <Select value={balanceOrder} onValueChange={(value: 'all' | 'highest' | 'lowest') => setBalanceOrder(value)}>
-                  <SelectTrigger className="mt-1 h-9 text-xs">
-                    <SelectValue placeholder="Ordenar por saldo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Sin ordenar</SelectItem>
-                    <SelectItem value="highest">Mayor compra</SelectItem>
-                    <SelectItem value="lowest">Menor compra</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
           <div>
-            <h2 className="text-xl font-black uppercase tracking-tight">Proveedores</h2>
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Directorio de proveedores y aliados</p>
+            <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Directorio de Proveedores</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 text-left">Gestión de relaciones comerciales</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input placeholder="Buscar proveedor..." className="pl-9 h-10 w-60 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-            </div>
-            {canPerform('proveedores', 'create') && (
-              <Button onClick={handleAdd} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2">
-                <Plus className="size-4" /> Nuevo Proveedor
-              </Button>
-            )}
-          </div>
-        </div>
-        <EditableDataTable data={filteredAndSorted} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onAddRow={canPerform('proveedores', 'create') ? handleAdd : undefined}
-          actions={(row) => (
-            <div className="flex gap-1">
-              <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierForHistory(row)}><Eye className="size-4" /></Button>
-              <Button title="Recalcular Saldo" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={async () => {
-                try {
-                  const result = await suppliersService.recalculateBalance(row.id);
-                  toast.success(`Saldo recalculado: ${formatConvertedAmount(result.newBalance)}`);
-                  onRefresh();
-                } catch (e: any) {
-                  toast.error('Error al recalcular: ' + (e.response?.data?.message || e.message));
-                }
-              }}><RefreshCw className="size-4" /></Button>
-              {canPerform('proveedores', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
-              )}
-            </div>
+          {canPerform('proveedores', 'create') && (
+            <Button onClick={handleAdd} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+              <UserPlus className="size-4" /> Agregar Proveedor
+            </Button>
           )}
-        />
+        </div>
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-muted/5 p-2 rounded-2xl border border-border/40">
+           <div className="flex flex-wrap items-center gap-2 flex-1">
+              <Select value={balanceOrder} onValueChange={(value: 'all' | 'highest' | 'lowest') => setBalanceOrder(value)}>
+                <SelectTrigger className="h-9 w-40 bg-background/50 border-border/50 rounded-xl text-xs">
+                  <SelectValue placeholder="Ordenar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Sin ordenar</SelectItem>
+                  <SelectItem value="highest">Mayor saldo</SelectItem>
+                  <SelectItem value="lowest">Menor saldo</SelectItem>
+                </SelectContent>
+              </Select>
+              <Badge variant="outline" className="h-9 px-4 rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+                {data.length} Proveedores
+              </Badge>
+           </div>
+           
+           <div className="relative w-full lg:w-72">
+             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+             <Input 
+               placeholder="Buscar..." 
+               className="pl-9 h-10 w-full bg-background border-border/50 rounded-xl text-xs focus:ring-primary/20" 
+               value={searchTerm} 
+               onChange={e => setSearchTerm(e.target.value)} 
+             />
+           </div>
+        </div>
+
+        <div className="rounded-2xl border border-border/50 bg-card/50 overflow-hidden">
+          <EditableDataTable
+            data={filteredAndSorted}
+            columns={columns}
+            onRowUpdate={handleUpdate}
+            isLoading={loading}
+            allowAddRow={false}
+            actions={(row) => (
+              <div className="flex gap-1">
+                <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierForHistory(row)}><Eye className="size-4" /></Button>
+                <Button title="Recalcular Saldo" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={async () => {
+                   try {
+                     const result = await suppliersService.recalculateBalance(row.id);
+                     toast.success(`Saldo recalculado: ${formatConvertedAmount(result.newBalance)}`);
+                     onRefresh();
+                   } catch (e: any) {
+                     toast.error('Error al recalcular: ' + (e.response?.data?.message || e.message));
+                   }
+                }}><RefreshCw className="size-4" /></Button>
+                {canPerform('proveedores', 'delete') && (
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                )}
+              </div>
+            )}
+          />
+        </div>
       </div>
 
       <ConfirmDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
         title="¿Eliminar proveedor?"
-        description="Si el proveedor tiene transacciones activas (facturas, órdenes de compra, pagos), no se podrá eliminar."
+        description="Si el proveedor tiene transacciones activas, no se podrá eliminar."
         confirmLabel="Eliminar"
         variant="destructive"
         loading={deleteLoading}
@@ -193,12 +204,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
             toast.success('Proveedor eliminado correctamente');
             onRefresh();
           } catch (error: any) {
-            const msg = error?.response?.data?.message || error?.message || '';
-            if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
-              toast.error('No se puede eliminar: este proveedor tiene transacciones activas (órdenes, facturas, pagos, etc.)');
-            } else {
-              toast.error(`Error al eliminar proveedor: ${msg}`);
-            }
+             toast.error('Error al eliminar');
           } finally {
             setDeleteLoading(false);
             setPendingDeleteId(null);
@@ -214,4 +220,3 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
     </div>
   );
 }
-

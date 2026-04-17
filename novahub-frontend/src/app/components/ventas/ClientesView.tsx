@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Users, UserPlus, Search, TrendingUp, CreditCard, CheckCircle2, Eye, Trash2, Plus
+  Users, UserPlus, Search, TrendingUp, CreditCard, CheckCircle2, Eye, Trash2, Plus, RefreshCcw
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -199,7 +199,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
 
       {/* Main Content */}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Directorio de Clientes</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión integral Excel-like sin interrupciones.</p>
@@ -208,7 +208,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
             {canPerform('SALES_CLIENTS', 'create') && (
               <Button 
                 onClick={handleAddClient}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
+                className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
               >
                 <UserPlus className="size-4" /> Nuevo Cliente
               </Button>
@@ -232,11 +232,29 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           }}
           columns={columns}
           onRowUpdate={handleUpdate}
-          onAddRow={handleAddClient}
+          allowAddRow={false}
           isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
                <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomer(row)}><Eye className="size-4" /></Button>
+               <Button 
+                 variant="ghost" 
+                 size="icon" 
+                 title="Recalcular Saldo" 
+                 className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors" 
+                 onClick={async () => {
+                   try {
+                     await toast.promise(customersService.recalculateBalance(row.id), {
+                       loading: 'Recalculando saldo...',
+                       success: 'Saldo recalculado exitosamente',
+                       error: 'Error al recalcular saldo'
+                     });
+                     onRefresh();
+                   } catch (e) {}
+                 }}
+               >
+                 <RefreshCcw className="size-4" />
+               </Button>
                {canPerform('SALES_CLIENTS', 'delete') && (
                  <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                )}

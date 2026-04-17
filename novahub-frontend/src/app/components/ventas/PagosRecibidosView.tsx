@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, Trash2, ChevronLeft, FileDown
+  Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, Trash2, ChevronLeft, FileDown, CircleDollarSign
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -15,6 +15,7 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 
 interface PagosRecibidosViewProps {
@@ -35,6 +36,7 @@ const methodOptions = [
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [] }: PagosRecibidosViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
+  const { themeConfig } = useTheme();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -97,12 +99,14 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
 
   const handleExportPDF = async (row: PaymentReceived) => {
     try {
-      const tenantName = user?.tenantName || 'Mi Empresa';
+      const tenantName = user?.tenantName || 'Empresa';
       await generateEstimatePDF({
         estimate: { ...row, number: row.number, customer: row.customer, items: [{ description: `Pago ${row.method}`, quantity: 1, unitPrice: Number(row.amount), total: Number(row.amount) }] },
         tenantName,
+        tenantLogo: themeConfig?.logo,
         formatAmount: formatConvertedAmount,
         documentType: 'payment',
+        primaryColor: themeConfig?.colors.primary
       });
       toast.success('PDF generado exitosamente');
     } catch { toast.error('Error al generar PDF'); }
@@ -257,13 +261,13 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         ))}
       </div>
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground">Pagos Recibidos</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Historial de cobranza y conciliación de ingresos.</p></div>
           <div className="flex items-center gap-3">
             {canPerform('SALES_PAYMENTS', 'create') && (
-              <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
-                <Plus className="size-4" /> Registrar Pago</Button>
+              <Button onClick={startNew} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+                <CircleDollarSign className="size-4" /> Registrar Pago</Button>
             )}
           </div>
         </div>

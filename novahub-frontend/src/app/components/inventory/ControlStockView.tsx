@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Scale, Plus, Check, X, CheckCircle, Receipt, Trash2 } from 'lucide-react';
+import { Scale, Plus, Check, X, CheckCircle, Receipt, Trash2, PlusCircle, FilePlus, Calendar, Box } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
+import { cn } from '../ui/utils';
 
 interface ControlStockViewProps {
   adjustments: any[];
@@ -288,110 +289,179 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'APPROVED': return 'bg-green-500/10 text-green-600';
-      case 'DRAFT': return 'bg-orange-500/10 text-orange-600';
-      default: return 'bg-muted text-muted-foreground';
+      case 'APPROVED': return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
+      case 'DRAFT': return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
+      default: return 'bg-muted text-muted-foreground border-border/50';
     }
   };
 
   return (
-    <Card className="p-4 border bg-card rounded-xl">
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 py-2">
         <div>
-          <h3 className="font-semibold">Ajustes de Inventario</h3>
-          <p className="text-sm text-muted-foreground">{adjustments.length} ajustes registrados</p>
+          <h3 className="text-xl font-black uppercase tracking-tight italic">Ajustes de Inventario</h3>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-[0.2em] mt-1">
+            {adjustments.length} ajustes registrados · Auditoría y control de stock
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
           <Button
-            size="sm"
             variant="outline"
-            className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
+            className="flex-1 sm:flex-none rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
             onClick={() => setIsSerialAdjustOpen(true)}
           >
             IMEI / Series
           </Button>
           <Button
-            size="sm"
             variant="outline"
-            className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
+            className="flex-1 sm:flex-none rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
             onClick={() => setIsReceptionOpen(true)}
           >
-            <Receipt className="size-4 mr-2" />
-            Registrar Recepción
+            <Receipt className="size-4 mr-2 text-primary" /> Registrar Recepción
           </Button>
           <Button 
-            size="sm" 
-            className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
             onClick={() => setIsCreating(true)}
             disabled={isCreating}
+            className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20"
           >
-            <Plus className="size-4" />
-            Nuevo Ajuste
+            <FilePlus className="size-4" /> Nuevo Ajuste
           </Button>
         </div>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      {/* Mobile View (Cards) */}
+      <div className="md:hidden space-y-4">
+        {isCreating && (
+          <Card className="p-4 border-2 border-primary/20 bg-primary/5 rounded-2xl space-y-4 shadow-xl">
+             <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                     <p className="text-[10px] font-black uppercase text-muted-foreground/60 mb-1">Almacén</p>
+                     <Select value={newAdjustment.warehouseId} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, warehouseId: v })}>
+                        <SelectTrigger className="h-9 text-xs font-bold uppercase"><SelectValue placeholder="ORIGEN" /></SelectTrigger>
+                        <SelectContent>{warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name.toUpperCase()}</SelectItem>)}</SelectContent>
+                     </Select>
+                  </div>
+                  <div>
+                     <p className="text-[10px] font-black uppercase text-muted-foreground/60 mb-1">Razón</p>
+                     <Select value={newAdjustment.reason} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, reason: v })}>
+                        <SelectTrigger className="h-9 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                        <SelectContent>{REASON_OPTIONS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label.toUpperCase()}</SelectItem>)}</SelectContent>
+                     </Select>
+                  </div>
+                </div>
+                <div>
+                   <p className="text-[10px] font-black uppercase text-muted-foreground/60 mb-1">Producto</p>
+                   <Select value={newAdjustment.productId} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, productId: v })}>
+                      <SelectTrigger className="h-9 text-xs font-bold uppercase"><SelectValue placeholder="SELECCIONAR PRODUCTO" /></SelectTrigger>
+                      <SelectContent>{products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name.toUpperCase()}</SelectItem>)}</SelectContent>
+                   </Select>
+                </div>
+                <div>
+                   <p className="text-[10px] font-black uppercase text-muted-foreground/60 mb-1">Stock Actual (Físico)</p>
+                   <Input type="number" placeholder="CANTIDAD" value={newAdjustment.actualStock} onChange={(e) => setNewAdjustment({ ...newAdjustment, actualStock: parseInt(e.target.value, 10) || 0 })} className="h-10 text-xs font-black" />
+                </div>
+             </div>
+             <div className="flex gap-2 pt-2">
+                <Button className="flex-1 bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest h-10 rounded-xl shadow-lg" onClick={handleCreateAdjustment} disabled={saving}>Guardar Ajuste</Button>
+                <Button variant="ghost" className="size-10 rounded-xl" onClick={() => setIsCreating(false)}><X className="size-4" /></Button>
+             </div>
+          </Card>
+        )}
+
+        {adjustments.length === 0 && !isCreating ? (
+          <div className="text-center py-20 bg-muted/5 rounded-3xl border border-dashed border-border/50">
+            <Scale className="size-12 mx-auto mb-4 text-muted-foreground/20" />
+            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/40">No hay ajustes pendientes</p>
+          </div>
+        ) : (
+          adjustments.map((adj: any) => {
+            const statusClass = getStatusBadge(adj.status);
+            return (
+              <Card key={adj.id} className="p-4 border-border/50 rounded-2xl shadow-sm space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-mono font-black text-xs text-primary mb-1">{adj.number}</h4>
+                    <p className="text-[10px] font-black uppercase text-muted-foreground/60 tracking-widest">{adj.warehouse?.name || 'ALMACÉN DESCONOCIDO'}</p>
+                  </div>
+                  <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5 border rounded-lg shadow-none", statusClass)}>
+                    {adj.status === 'APPROVED' ? 'APROBADO' : 'BORRADOR'}
+                  </Badge>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 py-3 border-y border-border/40">
+                  <div>
+                    <p className="text-[9px] font-black uppercase text-muted-foreground/40 tracking-widest mb-0.5">Razón</p>
+                    <p className="text-xs font-black uppercase tracking-tight">{REASON_OPTIONS.find((r) => r.value === adj.reason)?.label || adj.reason}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[9px] font-black uppercase text-muted-foreground/40 tracking-widest mb-0.5">Items</p>
+                    <Badge variant="outline" className="font-black h-5 px-1.5 bg-primary/5 text-primary border-none">{adj.items?.length || 0}</Badge>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-3">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground/40 tracking-widest">
+                    <Calendar className="size-3" />
+                    <span>{new Date(adj.date).toLocaleDateString()}</span>
+                  </div>
+                  {adj.status === 'DRAFT' && (
+                    <Button variant="outline" size="sm" className="h-8 rounded-lg text-[9px] font-black uppercase text-emerald-500 gap-1" onClick={() => handleApproveAdjustment(adj.id)} disabled={approvingId === adj.id}>
+                       <CheckCircle className="size-3" /> Aprobar
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop View (Table) */}
+      <div className="hidden md:block rounded-2xl border border-border/50 bg-card/50 overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Número</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-32">Número</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Almacén</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest">Razón</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-20">Items</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Fecha</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Estado</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-40">Razón</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-24">Items</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-40">Fecha</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-32">Estado</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isCreating && (
-              <TableRow className="bg-blue-500/5">
-                <TableCell className="text-xs text-muted-foreground">Auto</TableCell>
+              <TableRow className="bg-primary/5 border-b border-primary/20">
+                <TableCell className="text-[10px] font-black uppercase text-primary">AUTO-GEN</TableCell>
                 <TableCell>
                   <Select value={newAdjustment.warehouseId} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, warehouseId: v })}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Almacén" /></SelectTrigger>
-                    <SelectContent>
-                      {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                    </SelectContent>
+                    <SelectTrigger className="h-8 text-[10px] font-black uppercase rounded-lg"><SelectValue placeholder="ALMACÉN" /></SelectTrigger>
+                    <SelectContent>{warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name.toUpperCase()}</SelectItem>)}</SelectContent>
                   </Select>
                 </TableCell>
                 <TableCell>
                   <Select value={newAdjustment.reason} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, reason: v })}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {REASON_OPTIONS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-                    </SelectContent>
+                    <SelectTrigger className="h-8 text-[10px] font-black uppercase rounded-lg"><SelectValue /></SelectTrigger>
+                    <SelectContent>{REASON_OPTIONS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label.toUpperCase()}</SelectItem>)}</SelectContent>
                   </Select>
                 </TableCell>
                 <TableCell>
-                  <Select value={newAdjustment.productId} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, productId: v })}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Producto" /></SelectTrigger>
-                    <SelectContent>
-                      {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    <Input 
-                      type="number" 
-                      placeholder="Actual"
-                      value={newAdjustment.actualStock} 
-                      onChange={(e) => setNewAdjustment({ ...newAdjustment, actualStock: parseInt(e.target.value, 10) || 0 })}
-                      className="h-8 text-xs w-16"
-                    />
+                  <div className="flex gap-2 items-center justify-center">
+                    <Select value={newAdjustment.productId} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, productId: v })}>
+                      <SelectTrigger className="h-8 text-[10px] font-black uppercase rounded-lg w-32"><SelectValue placeholder="PRODUCTO" /></SelectTrigger>
+                      <SelectContent>{products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Input type="number" placeholder="FIS" value={newAdjustment.actualStock} onChange={(e) => setNewAdjustment({ ...newAdjustment, actualStock: parseInt(e.target.value, 10) || 0 })} className="h-8 w-14 text-center font-black" />
                   </div>
                 </TableCell>
-                <TableCell className="text-xs">Borrador</TableCell>
-                <TableCell>
-                  <div className="flex gap-1 justify-end">
-                    <Button size="icon" variant="ghost" className="size-7 text-green-600" onClick={handleCreateAdjustment} disabled={saving}>
-                      {saving ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Check className="size-4" />}
-                    </Button>
-                    <Button size="icon" variant="ghost" className="size-7 text-red-600" onClick={() => setIsCreating(false)} disabled={saving}>
-                      <X className="size-4" />
-                    </Button>
+                <TableCell><span className="text-[10px] font-black uppercase text-primary/40">HOY</span></TableCell>
+                <TableCell><Badge variant="outline" className="text-[9px] font-black bg-amber-500/10 text-amber-600 border-amber-500/20">BORRADOR</Badge></TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    <Button size="icon" variant="ghost" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10" onClick={handleCreateAdjustment} disabled={saving}><Check className="size-4" /></Button>
+                    <Button size="icon" variant="ghost" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10" onClick={() => setIsCreating(false)}><X className="size-4" /></Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -399,24 +469,27 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
             
             {adjustments.length === 0 && !isCreating ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                  <Scale className="size-10 mx-auto mb-2 opacity-20" />
-                  <p className="font-medium">No hay ajustes</p>
+                <TableCell colSpan={7} className="text-center py-16">
+                  <Scale className="size-12 mx-auto mb-4 text-muted-foreground/20" />
+                  <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/40">No hay registros de ajustes</p>
                 </TableCell>
               </TableRow>
             ) : (
               adjustments.map((adj: any) => {
                 const isApproving = approvingId === adj.id;
+                const statusClass = getStatusBadge(adj.status);
                 return (
-                  <TableRow key={adj.id} className="group hover:bg-muted/30">
-                    <TableCell className="font-mono text-xs">{adj.number}</TableCell>
-                    <TableCell className="text-sm">{adj.warehouse?.name || '-'}</TableCell>
-                    <TableCell className="text-xs">{REASON_OPTIONS.find((r) => r.value === adj.reason)?.label || adj.reason}</TableCell>
-                    <TableCell className="text-center font-medium">{adj.items?.length || 0}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{new Date(adj.date).toLocaleDateString()}</TableCell>
+                  <TableRow key={adj.id} className="group hover:bg-muted/30 transition-colors">
+                    <TableCell className="font-mono text-[10px] font-black text-primary">{adj.number}</TableCell>
+                    <TableCell className="text-[10px] font-black uppercase tracking-tight">{adj.warehouse?.name || '-'}</TableCell>
+                    <TableCell className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{REASON_OPTIONS.find((r) => r.value === adj.reason)?.label || adj.reason}</TableCell>
+                    <TableCell className="text-center">
+                       <Badge variant="outline" className="font-black text-[10px] bg-primary/5 border-none text-primary px-2">{adj.items?.length || 0} ITEMS</Badge>
+                    </TableCell>
+                    <TableCell className="text-[10px] font-black uppercase text-muted-foreground/40 tracking-widest">{new Date(adj.date).toLocaleDateString()}</TableCell>
                     <TableCell>
-                      <Badge className={`text-[10px] ${getStatusBadge(adj.status)}`}>
-                        {adj.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}
+                      <Badge className={cn("text-[9px] font-black uppercase px-2 py-0 border shadow-none", statusClass)}>
+                        {adj.status === 'APPROVED' ? 'APROBADO' : 'BORRADOR'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -424,7 +497,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                         <Button 
                           size="sm" 
                           variant="ghost" 
-                          className="h-7 text-xs text-green-600 hover:bg-green-500/10 gap-1"
+                          className="h-8 text-[10px] font-black uppercase text-emerald-500 hover:bg-emerald-500/10 gap-1 rounded-xl"
                           onClick={() => handleApproveAdjustment(adj.id)}
                           disabled={isApproving}
                         >
@@ -441,195 +514,200 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         </Table>
       </div>
 
-      <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-        Los ajustes en borrador deben ser aprobados para aplicar cambios al stock
+      <div className="px-2 text-[10px] text-muted-foreground font-black uppercase tracking-widest flex items-center justify-between">
+        <span>Ajustes auditados por NovaHub Inventory</span>
+        <span className="hidden sm:block">Los ajustes aprobados actualizan el stock físico de forma inmediata</span>
       </div>
 
       <Dialog open={isSerialAdjustOpen} onOpenChange={setIsSerialAdjustOpen}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Ajustar IMEI / Series</DialogTitle>
-            <DialogDescription>
-              Alta o baja puntual de IMEI con movimiento auditado.
+        <DialogContent className="sm:max-w-xl rounded-3xl overflow-hidden p-0 border-none shadow-2xl">
+          <DialogHeader className="bg-primary p-6 text-primary-foreground">
+            <DialogTitle className="font-black uppercase tracking-tighter text-2xl">Ajustar IMEI / Series</DialogTitle>
+            <DialogDescription className="text-white/60 font-bold uppercase text-[10px] tracking-widest">
+              Alta o baja manual de equipos serializados.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div className="p-6 space-y-4 bg-background">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <p className="text-[10px] text-muted-foreground mb-1">Acción</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground/40 mb-1 tracking-widest">Acción</p>
                 <Select value={serialAdjustment.action} onValueChange={(v) => setSerialAdjustment({ ...serialAdjustment, action: v })}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-10 text-xs font-black uppercase rounded-xl border-border/50 bg-muted/5"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ADD">Agregar</SelectItem>
-                    <SelectItem value="REMOVE">Remover</SelectItem>
+                    <SelectItem value="ADD">AGREGAR</SelectItem>
+                    <SelectItem value="REMOVE">REMOVER</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="md:col-span-2">
-                <p className="text-[10px] text-muted-foreground mb-1">Producto</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground/40 mb-1 tracking-widest">Producto</p>
                 <Select value={serialAdjustment.productId} onValueChange={(v) => setSerialAdjustment({ ...serialAdjustment, productId: v })}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Seleccionar producto" /></SelectTrigger>
+                  <SelectTrigger className="h-10 text-xs font-black uppercase rounded-xl border-border/50 bg-muted/5"><SelectValue placeholder="SELECCIONAR..." /></SelectTrigger>
                   <SelectContent>
-                    {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code} - {p.name}</SelectItem>)}
+                    {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code} - {p.name.toUpperCase()}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <p className="text-[10px] text-muted-foreground mb-1">Almacén</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground/40 mb-1 tracking-widest">Almacén</p>
                 <Select value={serialAdjustment.warehouseId} onValueChange={(v) => setSerialAdjustment({ ...serialAdjustment, warehouseId: v })}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Seleccionar almacén" /></SelectTrigger>
+                  <SelectTrigger className="h-10 text-xs font-black uppercase rounded-xl border-border/50 bg-muted/5"><SelectValue placeholder="SELECCIONAR..." /></SelectTrigger>
                   <SelectContent>
-                    {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                    {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name.toUpperCase()}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground mb-1">IMEI / Serie</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground/40 mb-1 tracking-widest">IMEI / Serie</p>
                 <Input
                   value={serialAdjustment.serialNumber}
                   onChange={(e) => setSerialAdjustment({ ...serialAdjustment, serialNumber: e.target.value })}
-                  className="h-9 text-xs font-mono"
-                  placeholder="Ej. 356938035643809"
+                  className="h-10 text-xs font-mono font-black border-border/50 bg-muted/5 rounded-xl uppercase"
+                  placeholder="DIGITE SERIE..."
                 />
               </div>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground mb-1">Nota (opcional)</p>
+              <p className="text-[10px] font-black uppercase text-muted-foreground/40 mb-1 tracking-widest">Motivo (Opcional)</p>
               <Input
                 value={serialAdjustment.notes}
                 onChange={(e) => setSerialAdjustment({ ...serialAdjustment, notes: e.target.value })}
-                className="h-9 text-xs"
-                placeholder="Motivo del ajuste"
+                className="h-10 text-xs font-bold uppercase border-border/50 bg-muted/5 rounded-xl"
+                placeholder="DETALLE DEL AJUSTE..."
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsSerialAdjustOpen(false)}>Cancelar</Button>
+          <DialogFooter className="p-6 pt-0 bg-background flex flex-col sm:flex-row gap-2">
+            <Button variant="ghost" className="rounded-xl font-black uppercase text-[10px] tracking-widest flex-1 sm:flex-none" onClick={() => setIsSerialAdjustOpen(false)}>Cancelar</Button>
             <Button
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-black uppercase text-[10px] tracking-widest h-11 px-8 flex-1 sm:flex-none shadow-lg shadow-primary/20"
               onClick={handleSerialAdjustment}
               disabled={saving}
             >
-              {saving ? 'Guardando...' : 'Guardar ajuste'}
+              {saving ? 'Guardando...' : 'Aplicar Ajuste IMEI'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isReceptionOpen} onOpenChange={setIsReceptionOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Registrar Recepción de Stock</DialogTitle>
-            <DialogDescription>
-              Registra entrada por producto, distribuye unidades por bodega y agrega IMEI/series.
+        <DialogContent className="sm:max-w-2xl rounded-3xl overflow-hidden p-0 border-none shadow-2xl">
+          <DialogHeader className="bg-primary p-6 text-primary-foreground relative">
+             <div className="absolute top-0 right-0 p-8 opacity-10"><Box className="size-32" /></div>
+            <DialogTitle className="font-black uppercase tracking-tighter text-2xl relative z-10">Recepción de Stock</DialogTitle>
+            <DialogDescription className="text-white/60 font-bold uppercase text-[10px] tracking-widest relative z-10">
+              Registra entrada de mercancía y distribuye por bodega.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="p-6 space-y-6 bg-background">
+            <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">
               <div>
-                <p className="text-[10px] text-muted-foreground mb-1">Producto</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground/40 mb-1 tracking-widest">Producto</p>
                 <Select value={newReception.productId} onValueChange={(v) => setNewReception({ ...newReception, productId: v })}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Seleccionar producto" /></SelectTrigger>
+                  <SelectTrigger className="h-11 text-xs font-black uppercase rounded-xl border-border/50 bg-muted/5"><SelectValue placeholder="SELECCIONAR PRODUCTO..." /></SelectTrigger>
                   <SelectContent>
-                    {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code} - {p.name}</SelectItem>)}
+                    {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code} - {p.name.toUpperCase()}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground mb-1">Cantidad total recibida</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground/40 mb-1 tracking-widest">Cant. Total</p>
                 <Input
                   type="number"
                   min={1}
                   value={newReception.totalQuantity || ''}
                   onChange={(e) => setNewReception({ ...newReception, totalQuantity: Math.max(0, parseInt(e.target.value, 10) || 0) })}
-                  className="h-9 text-xs"
-                  placeholder="Ej. 40"
+                  className="h-11 text-center text-lg font-black rounded-xl border-border/50 bg-muted/5"
+                  placeholder="0"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">Distribución por bodega/sucursal</p>
-                <Button variant="outline" size="sm" className="h-8 text-[10px] uppercase tracking-widest" onClick={addAllocationRow}>
-                  <Plus className="size-3 mr-1" /> Agregar fila
+                <p className="text-[10px] font-black uppercase text-muted-foreground/40 tracking-widest">Distribución Logística</p>
+                <Button variant="ghost" size="sm" className="h-8 text-[9px] font-black uppercase text-primary hover:bg-primary/5 rounded-lg" onClick={addAllocationRow}>
+                  <Plus className="size-3 mr-1" /> Agregar Bodega
                 </Button>
               </div>
-              {allocations.map((item) => (
-                <div key={item.id} className="grid grid-cols-[1fr_120px_36px] gap-2 items-center">
-                  <Select value={item.warehouseId} onValueChange={(v) => updateAllocation(item.id, { warehouseId: v })}>
-                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Bodega/Sucursal" /></SelectTrigger>
-                    <SelectContent>
-                      {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={item.quantity || ''}
-                    onChange={(e) => updateAllocation(item.id, { quantity: Math.max(0, parseInt(e.target.value, 10) || 0) })}
-                    className="h-9 text-xs text-right"
-                    placeholder="Cantidad"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 text-rose-500 hover:bg-rose-500 hover:text-white"
-                    onClick={() => removeAllocationRow(item.id)}
-                    disabled={allocations.length <= 1}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              ))}
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Total distribuido</span>
-                <span className={totalAllocated === Number(newReception.totalQuantity || 0) ? 'font-black text-emerald-500' : 'font-black text-rose-500'}>
-                  {totalAllocated} / {Number(newReception.totalQuantity || 0)}
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                {allocations.map((item) => (
+                  <div key={item.id} className="grid grid-cols-[1fr_100px_40px] gap-2 items-center">
+                    <Select value={item.warehouseId} onValueChange={(v) => updateAllocation(item.id, { warehouseId: v })}>
+                      <SelectTrigger className="h-10 text-[10px] font-black uppercase border-border/50 bg-muted/5 rounded-xl"><SelectValue placeholder="BODEGA..." /></SelectTrigger>
+                      <SelectContent>
+                        {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name.toUpperCase()}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={item.quantity || ''}
+                      onChange={(e) => updateAllocation(item.id, { quantity: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                      className="h-10 text-xs font-black text-center border-border/50 bg-muted/5 rounded-xl"
+                      placeholder="CANT"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-10 text-rose-500 hover:bg-rose-500/10 rounded-xl"
+                      onClick={() => removeAllocationRow(item.id)}
+                      disabled={allocations.length <= 1}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-muted/5 border border-border/40">
+                <span className="text-[10px] font-black uppercase text-muted-foreground/60 tracking-widest">Estado de distribución</span>
+                <span className={cn("text-xs font-black", totalAllocated === Number(newReception.totalQuantity || 0) ? 'text-emerald-500' : 'text-rose-500')}>
+                  {totalAllocated} / {Number(newReception.totalQuantity || 0)} ASIGNADOS
                 </span>
               </div>
             </div>
 
-            <div>
-              <p className="text-[10px] text-muted-foreground mb-1">IMEI / Series (uno por línea, opcional)</p>
-              <textarea
-                value={newReception.imeiText}
-                onChange={(e) => setNewReception({ ...newReception, imeiText: e.target.value })}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs min-h-[120px]"
-                placeholder={'Ejemplo:\n356938035643809\n356938035643810\n356938035643811'}
-              />
-              <p className="text-[10px] text-muted-foreground mt-1">{imeiList.length} IMEI/series capturados</p>
-            </div>
-
-            <div>
-              <p className="text-[10px] text-muted-foreground mb-1">Referencia / Nota (opcional)</p>
-              <Input
-                value={newReception.notes}
-                onChange={(e) => setNewReception({ ...newReception, notes: e.target.value })}
-                className="h-9 text-xs"
-                placeholder="Ej. Recepción OC-2026-001 / Lote abril"
-              />
+            <div className="grid md:grid-cols-2 gap-4">
+               <div>
+                  <p className="text-[10px] font-black uppercase text-muted-foreground/40 mb-1 tracking-widest">Series / IMEI (Uno por línea)</p>
+                  <textarea
+                    value={newReception.imeiText}
+                    onChange={(e) => setNewReception({ ...newReception, imeiText: e.target.value })}
+                    className="w-full rounded-xl border border-border/50 bg-muted/5 px-3 py-2 text-xs font-mono font-bold min-h-[100px] focus:ring-1 focus:ring-primary outline-none uppercase"
+                    placeholder={'3569380356...\n3569380357...'}
+                  />
+                  <p className="text-[9px] font-black uppercase text-primary mt-1 tracking-widest">{imeiList.length} SERIES DETECTADAS</p>
+               </div>
+               <div>
+                  <p className="text-[10px] font-black uppercase text-muted-foreground/40 mb-1 tracking-widest">Referencia / Observación</p>
+                  <textarea
+                    value={newReception.notes}
+                    onChange={(e) => setNewReception({ ...newReception, notes: e.target.value })}
+                    className="w-full rounded-xl border border-border/50 bg-muted/5 px-3 py-2 text-xs font-bold min-h-[100px] focus:ring-1 focus:ring-primary outline-none uppercase"
+                    placeholder="EJ. FACTURA PROVEEDOR #123..."
+                  />
+               </div>
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsReceptionOpen(false); resetReception(); }}>
+          <DialogFooter className="p-6 pt-0 bg-background">
+            <Button variant="ghost" className="rounded-xl font-black uppercase text-[10px] tracking-widest px-8" onClick={() => { setIsReceptionOpen(false); resetReception(); }}>
               Cancelar
             </Button>
             <Button
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-black uppercase text-[10px] tracking-widest h-11 px-10 shadow-xl shadow-primary/20"
               onClick={handleCreateReception}
               disabled={saving}
             >
-              {saving ? 'Guardando...' : 'Guardar recepción'}
+              {saving ? 'Procesando...' : 'Confirmar Recepción'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }
 

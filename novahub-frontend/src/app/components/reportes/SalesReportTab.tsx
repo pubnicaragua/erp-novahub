@@ -11,6 +11,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, PieChart as PieChartIcon, Users, Truck, ShoppingBag, Wallet, CreditCard } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { hexToRgb } from '../../utils/pdfGenerator';
 import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
 
@@ -203,8 +204,8 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const companyName = themeConfig.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
         const primaryColor = themeConfig.colors.primary || '#10b981';
-        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
-        const rgbPrimary = primaryHex.startsWith('#') ? [parseInt(primaryHex.slice(1,3), 16), parseInt(primaryHex.slice(3,5), 16), parseInt(primaryHex.slice(5,7), 16)] : [16, 185, 129];
+        const rgbPrimary = hexToRgb(primaryColor);
+        const primaryHex = '#' + rgbPrimary.map(x => x.toString(16).padStart(2, '0')).join('');
         const marginX = 14;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
@@ -306,7 +307,9 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const wb = new ExcelJS.Workbook();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
-        const primaryHex = (themeConfig.colors.primary || '#10b981').replace('#', '');
+        const primaryColor = themeConfig.colors.primary || '#10b981';
+        const rgbPrimary = hexToRgb(primaryColor);
+        const primaryHex = rgbPrimary.map(x => x.toString(16).padStart(2, '0')).join('');
         const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
         const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
 
@@ -657,4 +660,6 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   );
 });
 SalesReportTab.displayName = 'SalesReportTab';
+
+
 

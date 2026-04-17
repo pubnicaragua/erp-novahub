@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Search, TrendingUp, Clock, FilePlus, Package, Eye, Trash2, ChevronLeft
+  ClipboardList, PlusCircle, Search, TrendingUp, Clock, FilePlus, Package, Eye, Trash2, ChevronLeft, Download, CheckCircle2, FileInput
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -17,7 +17,6 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { FileDown } from 'lucide-react';
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -29,10 +28,11 @@ interface OrdenesVentaViewProps {
 }
 
 const statusOptions = [
+  { label: 'Borrador',           value: 'DRAFT',          color: 'bg-slate-500/10 text-slate-500' },
   { label: 'Pendiente Revisión', value: 'PENDING_REVIEW', color: 'bg-orange-500/10 text-orange-500' },
-  { label: 'Borrador',       value: 'DRAFT',       color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Cancelada',      value: 'CANCELLED',   color: 'bg-rose-500/10 text-rose-500' },
-  { label: 'Aprobada',       value: 'SHIPPED',     color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Aprobada',           value: 'CONFIRMED',      color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Enviada',           value: 'SHIPPED',        color: 'bg-purple-500/10 text-purple-500' },
+  { label: 'Cancelada',          value: 'CANCELLED',      color: 'bg-rose-500/10 text-rose-500' },
 ];
 
 export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, customers = [], products = [] }: OrdenesVentaViewProps) {
@@ -205,21 +205,22 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     }
   ];
 
-  const confirmedAmountInDisplayCurrency = data
-    .filter(order => (order.status || '').toUpperCase() === 'SHIPPED')
-    .reduce((acc, order) => acc + convertAmount(order.total || 0, order.currency, order.exchangeRate), 0);
+  const totalAmountInDisplayCurrency = data.reduce(
+    (acc, order) => acc + convertAmount(order.total || 0, order.currency, order.exchangeRate),
+    0
+  );
 
   const kpis = [
-    { title: 'Órdenes Aprobadas',  value: data.filter(o => (o.status||'').toUpperCase() === 'SHIPPED').length, icon: Package, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+    { title: 'Total Órdenes',    value: data.length,                                                                    icon: ClipboardList, color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
+    { title: 'Por Confirmar',   value: data.filter(o => (o.status||'').toUpperCase() === 'PENDING_REVIEW').length,      icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
+    { title: 'Confirmadas',      value: data.filter(o => (o.status||'').toUpperCase() === 'CONFIRMED').length,           icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     {
-      title: `Monto Confirmado (${displayCurrency})`,
-      value: formatConvertedAmount(confirmedAmountInDisplayCurrency, displayCurrency),
+      title: `Monto Total (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${totalAmountInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
       icon: TrendingUp,
-      color: 'text-emerald-500',
-      bg: 'bg-emerald-500/10',
+      color: 'text-rose-500',
+      bg: 'bg-rose-500/10',
     },
-    { title: 'En Proceso',        value: data.filter(o => (o.status||'').toUpperCase() === 'IN_PROGRESS').length, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Total del Mes',     value: data.length, icon: ClipboardList, color: 'text-purple-500', bg: 'bg-purple-500/10' },
   ];
 
   if (editingId && localDoc) {
@@ -373,7 +374,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   setLocalDoc({ ...localDoc, items: newItems } as any);
                   handleUpdate(localDoc!.id, { items: newItems });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                  <Plus className="size-3 mr-2" /> Agregar Item
+                  <PlusCircle className="size-3 mr-2" /> Agregar Item
                 </Button>
               </div>
             </div>
@@ -557,15 +558,15 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       </div>
 
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Órdenes de Venta</h2>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Órdenes confirmadas listas para preparación y facturación.</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Sincronización total de pedidos y logística.</p>
           </div>
           <div className="flex items-center gap-3">
             {canPerform('SALES_ORDERS', 'create') && (
-              <Button onClick={handleAddOrder} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
-                <Plus className="size-4" /> Nueva Orden
+              <Button onClick={handleAddOrder} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+                <FilePlus className="size-4" /> Nueva Orden
               </Button>
             )}
           </div>
@@ -591,19 +592,43 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           allowAddRow={false}
           actions={(row) => (
             <div className="flex items-center gap-1">
-                {row.status === 'confirmed' && canPerform('SALES_ORDERS', 'edit') && (
+                {canPerform('SALES_ORDERS', 'edit') && (
                   <Button 
                     title="Generar Factura" 
-                    onClick={() => onGenerateInvoice(row)}
+                    onClick={async () => {
+                      try {
+                        await salesOrdersService.update(row.id, { status: 'SHIPPED' });
+                        onGenerateInvoice(row);
+                        toast.success('Orden marcada como Enviada');
+                      } catch (e) {
+                        toast.error('Error al actualizar estado');
+                      }
+                    }}
                     variant="ghost" 
                     size="icon" 
-                    className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
+                    disabled={String(row.status || '').toUpperCase() === 'SHIPPED'}
+                    className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors disabled:opacity-50"
                   >
-                    <FilePlus className="size-4" />
+                    <FileInput className="size-4" />
                   </Button>
                 )}
-                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
+                <Button title={canPerform('SALES_ORDERS', 'edit') ? "Editar" : "Ver detalle"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { 
+                  try { 
+                    await toast.promise(generateEstimatePDF({ 
+                      estimate: row, 
+                      tenantName: user?.tenantName || 'Empresa', 
+                      formatAmount: formatConvertedAmount, 
+                      tenantLogo: themeConfig?.logo, 
+                      documentType: 'order',
+                      primaryColor: themeConfig?.colors.primary
+                    }), { 
+                      loading: 'Generando PDF...', 
+                      success: 'PDF generado exitosamente', 
+                      error: 'Error al generar PDF' 
+                    }); 
+                  } catch(e) { console.error(e) } 
+                }}><Download className="size-4" /></Button>
                 {canPerform('SALES_ORDERS', 'delete') && (
                   <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                 )}

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef } from 'react';
-import { Search, Plus, Trash2, Save, X, Check, Package } from 'lucide-react';
+import { Search, Plus, Trash2, Save, X, Check, Package, FilePlus, PlusCircle } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -12,6 +12,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { cn } from '../ui/utils';
 
 interface ProductosViewProps {
   products: any[];
@@ -521,54 +522,155 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   };
 
   return (
-    <Card className="p-4 border bg-card rounded-xl">
-      {/* Toolbar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-        <div className="flex items-center gap-2 flex-1">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar por nombre o código..." 
-              className="pl-9 h-9"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Header & Filters */}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
+          <div>
+            <h2 className="text-xl font-black uppercase tracking-tight">Catálogo de Productos</h2>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión integral de inventario y precios.</p>
           </div>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-[240px] max-w-[45vw] h-9">
-              <SelectValue placeholder="Categoría" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas las categorías</SelectItem>
-              {categories.map((c: any) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Button
+              variant="outline"
+              className="flex-1 sm:flex-none rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
+              onClick={() => setCategoryModalOpen(true)}
+            >
+              <PlusCircle className="size-4 mr-2" /> Categoría
+            </Button>
+            {canPerform('INVENTORY_PRODUCTS', 'create') && (
+              <Button 
+                onClick={handleAddNewRow}
+                className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20"
+              >
+                <FilePlus className="size-4" /> Nuevo Producto
+              </Button>
+            )}
+          </div>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
-          onClick={() => setCategoryModalOpen(true)}
-        >
-          <Plus className="size-4 mr-2" />
-          Nueva Categoría
-        </Button>
-        {canPerform('INVENTORY_PRODUCTS', 'create') && (
-          <Button 
-            size="sm" 
-            className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
-            onClick={handleAddNewRow}
-          >
-            <Plus className="size-4" />
-            Agregar Producto
-          </Button>
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-muted/5 p-2 rounded-2xl border border-border/40">
+          <div className="flex flex-col sm:flex-row items-center gap-2 flex-1 w-full">
+            <div className="relative w-full sm:flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/40" />
+              <Input 
+                placeholder="Buscar producto..." 
+                className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-full sm:w-64 h-10 bg-background/50 border-border/50 rounded-xl text-xs font-bold uppercase">
+                <SelectValue placeholder="Categoría" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
+                {categories.map((c: any) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name.toUpperCase()}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Badge variant="outline" className="hidden sm:flex h-10 px-4 rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+            {filteredProducts.length} Registros
+          </Badge>
+        </div>
+      </div>
+
+      {/* Mobile View (Cards) */}
+      <div className="md:hidden space-y-4">
+        {Array.from(editingRows.values()).filter(p => p.isNew).map(product => (
+          <Card key={product.id} className="p-4 border-2 border-primary/20 bg-primary/5 rounded-2xl space-y-4 shadow-xl">
+             <div className="space-y-3">
+                <div>
+                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1">Nombre</p>
+                   <Input value={product.name} onChange={e => handleUpdateField(product.id, 'name', e.target.value)} className="h-10 text-xs font-bold uppercase" placeholder="NOMBRE DEL PRODUCTO" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1">Código</p>
+                    <Input value={product.code} onChange={e => handleUpdateField(product.id, 'code', e.target.value)} className="h-10 text-xs font-mono uppercase" placeholder="SKU-001" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1">Categoría</p>
+                    <Select value={product.categoryId} onValueChange={v => handleUpdateField(product.id, 'categoryId', v)}>
+                        <SelectTrigger className="h-10 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                        <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name.toUpperCase()}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+             </div>
+             <div className="flex gap-2 pt-2 border-t border-border/20">
+                <Button className="flex-1 bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest h-10 rounded-xl shadow-lg shadow-primary/20" onClick={() => handleSaveRow(product.id)}>Guardar Producto</Button>
+                <Button variant="ghost" className="size-10 rounded-xl text-rose-500 hover:bg-rose-500/10" onClick={() => handleCancelEdit(product.id)}><X className="size-4" /></Button>
+             </div>
+          </Card>
+        ))}
+
+        {filteredProducts.length === 0 && editingRows.size === 0 ? (
+          <div className="text-center py-20 bg-muted/5 rounded-3xl border border-dashed border-border/50">
+            <Package className="size-12 mx-auto mb-4 text-muted-foreground/20" />
+            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/40">No se encontraron productos</p>
+          </div>
+        ) : (
+          filteredProducts.map(product => {
+            const isEditing = editingRows.has(product.id);
+            if (isEditing) {
+              const editData = editingRows.get(product.id)!;
+              return (
+                <Card key={product.id} className="p-4 border-2 border-primary/20 bg-primary/5 rounded-2xl space-y-4">
+                   <Input value={editData.name} onChange={e => handleUpdateField(product.id, 'name', e.target.value)} className="h-10 text-xs font-black uppercase" />
+                   <div className="flex gap-2">
+                      <Button className="flex-1 bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest h-10 rounded-xl shadow-lg" onClick={() => handleSaveRow(product.id)}>Guardar</Button>
+                      <Button variant="ghost" className="size-10 rounded-xl" onClick={() => handleCancelEdit(product.id)}><X className="size-4" /></Button>
+                   </div>
+                </Card>
+              );
+            }
+            const status = getStockStatus(product.stock || 0);
+            return (
+              <Card key={product.id} className="p-4 border-border/50 rounded-2xl shadow-sm active:scale-[0.98] transition-all" onClick={() => setProductDetail(product)}>
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex-1">
+                    <h4 className="font-black text-sm uppercase text-foreground leading-none mb-1">{product.name}</h4>
+                    <p className="text-[10px] font-mono font-black text-muted-foreground/40 uppercase tracking-tighter">{product.code}</p>
+                  </div>
+                  <Badge className={`${status.color} text-[9px] font-black uppercase px-2 py-0.5 border-none rounded-lg`}>{status.label}: {product.stock || 0}</Badge>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 py-2.5 mb-2 rounded-xl bg-muted/5 border border-border/40">
+                  <div className="text-center px-1">
+                    <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">Venta</p>
+                    <p className="text-[11px] font-black italic tabular-nums">{formatAmount(product.salePrice || 0)}</p>
+                  </div>
+                  <div className="text-center px-1 border-x border-border/40">
+                    <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">Costo</p>
+                    <p className="text-[11px] font-black italic text-muted-foreground/60 tabular-nums">{formatAmount(product.costPrice || 0)}</p>
+                  </div>
+                  <div className="text-center px-1">
+                    <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">Margen</p>
+                    <p className={cn("text-[11px] font-black italic tabular-nums", (product.salePrice - product.costPrice) >= 0 ? 'text-emerald-500' : 'text-rose-500')}>
+                      {formatAmount((product.salePrice || 0) - (product.costPrice || 0))}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between pt-3 border-t border-border/40">
+                  <span className="text-[10px] font-black uppercase text-muted-foreground/60 tracking-widest">{product.category?.name || 'SIN CATEGORÍA'}</span>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="size-8 rounded-lg" onClick={(e) => { e.stopPropagation(); handleEditRow(product); }}><Save className="size-4" /></Button>
+                    <Button variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}><Trash2 className="size-4" /></Button>
+                  </div>
+                </div>
+              </Card>
+            );
+          })
         )}
       </div>
 
-      {/* Table */}
-      <div className="rounded-lg border overflow-hidden">
+      {/* Table Container */}
+      <div className="hidden md:block rounded-2xl border border-border/50 bg-card/50 overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
@@ -806,7 +908,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           )}
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }
 

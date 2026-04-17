@@ -62,7 +62,7 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'PURCHASES_EXPENSES', label: 'Gastos', parent: 'PURCHASES' },
   { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos Recurrentes', parent: 'PURCHASES' },
   { id: 'PURCHASES_ORDERS', label: 'Órdenes de Compra', parent: 'PURCHASES' },
-  { id: 'PURCHASES_RECEIPTS', label: 'Recepciones de Compra', parent: 'PURCHASES' },
+  { id: 'PURCHASES_RECEIPTS', label: 'Recepciones de Compra', parent: 'PURCHASES', status: 'pending' },
   { id: 'PURCHASES_INVOICES', label: 'Facturas de Proveedor', parent: 'PURCHASES' },
   { id: 'PURCHASES_INVOICES_REC', label: 'Facturas de Proveedor Rec.', parent: 'PURCHASES' },
   { id: 'PURCHASES_PAYMENTS', label: 'Pagos Realizados', parent: 'PURCHASES' },
@@ -1288,8 +1288,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" />Borrar</span>
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-border/40 overflow-hidden">
-                    <table className="w-full text-sm table-fixed">
+                  <div className="rounded-2xl border border-border/40 overflow-hidden overflow-x-auto">
+                    <table className="w-full text-sm table-fixed min-w-[320px] sm:min-w-full">
                       <thead className="bg-muted/30">
                         <tr>
                           <th className="text-left px-2 sm:px-3 py-2 text-[10px] sm:text-xs font-black uppercase tracking-wider text-muted-foreground">Módulo</th>
@@ -1322,22 +1322,23 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                     <p className={cn("font-bold leading-tight truncate", isSubmodule ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm")}>
                                       {mod?.label || p.module}
                                       {isSubmodule && <span className="ml-1 text-[8px] font-black text-muted-foreground/50 uppercase">SUB</span>}
+                                      {(mod as any)?.status === 'pending' && <Badge variant="outline" className="ml-2 text-[7px] py-0 px-1 border-muted-foreground/30 text-muted-foreground/50">Próximamente</Badge>}
                                     </p>
                                     <p className="hidden lg:block text-[9px] text-muted-foreground truncate">{mod?.description || ''}</p>
                                   </div>
                                 </div>
                               </td>
                               <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.read} onCheckedChange={() => togglePermission(p.module, 'read')} className="scale-[0.65] sm:scale-75" /></div>
+                                <div className="flex justify-center"><Switch disabled={!canEditRoles || (mod as any)?.status === 'pending'} checked={!!p.read} onCheckedChange={() => togglePermission(p.module, 'read')} className="scale-[0.65] sm:scale-75" /></div>
                               </td>
                               <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.create} onCheckedChange={() => togglePermission(p.module, 'create')} className="scale-[0.65] sm:scale-75" /></div>
+                                <div className="flex justify-center"><Switch disabled={!canEditRoles || (mod as any)?.status === 'pending'} checked={!!p.create} onCheckedChange={() => togglePermission(p.module, 'create')} className="scale-[0.65] sm:scale-75" /></div>
                               </td>
                               <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.edit} onCheckedChange={() => togglePermission(p.module, 'edit')} className="scale-[0.65] sm:scale-75" /></div>
+                                <div className="flex justify-center"><Switch disabled={!canEditRoles || (mod as any)?.status === 'pending'} checked={!!p.edit} onCheckedChange={() => togglePermission(p.module, 'edit')} className="scale-[0.65] sm:scale-75" /></div>
                               </td>
                               <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} className="scale-[0.65] sm:scale-75" /></div>
+                                <div className="flex justify-center"><Switch disabled={!canEditRoles || (mod as any)?.status === 'pending'} checked={!!p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} className="scale-[0.65] sm:scale-75" /></div>
                               </td>
                             </tr>
                           );

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download, Banknote
+  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download, Banknote, FilePlus, PlusCircle
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -15,6 +15,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { generateSupplierInvoicePDF } from '../../utils/pdfGenerator';
 
 interface Props {
@@ -28,14 +29,15 @@ interface Props {
 
 const statusOpts = [
   { label: 'Pendiente',   value: 'PENDING',  color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Parcial',     value: 'PARTIAL',  color: 'bg-blue-500/10 text-blue-500' },
   { label: 'Pagada',      value: 'PAID',     color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Vencida',     value: 'OVERDUE',  color: 'bg-rose-500/10 text-rose-500' },
-  { label: 'Reembolsada', value: 'REFUNDED', color: 'bg-muted/30 text-muted-foreground/50' },
+  { label: 'Vencida',     value: 'OVERDUE',  color: 'bg-orange-500/10 text-orange-500' },
+  { label: 'Parcial',     value: 'PARTIAL',  color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Cancelada',   value: 'REFUNDED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
 export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice }: Props) {
   const { canPerform, user } = useAuth();
+  const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -376,11 +378,13 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                  variant="outline"
                  className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
                  onClick={() => generateSupplierInvoicePDF({
-                   invoice: localDoc,
-                   tenantName: user?.tenantName || 'Nova Hub',
-                   formatAmount: (amount: number, currency?: string, rate?: number) =>
-                     formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
-                 })}
+                 invoice: localDoc,
+                 tenantName: user?.tenantName || 'Empresa',
+                 tenantLogo: themeConfig?.logo,
+                 formatAmount: (amount: number, currency?: string, rate?: number) =>
+                 formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
+                   primaryColor: themeConfig?.colors.primary
+                  })}
                >
                  <Download className="size-3 mr-2" /> Descargar
                </Button>
@@ -514,7 +518,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, taxRate: 0, total: 0 }];
                   setLocalDoc({ ...localDoc, items: newItems as any });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                  <Plus className="size-3 mr-2" /> Agregar Item
+                  <PlusCircle className="size-3 mr-2" /> Agregar Item
                 </Button>
               )}
             </div>
@@ -623,58 +627,96 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         ))}
       </div>
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Facturas de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Cuentas por pagar</p></div>
-          <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerform('PURCHASES_INVOICES', 'create') && (
-              <Button onClick={handleCreateNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Factura</Button>
-            )}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+          <div>
+            <h2 className="text-xl font-black uppercase tracking-tight">Facturas de Proveedor</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 text-left">Cuentas por pagar</p>
+          </div>
+          {canPerform('compras', 'create') && (
+            <Button onClick={handleCreateNew} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-lg shadow-primary/20 transition-all active:scale-[0.98]">
+              <FilePlus className="size-4" /> Nueva Factura
+            </Button>
+          )}
+        </div>
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-muted/5 p-2 rounded-2xl border border-border/40">
+          <div className="flex items-center gap-2 flex-1">
+            <Badge variant="outline" className="h-9 px-4 rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+              {filtered.length} Registros
+            </Badge>
+          </div>
+
+          <div className="relative w-full lg:w-72">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+            <Input 
+              placeholder="Buscar..." 
+              className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs" 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)} 
+            />
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={canPerform('PURCHASES_INVOICES', 'delete') ? async (ids) => {
-            try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await billsService.delete(id as string);
+        <div className="rounded-2xl border border-border/50 bg-card/50 overflow-hidden">
+          <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} allowAddRow={false}
+            onBulkDelete={canPerform('compras', 'delete') ? async (ids) => {
+              try {
+                for (const id of ids) {
+                  if (String(id).startsWith('new-')) continue;
+                  await billsService.delete(id as string);
+                }
+                toast.success('Elementos eliminados');
+                onRefresh();
+              } catch (e) {
+                toast.error('Error al eliminar');
               }
-              toast.success('Elementos eliminados');
-              onRefresh();
-            } catch (e) {
-              toast.error('Error al eliminar');
-            }
-          } : undefined}
-          actions={(row) => (
-            <div className="flex gap-1">
-              <Button title={canPerform('PURCHASES_INVOICES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_INVOICES', 'create') && onRegisterPaymentFromInvoice && (
-                <Button
-                  title="Registrar Pago"
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500"
-                  onClick={() => onRegisterPaymentFromInvoice({
-                    supplierId: row.supplierId,
-                    supplierInvoiceId: row.id,
-                    date: new Date().toISOString(),
-                    amount: getBillPaymentAmount(row),
-                    currency: row.currency || displayCurrency,
-                    exchangeRate: row.exchangeRate || globalRate,
-                    method: 'TRANSFER',
-                    reference: `PAG-${(row.number || row.id || '').toString().replace(/[^A-Za-z0-9-]/g, '').slice(0, 20)}`,
-                    notes: `Pago de factura proveedor ${row.number || row.id || ''}`.trim(),
-                  })}
-                >
-                  <Banknote className="size-4" />
-                </Button>
-              )}
-              {canPerform('PURCHASES_INVOICES', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
-              )}
-            </div>
-          )}
-        />
+            } : undefined}
+            actions={(row) => (
+              <div className="flex gap-1">
+                <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
+                  try {
+                    await toast.promise(generateSupplierInvoicePDF({
+                      invoice: row,
+                      tenantName: user?.tenantName || 'Empresa',
+                      tenantLogo: themeConfig?.logo,
+                      formatAmount: (amount: number, currency?: string, rate?: number) =>
+                        formatConvertedAmount(Number(amount || 0), currency || (row.currency as any), rate || row.exchangeRate),
+                      primaryColor: themeConfig?.colors.primary
+                    }), {
+                      loading: 'Generando PDF...',
+                      success: 'PDF generado exitosamente',
+                      error: 'Error al generar PDF'
+                    });
+                  } catch(e) { console.error(e) }
+                }}><Download className="size-4" /></Button>
+                {canPerform('compras', 'create') && onRegisterPaymentFromInvoice && (
+                  <Button
+                    title="Registrar Pago"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500"
+                    onClick={() => onRegisterPaymentFromInvoice({
+                      supplierId: row.supplierId,
+                      supplierInvoiceId: row.id,
+                      date: new Date().toISOString(),
+                      amount: getBillPaymentAmount(row),
+                      currency: row.currency || displayCurrency,
+                      exchangeRate: row.exchangeRate || globalRate,
+                      method: 'TRANSFER',
+                      reference: `PAG-${(row.number || row.id || '').toString().replace(/[^A-Za-z0-9-]/g, '').slice(0, 20)}`,
+                      notes: `Pago de factura proveedor ${row.number || row.id || ''}`.trim(),
+                    })}
+                  >
+                    <Banknote className="size-4" />
+                  </Button>
+                )}
+                {canPerform('compras', 'delete') && (
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                )}
+              </div>
+            )}
+          />
+        </div>
         <ConfirmDialog
           open={!!pendingDeleteId}
           onOpenChange={(open) => !open && setPendingDeleteId(null)}

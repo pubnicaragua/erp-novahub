@@ -709,7 +709,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, ha
           </DialogHeader>
           {editingId && (
             <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto px-1">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre</Label>
                   <Input value={editData.firstName} onChange={e => setEditData({ ...editData, firstName: e.target.value })} className="rounded-xl" />
@@ -727,7 +727,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, ha
                 <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Teléfono</Label>
                 <Input value={editData.phone || ''} onChange={e => setEditData({ ...editData, phone: e.target.value })} className="rounded-xl" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Salario</Label>
                   <Input type="number" value={editData.salary} onChange={e => setEditData({ ...editData, salary: parseFloat(e.target.value) })} className="rounded-xl" />

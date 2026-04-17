@@ -262,20 +262,27 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   return (
     <div className="w-full space-y-4" onPaste={handlePaste}>
       {/* Search & Actions Bar */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center mb-2">
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-          <Input 
-            placeholder="Buscar en tabla..." 
-            className="pl-9 h-10 bg-muted/20 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+      <div className="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center mb-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+          <div className="bg-muted/20 px-4 py-2 rounded-xl border border-border/50 flex items-center justify-center shadow-inner">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 whitespace-nowrap">
+              {filteredData.length} Registros
+            </span>
+          </div>
+          <div className="relative flex-1 sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+            <Input 
+              placeholder="Buscar contenido..." 
+              className="pl-9 h-10 bg-muted/20 border-border/50 rounded-xl text-xs font-bold uppercase tracking-widest w-full shadow-inner focus:bg-background transition-all"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
         {allowAddRow && (
            <Button 
               variant="outline" 
-              className="h-10 text-[10px] font-black uppercase tracking-widest text-primary border-primary/20 hover:bg-primary/5 rounded-xl px-6 w-full sm:w-auto"
+              className="h-10 text-[10px] font-black uppercase tracking-widest text-primary border-primary/20 hover:bg-primary/5 rounded-xl px-6 w-full sm:w-auto shadow-sm"
               onClick={handleAddNewRow}
            >
               <Plus className="size-4 mr-2" /> Agregar Nueva Fila
@@ -514,13 +521,13 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                 </div>
 
                 {/* Data of Card */}
-                <div className="grid grid-cols-1 xs:grid-cols-2 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
                   {columns.map((col) => {
                     const value = row[col.key as string];
                     return (
-                        <div key={col.key as string} className="space-y-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground/40 tracking-wider font-mono">{col.header}</p>
-                            <div className="text-[12px] font-bold text-foreground">
+                        <div key={col.key as string} className="space-y-1 min-w-0 break-words">
+                            <p className="text-[9px] font-black uppercase text-muted-foreground/40 tracking-wider font-mono truncate">{col.header}</p>
+                            <div className="text-[12px] font-bold text-foreground break-words whitespace-normal">
                                 {col.render ? col.render(value, row) : value || '-'}
                             </div>
                         </div>

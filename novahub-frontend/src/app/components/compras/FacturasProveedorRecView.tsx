@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { RotateCcw, Plus, Search, Eye, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2 } from 'lucide-react';
+import { RotateCcw, Plus, Search, Eye, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2, Download, PlusCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { recurringSupplierInvoicesService, suppliersService } from '../../services/compras.service';
+import { suppliersService, recurringSupplierInvoicesService } from '../../services/compras.service';
 import type { RecurringSupplierInvoice, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
@@ -13,6 +13,8 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { generateRecurringExpensePDF } from '../../utils/pdfGenerator';
 
 interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; }
 
@@ -24,13 +26,14 @@ const freqOpts = [
 ];
 const freqMap: Record<string,string> = { weekly:'Semanal', monthly:'Mensual', quarterly:'Trimestral', yearly:'Anual' };
 const statusOpts = [
-  { label: 'Activo',     value: 'ACTIVE',    color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Pausado',    value: 'PAUSED',    color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Cancelado',  value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Activa',     value: 'ACTIVE',    color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Pausada',    value: 'PAUSED',    color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Cancelada',  value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
 export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
+  const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -78,7 +81,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
   );
 
   const columns: ColumnDef<RecurringSupplierInvoice>[] = [
-    { key: 'description' as any, header: 'Descripción', editable: canPerform('PURCHASES_INVOICES_REC', 'edit'), 
+    { key: 'description' as any, header: 'Descripción', editable: canPerform('compras', 'edit'), 
       render: (_, row) => <span className="text-xs font-bold text-primary">{(row as any).description || 'Factura Automática'}</span> },
     { key: 'supplier' as any,    header: 'Proveedor',
       render: (_, row) => <span className="font-bold text-sm">{(row as any).supplier?.name||'-'}</span> },
@@ -88,9 +91,9 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
           {formatConvertedAmount(Number(val || (row as any).amount || 0), row.currency, row.exchangeRate)}
         </span>
       ) },
-    { key: 'frequency' as any,   header: 'Frecuencia',  width: '120px', editable: canPerform('PURCHASES_INVOICES_REC', 'edit'), type: 'select', options: freqOpts,
+    { key: 'frequency' as any,   header: 'Frecuencia',  width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: freqOpts,
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-purple-500/10 text-purple-500 border-none">{freqMap[(val||'').toLowerCase()]||val||'-'}</Badge> },
-    { key: 'status' as any,      header: 'Estado',      width: '110px', editable: canPerform('PURCHASES_INVOICES_REC', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status' as any,      header: 'Estado',      width: '110px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -162,13 +165,28 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-             {!isNew && canPerform('PURCHASES_INVOICES_REC', 'delete') && (
+             {!isNew && (
+                <Button
+                  variant="outline"
+                  className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
+                  onClick={() => generateRecurringExpensePDF({
+                    recurring: localDoc,
+                    tenantName: user?.tenantName || 'Empresa',
+                    tenantLogo: themeConfig?.logo,
+                    formatAmount: formatConvertedAmount,
+                    primaryColor: themeConfig?.colors.primary
+                  })}
+                >
+                  <Download className="size-3 mr-2" /> Descargar
+                </Button>
+             )}
+             {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
-            {((isNew && canPerform('PURCHASES_INVOICES_REC', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES_REC', 'edit'))) && (
+            {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Factura Recurrente
               </Button>
@@ -184,7 +202,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Nombre Descriptivo</p>
                   <Input 
-                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     value={(localDoc as any).description || ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, description: e.target.value } as any)} 
                     className="h-8 text-xs font-bold" 
@@ -194,7 +212,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor Obligatorio</p>
                   <Combobox
-                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     options={suppliers
                       .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
                       .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
@@ -206,7 +224,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
                   <select 
-                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     value={localDoc.frequency || 'monthly'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, frequency: e.target.value as any })}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase text-primary"
@@ -217,7 +235,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha de Inicio</p>
                   <Input 
-                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     type="date" 
                     value={localDoc.startDate ? new Date(localDoc.startDate).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, startDate: new Date(e.target.value).toISOString() })} 
@@ -227,7 +245,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] font-black text-rose-500 mb-1 tracking-widest">Siguiente Factura *</p>
                   <Input 
-                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     type="date" 
                     value={(localDoc as any).nextInvoiceDate ? new Date((localDoc as any).nextInvoiceDate).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, nextInvoiceDate: new Date(e.target.value).toISOString() } as any)} 
@@ -237,7 +255,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <select 
-                    disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     value={localDoc.status || 'ACTIVE'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                     className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
@@ -253,12 +271,12 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
              <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Plantilla de Ítems</p>
-                  {((isNew && canPerform('PURCHASES_INVOICES_REC', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES_REC', 'edit'))) && (
+                  {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
                     <Button variant="outline" size="sm" onClick={() => {
                       const newItems = [...((localDoc as any).items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, total: 0 }];
                       setLocalDoc({ ...localDoc, items: newItems } as any);
                     }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                      <Plus className="size-3 mr-2" /> Agregar Item
+                      <PlusCircle className="size-3 mr-2" /> Agregar Item
                     </Button>
                   )}
                 </div>
@@ -274,7 +292,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                     <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
                       <div className="col-span-6">
                         <Input 
-                          disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
+                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                           value={item.description || ''} 
                           onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
                           className="h-8 text-xs" 
@@ -283,7 +301,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                       </div>
                       <div className="col-span-2">
                         <Input 
-                          disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
+                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                           type="number" 
                           min="0" 
                           value={item.quantity === 0 ? '' : item.quantity} 
@@ -294,7 +312,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                       </div>
                       <div className="col-span-2">
                         <Input 
-                          disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
+                          disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                           type="number" 
                           min="0" 
                           value={item.unitPrice === 0 ? '' : item.unitPrice} 
@@ -305,7 +323,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                       </div>
                       <div className="col-span-2 flex items-center justify-end gap-2">
                         <span className="text-xs font-black w-20 text-right tabular-nums">${Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                        {((isNew && canPerform('PURCHASES_INVOICES_REC', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES_REC', 'edit'))) && (
+                        {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
                           <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
                             <Trash2 className="size-3" />
                           </Button>
@@ -325,7 +343,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                       <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
                          <div className="w-1/2">
                             <select 
-                              disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
+                              disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                               value={localDoc.currency || 'NIO'} 
                               onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value, exchangeRate: globalRate } as any)}
                               className="h-6 w-full max-w-[80px] rounded-md border border-input bg-background px-1 text-[10px] font-bold uppercase"
@@ -399,37 +417,74 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
         ))}
       </div>
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Facturas Recurrentes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Servicios y pagos automáticos</p></div>
-          <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerform('PURCHASES_INVOICES_REC', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Agregar Factura Recurrente</Button>
-            )}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+          <div>
+            <h2 className="text-xl font-black uppercase tracking-tight">Facturas Recurrentes</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 text-left">Servicios y pagos automáticos</p>
+          </div>
+          {canPerform('compras', 'create') && (
+            <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-lg shadow-primary/20 transition-all active:scale-[0.98]">
+              <RotateCcw className="size-4" /> Nuevo Recurrente
+            </Button>
+          )}
+        </div>
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-muted/5 p-2 rounded-2xl border border-border/40">
+          <div className="flex items-center gap-2 flex-1">
+            <Badge variant="outline" className="h-9 px-4 rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+              {filtered.length} Registros
+            </Badge>
+          </div>
+
+          <div className="relative w-full lg:w-72">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+            <Input 
+              placeholder="Buscar..." 
+              className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs" 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)} 
+            />
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={canPerform('PURCHASES_INVOICES_REC', 'delete') ? async (ids) => {
-            try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await recurringSupplierInvoicesService.delete(id as string);
+        <div className="rounded-2xl border border-border/50 bg-card/50 overflow-hidden">
+          <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} allowAddRow={false}
+            onBulkDelete={canPerform('compras', 'delete') ? async (ids) => {
+              try {
+                for (const id of ids) {
+                  if (String(id).startsWith('new-')) continue;
+                  await recurringSupplierInvoicesService.delete(id as string);
+                }
+                toast.success('Elementos eliminados');
+                onRefresh();
+              } catch (e) {
+                toast.error('Error al eliminar');
               }
-              toast.success('Elementos eliminados');
-              onRefresh();
-            } catch (e) {
-              toast.error('Error al eliminar');
-            }
-          } : undefined}
-          actions={(row) => (
-            <div className="flex gap-1">
-              <Button title={canPerform('PURCHASES_INVOICES_REC', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_INVOICES_REC', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
-              )}
-            </div>
-          )}
-        />
+            } : undefined}
+            actions={(row) => (
+              <div className="flex gap-1">
+                <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
+                  try {
+                    await toast.promise(generateRecurringExpensePDF({
+                      recurring: row,
+                      tenantName: user?.tenantName || 'Empresa',
+                      tenantLogo: themeConfig?.logo,
+                      formatAmount: formatConvertedAmount,
+                      primaryColor: themeConfig?.colors.primary
+                    }), {
+                      loading: 'Generando PDF...',
+                      success: 'PDF generado exitosamente',
+                      error: 'Error al generar PDF'
+                    });
+                  } catch(e) { console.error(e) }
+                }}><Download className="size-4" /></Button>
+                {canPerform('compras', 'delete') && (
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                )}
+              </div>
+            )}
+          />
+        </div>
       </div>
     </div>
   );

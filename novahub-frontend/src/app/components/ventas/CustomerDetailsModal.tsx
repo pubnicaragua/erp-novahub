@@ -22,7 +22,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import type { Customer } from '../../types';
-import { generateCustomerStatementPDF } from '../../utils/pdfGenerator';
+import { generateCustomerStatementPDF, translateStatus } from '../../utils/pdfGenerator';
 
 interface CustomerDetailsModalProps {
   customer: Customer | null;
@@ -105,9 +105,10 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
       await generateCustomerStatementPDF({
         customer,
         transactions,
-        tenantName: user?.tenantName || 'Nova Hub',
+        tenantName: user?.tenantName || 'Empresa',
         tenantLogo: themeConfig?.logo,
-        formatAmount: formatConvertedAmount
+        formatAmount: formatConvertedAmount,
+        primaryColor: themeConfig?.colors.primary
       });
       toast.success('Estado de cuenta exportado');
     } catch (error) {
@@ -150,7 +151,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
         </DialogHeader>
 
         {/* Content Area */}
-        <ScrollArea className="flex-1 bg-slate-50/30 dark:bg-transparent">
+        <ScrollArea className="flex-1 min-h-0 overflow-auto bg-slate-50/30 dark:bg-transparent">
           <div className="p-6 md:p-8 space-y-8">
             
             {/* KPI Cards: Responsive Grid */}
@@ -251,7 +252,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                             <Calendar className="size-3.5" /> {new Date(it.date).toLocaleDateString()}
                           </span>
                           <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/30 flex items-center gap-1 whitespace-nowrap">
-                            • {it.status || 'Completado'}
+                            • {translateStatus(it.status)}
                           </span>
                         </div>
                       </div>

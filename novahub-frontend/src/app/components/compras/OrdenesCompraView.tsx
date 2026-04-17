@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput, Download, FileText
+  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput, Download, FileText, PlusCircle, FilePlus
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { generatePurchaseOrderPDF } from '../../utils/pdfGenerator';
 import { exportToCsv } from '../../utils/exportUtils';
 
@@ -32,15 +33,16 @@ const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
 
 const statusOpts = [
-  { label: 'Borrador',   value: 'DRAFT',      color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Pendiente',  value: 'PENDING',    color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Aprobada',   value: 'APPROVED',   color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Recibida',   value: 'RECEIVED',   color: 'bg-purple-500/10 text-purple-500' },
-  { label: 'Cancelada',  value: 'CANCELLED',  color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Borrador',           value: 'DRAFT',     color: 'bg-slate-500/10 text-slate-500' },
+  { label: 'Pendiente Revisión', value: 'PENDING',   color: 'bg-orange-500/10 text-orange-500' },
+  { label: 'Aprobada',           value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Recibida',           value: 'RECEIVED',  color: 'bg-purple-500/10 text-purple-500' },
+  { label: 'Cancelada',          value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
 export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice, supplierInvoices = [] }: Props) {
   const { canPerform, user } = useAuth();
+  const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -127,7 +129,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
 
         </span>
       ) },
-    { key: 'status',   header: 'Estado',    width: '120px', editable: canPerform('PURCHASES_ORDERS', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status',   header: 'Estado',    width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -368,11 +370,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                    variant="outline"
                    className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
                    onClick={() => generatePurchaseOrderPDF({
-                     order: localDoc,
-                     tenantName: user?.tenantName || 'Nova Hub',
-                     formatAmount: (amount: number, currency?: string, rate?: number) =>
-                       formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
-                   })}
+                   order: localDoc,
+                   tenantName: user?.tenantName || 'Empresa',
+                   tenantLogo: themeConfig?.logo,
+                   formatAmount: (amount: number, currency?: string, rate?: number) =>
+                   formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
+                     primaryColor: themeConfig?.colors.primary
+                    })}
                  >
                    <Download className="size-3 mr-2" /> Exportar PDF
                  </Button>
@@ -385,13 +389,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                  </Button>
                </>
              )}
-             {!isNew && canPerform('PURCHASES_ORDERS', 'delete') && (
+             {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
-            {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
+            {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar
               </Button>
@@ -413,7 +417,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div className={isNew ? 'col-span-2' : ''}>
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
                   <Combobox 
-                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     options={suppliers
                       .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
                       .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
@@ -425,7 +429,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
                   <Input 
-                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     type="date" 
                     value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
@@ -435,7 +439,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Entrega Esperada</p>
                   <Input 
-                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     type="date" 
                     value={localDoc.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, expectedDelivery: new Date(e.target.value).toISOString() })} 
@@ -445,7 +449,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <select 
-                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     value={localDoc.status || 'DRAFT'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
                     className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
@@ -456,7 +460,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
                   <select 
-                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     value={localDoc.currency || 'NIO'} 
                     onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any })}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
@@ -472,14 +476,14 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                     <Switch
                       checked={!!localDoc.isService}
                       onCheckedChange={handleServiceToggle}
-                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     />
                   </div>
                 </div>
                 <div className="col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Dirección</p>
                   <Input
-                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     value={localDoc.address || ''}
                     onChange={(e) => setLocalDoc({ ...localDoc, address: e.target.value })}
                     className="h-8 text-xs"
@@ -489,7 +493,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div className="col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Adjuntar evidencia (PDF, imagen, XLSX)</p>
                   <Input
-                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     type="file"
                     accept=".pdf,.xlsx,.xls,image/*"
                     onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
@@ -577,13 +581,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Ítems de Orden</p>
-              {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
+              {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
                 <Button variant="outline" size="sm" onClick={() => {
                   const isServiceOrder = !!localDoc.isService;
                   const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, code: '', name: '', category: '', stockApplies: isServiceOrder ? false : false, stock: undefined, quantity: 1, unitPrice: 0, total: 0 }];
                   setLocalDoc({ ...localDoc, items: newItems as any });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                  <Plus className="size-3 mr-2" /> Agregar Item
+                  <PlusCircle className="size-3 mr-2" /> Agregar Item
                 </Button>
               )}
             </div>
@@ -603,7 +607,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-2">
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={item.code || ''} 
                       onChange={(e) => handleItemChange(idx, 'code', e.target.value)} 
                       className="h-8 text-xs" 
@@ -612,7 +616,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   </div>
                   <div className="col-span-2">
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={item.name || ''} 
                       onChange={(e) => handleItemChange(idx, 'name', e.target.value)} 
                       className="h-8 text-xs" 
@@ -621,7 +625,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   </div>
                   <div className="col-span-2">
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={item.category || ''} 
                       onChange={(e) => handleItemChange(idx, 'category', e.target.value)} 
                       className="h-8 text-xs" 
@@ -635,12 +639,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                           type="checkbox"
                           checked={!!item.stockApplies}
                           onChange={(e) => handleItemChange(idx, 'stockApplies', e.target.checked)}
-                          disabled={!!localDoc.isService || (isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit'))}
+                          disabled={!!localDoc.isService || (isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit'))}
                         />
                         Stock
                       </label>
                       <Input 
-                        disabled={!item.stockApplies || (isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit'))}
+                        disabled={!item.stockApplies || (isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit'))}
                         type="number"
                         min="0"
                         value={item.stock === 0 ? '' : (item.stock ?? '')} 
@@ -652,7 +656,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   </div>
                   <div className="col-span-1">
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       type="number" 
                       min="0" 
                       value={item.quantity === 0 ? '' : item.quantity} 
@@ -663,7 +667,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   </div>
                   <div className="col-span-1">
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                      disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       type="number" 
                       min="0" 
                       value={item.unitPrice === 0 ? '' : item.unitPrice} 
@@ -682,7 +686,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                     />
                   </div>
                   <div className="col-span-1 flex items-center justify-end gap-2">
-                    {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
+                    {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
                       <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
                         <Trash2 className="size-3" />
                       </Button>
@@ -732,47 +736,84 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
         ))}
       </div>
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Órdenes de Compra</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Pedidos a proveedores</p></div>
-          <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerform('PURCHASES_ORDERS', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Orden</Button>
-            )}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+          <div>
+            <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Órdenes de Compra</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 text-left">Pedidos a proveedores y control de suministro</p>
           </div>
-        </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={canPerform('PURCHASES_ORDERS', 'delete') ? async (ids) => {
-            try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await purchaseOrdersService.delete(id as string);
-              }
-              toast.success('Elementos eliminados');
-              onRefresh();
-            } catch (e) {
-              toast.error('Error al eliminar');
-            }
-          } : undefined}
-          actions={(row) => (
-            <div className="flex gap-1">
-              <Button
-                title="Convertir a Factura"
-                variant="ghost"
-                size="icon"
-                disabled={String(row.status || '').toUpperCase() === 'RECEIVED' || supplierInvoices.some((inv) => inv.purchaseOrderId === row.id)}
-                className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-50"
-                onClick={() => handleConvertToInvoice(row)}
-              >
-                <FileInput className="size-4" />
-              </Button>
-              <Button title={canPerform('PURCHASES_ORDERS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_ORDERS', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
-              )}
-            </div>
+          {canPerform('compras', 'create') && (
+            <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-lg shadow-primary/20 transition-all active:scale-[0.98]">
+              <FilePlus className="size-4" /> Nueva Orden
+            </Button>
           )}
-        />
+        </div>
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-muted/5 p-2 rounded-2xl border border-border/40">
+           <div className="flex items-center gap-2 flex-1">
+              <Badge variant="outline" className="h-9 px-4 rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+                {data.length} Órdenes Registradas
+              </Badge>
+           </div>
+           
+           <div className="relative w-full lg:w-72">
+             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+             <Input 
+               placeholder="Buscar..." 
+               className="pl-9 h-10 w-full bg-background border-border/50 rounded-xl text-xs" 
+               value={searchTerm} 
+               onChange={e => setSearchTerm(e.target.value)} 
+             />
+           </div>
+        </div>
+        <div className="rounded-2xl border border-border/50 bg-card/50 overflow-hidden">
+          <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} allowAddRow={false}
+            onBulkDelete={canPerform('compras', 'delete') ? async (ids) => {
+              try {
+                for (const id of ids) {
+                  if (String(id).startsWith('new-')) continue;
+                  await purchaseOrdersService.delete(id as string);
+                }
+                toast.success('Elementos eliminados');
+                onRefresh();
+              } catch (e) {
+                toast.error('Error al eliminar');
+              }
+            } : undefined}
+            actions={(row) => (
+              <div className="flex gap-1">
+                <Button
+                  title="Convertir a Factura"
+                  variant="ghost"
+                  size="icon"
+                  disabled={String(row.status || '').toUpperCase() === 'RECEIVED' || supplierInvoices.some((inv) => inv.purchaseOrderId === row.id)}
+                  className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-50"
+                  onClick={() => handleConvertToInvoice(row)}
+                >
+                  <FileInput className="size-4" />
+                </Button>
+                <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
+                  try {
+                    await toast.promise(generatePurchaseOrderPDF({
+                      order: row,
+                      tenantName: user?.tenantName || 'Empresa',
+                      tenantLogo: themeConfig?.logo,
+                      formatAmount: formatConvertedAmount,
+                      primaryColor: themeConfig?.colors.primary
+                    }), {
+                      loading: 'Generando PDF...',
+                      success: 'PDF generado exitosamente',
+                      error: 'Error al generar PDF'
+                    });
+                  } catch(e) { console.error(e) }
+                }}><Download className="size-4" /></Button>
+                {canPerform('compras', 'delete') && (
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                )}
+              </div>
+            )}
+          />
+        </div>
         <ConfirmDialog
           open={!!pendingDeleteId}
           onOpenChange={(open) => !open && setPendingDeleteId(null)}

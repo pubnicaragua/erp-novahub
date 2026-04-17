@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, FilePlus, Eye, Trash2, ChevronLeft
+  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, FilePlus, Eye, Trash2, ChevronLeft, PlusCircle, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -363,7 +363,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                   setLocalDoc({ ...localDoc, items: newItems } as any);
                   handleUpdate(localDoc!.id, { items: newItems });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                  <Plus className="size-3 mr-2" /> Agregar Item
+                  <PlusCircle className="size-3 mr-2" /> Agregar Item
                 </Button>
               </div>
             </div>
@@ -511,15 +511,15 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
       </div>
 
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Estimaciones & Cotizaciones</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Negociaciones en tiempo real sin modals ni esperas.</p>
           </div>
           <div className="flex items-center gap-3">
             {canPerform('SALES_QUOTES', 'create') && (
-              <Button onClick={handleAddEstimate} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
-                <Plus className="size-4" /> Nueva Cotización
+              <Button onClick={handleAddEstimate} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+                <FilePlus className="size-4" /> Nueva Cotización
               </Button>
             )}
           </div>
@@ -551,11 +551,12 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                   estimate: {...row, customer: customers.find(c => c.id === row.customerId) || row.customer},
                   tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
                   tenantLogo: themeConfig?.logo,
-                  formatAmount: formatConvertedAmount
+                  formatAmount: formatConvertedAmount,
+                  primaryColor: themeConfig?.colors.primary
                 });
                 toast.success('Generando PDF...');
               }}>
-                <FilePlus className="size-4 text-muted-foreground hover:text-primary" />
+                <FileDown className="size-4 text-muted-foreground hover:text-primary" />
               </Button>
               <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setEditingId(row.id); }}>
                 <Eye className="size-4 text-muted-foreground hover:text-primary" />

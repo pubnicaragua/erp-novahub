@@ -12,6 +12,7 @@ export const customersService = {
   create: (data: Partial<Customer>) => api.post<Customer>('/sales/customers', data),
   update: (id: string, data: Partial<Customer>) => api.patch<Customer>(`/sales/customers/${id}`, data),
   delete: (id: string) => api.delete<void>(`/sales/customers/${id}`),
+  recalculateBalance: (id: string) => api.patch<any>(`/sales/customers/${id}/recalculate-balance`, {}),
 };
 
 // ---- Estimates ----

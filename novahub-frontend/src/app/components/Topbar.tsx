@@ -99,6 +99,8 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
 
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const toggleTheme = () => {
+    document.documentElement.classList.add('disable-transitions');
+    
     setIsDark(!isDark);
     if (!isDark) {
       document.documentElement.classList.add('dark');
@@ -107,6 +109,10 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       document.documentElement.classList.remove('dark');
       localStorage.setItem('erp-theme-mode', 'light');
     }
+
+    setTimeout(() => {
+      document.documentElement.classList.remove('disable-transitions');
+    }, 50);
   };
 
   const { currency, toggleCurrency, currencyInteractionEnabled } = useCurrency();
@@ -179,8 +185,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           <span className="text-xs font-bold">{currency}</span>
         </Button>
 
-        <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9" aria-label="Cambiar tema">
-          {isDark ? <Sun className="size-5" /> : <Moon className="size-5" />}
+        <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9 relative theme-toggle-btn overflow-hidden" aria-label="Cambiar tema">
+          <Sun className={cn("absolute inset-0 m-auto size-5 transition-all duration-500 ease-[cubic-bezier(0.175,0.885,0.32,1.275)]", isDark ? "translate-y-0 opacity-100 scale-100" : "translate-y-8 opacity-0 scale-50")} />
+          <Moon className={cn("absolute inset-0 m-auto size-5 transition-all duration-500 ease-[cubic-bezier(0.175,0.885,0.32,1.275)]", !isDark ? "translate-y-0 opacity-100 scale-100" : "-translate-y-8 opacity-0 scale-50")} />
         </Button>
 
         {/* Notifications */}

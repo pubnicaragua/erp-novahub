@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, FileDown, History
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, FileDown, History, FilePlus, PlusCircle
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -569,7 +569,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: '', serialNumbers: [] }];
                   setLocalDoc({ ...localDoc, items: newItems });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                  <Plus className="size-3 mr-2" /> Agregar Item
+                  <PlusCircle className="size-3 mr-2" /> Agregar Item
                 </Button>
               </div>
             </div>
@@ -777,15 +777,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       </div>
 
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Control de Facturación</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de recaudos masivos sin fricción.</p>
           </div>
           <div className="flex items-center gap-3">
             {canPerform('SALES_INVOICES', 'create') && (
-              <Button onClick={startNewInvoice} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
-                <Plus className="size-4" /> Nueva Factura
+              <Button onClick={startNewInvoice} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+                <FilePlus className="size-4" /> Nueva Factura
               </Button>
             )}
           </div>
@@ -812,7 +812,22 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           bulkActions={() => null}
           actions={(row) => (
               <div className="flex items-center gap-1">
-                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'invoice' as any }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
+                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { 
+                  try { 
+                    toast.promise(generateEstimatePDF({ 
+                      estimate: row, 
+                      tenantName: user?.tenantName || 'Empresa', 
+                      formatAmount: formatConvertedAmount as any, 
+                      tenantLogo: themeConfig?.logo, 
+                      documentType: 'invoice' as any,
+                      primaryColor: themeConfig?.colors.primary 
+                    }), { 
+                      loading: 'Generando PDF...', 
+                      success: 'PDF generado exitosamente', 
+                      error: 'Error al generar PDF' 
+                    }); 
+                  } catch(e) { console.error(e) } 
+                }}><FileDown className="size-4" /></Button>
                 <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4" /></Button>
                 <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                 {canPerform('SALES_INVOICES', 'delete') && (

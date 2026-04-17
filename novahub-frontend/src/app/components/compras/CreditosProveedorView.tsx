@@ -1,39 +1,42 @@
 import { useState, useEffect } from 'react';
-import { BadgeDollarSign, Plus, Search, Eye, TrendingUp, Hash, Trash2, ChevronLeft } from 'lucide-react';
+import { 
+  Wallet, Plus, Search, Eye, Trash2, CheckCircle2, TrendingDown, ChevronLeft, Clock, Download, FileMinus
+} from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { vendorCreditsService, suppliersService } from '../../services/compras.service';
-import type { SupplierCredit, Supplier } from '../../types';
+import type { VendorCredit, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
-import { cn } from '../ui/utils';
-import { useCurrency } from '../../contexts/CurrencyContext';
-import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { cn } from '../ui/utils';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { generateSupplierCreditPDF } from '../../utils/pdfGenerator';
 
-interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; }
+interface Props { data: VendorCredit[]; loading: boolean; onRefresh: () => void; }
 
 const statusOpts = [
-  { label: 'Borrador',  value: 'draft',   color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Emitido',   value: 'issued',  color: 'bg-blue-500/10 text-blue-500' },
-  { label: 'Aplicado',  value: 'applied', color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Anulado',   value: 'voided',  color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Emitido',   value: 'OPEN',   color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Aplicado',  value: 'CLOSED', color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Anulado',   value: 'VOIDED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
 export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
-  const { canPerform } = useAuth();
-  const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
+  const { canPerform, user } = useAuth();
+  const { formatConvertedAmount, displayCurrency, globalRate } = useCurrency();
+  const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
-  
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [localDoc, setLocalDoc] = useState<Partial<SupplierCredit> | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [localDoc, setLocalDoc] = useState<Partial<VendorCredit> | null>(null);
 
   useEffect(() => {
     suppliersService.getAll().then(res => {
@@ -48,10 +51,12 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
          setLocalDoc({
            supplierId: '',
            date: new Date().toISOString(),
-           reason: '',
-           status: 'issued',
-           items: [],
-           total: 0
+           total: 0,
+           balance: 0,
+           status: 'OPEN' as any,
+           notes: '',
+           currency: displayCurrency,
+           exchangeRate: globalRate,
          });
       } else {
          const found = data.find(x => x.id === editingId);
@@ -60,98 +65,64 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     } else {
       setLocalDoc(null);
     }
-  }, [editingId, data]);
+  }, [editingId, data, displayCurrency, globalRate]);
 
   const filtered = data.filter(c =>
     (c.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (c.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const resolveSourceCurrency = (value?: string) => ((value || '').toUpperCase() === 'USD' ? 'USD' : 'NIO');
-
-  const columns: ColumnDef<SupplierCredit>[] = [
-    { key: 'number',   header: 'Nota #',     width: '120px',
-      render: (_v, row) => <span className="font-black font-mono text-primary text-xs">{row.number||row.id?.slice(0,8)}</span> },
-    { key: 'supplier', header: 'Proveedor',
+  const columns: ColumnDef<VendorCredit>[] = [
+    { key: 'number',    header: 'Crédito #',    width: '120px',
+      render: (val) => <span className="font-black font-mono text-primary text-xs">{val}</span> },
+    { key: 'supplier',  header: 'Proveedor',   width: '200px',
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
-    { key: 'date',     header: 'Fecha',      width: '110px',
+    { key: 'date',      header: 'Fecha',       width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
-    { key: 'total',    header: 'Total',      width: '120px',
-      render: (val, row) => <span className="font-black tabular-nums">{formatConvertedAmount(Number(val || 0), resolveSourceCurrency((row as any)?.currency), (row as any)?.exchangeRate)}</span> },
-    { key: 'status',   header: 'Estado',     width: '110px', editable: canPerform('PURCHASES_RETURNS', 'edit'), type: 'select', options: statusOpts,
-      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toLowerCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
+    { key: 'total',     header: 'Monto Total', width: '130px',
+      render: (val, row) => <span className="font-bold tabular-nums">{formatConvertedAmount(val, row.currency, row.exchangeRate)}</span> },
+    { key: 'balance',   header: 'Saldo Disp.', width: '130px',
+      render: (val, row) => <span className="font-black tabular-nums text-emerald-500">{formatConvertedAmount(val, row.currency, row.exchangeRate)}</span> },
+    { key: 'status',    header: 'Estado',      width: '120px', editable: canPerform('PURCHASES_RETURNS', 'edit'), type: 'select', options: statusOpts,
+      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
-  const handleUpdate = async (id: string | number, updates: Partial<SupplierCredit>) => {
-    try { await vendorCreditsService.update(id as string, updates); toast.success('Crédito actualizado'); onRefresh(); }
+  const handleUpdate = async (id: string | number, updates: Partial<VendorCredit>) => {
+    try { await (vendorCreditsService as any).update(id as string, updates); toast.success('Crédito actualizado'); onRefresh(); }
     catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
   };
 
-  const recalculatedTotal = (localDoc?.items || []).reduce((acc, it) => acc + (Number(it.quantity || 0) * Number(it.unitPrice || 0)), 0);
-  
   const handleSaveDoc = async () => {
-    if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
+    if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
+    if (!localDoc?.total || localDoc.total <= 0) return toast.error('El monto debe ser mayor a 0');
     
     try {
-      const finalDoc = {
-          ...localDoc, 
-          total: recalculatedTotal,
-          currency: displayCurrency === 'USD' ? 'USD' : 'NIO'
-      };
       if (editingId === 'NEW') {
-        await vendorCreditsService.create(finalDoc as any);
-        toast.success('Crédito registrado exitosamente');
+        await vendorCreditsService.create({...localDoc, balance: localDoc.total} as any);
+        toast.success('Crédito creado');
       } else {
-        await vendorCreditsService.update(editingId!, finalDoc as any);
+        await (vendorCreditsService as any).update(editingId!, localDoc as any);
         toast.success('Crédito guardado');
       }
       setEditingId(null);
       onRefresh();
-    } catch (e: any) { 
-        toast.error('Error al registrar: ' + (e.response?.data?.message || 'Error')); 
+    } catch (e: any) {
+      toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
     }
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!pendingDeleteId) return;
-    setDeleteLoading(true);
-    try {
-      await vendorCreditsService.delete(pendingDeleteId);
-      toast.success('Crédito eliminado exitosamente');
-      setPendingDeleteId(null);
-      setEditingId(null);
-      onRefresh();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Error al eliminar');
-    } finally {
-      setDeleteLoading(false);
-    }
-  };
-
-  const handleDeleteItem = (idx: number) => {
-    if (!localDoc) return;
-    const newItems = [...(localDoc.items || [])];
-    newItems.splice(idx, 1);
-    setLocalDoc({ ...localDoc, items: newItems as any });
-  };
-
-  const handleItemChange = (idx: number, field: string, value: any) => {
-    if (!localDoc) return;
-    const newItems = [...(localDoc.items || [])];
-    newItems[idx] = { ...newItems[idx], [field]: value };
-    
-    if (['quantity', 'unitPrice'].includes(field)) {
-       const q = Number(newItems[idx].quantity || 0);
-       const p = Number(newItems[idx].unitPrice || 0);
-       newItems[idx].total = q * p;
-    }
-    setLocalDoc({ ...localDoc, items: newItems as any });
-  };
+  const todayStr = new Date().toLocaleDateString();
+  const kpis = [
+    { title: 'Total Créditos', value: data.length,                                                                                  icon: Wallet,       color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
+    { title: `Balance Total (${displayCurrency})`, value: formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.balance || 0), 0)), icon: TrendingDown, color: 'text-rose-500',    bg: 'bg-rose-500/10'    },
+    { title: 'Créditos Disponibles', value: data.filter(c => Number(c.balance || 0) > 0).length,                                    icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Créditos Hoy',   value: data.filter(c => c.date && new Date(c.date).toLocaleDateString() === todayStr).length,        icon: Clock,        color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
+  ];
 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
-    const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toLowerCase());
-
+    const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
+    
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -160,11 +131,26 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Nota de Crédito' : `Nota ${localDoc.number || 'de Crédito'}`}</h2>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor</p>
+              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nuevo Nota de Crédito' : `Crédito ${localDoc.number||''}`}</h2>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor del proveedor</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
+             {!isNew && (
+                <Button
+                  variant="outline"
+                  className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
+                  onClick={() => generateSupplierCreditPDF({
+                    credit: localDoc,
+                    tenantName: user?.tenantName || 'Empresa',
+                    tenantLogo: themeConfig?.logo,
+                    formatAmount: formatConvertedAmount,
+                    primaryColor: themeConfig?.colors.primary
+                  })}
+                >
+                  <Download className="size-3 mr-2" /> Descargar
+                </Button>
+             )}
              {!isNew && canPerform('PURCHASES_RETURNS', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
@@ -173,151 +159,54 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
              )}
             {((isNew && canPerform('PURCHASES_RETURNS', 'create')) || (!isNew && canPerform('PURCHASES_RETURNS', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                Guardar Nota
+                Guardar
               </Button>
             )}
           </div>
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50 col-span-2">
-            <CardContent className="p-6 space-y-3">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Datos del Crédito</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1">
+            <CardContent className="p-6 space-y-4">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalles del Crédito</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
-                  <Combobox
-                    disabled={isNew ? !canPerform('PURCHASES_RETURNS', 'create') : !canPerform('PURCHASES_RETURNS', 'edit')}
-                    options={suppliers
-                      .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
-                      .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
+                  <Combobox 
+                    options={suppliers.map(s => ({ label: s.name, value: s.id }))}
                     value={localDoc.supplierId || ''}
                     onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
-                    placeholder="Seleccionar proveedor..."
+                    placeholder="Seleccionar Proveedor"
                   />
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
-                  <Input 
-                    disabled={isNew ? !canPerform('PURCHASES_RETURNS', 'create') : !canPerform('PURCHASES_RETURNS', 'edit')}
-                    type="date" 
-                    value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
-                    className="h-8 text-xs" 
-                  />
+                  <p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
+                  <Input type="date" value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onChange={e => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <select 
-                    disabled={isNew ? !canPerform('PURCHASES_RETURNS', 'create') : !canPerform('PURCHASES_RETURNS', 'edit')}
-                    value={localDoc.status || 'issued'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
-                    className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
-                  >
-                    {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
+                   <select value={localDoc.status || 'OPEN'} onChange={e => setLocalDoc({ ...localDoc, status: e.target.value as any })} className={cn("h-8 w-full rounded-md border text-xs font-bold uppercase", currentStatus?.color)}>
+                     {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                   </select>
                 </div>
-                <div className="md:col-span-4">
-                  <p className="text-[10px] text-muted-foreground mb-1">Razón / Concepto</p>
-                  <Input 
-                    disabled={isNew ? !canPerform('PURCHASES_RETURNS', 'create') : !canPerform('PURCHASES_RETURNS', 'edit')}
-                    value={localDoc.reason || ''} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })} 
-                    className="h-8 text-xs" 
-                    placeholder="Ej. Devolución de mercadería" 
-                  />
+                <div className="md:col-span-2">
+                  <p className="text-[10px] text-muted-foreground mb-1">Notas</p>
+                  <Input value={localDoc.notes || ''} onChange={e => setLocalDoc({ ...localDoc, notes: e.target.value })} className="h-8 text-xs" placeholder="Motivo del crédito..." />
                 </div>
               </div>
             </CardContent>
           </Card>
-
-          <Card className="rounded-2xl border-border/50 col-span-2">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalles</p>
-                {((isNew && canPerform('PURCHASES_RETURNS', 'create')) || (!isNew && canPerform('PURCHASES_RETURNS', 'edit'))) && (
-                  <Button variant="outline" size="sm" onClick={() => {
-                    const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, total: 0 }];
-                    setLocalDoc({ ...localDoc, items: newItems as any });
-                  }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                    <Plus className="size-3 mr-2" /> Agregar Item
-                  </Button>
-                )}
-              </div>
-              
-              <div className="space-y-2">
-                <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                  <div className="col-span-5">Descripción</div>
-                  <div className="col-span-2 text-right">Cant.</div>
-                  <div className="col-span-3 text-right">Precio Unitario</div>
-                  <div className="col-span-2 text-right">Total</div>
-                </div>
-                {(localDoc.items || []).map((item: any, idx: number) => (
-                  <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
-                    <div className="col-span-5">
-                      <Input 
-                        disabled={isNew ? !canPerform('PURCHASES_RETURNS', 'create') : !canPerform('PURCHASES_RETURNS', 'edit')}
-                        value={item.description || ''} 
-                        onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
-                        className="h-8 text-xs" 
-                        placeholder="Concepto" 
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <Input 
-                        disabled={isNew ? !canPerform('PURCHASES_RETURNS', 'create') : !canPerform('PURCHASES_RETURNS', 'edit')}
-                        type="number" 
-                        min="0" 
-                        value={item.quantity === 0 ? '' : item.quantity} 
-                        onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} 
-                        className="h-8 text-xs text-right" 
-                        placeholder="0" 
-                      />
-                    </div>
-                    <div className="col-span-3">
-                      <Input 
-                        disabled={isNew ? !canPerform('PURCHASES_RETURNS', 'create') : !canPerform('PURCHASES_RETURNS', 'edit')}
-                        type="number" 
-                        min="0" 
-                        value={item.unitPrice === 0 ? '' : item.unitPrice} 
-                        onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
-                        className="h-8 text-xs text-right" 
-                        placeholder="0" 
-                      />
-                    </div>
-                    <div className="col-span-2 flex items-center justify-end gap-2">
-                      <span className="text-xs font-black w-20 text-right tabular-nums">{formatConvertedAmount(Number(item.total || 0), resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</span>
-                      {((isNew && canPerform('PURCHASES_RETURNS', 'create')) || (!isNew && canPerform('PURCHASES_RETURNS', 'edit'))) && (
-                        <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
-                          <Trash2 className="size-3" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-               <div className="flex justify-end mt-4">
-                  <div className="w-64 space-y-2 text-sm bg-muted/10 p-4 rounded-xl border border-border/50">
-                     <div className="flex justify-between pt-2 border-t font-black"><span className="uppercase text-[10px] tracking-widest">Total</span><span className="text-lg text-primary">{formatConvertedAmount(recalculatedTotal, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</span></div>
-                  </div>
-               </div>
+          <Card className="rounded-2xl border-border/50">
+            <CardContent className="p-6 flex flex-col justify-center h-full">
+               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-4">Monto del Crédito</p>
+               <Input type="number" value={localDoc.total || ''} onChange={e => setLocalDoc({ ...localDoc, total: Number(e.target.value), balance: Number(e.target.value) })} className="h-16 text-3xl font-black text-primary" placeholder="0.00" />
+               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 mt-2">Este monto estará disponible para aplicar a facturas.</p>
             </CardContent>
           </Card>
         </div>
-
       </div>
     );
   }
-
-  const disponible = data
-    .filter(c => (c.status || '').toLowerCase() === 'issued')
-    .reduce((a, c) => a + convertAmount(Number(c.total || 0), resolveSourceCurrency((c as any)?.currency), (c as any)?.exchangeRate), 0);
-  const kpis = [
-    { title: 'Crédito Disponible', value: formatConvertedAmount(disponible, displayCurrency),                                                icon: TrendingUp,      color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Total Notas',        value: data.length,                                                                         icon: Hash,            color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Emitidas',           value: data.filter(c => (c.status||'').toLowerCase() === 'issued').length,                                icon: BadgeDollarSign, color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
-  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -332,36 +221,99 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
         ))}
       </div>
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Créditos de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor</p></div>
-          <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            {canPerform('PURCHASES_RETURNS', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Crédito</Button>
-            )}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+          <div>
+            <h2 className="text-xl font-black uppercase tracking-tight">Créditos de Proveedores</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 text-left">Notas de crédito y saldos a favor</p>
+          </div>
+          {canPerform('compras', 'create') && (
+            <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-lg shadow-primary/20 transition-all active:scale-[0.98]">
+              <FileMinus className="size-4" /> Nuevo Crédito
+            </Button>
+          )}
+        </div>
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-muted/5 p-2 rounded-2xl border border-border/40">
+          <div className="flex items-center gap-2 flex-1">
+             <Badge variant="outline" className="h-9 px-4 rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+               {filtered.length} Registros
+             </Badge>
+          </div>
+
+          <div className="relative w-full lg:w-72">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+            <Input 
+              placeholder="Buscar..." 
+              className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs" 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)} 
+            />
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          actions={(row) => (
-             <div className="flex gap-1">
-              <Button title={canPerform('PURCHASES_RETURNS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_RETURNS', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
-              )}
-            </div>
-          )}
-        />
+        <div className="rounded-2xl border border-border/50 bg-card/50 overflow-hidden">
+          <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} allowAddRow={false}
+            onBulkDelete={canPerform('PURCHASES_RETURNS', 'delete') ? async (ids) => {
+              try {
+                for (const id of ids) {
+                   if (String(id).startsWith('new-')) continue;
+                   await vendorCreditsService.delete(id as string);
+                }
+                toast.success('Elementos eliminados');
+                onRefresh();
+              } catch (e) {
+                toast.error('Error al eliminar');
+              }
+            } : undefined}
+            actions={(row) => (
+              <div className="flex gap-1">
+                <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
+                  try {
+                    await toast.promise(generateSupplierCreditPDF({
+                      credit: row,
+                      tenantName: user?.tenantName || 'Empresa',
+                      tenantLogo: themeConfig?.logo,
+                      formatAmount: formatConvertedAmount,
+                      primaryColor: themeConfig?.colors.primary
+                    }), {
+                      loading: 'Generando PDF...',
+                      success: 'PDF generado exitosamente',
+                      error: 'Error al generar PDF'
+                    });
+                  } catch(e) { console.error(e) }
+                }}><Download className="size-4" /></Button>
+                {canPerform('compras', 'delete') && (
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                )}
+              </div>
+            )}
+          />
+        </div>
       </div>
 
       <ConfirmDialog
-        open={!!pendingDeleteId}
-        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+        title={"¿Eliminar crédito?"}
+        description="Esta acción eliminará el saldo a favor del proveedor. Si ya fue aplicado, podría haber inconsistencias."
+        confirmLabel="Eliminar"
+        variant="destructive"
         loading={deleteLoading}
-        title="Eliminar Crédito"
-        description="¿Estás seguro de eliminar esta nota de crédito? Esta acción no se puede deshacer y los montos a favor del proveedor serán revertidos."
-        onConfirm={handleDeleteConfirm}
+        onConfirm={async () => {
+          if (!pendingDeleteId) return;
+          try {
+            setDeleteLoading(true);
+            await vendorCreditsService.delete(pendingDeleteId);
+            toast.success('Registro eliminado');
+            onRefresh();
+          } catch (error: any) {
+            toast.error(error?.message || 'Error al eliminar');
+          } finally {
+            setDeleteLoading(false);
+            setPendingDeleteId(null);
+          }
+        }}
       />
     </div>
   );
 }
-

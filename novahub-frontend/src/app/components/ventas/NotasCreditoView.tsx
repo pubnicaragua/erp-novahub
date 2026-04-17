@@ -15,6 +15,7 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 
 interface NotasCreditoViewProps {
@@ -34,6 +35,7 @@ const statusOptions = [
 export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: NotasCreditoViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
+  const { themeConfig } = useTheme();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -114,12 +116,14 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
 
   const handleExportPDF = async (row: CreditNote) => {
     try {
-      const tenantName = user?.tenantName || 'Mi Empresa';
+      const tenantName = user?.tenantName || 'Empresa';
       await generateEstimatePDF({
         estimate: { ...row, number: row.number, customer: row.customer || customers.find(c => c.id === row.customerId) },
         tenantName,
+        tenantLogo: themeConfig?.logo,
         formatAmount: formatConvertedAmount,
         documentType: 'credit-note',
+        primaryColor: themeConfig?.colors.primary
       });
       toast.success('PDF generado exitosamente');
     } catch { toast.error('Error al generar PDF'); }
@@ -307,13 +311,13 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
         ))}
       </div>
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground">Notas de Crédito</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Registros de crédito emitidos a clientes.</p></div>
           <div className="flex items-center gap-3">
             {canPerform('SALES_CREDIT_NOTES', 'create') && (
-              <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
-                <Plus className="size-4" /> Nueva NC</Button>
+              <Button onClick={startNew} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+                <FileMinus className="size-4" /> Nueva NC</Button>
             )}
           </div>
         </div>

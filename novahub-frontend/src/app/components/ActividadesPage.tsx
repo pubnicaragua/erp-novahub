@@ -119,7 +119,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
                     data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
                 >
-                  <tab.icon className={cn("size-4", activeTab === tab.id ? "" : tab.color)} />
+                  <tab.icon className="size-4" />
                   <span className="hidden sm:inline">{tab.label}</span>
                 </TabsTrigger>
                 );

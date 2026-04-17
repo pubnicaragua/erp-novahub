@@ -342,7 +342,8 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
         const primaryColor = themeConfig.colors.primary || '#10b981';
-        const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : '10b981';
+        const rgbPrimary = hexToRgb(primaryColor);
+        const hexColor = rgbPrimary.map(x => x.toString(16).padStart(2, '0')).join('');
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const currencyLabel = displayCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)';
 
@@ -721,4 +722,6 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   );
 });
 ProvidersReportTab.displayName = 'ProvidersReportTab';
+
+
 

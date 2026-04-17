@@ -337,7 +337,8 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         const ws = wb.addWorksheet('RRHH');
         const companyName = themeConfig.tenantName || 'Mi Empresa';
         const primaryColor = themeConfig.colors.primary || '#10b981';
-        const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : '10b981';
+        const rgbPrimary = hexToRgb(primaryColor);
+        const hexColor = rgbPrimary.map(x => x.toString(16).padStart(2, '0')).join('');
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
 
         ws.getColumn(1).width = 30;
@@ -679,4 +680,6 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   );
 });
 HRReportTab.displayName = 'HRReportTab';
+
+
 

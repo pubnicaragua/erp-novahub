@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Download } from 'lucide-react';
+import { Plus, Search, Eye, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Download, Clock, CircleDollarSign } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { generateExpensePDF } from '../../utils/pdfGenerator';
 
 interface Props {
@@ -32,6 +33,7 @@ const methodOpts = [
 
 export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], draftPaymentFromInvoice, onDraftConsumed }: Props) {
   const { canPerform, user } = useAuth();
+  const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -99,6 +101,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const getMethodLabel = (method?: string) => methodOpts.find((opt) => opt.value === normalizeMethod(method))?.label || method || '-';
+  
   const toExpensePayload = (payment: Partial<PaymentMade>, supplierName?: string) => ({
     number: payment.number || payment.reference || payment.id || `PAG-${Date.now().toString().slice(-5)}`,
     id: payment.id,
@@ -136,11 +139,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     return haystack.includes(normalizedSearchTerm);
   });
 
-  const isSupplierActive = (supplierId?: string) =>
-    !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
-
   const columns: ColumnDef<PaymentMade>[] = [
-    { key: 'reference', header: 'Referencia', width: '130px', editable: canPerform('PURCHASES_PAYMENTS', 'edit') },
+    { key: 'reference', header: 'Referencia', width: '130px', editable: canPerform('compras', 'edit') },
     { key: 'supplierInvoiceId', header: 'Factura #', width: '120px',
       render: (val) => {
         const invoice = bills.find((bill) => bill.id === val);
@@ -156,27 +156,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
         </span>
       ) },
-    { key: 'method',    header: 'Método',     width: '120px', editable: canPerform('PURCHASES_PAYMENTS', 'edit'), type: 'select', options: methodOpts,
+    { key: 'method',    header: 'Método',     width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: methodOpts,
       render: (val) => { const o = methodOpts.find(x => x.value === normalizeMethod(String(val || ''))); return <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{o?.label||val||'-'}</Badge>; } },
   ];
-
-  const handleUpdate = async (id: string | number, updates: Partial<PaymentMade>) => {
-    try {
-      const payload = { ...updates } as any;
-      if (payload.method) payload.method = normalizeMethod(payload.method);
-      await paymentsService.update(id as string, payload);
-      const updatedPayment = {
-        ...(data.find((p) => p.id === id) || {}),
-        ...payload,
-      } as Partial<PaymentMade>;
-      if (updatedPayment.supplierInvoiceId && Number(updatedPayment.amount || 0) > 0) {
-        await syncLinkedInvoiceStatus(updatedPayment, String(id));
-      }
-      toast.success('Pago actualizado');
-      onRefresh();
-    }
-    catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
-  };
 
   const syncLinkedInvoiceStatus = async (paymentDraft: Partial<PaymentMade>, paymentIdToUpsert?: string) => {
     const invoiceId = String(paymentDraft.supplierInvoiceId || '');
@@ -220,6 +202,27 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     } as any);
   };
 
+  const isSupplierActive = (supplierId?: string) =>
+    !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
+
+  const handleUpdate = async (id: string | number, updates: Partial<PaymentMade>) => {
+    try {
+      const payload = { ...updates } as any;
+      if (payload.method) payload.method = normalizeMethod(payload.method);
+      await paymentsService.update(id as string, payload);
+      const updatedPayment = {
+        ...(data.find((p) => p.id === id) || {}),
+        ...payload,
+      } as Partial<PaymentMade>;
+      if (updatedPayment.supplierInvoiceId && Number(updatedPayment.amount || 0) > 0) {
+        await syncLinkedInvoiceStatus(updatedPayment, String(id));
+      }
+      toast.success('Pago actualizado');
+      onRefresh();
+    }
+    catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
+  };
+
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
@@ -240,17 +243,17 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
               String(createdPayment?.id || ''),
             );
           } catch (syncError: any) {
-            toast.warning(`Pago registrado, pero no se pudo actualizar estado de la factura: ${syncError?.message || 'Error de sincronización'}`);
+             console.error(syncError);
           }
         }
-        toast.success('Pago registrado exitosamente');
+        toast.success('Pago registrado');
       } else {
         await paymentsService.update(editingId!, payload);
         if (payload.supplierInvoiceId) {
           try {
             await syncLinkedInvoiceStatus({ ...payload, id: editingId }, String(editingId));
           } catch (syncError: any) {
-            toast.warning(`Pago guardado, pero no se pudo actualizar estado de la factura: ${syncError?.message || 'Error de sincronización'}`);
+             console.error(syncError);
           }
         }
         toast.success('Pago guardado');
@@ -269,9 +272,27 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     return sameSupplier && isOpen;
   });
 
+  const paidTotalInDisplayCurrency = data.reduce(
+    (acc, payment) => acc + convertAmount(payment.amount || 0, payment.currency, payment.exchangeRate),
+    0,
+  );
+
+  const todayStr = new Date().toLocaleDateString();
+  const kpis = [
+    { title: 'Transacciones',   value: data.length,                   icon: Hash,         color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
+    {
+      title: `Pagos Realizados (${displayCurrency})`,
+      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${paidTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: TrendingDown,
+      color: 'text-rose-500',
+      bg: 'bg-rose-500/10',
+    },
+    { title: 'Conciliados',     value: data.length,                   icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Pagos Hoy',       value: data.filter(p => p.date && new Date(p.date).toLocaleDateString() === todayStr).length, icon: Clock, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+  ];
+
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
-    
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -291,15 +312,16 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                   className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => generateExpensePDF({
                     expense: toExpensePayload(localDoc, suppliers.find((s) => s.id === localDoc.supplierId)?.name),
-                    tenantName: user?.tenantName || 'Nova Hub',
+                    tenantName: user?.tenantName || 'Empresa',
+                    tenantLogo: themeConfig?.logo,
                     formatAmount: (amount: number, currency?: string, rate?: number) =>
                       formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
                   })}
                 >
-                  <Download className="size-3 mr-2" /> Descargar PDF
+                  <Download className="size-3 mr-2" /> PDF
                 </Button>
               )}
-             {!isNew && canPerform('PURCHASES_PAYMENTS', 'delete') && (
+             {!isNew && canPerform('compras', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={async () => {
                      if(confirm('¿Seguro que deseas eliminar este pago?')){
@@ -309,9 +331,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
-            {((isNew && canPerform('PURCHASES_PAYMENTS', 'create')) || (!isNew && canPerform('PURCHASES_PAYMENTS', 'edit'))) && (
+            {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                Guardar Pago
+                Guardar
               </Button>
             )}
           </div>
@@ -320,147 +342,50 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1">
             <CardContent className="p-6 space-y-3">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Pago</p>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
-                    <Combobox
-                      disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                      options={suppliers
-                        .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
-                        .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
-                      value={localDoc.supplierId || ''}
-                      onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val, supplierInvoiceId: '' })}
-                      placeholder="Seleccionar proveedor..."
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-[10px] text-muted-foreground mb-1">Factura a Pagar / Abono (Opcional)</p>
-                    <Combobox
-                      disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                      options={currentBills.map(s => ({ label: `${s.number} (Total: ${s.total})`, value: s.id }))}
-                      value={localDoc.supplierInvoiceId || ''}
-                      onChange={(val) => {
-                          const b = currentBills.find(x => x.id === val);
-                          setLocalDoc({
-                            ...localDoc,
-                            supplierInvoiceId: val,
-                            amount: b ? b.total : localDoc.amount,
-                            currency: (b?.currency as any) || localDoc.currency || displayCurrency,
-                            exchangeRate: b?.exchangeRate || localDoc.exchangeRate || globalRate,
-                          });
-                      }}
-                      placeholder={localDoc.supplierId ? "Seleccionar factura abierta" : "Primero seleccione un proveedor"}
-                      emptyMessage="No hay facturas abiertas para este proveedor."
-                    />
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Fecha de Pago</p>
-                    <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                      type="date" 
-                      value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
-                      onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
-                      className="h-8 text-xs" 
-                    />
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Método de Pago</p>
-                    <select 
-                      disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                      value={normalizeMethod(localDoc.method as any)} 
-                      onChange={(e) => setLocalDoc({ ...localDoc, method: e.target.value as any })}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs uppercase"
-                    >
-                      {methodOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-[10px] text-muted-foreground mb-1">Referencia / Transferencia #</p>
-                    <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                      value={localDoc.reference || ''} 
-                      onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} 
-                      className="h-8 text-xs font-mono" 
-                      placeholder="Ej. TRANSF-001" 
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-[10px] text-muted-foreground mb-1">Notas ADicionales</p>
-                    <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                      value={localDoc.notes || ''} 
-                      onChange={(e) => setLocalDoc({ ...localDoc, notes: e.target.value })} 
-                      className="h-8 text-xs" 
-                      placeholder="Concepto interno..." 
-                    />
-                  </div>
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="md:col-span-2">
+                  <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
+                  <Combobox 
+                    options={suppliers.map(s => ({ label: s.name, value: s.id }))}
+                    value={localDoc.supplierId || ''}
+                    onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val, supplierInvoiceId: '' })}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-[10px] text-muted-foreground mb-1">Factura (Opcional)</p>
+                  <Combobox 
+                    options={currentBills.map(b => ({ label: b.number, value: b.id }))}
+                    value={localDoc.supplierInvoiceId || ''}
+                    onChange={(val) => {
+                       const b = currentBills.find(x => x.id === val);
+                       setLocalDoc({ ...localDoc, supplierInvoiceId: val, amount: b ? b.total : localDoc.amount });
+                    }}
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
+                  <Input type="date" value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onChange={e => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Método</p>
+                  <select value={normalizeMethod(localDoc.method as any)} onChange={e => setLocalDoc({ ...localDoc, method: e.target.value as any })} className="h-8 w-full rounded-md border text-xs">
+                    {methodOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
                 </div>
               </div>
             </CardContent>
           </Card>
-
           <Card className="rounded-2xl border-border/50">
-            <CardContent className="p-6 flex flex-col justify-center h-full space-y-4">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Monto Pagado</p>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center text-sm border-b border-border/50 pb-4">
-                   <div className="w-1/2">
-                      <p className="text-[10px] text-muted-foreground mb-1">Moneda de Pago</p>
-                        <select 
-                          disabled
-                          value={localDoc.currency || displayCurrency}
-                          onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
-                          className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
-                        >
-                        <option value={localDoc.currency || displayCurrency}>{localDoc.currency || displayCurrency}</option>
-                        </select>
-                    </div>
-                   <div className="w-1/2 flex flex-col items-end">
-                      <p className="text-[10px] text-muted-foreground mb-1">Monto de Salida</p>
-                      <Input 
-                        disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                        type="number" 
-                        min="0" 
-                        value={localDoc.amount || ''} 
-                        onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })} 
-                        className="h-10 text-xl font-black text-emerald-500 text-right w-full max-w-[150px]" 
-                        placeholder="0.00" 
-                      />
-                   </div>
-                </div>
-                
-                <div className="flex justify-between items-center text-base pt-2">
-                  <span className="font-black uppercase text-xs tracking-widest">Base Estimada</span>
-                  <span className="font-black text-muted-foreground tabular-nums text-right">
-                     {localDoc.currency === 'USD' ? `C$ ${(Number(localDoc.amount||0) * (localDoc.exchangeRate || globalRate)).toLocaleString()}` : `$ ${(Number(localDoc.amount||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}`}
-                  </span>
-                </div>
-              </div>
+            <CardContent className="p-6">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-4">Monto</p>
+              <Input type="number" value={localDoc.amount || ''} onChange={e => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })} className="h-12 text-2xl font-black text-emerald-500" />
             </CardContent>
           </Card>
         </div>
       </div>
     );
   }
-
-  const paidTotalInDisplayCurrency = data.reduce(
-    (acc, payment) => acc + convertAmount(payment.amount || 0, payment.currency, payment.exchangeRate),
-    0,
-  );
-
-  const kpis = [
-    { title: 'Transacciones',   value: data.length,                   icon: Hash,         color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
-    {
-      title: `Pagos Realizados (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${paidTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
-      icon: TrendingDown,
-      color: 'text-rose-500',
-      bg: 'bg-rose-500/10',
-    },
-    { title: 'Conciliados',     value: data.length,                   icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -475,53 +400,73 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         ))}
       </div>
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Pagos Realizados</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Desembolsos a proveedores</p></div>
-          <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-             {canPerform('PURCHASES_PAYMENTS', 'create') && (
-               <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Pago</Button>
-             )}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+          <div>
+            <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Pagos Realizados</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 text-left">Control de desembolsos a proveedores</p>
           </div>
-        </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
-          onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'delete') ? async (ids) => {
-            try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await paymentsService.delete(id as string);
-              }
-              toast.success('Elementos eliminados');
-              onRefresh();
-            } catch (e) {
-              toast.error('Error al eliminar');
-            }
-          } : undefined}
-           actions={(row) => (
-              <div className="flex gap-1">
-               <Button
-                 title="Descargar PDF"
-                 variant="ghost"
-                 size="icon"
-                 className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
-                 onClick={() => generateExpensePDF({
-                   expense: toExpensePayload(row, row.supplier?.name),
-                   tenantName: user?.tenantName || 'Nova Hub',
-                   formatAmount: (amount: number, currency?: string, rate?: number) =>
-                     formatConvertedAmount(Number(amount || 0), currency || row.currency, rate || row.exchangeRate),
-                 })}
-               >
-                 <Download className="size-4" />
-               </Button>
-               <Button title={canPerform('PURCHASES_PAYMENTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_PAYMENTS', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { await paymentsService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
-              )}
-            </div>
+          {canPerform('compras', 'create') && (
+            <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-lg shadow-primary/20 transition-all active:scale-[0.98]">
+              <CircleDollarSign className="size-4" /> Nuevo Pago
+            </Button>
           )}
-        />
+        </div>
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-muted/5 p-2 rounded-2xl border border-border/40">
+           <div className="flex items-center gap-2 flex-1">
+              <Badge variant="outline" className="h-9 px-4 rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+                {data.length} Pagos Registrados
+              </Badge>
+           </div>
+           
+           <div className="relative w-full lg:w-72">
+             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+             <Input 
+               placeholder="Buscar..." 
+               className="pl-9 h-10 w-full bg-background border-border/50 rounded-xl text-xs focus:ring-primary/20" 
+               value={searchTerm} 
+               onChange={e => setSearchTerm(e.target.value)} 
+             />
+           </div>
+        </div>
+        <div className="rounded-2xl border border-border/50 bg-card/50 overflow-hidden">
+          <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} allowAddRow={false}
+            onBulkDelete={canPerform('compras', 'delete') ? async (ids) => {
+              try {
+                for (const id of ids) {
+                   if (String(id).startsWith('new-')) continue;
+                   await paymentsService.delete(id as string);
+                }
+                toast.success('Eliminados');
+                onRefresh();
+              } catch { toast.error('Error al eliminar'); }
+            } : undefined}
+            actions={(row) => (
+              <div className="flex gap-1">
+                 <Button
+                    title="PDF"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
+                    onClick={() => generateExpensePDF({
+                      expense: toExpensePayload(row, row.supplier?.name),
+                      tenantName: user?.tenantName || 'Empresa',
+                      tenantLogo: themeConfig?.logo,
+                      formatAmount: (amount: number, currency?: string, rate?: number) =>
+                        formatConvertedAmount(Number(amount || 0), currency || row.currency, rate || row.exchangeRate),
+                    })}
+                  >
+                    <Download className="size-4" />
+                  </Button>
+                <Button variant="ghost" size="icon" className="size-8 rounded-lg" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                {canPerform('compras', 'delete') && (
+                   <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { if(confirm('¿Eliminar?')) { await paymentsService.delete(row.id); onRefresh(); } }}><Trash2 className="size-4" /></Button>
+                )}
+              </div>
+            )}
+          />
+        </div>
       </div>
     </div>
   );
 }
-

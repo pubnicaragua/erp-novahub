@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Truck, ArrowRight, Search, Plus, Check, X, Package } from 'lucide-react';
+import { Truck, ArrowRight, Search, Plus, Check, X, Package, PlusCircle, FilePlus, Calendar } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -10,6 +10,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
+import { cn } from '../ui/utils';
 
 interface TransferenciasViewProps {
   transfers: any[];
@@ -20,10 +21,10 @@ interface TransferenciasViewProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: 'PENDING', label: 'Pendiente', color: 'bg-orange-500/10 text-orange-600' },
-  { value: 'IN_TRANSIT', label: 'En Tránsito', color: 'bg-blue-500/10 text-blue-600' },
-  { value: 'COMPLETED', label: 'Completada', color: 'bg-green-500/10 text-green-600' },
-  { value: 'CANCELLED', label: 'Cancelada', color: 'bg-red-500/10 text-red-600' },
+  { value: 'PENDING', label: 'Pendiente', color: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
+  { value: 'IN_TRANSIT', label: 'En Tránsito', color: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
+  { value: 'COMPLETED', label: 'Completada', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
+  { value: 'CANCELLED', label: 'Cancelada', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20' },
 ];
 
 export function TransferenciasView({ transfers, warehouses, products, series = [], onRefresh }: TransferenciasViewProps) {
@@ -102,7 +103,6 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
       toast.error('La cantidad debe coincidir con los IMEI seleccionados');
       return;
     }
-    // Use the first variant of the product, or the product's default variant
     const variantId = product?.variants?.[0]?.id || product?.id;
     
     if (!variantId) {
@@ -150,31 +150,119 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
   };
 
   return (
-    <Card className="p-4 border bg-card rounded-xl">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-        <div className="flex items-center gap-2 flex-1">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar por guía o almacén..." 
-              className="pl-9 h-9"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/40" />
+          <Input 
+            placeholder="Buscar por guía o almacén..." 
+            className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
         <Button 
-          size="sm" 
-          className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
           onClick={() => setIsCreating(true)}
           disabled={isCreating}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 w-full sm:w-auto"
         >
-          <Plus className="size-4" />
-          Nueva Transferencia
+          <PlusCircle className="size-4" /> Nueva Transferencia
         </Button>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      {/* Mobile View (Cards) */}
+      <div className="md:hidden space-y-4">
+        {isCreating && (
+          <Card className="p-4 border-2 border-primary/20 bg-primary/5 rounded-2xl space-y-4 shadow-xl">
+             <div className="grid grid-cols-2 gap-3">
+                <div>
+                   <p className="text-[10px] font-black uppercase text-muted-foreground/60 mb-1">Origen</p>
+                   <Select value={newTransfer.fromId} onValueChange={(v) => { setNewTransfer({...newTransfer, fromId: v}); setSelectedSerials([]); }}>
+                      <SelectTrigger className="h-9 text-xs font-bold uppercase"><SelectValue placeholder="ORIGEN" /></SelectTrigger>
+                      <SelectContent>{warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name.toUpperCase()}</SelectItem>)}</SelectContent>
+                   </Select>
+                </div>
+                <div>
+                   <p className="text-[10px] font-black uppercase text-muted-foreground/60 mb-1">Destino</p>
+                   <Select value={newTransfer.toId} onValueChange={(v) => setNewTransfer({...newTransfer, toId: v})}>
+                      <SelectTrigger className="h-9 text-xs font-bold uppercase"><SelectValue placeholder="DESTINO" /></SelectTrigger>
+                      <SelectContent>{warehouses.filter(w => w.id !== newTransfer.fromId).map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name.toUpperCase()}</SelectItem>)}</SelectContent>
+                   </Select>
+                </div>
+             </div>
+             <div className="space-y-3">
+                <div>
+                   <p className="text-[10px] font-black uppercase text-muted-foreground/60 mb-1">Producto</p>
+                   <div className="flex gap-2">
+                      <Select value={newTransfer.productId} onValueChange={(v) => { setNewTransfer({...newTransfer, productId: v}); setSelectedSerials([]); }}>
+                        <SelectTrigger className="h-9 text-xs font-bold uppercase flex-1"><SelectValue placeholder="SELECCIONAR..." /></SelectTrigger>
+                        <SelectContent>{products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name.toUpperCase()}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Input type="number" value={isSerialTracked(selectedProduct) ? selectedSerials.length : newTransfer.quantity} onChange={(e) => setNewTransfer({...newTransfer, quantity: parseInt(e.target.value) || 1})} className="h-9 w-16 text-center font-black" disabled={isSerialTracked(selectedProduct)} />
+                   </div>
+                </div>
+                {isSerialTracked(selectedProduct) && (
+                   <Button variant="outline" className="w-full h-9 rounded-xl font-black text-[10px] uppercase tracking-widest" onClick={() => setSerialPickerOpen(true)}>
+                      IMEI SELECCIONADOS ({selectedSerials.length})
+                   </Button>
+                )}
+             </div>
+             <div className="flex gap-2 pt-2">
+                <Button className="flex-1 bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest h-10 rounded-xl" onClick={handleCreateTransfer} disabled={saving}>Confirmar Transferencia</Button>
+                <Button variant="ghost" className="size-10 rounded-xl" onClick={() => setIsCreating(false)}><X className="size-4" /></Button>
+             </div>
+          </Card>
+        )}
+
+        {filteredTransfers.length === 0 && !isCreating ? (
+          <div className="text-center py-20 bg-muted/5 rounded-3xl border border-dashed border-border/50">
+            <Truck className="size-12 mx-auto mb-4 text-muted-foreground/20" />
+            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/40">No hay transferencias registradas</p>
+          </div>
+        ) : (
+          filteredTransfers.map((trf: any) => {
+            const statusInfo = getStatusInfo(trf.status);
+            return (
+              <Card key={trf.id} className="p-4 border-border/50 rounded-2xl shadow-sm space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-mono font-black text-xs text-primary mb-1">{trf.number}</h4>
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+                      <span>{trf.from?.name}</span>
+                      <ArrowRight className="size-3" />
+                      <span>{trf.to?.name}</span>
+                    </div>
+                  </div>
+                  <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5 border rounded-lg shadow-none", statusInfo.color)}>
+                    {statusInfo.label}
+                  </Badge>
+                </div>
+                
+                <div className="flex items-center justify-between pt-3 border-t border-border/40 text-[10px] font-black uppercase tracking-widest">
+                  <div className="flex items-center gap-2 text-muted-foreground/40">
+                    <Calendar className="size-3" />
+                    <span>{new Date(trf.date).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground/40">Items:</span>
+                    <Badge variant="outline" className="h-5 px-1.5 font-black bg-primary/5 border-none text-primary">{trf.items?.length || 0}</Badge>
+                  </div>
+                </div>
+
+                {trf.status !== 'COMPLETED' && trf.status !== 'CANCELLED' && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <Button variant="outline" className="h-8 rounded-lg text-[9px] font-black uppercase" onClick={() => handleUpdateStatus(trf.id, 'COMPLETED')}>Completar</Button>
+                    <Button variant="ghost" className="h-8 rounded-lg text-[9px] font-black uppercase text-rose-500" onClick={() => handleUpdateStatus(trf.id, 'CANCELLED')}>Cancelar</Button>
+                  </div>
+                )}
+              </Card>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop View (Table) */}
+      <div className="hidden md:block rounded-2xl border border-border/50 bg-card/50 overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
@@ -184,74 +272,43 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Destino</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-48">Items</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-40">Fecha</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Estado</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-44 text-right">Estado / Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isCreating && (
-              <TableRow className="bg-blue-500/5">
-                <TableCell className="text-xs text-muted-foreground">Auto</TableCell>
+              <TableRow className="bg-primary/5 border-b border-primary/20">
+                <TableCell className="text-[10px] font-black uppercase text-primary">AUTO-GEN</TableCell>
                 <TableCell>
                   <Select value={newTransfer.fromId} onValueChange={(v) => { setNewTransfer({...newTransfer, fromId: v}); setSelectedSerials([]); }}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Origen" /></SelectTrigger>
-                    <SelectContent>
-                      {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                    </SelectContent>
+                    <SelectTrigger className="h-8 text-[10px] font-black uppercase rounded-lg"><SelectValue placeholder="ORIGEN" /></SelectTrigger>
+                    <SelectContent>{warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name.toUpperCase()}</SelectItem>)}</SelectContent>
                   </Select>
                 </TableCell>
-                <TableCell className="text-center"><ArrowRight className="size-4 mx-auto text-muted-foreground" /></TableCell>
+                <TableCell className="text-center"><ArrowRight className="size-4 mx-auto text-primary/40" /></TableCell>
                 <TableCell>
                   <Select value={newTransfer.toId} onValueChange={(v) => setNewTransfer({...newTransfer, toId: v})}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Destino" /></SelectTrigger>
-                    <SelectContent>
-                      {warehouses.filter(w => w.id !== newTransfer.fromId).map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                    </SelectContent>
+                    <SelectTrigger className="h-8 text-[10px] font-black uppercase rounded-lg"><SelectValue placeholder="DESTINO" /></SelectTrigger>
+                    <SelectContent>{warehouses.filter(w => w.id !== newTransfer.fromId).map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name.toUpperCase()}</SelectItem>)}</SelectContent>
                   </Select>
                 </TableCell>
                 <TableCell>
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center justify-center">
                     <Select value={newTransfer.productId} onValueChange={(v) => { setNewTransfer({...newTransfer, productId: v}); setSelectedSerials([]); }}>
-                      <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Prod" /></SelectTrigger>
-                      <SelectContent>
-                        {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code}</SelectItem>)}
-                      </SelectContent>
+                      <SelectTrigger className="h-8 text-[10px] font-black uppercase rounded-lg w-32"><SelectValue placeholder="PROD" /></SelectTrigger>
+                      <SelectContent>{products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name.toUpperCase()}</SelectItem>)}</SelectContent>
                     </Select>
-                    <Input 
-                      type="number" 
-                      value={isSerialTracked(selectedProduct) ? selectedSerials.length : newTransfer.quantity} 
-                      onChange={(e) => setNewTransfer({...newTransfer, quantity: parseInt(e.target.value) || 1})}
-                      className="h-8 text-xs w-16"
-                      min={1}
-                      disabled={isSerialTracked(selectedProduct)}
-                    />
+                    <Input type="number" value={isSerialTracked(selectedProduct) ? selectedSerials.length : newTransfer.quantity} onChange={(e) => setNewTransfer({...newTransfer, quantity: parseInt(e.target.value) || 1})} className="h-8 w-14 text-center font-black" disabled={isSerialTracked(selectedProduct)} />
                     {isSerialTracked(selectedProduct) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-[10px] uppercase tracking-wider"
-                        onClick={() => setSerialPickerOpen(true)}
-                      >
-                        IMEI ({selectedSerials.length})
-                      </Button>
+                      <Button variant="outline" size="sm" className="h-8 text-[9px] font-black uppercase rounded-lg px-2" onClick={() => setSerialPickerOpen(true)}>IMEI ({selectedSerials.length})</Button>
                     )}
                   </div>
                 </TableCell>
-                <TableCell>
-                  <Input 
-                    type="date" 
-                    value={newTransfer.date} 
-                    onChange={(e) => setNewTransfer({...newTransfer, date: e.target.value})}
-                    className="h-8 text-xs w-full min-w-[130px] pr-2"
-                  />
-                </TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" className="size-7 text-green-600" onClick={handleCreateTransfer} disabled={saving}>
-                      {saving ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Check className="size-4" />}
-                    </Button>
-                    <Button size="icon" variant="ghost" className="size-7 text-red-600" onClick={() => setIsCreating(false)} disabled={saving}>
-                      <X className="size-4" />
-                    </Button>
+                <TableCell><Input type="date" value={newTransfer.date} onChange={(e) => setNewTransfer({...newTransfer, date: e.target.value})} className="h-8 text-[10px] font-black" /></TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    <Button size="icon" variant="ghost" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10" onClick={handleCreateTransfer} disabled={saving}><Check className="size-4" /></Button>
+                    <Button size="icon" variant="ghost" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10" onClick={() => setIsCreating(false)}><X className="size-4" /></Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -259,9 +316,9 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
             
             {filteredTransfers.length === 0 && !isCreating ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                  <Truck className="size-10 mx-auto mb-2 opacity-20" />
-                  <p className="font-medium">No hay transferencias</p>
+                <TableCell colSpan={7} className="text-center py-16">
+                  <Truck className="size-12 mx-auto mb-4 text-muted-foreground/20" />
+                  <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/40">No hay transferencias en este momento</p>
                 </TableCell>
               </TableRow>
             ) : (
@@ -269,26 +326,30 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
                 const statusInfo = getStatusInfo(trf.status);
                 const isUpdating = updatingId === trf.id;
                 return (
-                  <TableRow key={trf.id} className="group hover:bg-muted/30">
-                    <TableCell className="font-mono text-xs">{trf.number}</TableCell>
-                    <TableCell className="text-sm">{trf.from?.name || '-'}</TableCell>
-                    <TableCell className="text-center"><ArrowRight className="size-4 mx-auto text-muted-foreground" /></TableCell>
-                    <TableCell className="text-sm">{trf.to?.name || '-'}</TableCell>
-                    <TableCell className="text-center font-medium">{trf.items?.length || 0}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{new Date(trf.date).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <Select 
-                        value={trf.status} 
-                        onValueChange={(v) => handleUpdateStatus(trf.id, v)}
-                        disabled={isUpdating || trf.status === 'COMPLETED' || trf.status === 'CANCELLED'}
-                      >
-                        <SelectTrigger className={`h-7 text-[10px] font-medium ${statusInfo.color}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                  <TableRow key={trf.id} className="group hover:bg-muted/30 transition-colors">
+                    <TableCell className="font-mono text-[10px] font-black text-primary">{trf.number}</TableCell>
+                    <TableCell className="text-[10px] font-black uppercase tracking-tight">{trf.from?.name || '-'}</TableCell>
+                    <TableCell className="text-center"><ArrowRight className="size-4 mx-auto text-muted-foreground/20" /></TableCell>
+                    <TableCell className="text-[10px] font-black uppercase tracking-tight">{trf.to?.name || '-'}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline" className="font-black text-[10px] bg-primary/5 border-none text-primary px-2">{trf.items?.length || 0} ITEMS</Badge>
+                    </TableCell>
+                    <TableCell className="text-[10px] font-black uppercase text-muted-foreground/40 tracking-widest">{new Date(trf.date).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Select 
+                          value={trf.status} 
+                          onValueChange={(v) => handleUpdateStatus(trf.id, v)}
+                          disabled={isUpdating || trf.status === 'COMPLETED' || trf.status === 'CANCELLED'}
+                        >
+                          <SelectTrigger className={cn("h-8 text-[10px] font-black uppercase w-36 rounded-lg shadow-none", statusInfo.color)}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label.toUpperCase()}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -298,69 +359,79 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
         </Table>
       </div>
 
-      <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-        {filteredTransfers.length} transferencias
+      <div className="px-2 text-[10px] text-muted-foreground font-black uppercase tracking-widest">
+        {filteredTransfers.length} transferencias registradas · NovaHub Logistics
       </div>
+
       <Dialog open={serialPickerOpen} onOpenChange={setSerialPickerOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Seleccionar IMEI / Series</DialogTitle>
-            <DialogDescription>
-              Selecciona los IMEI disponibles del almacén origen para la transferencia.
+        <DialogContent className="sm:max-w-2xl rounded-3xl overflow-hidden p-0 border-none shadow-2xl">
+          <DialogHeader className="bg-primary p-6 text-primary-foreground">
+            <DialogTitle className="font-black uppercase tracking-tighter text-2xl">Seleccionar IMEI / Series</DialogTitle>
+            <DialogDescription className="text-white/60 font-bold uppercase text-[10px] tracking-widest">
+              Selecciona los equipos disponibles para esta transferencia.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <Input
-              value={serialSearch}
-              onChange={(e) => setSerialSearch(e.target.value)}
-              placeholder="Buscar IMEI..."
-              className="h-9 text-xs"
-            />
-            <div className="max-h-72 overflow-auto rounded-md border p-2 space-y-1">
+          <div className="p-6 space-y-6 bg-background">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/40" />
+              <Input
+                value={serialSearch}
+                onChange={(e) => setSerialSearch(e.target.value)}
+                placeholder="BUSCAR IMEI..."
+                className="pl-9 h-11 text-xs font-black uppercase rounded-xl bg-muted/5 border-border/50"
+              />
+            </div>
+            <div className="max-h-80 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
               {availableSerials
                 .filter((item) => !serialSearch || String(item.number || '').toLowerCase().includes(serialSearch.toLowerCase()))
                 .map((item) => {
                   const checked = selectedSerials.includes(item.number);
                   return (
-                    <label key={item.id} className="flex items-center justify-between gap-2 rounded px-2 py-1.5 hover:bg-muted/40 cursor-pointer">
-                      <div className="flex items-center gap-2">
+                    <label key={item.id} className={cn("flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer", checked ? "bg-primary/5 border-primary shadow-sm" : "bg-muted/5 border-border/40 hover:border-border/80")}>
+                      <div className="flex items-center gap-4">
                         <Checkbox
                           checked={checked}
                           onCheckedChange={(v) => {
                             if (v) setSelectedSerials((prev) => [...new Set([...prev, item.number])]);
                             else setSelectedSerials((prev) => prev.filter((n) => n !== item.number));
                           }}
+                          className="rounded-md size-5"
                         />
-                        <span className="text-xs font-mono">{item.number}</span>
+                        <span className="text-sm font-black font-mono tracking-tight">{item.number}</span>
                       </div>
-                      <span className="text-[10px] text-muted-foreground">{item.warehouseName || '-'}</span>
+                      <Badge variant="outline" className="text-[9px] font-black uppercase bg-background border-border/40 text-muted-foreground/60">{item.warehouseName || 'SIN ALMACÉN'}</Badge>
                     </label>
                   );
                 })}
               {availableSerials.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-3">No hay seriales disponibles para este producto.</p>
+                <div className="text-center py-12">
+                  <Package className="size-12 mx-auto mb-4 text-muted-foreground/10" />
+                  <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/30">No hay seriales disponibles</p>
+                </div>
               )}
             </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Seleccionados</span>
-              <Badge variant="outline">{selectedSerials.length}</Badge>
+          </div>
+          <div className="p-6 bg-muted/5 border-t border-border/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase text-muted-foreground/40 tracking-widest">Seleccionados:</span>
+              <Badge className="bg-primary text-primary-foreground font-black px-3">{selectedSerials.length}</Badge>
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button variant="ghost" className="rounded-xl font-black uppercase text-[10px] tracking-widest flex-1 sm:flex-none" onClick={() => setSerialPickerOpen(false)}>Cancelar</Button>
+              <Button
+                className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-black uppercase text-[10px] tracking-widest h-11 px-8 flex-1 sm:flex-none"
+                onClick={() => {
+                  setNewTransfer((prev) => ({ ...prev, quantity: selectedSerials.length || 1 }));
+                  setSerialPickerOpen(false);
+                }}
+              >
+                Confirmar
+              </Button>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSerialPickerOpen(false)}>Cerrar</Button>
-            <Button
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              onClick={() => {
-                setNewTransfer((prev) => ({ ...prev, quantity: selectedSerials.length || 1 }));
-                setSerialPickerOpen(false);
-              }}
-            >
-              Confirmar selección
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }
 

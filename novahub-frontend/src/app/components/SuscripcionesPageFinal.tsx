@@ -380,14 +380,14 @@ export function SuscripcionesPageFinal() {
               <motion.div key={tenant.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                 <Card className="border-border/40 hover:shadow-md transition-all">
                   <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-4 flex-1">
-                        <div className="size-12 rounded-xl bg-emerald-100 dark:bg-emerald-950/30 flex items-center justify-center">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex items-start gap-4 flex-1 w-full">
+                        <div className="size-12 rounded-xl bg-emerald-100 dark:bg-emerald-950/30 flex items-center justify-center shrink-0">
                           <Building2 className="size-6 text-emerald-600" />
                         </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-lg font-bold">{tenant.name}</h3>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <h3 className="text-lg font-bold truncate">{tenant.name}</h3>
                             <Badge variant="outline" className="bg-primary/10 text-primary">{tenant.plan || 'BASIC'}</Badge>
                             {tenant.isActive ? (
                               <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">Activa</Badge>
@@ -395,26 +395,26 @@ export function SuscripcionesPageFinal() {
                               <Badge variant="secondary">Inactiva</Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground mb-3">
-                            URL: <code className="bg-muted px-2 py-1 rounded">{tenant.slug}.novahub.io</code>
+                          <p className="text-sm text-muted-foreground mb-3 truncate">
+                            URL: <code className="bg-muted px-2 py-1 rounded text-[10px] sm:text-xs">{tenant.slug}.novahub.io</code>
                           </p>
                           <div className="flex flex-wrap gap-2">
                             {tenant.subscriptions?.map((sub: any) => (
-                              <Badge key={sub.module} className="bg-emerald-600 text-white">
+                              <Badge key={sub.module} className="bg-emerald-600 text-white text-[9px] sm:text-[10px]">
                                 {AVAILABLE_MODULES.find(m => m.id === sub.module)?.label || sub.module}
                               </Badge>
                             ))}
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => openManageUsers(tenant)}>
+                      <div className="flex flex-wrap items-center gap-2 w-full md:w-auto mt-2 md:mt-0">
+                        <Button variant="outline" size="sm" onClick={() => openManageUsers(tenant)} className="flex-1 md:flex-none">
                           <UserPlus className="size-4 mr-2" />Usuarios ({tenant.users?.length || 0})
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => openAddModule(tenant)}>
+                        <Button variant="outline" size="sm" onClick={() => openAddModule(tenant)} className="flex-1 md:flex-none">
                           <Plus className="size-4 mr-2" />Módulo
                         </Button>
-                        <Button variant="outline" size="sm" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200" onClick={() => openGenerateInvoice(tenant)}>
+                        <Button variant="outline" size="sm" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 flex-1 md:flex-none" onClick={() => openGenerateInvoice(tenant)}>
                           <FileText className="size-4 mr-2" />Factura
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => openEditTenant(tenant)}>
@@ -495,7 +495,7 @@ export function SuscripcionesPageFinal() {
                 <p className="text-xs text-muted-foreground">URL final: {tenantForm.slug || tenantForm.name.toLowerCase().replace(/\s+/g, '-')}.novahub.io</p>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Industria</Label>
                 <Select value={tenantForm.industry} onValueChange={v => setTenantForm({...tenantForm, industry: v})}>
@@ -642,7 +642,7 @@ export function SuscripcionesPageFinal() {
           <div className="space-y-6 py-4">
             <div className="space-y-3">
               <Label className="text-sm font-semibold">Módulos a incluir</Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {AVAILABLE_MODULES.map(m => (
                   <div 
                     key={m.id} 
@@ -668,7 +668,7 @@ export function SuscripcionesPageFinal() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Moneda</Label>
                 <Select value={invoiceForm.currency} onValueChange={v => setInvoiceForm({...invoiceForm, currency: v})}>
