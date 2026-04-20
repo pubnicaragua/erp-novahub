@@ -172,8 +172,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
 
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <main className="flex-1 overflow-y-auto custom-scrollbar relative">
+    <div className="bg-background">
+      <div className="relative">
         <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div className="flex items-center gap-3">
@@ -262,7 +262,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
           </AnimatePresence>
           </Tabs>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

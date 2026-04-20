@@ -170,7 +170,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
         </span>
       ) },
-    { key: 'method',    header: 'Método',     width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: methodOpts,
+    { key: 'method',    header: 'Método',     width: '120px',
       render: (val) => { const o = methodOpts.find(x => x.value === normalizeMethod(String(val || ''))); return <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{o?.label||val||'-'}</Badge>; } },
   ];
 
@@ -379,7 +379,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
-                  <Input type="date" value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onChange={e => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                  <Input type="date" value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onChange={e => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} className="h-9 text-xs font-bold" />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Método</p>
@@ -458,10 +458,10 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
             actions={(row) => (
               <div className="flex gap-1">
                  <Button
-                    title="PDF"
+                    title="Exportar PDF"
                     variant="ghost"
                     size="icon"
-                    className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
+                    className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors"
                     onClick={() => generateExpensePDF({
                       expense: toExpensePayload(row, row.supplier?.name),
                       tenantName: user?.tenantName || 'Empresa',
@@ -472,9 +472,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                   >
                     <Download className="size-4" />
                   </Button>
-                <Button variant="ghost" size="icon" className="size-8 rounded-lg" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                 {canPerform('compras', 'delete') && (
-                   <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { if(confirm('¿Eliminar?')) { await paymentsService.delete(row.id); onRefresh(); } }}><Trash2 className="size-4" /></Button>
+                   <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={async () => { if(confirm('¿Eliminar Pago?')) { await paymentsService.delete(row.id); onRefresh(); } }}><Trash2 className="size-4" /></Button>
                 )}
               </div>
             )}

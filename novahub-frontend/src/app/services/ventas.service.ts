@@ -72,6 +72,7 @@ export const salesReturnsService = {
   create: (data: Partial<SalesReturn>) => api.post<SalesReturn>('/sales/returns', data),
   update: (id: string, data: Partial<SalesReturn>) => api.patch<SalesReturn>(`/sales/returns/${id}`, data),
   approve: (id: string) => api.patch<SalesReturn>(`/sales/returns/${id}/approve`, {}),
+  processReturn: (id: string) => api.patch<SalesReturn>(`/sales/returns/${id}/process`, {}),
   reject: (id: string) => api.patch<SalesReturn>(`/sales/returns/${id}/reject`, {}),
   delete: (id: string) => api.delete<void>(`/sales/returns/${id}`),
 };

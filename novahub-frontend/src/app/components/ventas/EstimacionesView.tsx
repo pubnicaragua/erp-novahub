@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, FilePlus, Eye, Trash2, ChevronLeft, PlusCircle, FileDown
+  FileSpreadsheet, Plus, Search, Send, TrendingUp, Clock, CheckCircle2, FilePlus, Eye, Trash2, ChevronLeft, PlusCircle, FileDown, XCircle
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -28,8 +28,9 @@ interface EstimacionesViewProps {
 
 const statusOptions = [
   { label: 'Borrador',  value: 'DRAFT',     color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Cancelada',value: 'CANCELLED', color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Aprobada', value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Pendiente', value: 'SENT',      color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Aprobada',  value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Cancelada', value: 'CANCELLED', color: 'bg-muted/20 text-muted-foreground' },
 ];
 
 export function EstimacionesView({ data, loading: _loading, onRefresh, customers = [], products = [] }: EstimacionesViewProps) {
@@ -41,26 +42,40 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Estimate | null>(null);
 
-  useEffect(() => {
-    if (editingId) {
-      const e = data.find(x => x.id === editingId);
-      setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
-    } else {
-      setLocalDoc(null);
-    }
-  }, [editingId, data]);
 
 
+
+  const [stateChangePending, setStateChangePending] = useState<{ id: string; status: string; label: string } | null>(null);
 
   const handleUpdate = async (id: string | number, updates: Partial<Estimate>) => {
+    if (id === 'new') {
+      setLocalDoc(prev => {
+        const next = prev ? { ...prev, ...updates } : null;
+        if (next && next.date && next.expiryDate) {
+            if (new Date(next.expiryDate) < new Date(next.date)) {
+                toast.error('Fecha de vencimiento no puede ser menor a emisión');
+                next.expiryDate = new Date(new Date(next.date).getTime() + 86400000).toISOString();
+            }
+        }
+        return next as any;
+      });
+      return;
+    }
     try {
+      if (updates.expiryDate && localDoc?.date) {
+          if (new Date(updates.expiryDate) < new Date(localDoc.date)) {
+              toast.error('Fecha inválida');
+              return;
+          }
+      }
       await estimatesService.update(id.toString(), updates);
       if (updates.status === 'APPROVED') {
         toast.info('Generando Orden de Venta automáticamente...');
         await estimatesService.convertToOrder(id.toString());
         toast.success('Cotización aprobada y convertida a Orden de Venta');
       } else {
-        toast.success('Cotización actualizada');
+        const labelMap: Record<string, string> = { SENT: 'PENDIENTE', CANCELLED: 'CANCELADA', DRAFT: 'BORRADOR', APPROVED: 'APROBADA' };
+        toast.success(`Estado actualizado a ${labelMap[updates.status || ''] || updates.status}`);
       }
       onRefresh();
     } catch (error) {
@@ -69,28 +84,43 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
     }
   };
 
-  const handleAddEstimate = async () => {
+  const handleAddEstimate = () => {
+    setEditingId('new');
+    setLocalDoc({
+      id: 'new',
+      number: `COT-${Math.floor(Math.random() * 900000) + 100000}`,
+      customerId: '',
+      date: new Date().toISOString(),
+      expiryDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+      items: [],
+      subtotal: 0,
+      taxAmount: 0,
+      discountAmount: 0,
+      total: 0,
+      currency: displayCurrency as any,
+      exchangeRate: globalRate,
+      status: 'DRAFT' as any
+    } as any);
+  };
+
+  const handleSaveDoc = async (status: string) => {
+    if (!localDoc?.customerId) {
+        toast.error('Selecciona un cliente');
+        return;
+    }
     try {
-      toast.info('Creando estimación comercial...');
-      const newEst = await estimatesService.create({
-        customerId: customers[0]?.id || 'temp',
-        date: new Date().toISOString(),
-        expiryDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-        items: [],
-        subtotal: 0,
-        taxAmount: 0,
-        discountAmount: 0,
-        total: 0,
-        currency: displayCurrency,
-        exchangeRate: globalRate,
-        status: 'DRAFT' as any,
-        number: `COT-${Date.now().toString().slice(-6)}`
-      });
-      await onRefresh();
-      toast.success('Nueva cotización en borrador creada exitosamente');
-      setEditingId(newEst.id);
-    } catch (error) {
-      toast.error('Error al iniciar la edición');
+      const finalDoc = { ...localDoc, status, currency: displayCurrency, exchangeRate: globalRate };
+      if (editingId === 'new') {
+          await estimatesService.create(finalDoc);
+          toast.success('Cotización creada exitosamente');
+      } else {
+          await estimatesService.update(editingId!, finalDoc);
+          toast.success('Cambios guardados');
+      }
+      setEditingId(null);
+      onRefresh();
+    } catch (e) {
+      toast.error('Error al guardar');
     }
   };
 
@@ -114,15 +144,23 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0 });
 
   useEffect(() => {
-    if (editingId) {
+    if (editingId && editingId !== 'new') {
       const e = data.find(x => x.id === editingId);
       setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
       if (e) setLocalRates(calculateRates(e));
+    } else if (editingId === 'new') {
+       // already handled by handleAddEstimate
     } else {
       setLocalDoc(null);
       setLocalRates({ dRate: 0, tRate: 0 });
     }
-  }, [editingId]); // Intentionally removed 'data' to prevent server-refreshes from destroying mid-edit local states
+  }, [editingId]);
+
+  useEffect(() => {
+    if (localDoc) {
+       setLocalDoc(prev => prev ? { ...prev, currency: displayCurrency as any, exchangeRate: globalRate } : null);
+    }
+  }, [displayCurrency, globalRate]);
 
 
   const columns: ColumnDef<Estimate>[] = [
@@ -166,7 +204,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
       key: 'status', 
       header: 'Estado', 
       width: '130px',
-      editable: canPerform('SALES_QUOTES', 'edit'),
+      editable: false,
       type: 'select',
       options: statusOptions,
       render: (val) => {
@@ -207,7 +245,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
       bg: 'bg-blue-500/10',
     },
     { title: 'Tasa Conversión', value: `${((data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (data.length || 1)) * 100).toFixed(0)}%`, icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Enviadas', value: data.filter(e => (e.status||'').toUpperCase() === 'SENT').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { title: 'Pendientes', value: data.filter(e => (e.status||'').toUpperCase() === 'SENT').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
     { title: 'Aprobadas', value: data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length, icon: CheckCircle2, color: 'text-purple-500', bg: 'bg-purple-500/10' },
   ];
 
@@ -228,13 +266,18 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
           <div className="flex items-center gap-3">
             {canPerform('SALES_QUOTES', 'edit') && (
               <>
-                <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => { handleUpdate(localDoc!.id, { status: 'DRAFT' as any }); setEditingId(null); }}>
+                <Button 
+                  variant="outline" 
+                  className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
+                  onClick={() => handleSaveDoc('DRAFT')}
+                >
                   Guardar Borrador
                 </Button>
-                <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => { handleUpdate(localDoc!.id, { status: 'APPROVED' as any }); setEditingId(null); }}>
-                  Aprobar Y Crear Orden
+                <Button 
+                  className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                  onClick={() => handleSaveDoc('SENT')}
+                >
+                  Crear Cotización
                 </Button>
               </>
             )}
@@ -244,34 +287,41 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Número</p>
-                  <Input defaultValue={localDoc?.number} onBlur={(e) => handleUpdate(localDoc!.id, { number: e.target.value })} className="h-8 text-xs font-black uppercase" />
-                </div>
-                <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span>
+                  <p className="text-[10px] text-muted-foreground mb-1 uppercase font-black">Número</p>
+                  <Input value={localDoc?.number} readOnly className="h-9 text-xs font-black uppercase bg-muted/10 cursor-not-allowed" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
+                  <p className="text-[10px] text-muted-foreground mb-1 uppercase font-black">Cliente</p>
                   <Combobox 
                     options={(customers || [])
                       .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))}
                     value={localDoc?.customerId || ''}
-                    onChange={(val) => handleUpdate(localDoc!.id, { customerId: val })}
+                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val } as any)}
                     placeholder="Seleccionar Cliente"
                   />
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
-                  <Input type="date" defaultValue={typeof localDoc?.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc?.date || ''} onBlur={(e) => handleUpdate(localDoc!.id, { date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                  <p className="text-[10px] text-muted-foreground mb-1 uppercase font-black">Fecha Emisión</p>
+                  <Input 
+                    type="date" 
+                    value={typeof localDoc?.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc?.date || ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value } as any)} 
+                    className="h-9 text-xs font-bold" 
+                  />
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Válida hasta</p>
-                  <Input type="date" defaultValue={typeof localDoc?.expiryDate === 'string' && localDoc.expiryDate.includes('T') ? localDoc.expiryDate.split('T')[0] : localDoc?.expiryDate || ''} onBlur={(e) => handleUpdate(localDoc!.id, { expiryDate: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                  <p className="text-[10px] text-muted-foreground mb-1 uppercase font-black">Válida hasta</p>
+                  <Input 
+                    type="date" 
+                    min={localDoc?.date ? localDoc.date.split('T')[0] : ''}
+                    value={typeof localDoc?.expiryDate === 'string' && localDoc.expiryDate.includes('T') ? localDoc.expiryDate.split('T')[0] : localDoc?.expiryDate || ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, expiryDate: e.target.value } as any)} 
+                    className="h-9 text-xs font-bold" 
+                  />
                 </div>
-                  {/* Moneda se ajusta automáticamente según la vista topbar */}
               </div>
             </CardContent>
           </Card>
@@ -378,32 +428,31 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                 <div key={item.id || idx} className="flex flex-col md:grid md:grid-cols-12 gap-4 md:gap-2 items-start md:items-center p-4 md:p-0 border md:border-none rounded-2xl md:rounded-none bg-muted/5 md:bg-transparent relative group">
                   <div className="w-full md:col-span-6 space-y-1">
                     <label className="md:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Producto / Servicio</label>
-                    <Combobox 
-                      options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))}
-                      value={item.productId || ''}
-                      onChange={(val) => {
-                        const newItems = [...(localDoc.items || [])] as any[];
-                        const selectedProd = products.find(p => p.id === val);
-                        newItems[idx].productId = val;
-                        if (selectedProd) {
-                          newItems[idx].description = selectedProd.name;
-                          newItems[idx].unitPrice = Number(selectedProd.price || 0);
-                          newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
-                        } else {
-                          newItems[idx].description = 'Producto Customizado';
-                          newItems[idx].unitPrice = 0;
-                          newItems[idx].total = 0;
-                        }
-                        const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
-                        const dAmount = newSubtotal * (localRates.dRate / 100);
-                        const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
-                        setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                        handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
-                      }}
-                      placeholder="Seleccionar Producto..."
-                    />
+                      <Combobox 
+                        options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))}
+                        value={item.productId || ''}
+                        onChange={(val) => {
+                          const newItems = [...(localDoc.items || [])] as any[];
+                          const selectedProd = products.find(p => p.id === val);
+                          newItems[idx].productId = val;
+                          if (selectedProd) {
+                            newItems[idx].description = selectedProd.name;
+                            newItems[idx].unitPrice = Number(selectedProd.price || 0);
+                            newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
+                          } else {
+                            newItems[idx].description = 'Producto Customizado';
+                            newItems[idx].unitPrice = 0;
+                            newItems[idx].total = 0;
+                          }
+                          const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
+                          const dAmount = newSubtotal * (localRates.dRate / 100);
+                          const base = newSubtotal - dAmount;
+                          const tAmount = base * (localRates.tRate / 100);
+                          const newTotal = base + tAmount;
+                          setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
+                        }}
+                        placeholder="Seleccionar Producto..."
+                      />
                   </div>
                   <div className="flex gap-4 w-full md:contents">
                     <div className="flex-1 md:col-span-2 space-y-1">
@@ -424,7 +473,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                           const newTotal = base + tAmount;
                           setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                         }}
-                        onBlur={() => handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total })}
                         className="h-9 md:h-8 text-xs md:text-right font-bold" 
                       />
                     </div>
@@ -446,7 +494,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                           const newTotal = base + tAmount;
                           setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                         }}
-                        onBlur={() => handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total })}
                         className="h-9 md:h-8 text-xs md:text-right font-bold" 
                       />
                     </div>
@@ -527,6 +574,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
 
         <EditableDataTable 
           data={data}
+          showSelection={false}
           onBulkDelete={async (ids) => {
             try {
               for (const id of ids) {
@@ -545,7 +593,71 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
           allowAddRow={false}
           actions={(row) => (
             <>
-              <Button variant="ghost" title="Descargar PDF" size="icon" onClick={(e) => { 
+              {canPerform('SALES_QUOTES', 'edit') && row.status === 'DRAFT' && (
+                <>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    title="Pasar a Pendiente"
+                    className="size-8 rounded-lg text-blue-500 hover:bg-blue-500/10 hover:text-blue-500 transition-colors" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStateChangePending({ id: row.id, status: 'SENT', label: 'PENDIENTE' });
+                    }}
+                  >
+                    <Send className="size-4" />
+                  </Button>
+                </>
+              )}
+
+              {canPerform('SALES_QUOTES', 'edit') && row.status === 'SENT' && (
+                <>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    title="Enviar a Orden de Venta"
+                    className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStateChangePending({ id: row.id, status: 'APPROVED', label: 'APROBADA' });
+                    }}
+                  >
+                    <CheckCircle2 className="size-4" />
+                  </Button>
+                </>
+              )}
+
+              {canPerform('SALES_QUOTES', 'edit') && row.status === 'CANCELLED' && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  title="Re-activar a Pendiente"
+                  className="size-8 rounded-lg text-blue-500 hover:bg-blue-500/10 hover:text-blue-500 transition-colors" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStateChangePending({ id: row.id, status: 'SENT', label: 'PENDIENTE' });
+                  }}
+                >
+                  <Send className="size-4" />
+                </Button>
+              )}
+
+              {canPerform('SALES_QUOTES', 'edit') && (row.status === 'DRAFT' || row.status === 'SENT') && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  title="Cancelar"
+                  className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStateChangePending({ id: row.id, status: 'CANCELLED', label: 'CANCELADA' });
+                  }}
+                >
+                  <XCircle className="size-4" />
+                </Button>
+              )}
+
+              <Button variant="ghost" title="Descargar PDF" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={(e) => { 
                 e.stopPropagation(); 
                 generateEstimatePDF({
                   estimate: {...row, customer: customers.find(c => c.id === row.customerId) || row.customer},
@@ -556,13 +668,15 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                 });
                 toast.success('Generando PDF...');
               }}>
-                <FileDown className="size-4 text-muted-foreground hover:text-primary" />
+                <FileDown className="size-4" />
               </Button>
-              <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setEditingId(row.id); }}>
-                <Eye className="size-4 text-muted-foreground hover:text-primary" />
+
+              <Button variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={(e) => { e.stopPropagation(); setEditingId(row.id); }}>
+                <Eye className="size-4" />
               </Button>
+
               {canPerform('SALES_QUOTES', 'delete') && (
-                <Button variant="ghost" size="icon" className="hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}>
+                <Button variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}>
                   <Trash2 className="size-4" />
                 </Button>
               )}
@@ -598,6 +712,19 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
             setDeleteLoading(false);
             setPendingDeleteId(null);
           }
+        }}
+      />
+      <ConfirmDialog
+        open={stateChangePending !== null}
+        onOpenChange={(open) => { if (!open) setStateChangePending(null); }}
+        title={`Actualizar a ${stateChangePending?.label}`}
+        description={`Vas a cambiar el estado de la cotización. Esto mantendrá el flujo de ventas actualizado.`}
+        confirmLabel="Continuar"
+        variant="default"
+        onConfirm={async () => {
+          if (!stateChangePending) return;
+          await handleUpdate(stateChangePending.id, { status: stateChangePending.status as any });
+          setStateChangePending(null);
         }}
       />
     </div>

@@ -258,7 +258,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       )
     },
     { key: 'customer', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
-    { key: 'frequency', header: 'Frecuencia', width: '120px', editable: canPerform('SALES_RECURRING', 'edit'), type: 'select', options: frequencyOptions,
+    { key: 'frequency', header: 'Frecuencia', width: '120px',
       render: (val) => { const freqMap: Record<string, string> = { WEEKLY: 'Semanal', MONTHLY: 'Mensual', QUARTERLY: 'Trimestral', YEARLY: 'Anual' };
         return <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-500 border-none">{freqMap[(val||'').toUpperCase()] || val}</Badge>; } },
     { key: 'total', header: 'Monto Ciclo', width: '150px',
@@ -367,10 +367,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                       const nextInvoiceDate = calculateNextInvoiceDate(localDoc?.frequency || 'MONTHLY', newStartDate);
                       setLocalDoc({ ...localDoc, startDate: newStartDate, nextInvoiceDate });
                     }}
-                    className="h-8 text-xs"
+                    className="h-9 text-xs font-bold"
                   /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha Fin (Opcional)</p>
-                  <Input type="date" value={toDateInputValue(localDoc?.endDate)} onChange={(e) => setLocalDoc({ ...localDoc, endDate: e.target.value })} className="h-8 text-xs" /></div>
+                  <Input type="date" value={toDateInputValue(localDoc?.endDate)} onChange={(e) => setLocalDoc({ ...localDoc, endDate: e.target.value })} className="h-9 text-xs font-bold" /></div>
                 <div className="col-span-2"><p className="text-[10px] text-muted-foreground mb-1">Próxima Fecha de Facturación (calculada)</p>
                   <Input value={formatDateSafe(localDoc?.nextInvoiceDate || '')} disabled className="h-8 text-xs font-bold bg-muted/20" /></div>
               </div>
@@ -520,7 +520,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             )}
           </div>
         </div>
-        <EditableDataTable data={data}
+        <EditableDataTable 
+          data={data}
+          showSelection={false}
           allowAddRow={false}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch { toast.error('Error al eliminar'); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
@@ -528,15 +530,15 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             <div className="flex items-center gap-1">
                {canPerform('SALES_RECURRING', 'edit') && (
                  (row.status||'').toUpperCase() === 'ACTIVE' ? (
-                   <Button title="Pausar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 transition-colors"><Pause className="size-4" /></Button>
+                   <Button title="Pausar Facturación" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 hover:text-amber-500 transition-colors"><Pause className="size-4" /></Button>
                  ) : (
-                   <Button title="Reanudar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors"><Play className="size-4" /></Button>
+                   <Button title="Reanudar Facturación" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"><Play className="size-4" /></Button>
                  )
                )}
-               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
-               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+               <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
+               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                {canPerform('SALES_RECURRING', 'delete') && (
-                 <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                )}
             </div>
           )}

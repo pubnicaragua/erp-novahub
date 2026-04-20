@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, FileDown, History, FilePlus, PlusCircle
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, FileDown, History, FilePlus, PlusCircle, XCircle, CheckCircle, ShieldCheck
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -343,7 +343,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       key: 'number',
       header: 'Nº Factura',
       width: '140px',
-      render: (val, row) => <span className="text-xs font-black font-mono text-primary cursor-pointer hover:underline" onClick={() => setEditingId(row.id)}>{val}</span>
+      render: (val, row) => (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-black font-mono text-primary cursor-pointer hover:underline" onClick={() => setEditingId(row.id)}>{val}</span>
+          {row.salesOrderId && (
+            <Badge className="text-[7px] font-black bg-orange-500/10 text-orange-500 border-none px-1.5 py-0 w-fit">
+              Desde Orden Venta
+            </Badge>
+          )}
+        </div>
+      )
     },
     {
       key: 'customer',
@@ -381,9 +390,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       key: 'status',
       header: 'Estado',
       width: '130px',
-      editable: canPerform('SALES_INVOICES', 'edit'),
-      type: 'select',
-      options: editableStatusOptions,
       render: (val) => {
         const opt = statusOptions.find(o => o.value === (val || '').toUpperCase());
         return (
@@ -452,14 +458,23 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           <div className="flex items-center gap-3">
             {((isCreating && canPerform('SALES_INVOICES', 'create')) || (!isCreating && canPerform('SALES_INVOICES', 'edit'))) && (
               <>
-                <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => handleSaveInvoice(false)}>
-                  Guardar Borrador
-                </Button>
-                <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => handleSaveInvoice(true)}>
-                  Emitir Factura
-                </Button>
+                {(!localDoc?.status || localDoc?.status === 'DRAFT') ? (
+                  <>
+                    <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
+                      onClick={() => handleSaveInvoice(false)}>
+                      Guardar Borrador
+                    </Button>
+                    <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                      onClick={() => handleSaveInvoice(true)}>
+                      Emitir Factura
+                    </Button>
+                  </>
+                ) : (
+                  <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                    onClick={() => handleSaveInvoice(false)}>
+                    Guardar Cambios
+                  </Button>
+                )}
               </>
             )}
           </div>
@@ -475,35 +490,33 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   <Input value={localDoc?.number || ''} onChange={(e) => setLocalDoc({ ...localDoc, number: e.target.value })} className="h-8 text-xs font-black uppercase" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  {isCreating ? (
-                    <span className="text-xs font-black px-2 py-0.5 rounded-lg bg-muted/20 text-muted-foreground">Nuevo</span>
-                  ) : (
-                    <select value={(localDoc?.status || '').toUpperCase()} onChange={(e) => handleStatusChange(e.target.value)} className={`h-8 rounded-md border border-input px-2 text-xs font-bold uppercase ${statusOpt?.color || 'bg-background'}`}>
-                      {editableStatusOptions.map(o => ( <option key={o.value} value={o.value}>{o.label}</option> ))}
-                    </select>
-                  )}
-                </div>
-                <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox
                     options={customers
                       .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))}
                     value={localDoc?.customerId || ''}
-                    onChange={(val) => { setLocalDoc({ ...localDoc, customerId: val }); if (!isCreating) handleUpdate(localDoc!.id, { customerId: val }); }}
+                    onChange={(val) => { setLocalDoc({ ...localDoc, customerId: val }); }}
                     placeholder="Seleccionar Cliente"
                   />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
-                  <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''}
-                    onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" />
+                  <Input 
+                    type="date" 
+                    value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''}
+                    onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} 
+                    className="h-9 text-xs font-bold" 
+                  />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Vencimiento</p>
-                  <Input type="date" value={localDoc?.dueDate ? (typeof localDoc.dueDate === 'string' && localDoc.dueDate.includes('T') ? localDoc.dueDate.split('T')[0] : localDoc.dueDate) : ''}
-                    onChange={(e) => setLocalDoc({ ...localDoc, dueDate: e.target.value })} className="h-8 text-xs" />
+                  <Input 
+                    type="date" 
+                    value={localDoc?.dueDate ? (typeof localDoc.dueDate === 'string' && localDoc.dueDate.includes('T') ? localDoc.dueDate.split('T')[0] : localDoc.dueDate) : ''}
+                    onChange={(e) => setLocalDoc({ ...localDoc, dueDate: e.target.value })} 
+                    className="h-9 text-xs font-bold" 
+                  />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Vendedor (Opcional)</p>
@@ -514,7 +527,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       description: e.position?.title 
                     }))}
                     value={localDoc?.sellerEmployeeId || ''}
-                    onChange={(val) => { setLocalDoc({ ...localDoc, sellerEmployeeId: val }); if (!isCreating) handleUpdate(localDoc!.id, { sellerEmployeeId: val }); }}
+                    onChange={(val) => { setLocalDoc({ ...localDoc, sellerEmployeeId: val }); }}
                     placeholder="Seleccionar Vendedor"
                   />
                 </div>
@@ -524,9 +537,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     onChange={(e) => { 
                       const val = Number(e.target.value); 
                       setLocalDoc({ ...localDoc, commissionRate: val }); 
-                    }} 
-                    onBlur={() => {
-                        if (!isCreating) handleUpdate(localDoc!.id, { commissionRate: localDoc?.commissionRate });
                     }} 
                     className={cn("h-8 text-xs", !localDoc?.sellerEmployeeId && "opacity-50 cursor-not-allowed bg-muted/20")} disabled={!localDoc?.sellerEmployeeId} 
                   />
@@ -620,9 +630,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         }
                         const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
                         setLocalDoc({ ...localDoc, items: newItems, ...calc });
-                        if (!isCreating) {
-                          handleUpdate(localDoc!.id, { items: newItems, ...calc });
-                        }
                       }}
                       placeholder="Seleccionar Producto..."
                     />
@@ -713,11 +720,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           newItems[idx] = { ...newItems[idx], quantity: newQty, total: newQty * Number(newItems[idx].unitPrice || 0) };
                           const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
                           setLocalDoc({ ...localDoc, items: newItems, ...calc });
-                        }} onBlur={() => {
-                          if (!isCreating) {
-                            const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
-                            handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
-                          }
                         }} className="h-9 md:h-8 text-xs md:text-right font-bold" disabled={item.productId && isSerialTracked(products.find(x => x.id === item.productId))} />
                     </div>
                     <div className="flex-1 md:col-span-2 space-y-1">
@@ -728,11 +730,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           newItems[idx] = { ...newItems[idx], unitPrice: Number(e.target.value), total: Number(newItems[idx].quantity || 1) * Number(e.target.value) };
                           const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
                           setLocalDoc({ ...localDoc, items: newItems, ...calc });
-                        }} onBlur={() => {
-                          if (!isCreating) {
-                            const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
-                            handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
-                          }
                         }} className="h-9 md:h-8 text-xs md:text-right font-bold" />
                     </div>
                   </div>
@@ -814,6 +811,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
         <EditableDataTable
           data={data}
+          showSelection={false}
         columns={columns}
         allowAddRow={false}
         onRowUpdate={async (id, updates) => {
@@ -833,7 +831,40 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           bulkActions={() => null}
           actions={(row) => (
               <div className="flex items-center gap-1">
-                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { 
+                {row.status === 'DRAFT' && (
+                  <Button 
+                    title="Emitir Factura" 
+                    variant="ghost" 
+                    size="icon" 
+                    className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 hover:text-amber-500 transition-colors" 
+                    onClick={() => handleStatusChange('PENDING', row.id, row)}
+                  >
+                    <ShieldCheck className="size-4" />
+                  </Button>
+                )}
+                {(row.status === 'PENDING' || row.status === 'OVERDUE' || row.status === 'PARTIAL') && (
+                  <Button 
+                    title="Marcar como Pagada" 
+                    variant="ghost" 
+                    size="icon" 
+                    className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" 
+                    onClick={() => handleStatusChange('PAID', row.id, row)}
+                  >
+                    <CheckCircle className="size-4" />
+                  </Button>
+                )}
+                {(row.status === 'DRAFT' || row.status === 'PENDING' || row.status === 'OVERDUE') && (
+                  <Button 
+                    title="Cancelar Factura" 
+                    variant="ghost" 
+                    size="icon" 
+                    className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" 
+                    onClick={() => handleStatusChange('CANCELLED', row.id, row)}
+                  >
+                    <XCircle className="size-4" />
+                  </Button>
+                )}
+                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { 
                   try { 
                     toast.promise(generateEstimatePDF({ 
                       estimate: row, 
@@ -849,10 +880,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     }); 
                   } catch(e) { console.error(e) } 
                 }}><FileDown className="size-4" /></Button>
-                <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4" /></Button>
-                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 hover:text-amber-500 transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4" /></Button>
+                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                 {canPerform('SALES_INVOICES', 'delete') && (
-                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                 )}
               </div>
           )}

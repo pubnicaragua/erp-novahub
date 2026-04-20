@@ -272,9 +272,11 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                       <p className="sm:hidden text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">Monto Total</p>
                       <p className={cn(
                         "text-[16px] sm:text-[18px] font-black tabular-nums tracking-tighter", 
-                        (it.type === 'INVOICE' || (it.type === 'RETURN' && it.status === 'PAID') || (it.type === 'PAYMENT' && it.reference?.startsWith('NC-'))) 
+                        (it.type === 'INVOICE' || 
+                         it.type === 'CREDIT_NOTE' || 
+                         (it.type === 'PAYMENT' && it.reference?.startsWith('DEV-'))) 
                           ? 'text-rose-500' 
-                          : (it.type === 'PAYMENT' || it.type === 'CREDIT_NOTE' || (it.type === 'RETURN' && it.status === 'PENDING'))
+                          : (it.type === 'PAYMENT' || it.type === 'RETURN')
                             ? 'text-emerald-500'
                             : 'text-muted-foreground/50'
                       )}>
@@ -284,10 +286,12 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                           Cotizaciones / Órdenes / Recurrentes: (Sin Signo)
                         */}
                         {
-                          (it.type === 'INVOICE' || (it.type === 'RETURN' && it.status === 'PAID') || (it.type === 'PAYMENT' && it.reference?.startsWith('NC-'))) 
-                          ? '+' 
-                          : (it.type === 'PAYMENT' || it.type === 'CREDIT_NOTE' || (it.type === 'RETURN' && it.status === 'PENDING'))
-                            ? '-'
+                          (it.type === 'INVOICE' || 
+                           it.type === 'CREDIT_NOTE' || 
+                           (it.type === 'PAYMENT' && it.reference?.startsWith('DEV-'))) 
+                          ? '-' 
+                          : (it.type === 'PAYMENT' || it.type === 'RETURN')
+                            ? '+'
                             : ''
                         }
                         {formatConvertedAmount(it.total, it.currency, it.exchangeRate)}

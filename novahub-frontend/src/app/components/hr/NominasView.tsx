@@ -270,6 +270,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                 <th className="px-4 py-3 text-right text-xs font-semibold">Salario Bruto</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold">Neto a Pagar</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold">Costo Total Empresa</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold">Frecuencia</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold">Estado</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold">Acciones</th>
               </tr>
@@ -306,6 +307,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-orange-600 dark:text-orange-400">
                       {formatConvertedAmount(payroll.costoTotalEmpresa || payroll.grossPay, currency)}
+                    </td>
+                    <td className="px-4 py-3 text-[10px] font-black uppercase text-muted-foreground/70">
+                      {payroll.frequency === 'WEEKLY' ? 'Semanal' : payroll.frequency === 'BIWEEKLY' ? 'Quincenal' : 'Mensual'}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-1 rounded-lg font-bold ${

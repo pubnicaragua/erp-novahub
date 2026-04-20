@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download, Banknote, FilePlus, PlusCircle
+  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download, Banknote, FilePlus, PlusCircle, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -194,7 +194,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
         </span>
       ) },
-    { key: 'status',   header: 'Estado',      width: '110px', editable: canPerform('PURCHASES_INVOICES', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status',   header: 'Estado',      width: '110px',
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -480,19 +480,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     type="date" 
                     value={localDoc.dueDate ? new Date(localDoc.dueDate).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, dueDate: new Date(e.target.value).toISOString() })} 
-                    className="h-8 text-xs" 
+                    className="h-9 text-xs font-bold" 
                   />
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <select 
-                    disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
-                    value={localDoc.status || 'PENDING'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
-                    className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
-                  >
-                    {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
@@ -697,29 +686,12 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             } : undefined}
             actions={(row) => (
               <div className="flex gap-1">
-                <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-                <Button title="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
-                  try {
-                    await toast.promise(generateSupplierInvoicePDF({
-                      invoice: row,
-                      tenantName: user?.tenantName || 'Empresa',
-                      tenantLogo: themeConfig?.logo,
-                      formatAmount: (amount: number, currency?: string, rate?: number) =>
-                        formatConvertedAmount(Number(amount || 0), currency || (row.currency as any), rate || row.exchangeRate),
-                      primaryColor: themeConfig?.colors.primary
-                    }), {
-                      loading: 'Generando PDF...',
-                      success: 'PDF generado exitosamente',
-                      error: 'Error al generar PDF'
-                    });
-                  } catch(e) { console.error(e) }
-                }}><Download className="size-4" /></Button>
                 {canPerform('compras', 'create') && onRegisterPaymentFromInvoice && (
                   <Button
                     title="Registrar Pago"
                     variant="ghost"
                     size="icon"
-                    className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500"
+                    className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
                     onClick={() => onRegisterPaymentFromInvoice({
                       supplierId: row.supplierId,
                       supplierInvoiceId: row.id,
@@ -735,8 +707,25 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     <Banknote className="size-4" />
                   </Button>
                 )}
+                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
+                  try {
+                    await toast.promise(generateSupplierInvoicePDF({
+                      invoice: row,
+                      tenantName: user?.tenantName || 'Empresa',
+                      tenantLogo: themeConfig?.logo,
+                      formatAmount: (amount: number, currency?: string, rate?: number) =>
+                        formatConvertedAmount(Number(amount || 0), currency || (row.currency as any), rate || row.exchangeRate),
+                      primaryColor: themeConfig?.colors.primary
+                    }), {
+                      loading: 'Generando PDF...',
+                      success: 'PDF generado exitosamente',
+                      error: 'Error al generar PDF'
+                    });
+                  } catch(e) { console.error(e) }
+                }}><FileDown className="size-4" /></Button>
+                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                 {canPerform('compras', 'delete') && (
-                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                 )}
               </div>
             )}

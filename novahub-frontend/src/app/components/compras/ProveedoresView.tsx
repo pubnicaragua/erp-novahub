@@ -54,7 +54,17 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
     { key: 'email',       header: 'Email',     editable: canPerform('proveedores', 'edit') },
     { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('proveedores', 'edit') },
     { key: 'balance', header: 'Saldo', width: '130px',
-      render: (val) => <span className="font-black text-rose-500 tabular-nums">{formatConvertedAmount(val || 0, 'NIO')}</span>
+      render: (val) => {
+        const amount = Number(val || 0);
+        return (
+          <span className={cn(
+            "font-black tabular-nums",
+            amount > 0 ? "text-rose-500" : "text-emerald-500"
+          )}>
+            {formatConvertedAmount(Math.abs(amount), 'NIO')}
+          </span>
+        );
+      }
     },
     { key: 'status', header: 'Estado', width: '120px', editable: canPerform('proveedores', 'edit'), type: 'select', options: statusOptions,
       render: (val) => {
@@ -168,21 +178,21 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
             isLoading={loading}
             allowAddRow={false}
             actions={(row) => (
-              <div className="flex gap-1">
-                <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierForHistory(row)}><Eye className="size-4" /></Button>
-                <Button title="Recalcular Saldo" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={async () => {
-                   try {
-                     const result = await suppliersService.recalculateBalance(row.id);
-                     toast.success(`Saldo recalculado: ${formatConvertedAmount(result.newBalance)}`);
-                     onRefresh();
-                   } catch (e: any) {
-                     toast.error('Error al recalcular: ' + (e.response?.data?.message || e.message));
-                   }
-                }}><RefreshCw className="size-4" /></Button>
-                {canPerform('proveedores', 'delete') && (
-                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
-                )}
-              </div>
+               <div className="flex gap-1">
+                 <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedSupplierForHistory(row)}><Eye className="size-4" /></Button>
+                 <Button title="Recalcular Saldo" variant="ghost" size="icon" className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 hover:text-amber-500 transition-colors" onClick={async () => {
+                    try {
+                      const result = await suppliersService.recalculateBalance(row.id);
+                      toast.success(`Saldo recalculado: ${formatConvertedAmount(result.newBalance)}`);
+                      onRefresh();
+                    } catch (e: any) {
+                      toast.error('Error al recalcular: ' + (e.response?.data?.message || e.message));
+                    }
+                 }}><RefreshCw className="size-4" /></Button>
+                 {canPerform('proveedores', 'delete') && (
+                   <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                 )}
+               </div>
             )}
           />
         </div>

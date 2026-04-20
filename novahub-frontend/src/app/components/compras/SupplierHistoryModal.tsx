@@ -264,15 +264,14 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                             : 'text-muted-foreground/50'
                       )}>
                         {/* 
-                          Facturas / Liquidación Crédito: (+)
-                          Pagos / Crédito Emitido: (-)
-                          Órdenes / Recepciones / Recurrentes: (Sin Signo)
+                          Facturas / Liquidación Crédito: (-) - Aumenta Deuda
+                          Pagos / Crédito Emitido: (+) - Disminuye Deuda
                         */}
                         {
                           (it.type === 'INVOICE' || (it.type === 'PAYMENT' && it.reference?.startsWith('SC-'))) 
-                          ? '+' 
+                          ? '-' 
                           : (it.type === 'PAYMENT' || it.type === 'CREDIT')
-                            ? '-'
+                            ? '+'
                             : ''
                         }
                         {formatConvertedAmount(it.total, it.currency, it.exchangeRate)}

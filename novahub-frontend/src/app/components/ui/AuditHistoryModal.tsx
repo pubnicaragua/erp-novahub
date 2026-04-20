@@ -30,6 +30,51 @@ const actionLabels: Record<string, string> = {
   STATUS_CHANGE: 'Cambio de Estado',
 };
 
+const keyTranslations: Record<string, string> = {
+  status: 'Estado',
+  total: 'Total',
+  subtotal: 'Subtotal',
+  taxAmount: 'IVA',
+  discountAmount: 'Descuento',
+  customerId: 'Cliente',
+  date: 'Fecha',
+  dueDate: 'Vencimiento',
+  notes: 'Notas',
+  number: 'Número',
+  currency: 'Moneda',
+  exchangeRate: 'Tasa de Cambio',
+  items: 'Productos/Items',
+  expectedDelivery: 'Entrega Esperada',
+  expiryDate: 'Expira el',
+  reference: 'Referencia',
+  warehouseId: 'Bodega/Almacén',
+};
+
+const valueTranslations: Record<string, string> = {
+  DRAFT: 'BORRADOR',
+  PENDING: 'PENDIENTE',
+  PAID: 'PAGADA',
+  CANCELLED: 'CANCELADA',
+  OVERDUE: 'VENCIDA',
+  PARTIAL: 'PARCIAL',
+  SENT: 'ENVIADA',
+  ACCEPTED: 'ACEPTADA',
+  REJECTED: 'RECHAZADA',
+  SHIPPED: 'FACTURADA', // En ERP-NovaHub, SHIPPED es Facturada
+  DELIVERED: 'ENTREGADA',
+  COMPLETED: 'COMPLETADA',
+  ACTIVE: 'ACTIVO',
+  INACTIVE: 'INACTIVO',
+  CASH: 'EFECTIVO',
+  TRANSFER: 'TRANSFERENCIA',
+};
+
+const translateKey = (key: string) => keyTranslations[key] || key;
+const translateValue = (val: any) => {
+  if (typeof val !== 'string') return String(val);
+  return valueTranslations[val] || val;
+};
+
 export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = 'Historial de Cambios' }: AuditHistoryModalProps) {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -129,7 +174,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
                                   <ul className="list-disc list-inside space-y-1">
                                     {Object.entries(detailsObj).map(([key, value]) => (
                                       <li key={key}>
-                                        <span className="font-bold text-foreground">{key}:</span> {String(value)}
+                                        <span className="font-bold text-foreground">{translateKey(key)}:</span> {translateValue(value)}
                                       </li>
                                     ))}
                                   </ul>

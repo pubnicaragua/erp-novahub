@@ -56,6 +56,7 @@ export const hexToRgb = (color?: string): [number, number, number] => {
 const statusTranslations: Record<string, string> = {
   'PAID': 'PAGADA',
   'PENDING': 'PENDIENTE',
+  'PENDING_REVIEW': 'PENDIENTE REVISIÓN',
   'CANCELLED': 'CANCELADO',
   'DRAFT': 'BORRADOR',
   'PARTIAL': 'PARCIAL',
@@ -107,7 +108,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
   // Representación del Nombre de la Empresa en el encabezado izquierdo
-  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  doc.text((tenantName || 'Nuestra Empresa').toUpperCase(), 14, titleY);
   
   // Subtítulo / Identificadores de Empresa
   doc.setFontSize(10);
@@ -265,7 +266,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184); // Slate 400
   doc.setFont('helvetica', 'italic');
-  doc.text(`Documento de cotización originado por el módulo Ventas de ERP Nova Hub. Generado por ${tenantName}`, 14, pageHeight - 10);
+  doc.text(`Documento generado por ${(tenantName || 'Nuestra Empresa').toUpperCase()}`, 14, pageHeight - 10);
 
   // Descargar PDF
   doc.save(`${estimate.number || 'Cotizacion'}.pdf`);
@@ -291,7 +292,7 @@ export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, 
   }
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  doc.text((tenantName || 'Nuestra Empresa').toUpperCase(), 14, titleY);
   
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
@@ -346,7 +347,7 @@ export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, 
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Generado por ${tenantName} - Módulo de Compras`, 14, pageHeight - 10);
+  doc.text(`Documento generado por ${(tenantName || 'Nuestra Empresa').toUpperCase()}`, 14, pageHeight - 10);
 
   doc.save(`Historial_${supplier.name.replace(/\s+/g, '_')}.pdf`);
 };
@@ -379,7 +380,7 @@ export const generateExpensePDF = async ({
 
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  doc.text((tenantName || 'Nuestra Empresa').toUpperCase(), 14, titleY);
   
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
@@ -453,7 +454,7 @@ export const generateExpensePDF = async ({
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Documento generado por el módulo de Compras. Generado por ${tenantName}`, 14, pageHeight - 10);
+  doc.text(`Documento generado por ${(tenantName || 'Nuestra Empresa').toUpperCase()}`, 14, pageHeight - 10);
 
   doc.save(`${expense.number || expense.id || 'gasto'}.pdf`);
 };
@@ -486,7 +487,7 @@ export const generatePurchaseOrderPDF = async ({
 
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  doc.text((tenantName || 'Nuestra Empresa').toUpperCase(), 14, titleY);
   
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
@@ -580,7 +581,7 @@ export const generatePurchaseOrderPDF = async ({
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Documento generado por el módulo de Compras. Generado por ${tenantName}`, 14, pageHeight - 10);
+  doc.text(`Documento generado por ${(tenantName || 'Nuestra Empresa').toUpperCase()}`, 14, pageHeight - 10);
 
   doc.save(`${order.number || order.id || 'orden_compra'}.pdf`);
 };
@@ -612,7 +613,7 @@ export const generateRecurringInvoicePDF = async ({
 
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nova Hub', 14, titleY);
+  doc.text((tenantName || 'Nova Hub').toUpperCase(), 14, titleY);
 
   doc.setFontSize(12);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
@@ -699,7 +700,7 @@ export const generateRecurringInvoicePDF = async ({
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Generado por ${tenantName} - Módulo de Ventas`, 14, doc.internal.pageSize.height - 10);
+  doc.text(`Documento generado por ${(tenantName || 'Nuestra Empresa').toUpperCase()}`, 14, doc.internal.pageSize.height - 10);
 
   doc.save(`${recurringInvoice.number || recurringInvoice.id || 'factura_recurrente'}.pdf`);
 };
@@ -732,7 +733,7 @@ export const generateSupplierInvoicePDF = async ({
 
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  doc.text((tenantName || 'Nuestra Empresa').toUpperCase(), 14, titleY);
   
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
@@ -832,7 +833,7 @@ export const generateSupplierInvoicePDF = async ({
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Documento generado por el módulo de Compras. Generado por ${tenantName}`, 14, pageHeight - 10);
+  doc.text(`Documento generado por ${(tenantName || 'Nuestra Empresa').toUpperCase()}`, 14, pageHeight - 10);
 
   doc.save(`${invoice.number || invoice.id || 'factura_proveedor'}.pdf`);
 };
@@ -971,7 +972,7 @@ export const generateCustomerStatementPDF = async ({
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Documento administrativo de uso interno. Generado por la plataforma ERP Nova Hub para ${tenantName}.`, 14, pageHeight - 10);
+  doc.text(`Documento generado por ${(tenantName || 'Nuestra Empresa').toUpperCase()}`, 14, pageHeight - 10);
 
   // 8. Descarga
   doc.save(`Historial_Cliente_${customer.name.replace(/\s+/g, '_')}.pdf`);
@@ -1049,7 +1050,7 @@ export const generatePlatformDocumentPDF = async ({
   doc.text('DIRIGIDO A:', 14, 65);
   
   doc.setFontSize(12);
-  doc.text(tenantName, 14, 72);
+  doc.text(tenantName.toUpperCase(), 14, 72);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text('Cliente Corporativo / Suscriptor', 14, 77);
@@ -1148,7 +1149,7 @@ export const generatePlatformDocumentPDF = async ({
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
     doc.setFont('helvetica', 'italic');
-    doc.text(`Documento generado por NovaHub Tool - Página ${i} de ${pageCount}`, 14, pageHeight - 15);
+    doc.text(`Documento generado por ${(tenantName || 'Nuestra Empresa').toUpperCase()} - Página ${i} de ${pageCount}`, 14, pageHeight - 15);
     doc.text('www.novahub.io | soporte@novahub.io', 14, pageHeight - 10);
   }
 
@@ -1276,7 +1277,7 @@ export const generateSupplierStatementPDF = async ({
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Documento administrativo de uso interno - Módulo de Compras. Generado por ${tenantName}.`, 14, pageHeight - 10);
+  doc.text(`Documento generado por ${(tenantName || 'Nuestra Empresa').toUpperCase()}`, 14, pageHeight - 10);
 
   doc.save(`Historial_Proveedor_${supplier.name.replace(/\s+/g, '_')}.pdf`);
 };
@@ -1303,7 +1304,7 @@ export const generatePurchaseReceptionPDF = async ({
 
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  doc.text((tenantName || 'Nuestra Empresa').toUpperCase(), 14, titleY);
 
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
@@ -1362,7 +1363,7 @@ export const generatePurchaseReceptionPDF = async ({
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Documento generado por el módulo de Compras. Generado por ${tenantName}`, 14, pageHeight - 10);
+  doc.text(`Documento generado por ${(tenantName || 'Nuestra Empresa').toUpperCase()}`, 14, pageHeight - 10);
 
   doc.save(`${reception.number || 'recepcion'}.pdf`);
 };
@@ -1389,7 +1390,7 @@ export const generateSupplierCreditPDF = async ({
 
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  doc.text((tenantName || 'Nuestra Empresa').toUpperCase(), 14, titleY);
 
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
@@ -1465,7 +1466,7 @@ export const generateSupplierCreditPDF = async ({
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Documento generado por el módulo de Compras. Generado por ${tenantName}`, 14, pageHeight - 10);
+  doc.text(`Documento generado por ${(tenantName || 'Nuestra Empresa').toUpperCase()}`, 14, pageHeight - 10);
 
   doc.save(`${credit.number || 'nota_credito'}.pdf`);
 };
@@ -1492,7 +1493,7 @@ export const generateRecurringExpensePDF = async ({
 
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  doc.text((tenantName || 'Nuestra Empresa').toUpperCase(), 14, titleY);
 
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
@@ -1561,7 +1562,7 @@ export const generateRecurringExpensePDF = async ({
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Documento generado por el módulo de Compras. Generado por ${tenantName}`, 14, pageHeight - 10);
+  doc.text(`Documento generado por ${(tenantName || 'Nuestra Empresa').toUpperCase()}`, 14, pageHeight - 10);
 
   doc.save(`Recurrente_${recurring.description?.replace(/\s+/g, '_') || 'doc'}.pdf`);
 };

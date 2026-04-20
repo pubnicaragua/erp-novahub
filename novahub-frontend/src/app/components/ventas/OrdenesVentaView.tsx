@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, PlusCircle, Search, TrendingUp, Clock, FilePlus, Package, Eye, Trash2, ChevronLeft, Download, CheckCircle2, FileInput
+  ClipboardList, PlusCircle, Search, Send, Clock, FilePlus, Package, Eye, Trash2, ChevronLeft, FileDown, CheckCircle2, XCircle, TrendingUp
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -28,53 +28,61 @@ interface OrdenesVentaViewProps {
 }
 
 const statusOptions = [
-  { label: 'Borrador',           value: 'DRAFT',          color: 'bg-slate-500/10 text-slate-500' },
-  { label: 'Pendiente Revisión', value: 'PENDING_REVIEW', color: 'bg-orange-500/10 text-orange-500' },
-  { label: 'Aprobada',           value: 'CONFIRMED',      color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Enviada',           value: 'SHIPPED',        color: 'bg-purple-500/10 text-purple-500' },
-  { label: 'Cancelada',          value: 'CANCELLED',      color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'BORRADOR',           value: 'DRAFT',          color: 'bg-slate-500/10 text-slate-500' },
+  { label: 'PENDIENTE',          value: 'PENDING_REVIEW', color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'FACTURADA',          value: 'SHIPPED',        color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'CANCELADA',          value: 'CANCELLED',      color: 'bg-rose-500/10 text-rose-500' },
 ];
 
 export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, customers = [], products = [] }: OrdenesVentaViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount, formatAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<SalesOrder | null>(null);
-
-  useEffect(() => {
-    if (editingId) {
-      const e = data.find(x => x.id === editingId);
-      setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
-    } else {
-      setLocalDoc(null);
-    }
-  }, [editingId, data]);
-
-
+  const [stateChangePending, setStateChangePending] = useState<{id: string | number, status: string, label: string} | null>(null);
 
   const handleUpdate = async (id: string | number, updates: Partial<SalesOrder>) => {
+    if (id === 'new') {
+        setLocalDoc(prev => prev ? ({ ...prev, ...updates } as any) : null);
+        return;
+    }
     try {
-      if (updates.status && String(updates.status).toUpperCase() === 'SHIPPED') {
+      if (updates.status === 'SHIPPED') {
         const orderToConvert = data.find(o => o.id === id) || localDoc;
         if (orderToConvert) {
-          await salesOrdersService.update(id.toString(), { status: 'SHIPPED' as any });
-          toast.success('Orden Aprobada. Redirigiendo a factura...');
-          onRefresh(); // trigger background refresh
-          onGenerateInvoice({ ...orderToConvert, status: 'SHIPPED' as any });
+          // Validar Stock
+          for (const item of orderToConvert.items || []) {
+            if (item.productId) {
+              const product = products.find(p => p.id === item.productId);
+              if (product && Number(item.quantity) > Number(product.stock)) {
+                toast.error(`Sin stock suficiente para: ${product.name}. Disponible: ${product.stock}`);
+                return;
+              }
+            }
+          }
+
+          await salesOrdersService.convertToInvoice(id.toString());
+          toast.success('Orden de Venta enviada a facturas.');
+          onRefresh();
           return;
         }
       }
 
       await salesOrdersService.update(id.toString(), updates);
-      toast.success('Orden actualizada');
+      
+      const labelMap: Record<string, string> = { PENDING_REVIEW: 'PENDIENTE', SENT: 'PENDIENTE', CANCELLED: 'CANCELADA', DRAFT: 'BORRADOR', SHIPPED: 'FACTURADA' };
+      if (updates.status) {
+          toast.success(`Estado actualizado a ${labelMap[updates.status] || updates.status}`);
+      } else {
+          toast.success('Orden actualizada');
+      }
       onRefresh();
     } catch (error: any) {
        const msg = error.response?.data?.message;
-       toast.error(`Error al actualizar status: ${Array.isArray(msg) ? msg.join(', ') : (msg || error.message)}`);
-       throw error;
+       toast.error(`Error: ${Array.isArray(msg) ? msg.join(', ') : (msg || error.message)}`);
     }
   };
 
@@ -92,41 +100,37 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0 });
 
   useEffect(() => {
-    if (editingId) {
+    if (editingId && editingId !== 'new') {
       const e = data.find(x => x.id === editingId);
       setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
       if (e) setLocalRates(calculateRates(e));
+    } else if (editingId === 'new') {
+        // Handled by handleAddOrder
     } else {
       setLocalDoc(null);
       setLocalRates({ dRate: 0, tRate: 0 });
     }
-  }, [editingId]); // Intentionally removed 'data' to prevent server-refreshes from destroying mid-edit local states
+  }, [editingId, data]);
 
-  const handleAddOrder = async () => {
-    if (!customers || customers.length === 0) {
-      toast.error('Debe registrar al menos un cliente primero');
-      return;
-    }
-    try {
-      toast.info('Creando orden de venta...');
-      const newOrd = await salesOrdersService.create({
-        customerId: customers[0].id,
-        date: new Date().toISOString(),
-        expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
-        discountAmount: 0,
-        total: 0,
-        currency: displayCurrency as any,
-        exchangeRate: globalRate,
-        status: 'DRAFT' as any,
-        items: [],
-        number: `ORD-${Date.now().toString().slice(-6)}`
-      });
-      await onRefresh();
-      toast.success('Nueva orden de venta en borrador creada exitosamente');
-      setEditingId(newOrd.id);
-    } catch (error) {
-      toast.error('Error al crear la orden de venta');
-    }
+  const handleAddOrder = () => {
+    const tempId = 'new';
+    setEditingId(tempId);
+    setLocalDoc({
+      id: tempId,
+      customerId: customers[0]?.id || '',
+      date: new Date().toISOString(),
+      expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
+      discountAmount: 0,
+      taxAmount: 0,
+      subtotal: 0,
+      total: 0,
+      currency: displayCurrency as any,
+      exchangeRate: globalRate,
+      status: 'DRAFT' as any,
+      items: [],
+      number: `OV-${Date.now().toString().slice(-6)}`
+    } as any);
+    setLocalRates({ dRate: 0, tRate: 0 });
   };
 
   const columns: ColumnDef<SalesOrder>[] = [
@@ -178,7 +182,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       key: 'status', 
       header: 'Estado', 
       width: '130px',
-      editable: canPerform('SALES_ORDERS', 'edit'),
+      editable: false,
       type: 'select',
       options: statusOptions,
       render: (val) => {
@@ -225,6 +229,45 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   if (editingId && localDoc) {
     const statusOpt = statusOptions.find(o => o.value === (localDoc?.status || '').toUpperCase());
+    
+    const handleSave = async (status: string) => {
+        try {
+            const docToSave = { ...localDoc, status: status as any };
+
+            // Validar Stock si se va a facturar
+            if (status === 'SHIPPED') {
+              for (const item of docToSave.items || []) {
+                if (item.productId) {
+                  const product = products.find(p => p.id === item.productId);
+                  if (product && Number(item.quantity) > Number(product.stock)) {
+                    toast.error(`Sin stock suficiente para: ${product.name}. Disponible: ${product.stock}`);
+                    return;
+                  }
+                }
+              }
+            }
+
+            if (editingId === 'new') {
+                const { id, ...rest } = docToSave;
+                const newOrder = await salesOrdersService.create({ ...rest, status: status === 'SHIPPED' ? 'PENDING_REVIEW' : status } as any);
+                if (status === 'SHIPPED') {
+                  await salesOrdersService.convertToInvoice(newOrder.id);
+                }
+                toast.success(status === 'DRAFT' ? 'Borrador guardado' : 'Orden de Venta enviada a facturas.');
+            } else {
+                await salesOrdersService.update(localDoc.id.toString(), { ...docToSave, status: status === 'SHIPPED' ? 'PENDING_REVIEW' : status } as any);
+                if (status === 'SHIPPED') {
+                  await salesOrdersService.convertToInvoice(localDoc.id.toString());
+                }
+                toast.success(status === 'DRAFT' ? 'Borrador actualizado' : 'Orden de Venta enviada a facturas.');
+            }
+            setEditingId(null);
+            onRefresh();
+        } catch (error) {
+            toast.error('Error al guardar');
+        }
+    };
+
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -234,56 +277,69 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             </Button>
             <div>
               <h2 className="text-xl font-black uppercase tracking-tight">Orden {localDoc?.number}</h2>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de la orden de venta</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 italic">Gestión de pedido de venta</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             {canPerform('SALES_ORDERS', 'edit') && (
               <>
-                <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => { handleUpdate(localDoc!.id, { status: 'DRAFT' as any }); setEditingId(null); }}>
+                <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6 h-10 hover:bg-muted/50 transition-all"
+                  onClick={() => handleSave('DRAFT')}>
                   Guardar Borrador
                 </Button>
-                <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => { handleUpdate(localDoc!.id, { status: 'SHIPPED' as any }); setEditingId(null); toast.success('Orden aprobada'); }}>
-                  Aprobar y Generar Factura
+                <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 hover:opacity-90 transition-all"
+                  onClick={() => handleSave('SHIPPED')}>
+                  Crear y Facturar
                 </Button>
               </>
             )}
           </div>
         </div>
-        <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50">
-            <CardContent className="p-6 space-y-3">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Número</p>
-                  <Input defaultValue={localDoc?.number} onBlur={(e) => handleUpdate(localDoc!.id, { number: e.target.value })} className="h-8 text-xs font-black uppercase" />
+        <div className="grid md:grid-cols-2 gap-6">
+          <Card className="rounded-2xl border-border/50 shadow-sm overflow-hidden">
+            <CardContent className="p-6 space-y-6">
+              <div className="flex items-center gap-2 border-b border-border/50 pb-4">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <Package className="size-4" />
                 </div>
-                <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span>
+                <p className="text-xs font-black uppercase tracking-widest">Información General</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                <div className="col-span-1">
+                  <p className="text-[10px] text-muted-foreground mb-1 uppercase font-black">Número de Orden</p>
+                  <Input value={localDoc?.number} readOnly className="h-9 text-xs font-bold bg-muted/30 border-dashed" />
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
+                <div className="col-span-2">
+                  <p className="text-[10px] text-muted-foreground mb-1 uppercase font-black">Cliente</p>
                   <Combobox 
                     options={(customers || [])
                       .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))}
                     value={localDoc?.customerId || ''}
-                    onChange={(val) => handleUpdate(localDoc!.id, { customerId: val })}
+                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val } as any)}
                     placeholder="Seleccionar Cliente"
                   />
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
-                  <Input type="date" defaultValue={localDoc?.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onBlur={(e) => handleUpdate(localDoc!.id, { date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                <div className="col-span-1">
+                  <p className="text-[10px] text-muted-foreground mb-1 uppercase font-black">Fecha Emisión</p>
+                  <Input 
+                    type="date" 
+                    value={typeof localDoc?.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc?.date || ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value } as any)} 
+                    className="h-9 text-xs font-bold" 
+                  />
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Entrega Esperada</p>
-                  <Input type="date" defaultValue={localDoc?.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString().split('T')[0] : ''} onBlur={(e) => handleUpdate(localDoc!.id, { expectedDelivery: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
+                <div className="col-span-1">
+                  <p className="text-[10px] text-muted-foreground mb-1 uppercase font-black">Entrega Esperada</p>
+                  <Input 
+                    type="date" 
+                    min={localDoc?.date ? localDoc.date.split('T')[0] : ''}
+                    value={typeof localDoc?.expectedDelivery === 'string' && localDoc.expectedDelivery.includes('T') ? localDoc.expectedDelivery.split('T')[0] : localDoc?.expectedDelivery || ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, expectedDelivery: e.target.value } as any)} 
+                    className="h-9 text-xs font-bold" 
+                  />
                 </div>
-                {/* Moneda se sincroniza dinamicamente con Topbar */}
               </div>
             </CardContent>
           </Card>
@@ -444,7 +500,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       <Input 
                         type="number" 
                         min="0"
-                        max={Number(products.find(x => x.id === item.productId)?.stock || 1000000)}
                         value={Number(item.quantity) || ''} 
                         placeholder="0"
                         onChange={(e) => {
@@ -452,7 +507,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                           const p = products.find(x => x.id === item.productId);
                           if (p && newQty > Number(p.stock || 0)) {
                             toast.warning(`Stock insuficiente. Disponible: ${p.stock}`, { id: `stock-warn-${idx}` });
-                            newQty = Number(p.stock || 0);
                           }
                           const newItems = [...(localDoc.items || [])] as any[];
                           newItems[idx].quantity = newQty;
@@ -463,9 +517,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                           const tAmount = base * (localRates.tRate / 100);
                           const newTotal = base + tAmount;
                           setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                        }}
-                        onBlur={() => {
-                          handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total });
                         }}
                         className="h-9 md:h-8 text-xs md:text-right font-bold" 
                       />
@@ -488,9 +539,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                           const newTotal = base + tAmount;
                           setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                         }}
-                        onBlur={() => {
-                          handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total });
-                        }}
                         className="h-9 md:h-8 text-xs md:text-right font-bold" 
                       />
                     </div>
@@ -512,7 +560,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const tAmount = base * (localRates.tRate / 100);
                         const newTotal = base + tAmount;
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                        handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                     }}>
                       <Trash2 className="size-4 md:size-3" />
                     </Button>
@@ -574,6 +621,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
         <EditableDataTable 
           data={data}
+          showSelection={false}
           onBulkDelete={async (ids) => {
             try {
               for (const id of ids) {
@@ -591,51 +639,114 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           isLoading={loading}
           allowAddRow={false}
           actions={(row) => (
-            <div className="flex items-center gap-1">
-                {canPerform('SALES_ORDERS', 'edit') && (
-                  <Button 
-                    title="Generar Factura" 
-                    onClick={async () => {
-                      try {
-                        await salesOrdersService.update(row.id, { status: 'SHIPPED' });
-                        onGenerateInvoice(row);
-                        toast.success('Orden marcada como Enviada');
-                      } catch (e) {
-                        toast.error('Error al actualizar estado');
-                      }
-                    }}
-                    variant="ghost" 
-                    size="icon" 
-                    disabled={String(row.status || '').toUpperCase() === 'SHIPPED'}
-                    className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors disabled:opacity-50"
-                  >
-                    <FileInput className="size-4" />
-                  </Button>
-                )}
-                <Button title={canPerform('SALES_ORDERS', 'edit') ? "Editar" : "Ver detalle"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-                <Button title="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { 
-                  try { 
-                    await toast.promise(generateEstimatePDF({ 
-                      estimate: row, 
-                      tenantName: user?.tenantName || 'Empresa', 
-                      formatAmount: formatConvertedAmount, 
-                      tenantLogo: themeConfig?.logo, 
-                      documentType: 'order',
-                      primaryColor: themeConfig?.colors.primary
-                    }), { 
-                      loading: 'Generando PDF...', 
-                      success: 'PDF generado exitosamente', 
-                      error: 'Error al generar PDF' 
-                    }); 
-                  } catch(e) { console.error(e) } 
-                }}><Download className="size-4" /></Button>
-                {canPerform('SALES_ORDERS', 'delete') && (
-                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
-                )}
-             </div>
-           )}
-         />
+            <>
+              {canPerform('SALES_ORDERS', 'edit') && row.status === 'DRAFT' && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  title="Pasar a Pendiente"
+                  className="hover:bg-blue-500/10 text-foreground hover:text-foreground hover:scale-110 transition-transform" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStateChangePending({ id: row.id, status: 'PENDING_REVIEW', label: 'PENDIENTE' });
+                  }}
+                >
+                  <Send className="size-4" />
+                </Button>
+              )}
+
+              {canPerform('SALES_ORDERS', 'edit') && row.status === 'PENDING_REVIEW' && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  title="Aprobar y Facturar"
+                  className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStateChangePending({ id: row.id, status: 'SHIPPED', label: 'FACTURADA' });
+                  }}
+                >
+                  <CheckCircle2 className="size-4" />
+                </Button>
+              )}
+
+              {canPerform('SALES_ORDERS', 'edit') && row.status === 'CANCELLED' && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  title="Re-activar a Pendiente"
+                  className="size-8 rounded-lg text-blue-500 hover:bg-blue-500/10 hover:text-blue-500 transition-colors" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStateChangePending({ id: row.id, status: 'PENDING_REVIEW', label: 'PENDIENTE' });
+                  }}
+                >
+                  <Send className="size-4" />
+                </Button>
+              )}
+
+              {canPerform('SALES_ORDERS', 'edit') && (row.status === 'DRAFT' || row.status === 'PENDING_REVIEW') && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  title="Cancelar"
+                  className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStateChangePending({ id: row.id, status: 'CANCELLED', label: 'CANCELADA' });
+                  }}
+                >
+                  <XCircle className="size-4" />
+                </Button>
+              )}
+
+              <Button variant="ghost" title="Descargar PDF" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async (e) => { 
+                e.stopPropagation();
+                try { 
+                  await toast.promise(generateEstimatePDF({ 
+                    estimate: row, 
+                    tenantName: user?.tenantName || 'Empresa', 
+                    formatAmount: formatConvertedAmount, 
+                    tenantLogo: themeConfig?.logo, 
+                    documentType: 'order',
+                    primaryColor: themeConfig?.colors.primary
+                  }), { 
+                    loading: 'Generando PDF...', 
+                    success: 'PDF generado', 
+                    error: 'Error al generar PDF' 
+                  }); 
+                } catch(e) { console.error(e) } 
+              }}>
+                <FileDown className="size-4" />
+              </Button>
+
+              <Button variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}>
+                <Eye className="size-4" />
+              </Button>
+
+              {canPerform('SALES_ORDERS', 'delete') && (
+                <Button variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}>
+                  <Trash2 className="size-4" />
+                </Button>
+              )}
+            </>
+          )}
+        />
        </div>
+
+      <ConfirmDialog
+        open={stateChangePending !== null}
+        onOpenChange={(open) => { if (!open) setStateChangePending(null); }}
+        title={`Actualizar a ${stateChangePending?.label}`}
+        description={`Vas a cambiar el estado de la orden de venta. Esto mantendrá el flujo de despacho actualizado.`}
+        confirmLabel="Continuar"
+        variant="default"
+        onConfirm={async () => {
+          if (!stateChangePending) return;
+          await handleUpdate(stateChangePending.id, { status: stateChangePending.status as any });
+          setStateChangePending(null);
+        }}
+      />
 
       <ConfirmDialog
         open={pendingDeleteId !== null}

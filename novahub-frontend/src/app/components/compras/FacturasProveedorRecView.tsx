@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { RotateCcw, Plus, Search, Eye, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2, Download, PlusCircle } from 'lucide-react';
+import { RotateCcw, Plus, Search, Eye, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2, Download, PlusCircle, FileDown } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -81,7 +81,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
   );
 
   const columns: ColumnDef<RecurringSupplierInvoice>[] = [
-    { key: 'description' as any, header: 'Descripción', editable: canPerform('compras', 'edit'), 
+    { key: 'description' as any, header: 'Descripción', 
       render: (_, row) => <span className="text-xs font-bold text-primary">{(row as any).description || 'Factura Automática'}</span> },
     { key: 'supplier' as any,    header: 'Proveedor',
       render: (_, row) => <span className="font-bold text-sm">{(row as any).supplier?.name||'-'}</span> },
@@ -91,9 +91,9 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
           {formatConvertedAmount(Number(val || (row as any).amount || 0), row.currency, row.exchangeRate)}
         </span>
       ) },
-    { key: 'frequency' as any,   header: 'Frecuencia',  width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: freqOpts,
+    { key: 'frequency' as any,   header: 'Frecuencia',  width: '120px',
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-purple-500/10 text-purple-500 border-none">{freqMap[(val||'').toLowerCase()]||val||'-'}</Badge> },
-    { key: 'status' as any,      header: 'Estado',      width: '110px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status' as any,      header: 'Estado',      width: '110px',
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -249,19 +249,8 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                     type="date" 
                     value={(localDoc as any).nextInvoiceDate ? new Date((localDoc as any).nextInvoiceDate).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, nextInvoiceDate: new Date(e.target.value).toISOString() } as any)} 
-                    className="h-8 text-xs font-bold border-rose-500/50" 
+                    className="h-9 text-xs font-bold border-rose-500/50" 
                   />
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <select 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
-                    value={localDoc.status || 'ACTIVE'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
-                    className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
-                  >
-                    {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
                 </div>
               </div>
             </CardContent>
@@ -462,8 +451,21 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
             } : undefined}
             actions={(row) => (
               <div className="flex gap-1">
-                <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-                <Button title="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
+                {canPerform('compras', 'edit') && (
+                  <Button
+                    title={(row.status||'').toUpperCase() === 'ACTIVE' ? 'Pausar Facturación' : 'Reanudar Facturación'}
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "size-8 rounded-lg transition-colors",
+                      (row.status||'').toUpperCase() === 'ACTIVE' ? "text-amber-500 hover:bg-amber-500/10 hover:text-amber-500" : "text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500"
+                    )}
+                    onClick={() => handleUpdate(row.id, { status: (row.status||'').toUpperCase() === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' })}
+                  >
+                    <RotateCcw className="size-4" />
+                  </Button>
+                )}
+                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
                   try {
                     await toast.promise(generateRecurringExpensePDF({
                       recurring: row,
@@ -477,9 +479,10 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                       error: 'Error al generar PDF'
                     });
                   } catch(e) { console.error(e) }
-                }}><Download className="size-4" /></Button>
+                }}><FileDown className="size-4" /></Button>
+                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                 {canPerform('compras', 'delete') && (
-                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                 )}
               </div>
             )}

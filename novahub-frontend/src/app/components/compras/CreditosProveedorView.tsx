@@ -177,9 +177,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
                     placeholder="Seleccionar Proveedor" 
                   /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
-                  <Input type="date" value={localDoc?.date ? localDoc.date.split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
-                <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span></div>
+                  <Input type="date" value={localDoc?.date ? localDoc.date.split('T')[0] : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-9 text-xs font-bold" /></div>
               </div>
               <div><p className="text-[10px] text-muted-foreground mb-1">Motivo / Razón</p>
                 <textarea value={localDoc?.reason || ''} onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })}
@@ -258,18 +256,23 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Créditos recibidos por compras o devoluciones.</p></div>
           <Button onClick={startNew} className="bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20"><Plus className="size-4" /> Nuevo Crédito</Button>
         </div>
-        <EditableDataTable data={data} isLoading={loading} columns={columns} 
+        <EditableDataTable data={data} isLoading={loading} columns={columns} allowAddRow={false}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               {row.status?.toUpperCase() === 'DRAFT' && (
-                 <>
-                   <Button title="Emitir" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><Send className="size-4" /></Button>
-                   <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
-                 </>
+               {canPerform('PURCHASES_RETURNS', 'edit') && (row.status||'').toUpperCase() === 'DRAFT' && (
+                 <Button title="Emitir Crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" onClick={() => handleIssue(row.id)}><Send className="size-4" /></Button>
                )}
-               {row.status?.toUpperCase() === 'ISSUED' && <Button title="Marcar como Pagado" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleApply(row.id)}><CheckCircle2 className="size-4" /></Button>}
-               {['APPLIED', 'PAID'].includes(row.status?.toUpperCase()) && <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-none px-2 py-1"><CheckCircle2 className="size-3 mr-1" /> Pagada</Badge>}
+               {canPerform('PURCHASES_RETURNS', 'edit') && (row.status||'').toUpperCase() === 'ISSUED' && (
+                 <Button title="Liquidar Crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" onClick={() => handleApply(row.id)}><CheckCircle2 className="size-4" /></Button>
+               )}
+               <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={() => {
+                 // handleExportPDF(row)
+                 toast.info('Exportación PDF no implementada para créditos proveedor aún');
+               }}><FileDown className="size-4" /></Button>
+               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+               {canPerform('PURCHASES_RETURNS', 'delete') && (row.status||'').toUpperCase() === 'DRAFT' && (
+                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+               )}
             </div>
           )}
         />

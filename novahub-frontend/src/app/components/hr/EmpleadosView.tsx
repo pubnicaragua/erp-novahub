@@ -132,6 +132,9 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, ha
         phone: editData.phone?.trim() || null,
         salary: isNaN(editData.salary) ? 0 : Number(editData.salary),
         currency: editData.currency || 'NIO',
+        payFrequency: editData.payFrequency || 'MONTHLY',
+        departmentId: editData.departmentId,
+        positionId: editData.positionId,
       };
 
       await hrService.updateEmployee(id, sanitizedData);
@@ -183,6 +186,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, ha
       contractType: 'FULL_TIME',
       salary: 0,
       currency: 'NIO',
+      payFrequency: 'MONTHLY',
       employmentStatus: 'ACTIVE',
     };
     setNewRows([...newRows, newRow]);
@@ -231,6 +235,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, ha
         positionId: row.positionId,
         salary: isNaN(row.salary) ? 0 : Number(row.salary),
         currency: row.currency || 'NIO',
+        payFrequency: row.payFrequency || 'MONTHLY',
         hireDate: row.hireDate || new Date().toISOString().split('T')[0],
         contractType: row.contractType || 'FULL_TIME',
       };
@@ -319,6 +324,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, ha
                   <th className="px-4 py-3 text-left text-xs font-semibold">Departamento</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold">Puesto</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold">Salario</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold">Frecuencia</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold">Estado</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold">Acciones</th>
                 </tr>
@@ -369,7 +375,11 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, ha
                     </td>
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-1">
-                        <Select value={row.departmentId} onValueChange={(v) => updateNewRow(row.tempId, 'departmentId', v)}>
+                        <Select value={row.departmentId} onValueChange={(v) => {
+                          const firstPos = positions.find((p: any) => p.departmentId === v);
+                          updateNewRow(row.tempId, 'departmentId', v);
+                          if (firstPos) updateNewRow(row.tempId, 'positionId', firstPos.id);
+                        }}>
                           <SelectTrigger className="h-8 text-sm">
                             <SelectValue />
                           </SelectTrigger>
@@ -391,7 +401,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, ha
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {positions.map((pos: any) => (
+                            {positions.filter((p: any) => p.departmentId === row.departmentId).map((pos: any) => (
                               <SelectItem key={pos.id} value={pos.id}>{pos.title}</SelectItem>
                             ))}
                           </SelectContent>
@@ -424,6 +434,18 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, ha
                           </SelectContent>
                         </Select>
                       </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <Select value={row.payFrequency} onValueChange={(v) => updateNewRow(row.tempId, 'payFrequency', v)}>
+                        <SelectTrigger className="h-8 text-xs font-bold w-28">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="WEEKLY">Semanal</SelectItem>
+                          <SelectItem value="BIWEEKLY">Quincenal</SelectItem>
+                          <SelectItem value="MONTHLY">Mensual</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </td>
                     <td className="px-4 py-2">
                       <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded font-bold">Nuevo</span>
@@ -508,6 +530,24 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, ha
                           <span className="text-sm font-bold text-primary">{formatConvertedAmount(emp.salary, emp.currency)}</span>
                           <span className="text-[9px] text-muted-foreground uppercase font-black">Original: {emp.currency}</span>
                         </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
+                      {editingId === emp.id ? (
+                        <Select value={editData.payFrequency} onValueChange={(v) => setEditData({ ...editData, payFrequency: v })}>
+                          <SelectTrigger className="h-8 text-xs font-bold w-28">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="WEEKLY">Semanal</SelectItem>
+                            <SelectItem value="BIWEEKLY">Quincenal</SelectItem>
+                            <SelectItem value="MONTHLY">Mensual</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-xs font-bold uppercase text-muted-foreground bg-muted px-2 py-1 rounded">
+                          {emp.payFrequency === 'WEEKLY' ? 'Semanal' : emp.payFrequency === 'BIWEEKLY' ? 'Quincenal' : 'Mensual'}
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-2">
@@ -742,6 +782,50 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, ha
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Departamento</Label>
+                  <Select value={editData.departmentId} onValueChange={(v) => {
+                    const firstPos = positions.find((p: any) => p.departmentId === v);
+                    setEditData({ 
+                      ...editData, 
+                      departmentId: v,
+                      positionId: firstPos ? firstPos.id : editData.positionId
+                    });
+                  }}>
+                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Departamento" /></SelectTrigger>
+                    <SelectContent>
+                      {departments.map((dept: any) => (
+                        <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Puesto</Label>
+                  <Select value={editData.positionId} onValueChange={(v) => setEditData({ ...editData, positionId: v })}>
+                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Puesto" /></SelectTrigger>
+                    <SelectContent>
+                      {positions.filter((p: any) => p.departmentId === editData.departmentId).map((pos: any) => (
+                        <SelectItem key={pos.id} value={pos.id}>{pos.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Frecuencia de Pago</Label>
+                <Select value={editData.payFrequency} onValueChange={(v) => setEditData({ ...editData, payFrequency: v })}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="WEEKLY">Semanal</SelectItem>
+                    <SelectItem value="BIWEEKLY">Quincenal</SelectItem>
+                    <SelectItem value="MONTHLY">Mensual</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           )}

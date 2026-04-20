@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput, Download, FileText, PlusCircle, FilePlus
+  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput, Download, FileText, PlusCircle, FilePlus, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -129,7 +129,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
 
         </span>
       ) },
-    { key: 'status',   header: 'Estado',    width: '120px', editable: canPerform('compras', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status',   header: 'Estado',    width: '120px',
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -428,12 +428,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
-                  <Input 
+                   <Input 
                     disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                     type="date" 
                     value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
-                    className="h-8 text-xs" 
+                    className="h-9 text-xs font-bold" 
                   />
                 </div>
                 <div>
@@ -443,19 +443,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                     type="date" 
                     value={localDoc.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString().split('T')[0] : ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, expectedDelivery: new Date(e.target.value).toISOString() })} 
-                    className="h-8 text-xs" 
+                    className="h-9 text-xs font-bold" 
                   />
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <select 
-                    disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
-                    value={localDoc.status || 'DRAFT'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
-                    className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
-                  >
-                    {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
@@ -786,13 +775,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   variant="ghost"
                   size="icon"
                   disabled={String(row.status || '').toUpperCase() === 'RECEIVED' || supplierInvoices.some((inv) => inv.purchaseOrderId === row.id)}
-                  className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-50"
+                  className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors disabled:opacity-50"
                   onClick={() => handleConvertToInvoice(row)}
                 >
                   <FileInput className="size-4" />
                 </Button>
-                <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-                <Button title="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
+                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
                   try {
                     await toast.promise(generatePurchaseOrderPDF({
                       order: row,
@@ -806,9 +794,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                       error: 'Error al generar PDF'
                     });
                   } catch(e) { console.error(e) }
-                }}><Download className="size-4" /></Button>
+                }}><FileDown className="size-4" /></Button>
+                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                 {canPerform('compras', 'delete') && (
-                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                 )}
               </div>
             )}

@@ -148,7 +148,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         </span>)
     },
     {
-      key: 'method', header: 'Método', width: '120px', editable: canPerform('SALES_PAYMENTS', 'edit'), type: 'select', options: methodOptions,
+      key: 'method', header: 'Método', width: '120px',
       render: (val) => {
         const methodMap: Record<string, string> = { TRANSFER: 'Transferencia', CASH: 'Efectivo', CARD: 'Tarjeta', CHECK: 'Cheque' };
         return <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none bg-blue-500/10 text-blue-500">{methodMap[(val || '').toUpperCase()] || val}</Badge>;
@@ -285,16 +285,18 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             )}
           </div>
         </div>
-        <EditableDataTable data={data}
+        <EditableDataTable 
+          data={data}
+          showSelection={false}
           allowAddRow={false}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch { toast.error('Error al eliminar'); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-              <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
-              <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
+              <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
+              <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
               {canPerform('SALES_PAYMENTS', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
               )}
             </div>
           )}

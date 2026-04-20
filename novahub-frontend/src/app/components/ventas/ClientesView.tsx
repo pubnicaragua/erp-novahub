@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Users, UserPlus, Search, TrendingUp, CreditCard, CheckCircle2, Eye, Trash2, Plus, RefreshCcw
+  Users, UserPlus, Search, TrendingUp, CreditCard, CheckCircle2, Eye, Trash2, Plus, RefreshCw
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -218,6 +218,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
 
         <EditableDataTable 
           data={data}
+          showSelection={false}
           onBulkDelete={async (ids) => {
             try {
               for (const id of ids) {
@@ -236,12 +237,12 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomer(row)}><Eye className="size-4" /></Button>
+               <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomer(row)}><Eye className="size-4" /></Button>
                <Button 
                  variant="ghost" 
                  size="icon" 
                  title="Recalcular Saldo" 
-                 className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors" 
+                 className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 hover:text-amber-500 transition-colors" 
                  onClick={async () => {
                    try {
                      await toast.promise(customersService.recalculateBalance(row.id), {
@@ -250,13 +251,23 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
                        error: 'Error al recalcular saldo'
                      });
                      onRefresh();
-                   } catch (e) {}
+                   } catch (e) {
+                     console.error(e);
+                   }
                  }}
                >
-                 <RefreshCcw className="size-4" />
+                 <RefreshCw className="size-4" />
                </Button>
                {canPerform('SALES_CLIENTS', 'delete') && (
-                 <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                 <Button 
+                   variant="ghost" 
+                   size="icon" 
+                   title="Eliminar Cliente" 
+                   className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" 
+                   onClick={() => setPendingDeleteId(row.id)}
+                 >
+                   <Trash2 className="size-4" />
+                 </Button>
                )}
             </div>
           )}

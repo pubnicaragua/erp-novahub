@@ -28,9 +28,9 @@ interface DevolucionesViewProps {
 }
 
 const statusOptions = [
-  { label: 'Pendiente',  value: 'PENDING',   color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Aprobada',   value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Procesada',  value: 'PROCESSED', color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Borrador',   value: 'PENDING',   color: 'bg-slate-500/10 text-slate-500' },
+  { label: 'Emitida',    value: 'APPROVED',  color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Pagada',     value: 'PROCESSED', color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Rechazada',  value: 'REJECTED',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
@@ -136,6 +136,14 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     } catch { toast.error('Error al rechazar'); }
   };
 
+  const handleProcess = async (id: string) => {
+    try {
+      await salesReturnsService.processReturn(id);
+      toast.success('Devolución pagada/procesada');
+      onRefresh();
+    } catch { toast.error('Error al procesar'); }
+  };
+
   // Get invoices for selected customer
   const customerInvoices = localDoc?.customerId
     ? invoices.filter(i => i.customerId === localDoc.customerId)
@@ -171,9 +179,9 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
 
   const kpis = [
     { title: 'Total Devuelto',  value: formatConvertedAmount(totalReturnedInDisplayCurrency, displayCurrency), icon: FileOutput,   color: 'text-rose-500',    bg: 'bg-rose-500/10'    },
-    { title: 'Pendientes',      value: data.filter(r => (r.status||'').toUpperCase() === 'PENDING').length,           icon: Clock,        color: 'text-amber-500',   bg: 'bg-amber-500/10'   },
-    { title: 'Aprobadas',       value: data.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length,          icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Rechazadas',      value: data.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length,          icon: XCircle,      color: 'text-muted-foreground', bg: 'bg-muted/10' },
+    { title: 'Borradores',      value: data.filter(r => (r.status||'').toUpperCase() === 'PENDING').length,           icon: Clock,        color: 'text-slate-500',   bg: 'bg-slate-500/10'   },
+    { title: 'Emitidas',        value: data.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length,          icon: CheckCircle2, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { title: 'Pagadas',         value: data.filter(r => (r.status||'').toUpperCase() === 'PROCESSED').length,         icon: ShieldCheck,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   ];
 
   // ─── INLINE FORM ────────────────────────────────────────────────────
@@ -198,10 +206,14 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                 {canApprove && (
                   <div className="flex gap-2">
                     <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                      onClick={() => { handleReject(localDoc.id); setEditingId(null); }}><XCircle className="size-3 mr-2" /> Rechazar / Cancelar</Button>
-                    <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                      onClick={() => { handleApprove(localDoc.id); setEditingId(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar Devolución</Button>
+                      onClick={() => { handleReject(localDoc.id); setEditingId(null); }}><XCircle className="size-3 mr-2" /> Rechazar</Button>
+                    <Button variant="outline" className="rounded-xl border-amber-500/50 text-amber-500 hover:bg-amber-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                      onClick={() => { handleApprove(localDoc.id); setEditingId(null); }}><ShieldCheck className="size-3 mr-2" /> Emitir Devolución</Button>
                   </div>
+                )}
+                {(!isCreating && (localDoc?.status || '').toUpperCase() === 'APPROVED') && (
+                  <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                    onClick={() => { handleProcess(localDoc.id); setEditingId(null); }}><CheckCircle2 className="size-3 mr-2" /> Pagar Devolución</Button>
                 )}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   {isCreating ? 'Registrar Devolución' : 'Guardar Cambios'}
@@ -254,9 +266,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                   }} placeholder="Seleccionar Factura" />
                 </div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
-                  <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
-                {!isCreating && <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span></div>}
+                  <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-9 text-xs font-bold" /></div>
               </div>
               <div><p className="text-[10px] text-muted-foreground mb-1">Razón de la Devolución</p>
                 <textarea value={localDoc?.reason || ''} onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })}
@@ -270,7 +280,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                 <span className="font-black">Total Devolución</span>
                 <span className="text-rose-500 font-black text-lg text-right">{formatConvertedAmount(Number(localDoc?.total||0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
               </div>
-              <p className="text-[10px] text-muted-foreground italic">Al aprobar esta devolución, el estado cambiará a aprobado. Los ajustes contables deben realizarse mediante una Nota de Crédito manual.</p>
+              <p className="text-[10px] text-muted-foreground italic">Al emitir, el saldo del cliente aumenta (se le debe el dinero). Al pagar, el saldo se cancela. Use una nota de crédito si desea compensar saldos pendientes directamente.</p>
             </CardContent>
           </Card>
         </div>
@@ -367,7 +377,9 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             )}
           </div>
         </div>
-        <EditableDataTable data={data}
+        <EditableDataTable 
+          data={data}
+          showSelection={false}
           allowAddRow={false}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch { toast.error('Error'); } }}
           columns={columns} onRowUpdate={async () => {}} isLoading={loading}
@@ -375,14 +387,17 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             <div className="flex items-center gap-1">
                {canPerform('SALES_RETURNS', 'edit') && (row.status||'').toUpperCase() === 'PENDING' && (
                  <>
-                   <Button title="Rechazar Devolución" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors" onClick={() => handleReject(row.id)}><XCircle className="size-4" /></Button>
-                   <Button title="Aprobar Devolución" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
+                   <Button title="Emitir Devolución" variant="ghost" size="icon" className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 hover:text-amber-500 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
+                   <Button title="Rechazar Devolución" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => handleReject(row.id)}><XCircle className="size-4" /></Button>
                  </>
                )}
-               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
-               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+               {canPerform('SALES_RETURNS', 'edit') && (row.status||'').toUpperCase() === 'APPROVED' && (
+                 <Button title="Pagar Devolución" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" onClick={() => handleProcess(row.id)}><CheckCircle2 className="size-4" /></Button>
+               )}
+               <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
+               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                {canPerform('SALES_RETURNS', 'delete') && (
-                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                )}
             </div>
           )}

@@ -54,6 +54,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDescription, setNewCategoryDescription] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
+  const [adjustStockProduct, setAdjustStockProduct] = useState<any | null>(null);
+  const [adjustQty, setAdjustQty] = useState(0);
+  const [adjustWarehouse, setAdjustWarehouse] = useState('');
+  const [adjustLoading, setAdjustLoading] = useState(false);
   const newRowRef = useRef<HTMLInputElement>(null);
 
   const filteredProducts = products.filter((p: any) => {
@@ -267,6 +271,40 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       toast.error('Error al eliminar');
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const handleAdjustStock = async () => {
+    if (!adjustStockProduct || adjustQty <= 0 || !adjustWarehouse) {
+      toast.error('Datos incompletos para el ajuste');
+      return;
+    }
+    setAdjustLoading(true);
+    try {
+      // Intentar obtener variantId del producto
+      let variantId = adjustStockProduct.variants?.[0]?.id;
+      if (!variantId) {
+        const full = await inventoryService.getProduct(adjustStockProduct.id);
+        variantId = (full as any)?.data?.variants?.[0]?.id || (full as any)?.variants?.[0]?.id;
+      }
+
+      await inventoryService.createMovement({
+        productId: adjustStockProduct.id,
+        warehouseId: adjustWarehouse,
+        variantId,
+        type: 'IN',
+        quantity: adjustQty,
+        reference: 'AJUSTE MANUAL'
+      });
+      toast.success('Stock actualizado correctamente');
+      setAdjustStockProduct(null);
+      setAdjustQty(0);
+      setAdjustWarehouse('');
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e.message || 'Error al ajustar stock');
+    } finally {
+      setAdjustLoading(false);
     }
   };
 
@@ -752,6 +790,19 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                      </TableCell>
                      <TableCell className="text-right">
                        <div className="flex items-center justify-end gap-1 transition-opacity">
+                         <Button 
+                           variant="ghost" 
+                           size="icon" 
+                           className="size-7 text-emerald-600 hover:bg-emerald-500/10"
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             setAdjustStockProduct(product);
+                             setAdjustWarehouse(warehouses[0]?.id || '');
+                           }}
+                           title="Añadir Stock"
+                         >
+                           <PlusCircle className="size-3.5" />
+                         </Button>
                          {canPerform('INVENTORY_PRODUCTS', 'edit') && (
                             <Button 
                               variant="ghost" 
@@ -798,10 +849,62 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         onOpenChange={(open) => !open && setPendingDeleteId(null)}
         title="¿Eliminar producto?"
         description="Esta acción eliminará el producto del inventario."
-        confirmLabel="Eliminar"
-        loading={deleteLoading}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
         onConfirm={handleConfirmDelete}
+        loading={deleteLoading}
+        variant="destructive"
       />
+
+      {/* Diálogo Ajuste de Stock */}
+      <Dialog open={!!adjustStockProduct} onOpenChange={(open) => !open && setAdjustStockProduct(null)}>
+        <DialogContent className="sm:max-w-[400px] rounded-3xl p-6">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black uppercase tracking-tight">Añadir Stock</DialogTitle>
+            <DialogDescription className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">
+              {adjustStockProduct?.name} ({adjustStockProduct?.code})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Bodega</label>
+              <Select value={adjustWarehouse} onValueChange={setAdjustWarehouse}>
+                <SelectTrigger className="h-10 rounded-xl bg-muted/30 border-none font-bold text-xs uppercase">
+                  <SelectValue placeholder="Seleccionar bodega" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.map(w => (
+                    <SelectItem key={w.id} value={w.id}>{w.name.toUpperCase()}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cantidad a añadir</label>
+              <Input 
+                type="number" 
+                value={adjustQty || ''} 
+                onChange={e => setAdjustQty(Math.max(0, parseInt(e.target.value) || 0))}
+                className="h-10 rounded-xl bg-muted/30 border-none font-bold text-xs"
+                placeholder="0"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setAdjustStockProduct(null)} className="rounded-xl font-black uppercase text-[10px] tracking-widest h-10">
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleAdjustStock} 
+              disabled={adjustLoading || adjustQty <= 0 || !adjustWarehouse}
+              className="rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase text-[10px] tracking-widest px-6 h-10 shadow-lg shadow-emerald-500/20"
+            >
+              {adjustLoading ? 'Procesando...' : 'Confirmar Entrada'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={categoryModalOpen} onOpenChange={setCategoryModalOpen}>
         <DialogContent>
           <DialogHeader>

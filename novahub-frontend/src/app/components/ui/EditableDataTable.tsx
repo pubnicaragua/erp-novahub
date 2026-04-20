@@ -490,38 +490,24 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                 {/* Header of Card */}
                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-border/50 gap-4">
                   <div className="flex items-center gap-3">
-                    {showSelection && (
-                       <Checkbox 
-                        checked={isSelected} 
-                        onCheckedChange={() => toggleSelectRow(rowId)}
-                      />
-                    )}
                     <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 leading-none mb-1">Registro</p>
-                        <p className="text-sm font-black text-foreground truncate max-w-[140px] xs:max-w-none">
+                        <p className="text-sm font-black text-foreground">
                             {String(row.name || row.number || row.id || 'N/A')}
                         </p>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-1.5 bg-background/80 backdrop-blur-sm p-1 rounded-xl border border-border/50 shadow-inner">
-                    {actions ? actions(row) : (
-                        onRowDelete && (
-                            <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="size-8 text-rose-500/70 hover:text-rose-500 hover:bg-rose-500/5 rounded-lg"
-                                onClick={() => setConfirmDeleteId(rowId)}
-                            >
-                                <Trash2 className="size-4" />
-                            </Button>
-                        )
-                    )}
-                  </div>
+                  {isDraft && (
+                      <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-primary bg-primary/5 py-1 px-3 rounded-full shadow-sm border border-primary/10">
+                          <span className="size-1.5 rounded-full bg-primary animate-pulse" />
+                          Borrador
+                      </div>
+                  )}
                 </div>
 
                 {/* Data of Card */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                <div className="grid grid-cols-1 xs:grid-cols-2 gap-x-4 gap-y-4 mb-5">
                   {columns.map((col) => {
                     const value = row[col.key as string];
                     return (
@@ -535,12 +521,40 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   })}
                 </div>
 
-                {isDraft && (
-                    <div className="mt-4 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-primary bg-primary/5 py-1 px-3 rounded-full w-fit">
-                        <span className="size-1.5 rounded-full bg-primary animate-pulse" />
-                        Cambios sin guardar
+                {/* Footer Actions Row */}
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-border/50">
+                    <div className="flex-1">
+                         {/* Optional status or secondary info could go here */}
                     </div>
-                )}
+                    <div className="flex items-center gap-1 bg-muted/20 p-1 rounded-xl border border-border/40">
+                        {onRowUpdate && columns.some(c => c.editable) && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            title="Editar registro"
+                            className="size-9 text-primary hover:bg-primary/10 rounded-lg"
+                            onClick={() => {
+                              setItemBeingEdited({...row});
+                              setIsEditModalOpen(true);
+                            }}
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                        )}
+                        {actions ? actions(row) : (
+                            onRowDelete && (
+                                <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="size-9 text-rose-500/70 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg"
+                                    onClick={() => setConfirmDeleteId(rowId)}
+                                >
+                                    <Trash2 className="size-4" />
+                                </Button>
+                            )
+                        )}
+                    </div>
+                </div>
               </div>
             );
           })}

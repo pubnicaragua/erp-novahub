@@ -218,9 +218,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
                     placeholder="Seleccionar Cliente" 
                   /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
-                  <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
-                {!isCreating && <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span></div>}
+                  <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-9 text-xs font-bold" /></div>
                 {localDoc?.salesReturnId && <div><p className="text-[10px] text-muted-foreground mb-1">Devolución Asociada</p>
                   <span className="text-xs font-bold text-blue-500">{localDoc.salesReturnId.slice(0, 10)}...</span></div>}
               </div>
@@ -323,22 +321,24 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
             )}
           </div>
         </div>
-        <EditableDataTable data={data}
+        <EditableDataTable 
+          data={data}
+          showSelection={false}
           allowAddRow={false}
           onBulkDelete={async (ids) => { try { for (const id of ids) { await creditNotesService.delete(id as string); } toast.success('Eliminadas'); onRefresh(); } catch { toast.error('Error'); } }}
           columns={columns} onRowUpdate={async () => {}} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
                {canPerform('SALES_CREDIT_NOTES', 'edit') && (row.status||'').toUpperCase() === 'DRAFT' && (
-                 <Button title="Emitir" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleIssue(row.id)}><Send className="size-4" /></Button>
+                 <Button title="Emitir Nota de Crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" onClick={() => handleIssue(row.id)}><Send className="size-4" /></Button>
                )}
                {canPerform('SALES_CREDIT_NOTES', 'edit') && (row.status||'').toUpperCase() === 'ISSUED' && (
-                 <Button title="Liquidar Crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors" onClick={() => handleApply(row.id)}><CheckCircle2 className="size-4" /></Button>
+                 <Button title="Liquidar Saldo" variant="ghost" size="icon" className="size-8 rounded-lg text-blue-500 hover:bg-blue-500/10 hover:text-blue-500 transition-colors" onClick={() => handleApply(row.id)}><CheckCircle2 className="size-4" /></Button>
                )}
-               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
-               <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+               <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
+               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                {canPerform('SALES_CREDIT_NOTES', 'delete') && (
-                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                )}
             </div>
           )}
