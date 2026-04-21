@@ -15,6 +15,7 @@ import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 interface RecordatoriosViewProps {
   data: Reminder[];
@@ -124,26 +125,34 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
           <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{kpi.value}</p></div>
+            <CardContent className="p-4 sm:p-5 flex items-center gap-3 sm:gap-4">
+              <div className={cn("p-2 sm:p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-5 sm:size-6", kpi.color)} /></div>
+              <div className="min-w-0">
+                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 truncate">{kpi.title}</p>
+                <p className="text-lg sm:text-2xl font-black tracking-tight truncate">{kpi.value}</p>
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <Card className="border-none bg-background/50 backdrop-blur-xl shadow-sm">
-        <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Recordatorios</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Alertas programadas</p></div>
+      <Card className="border-none bg-background/50 backdrop-blur-xl shadow-sm overflow-hidden">
+        <div className="p-4 sm:p-6 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight">Recordatorios</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Alertas programadas</p>
+          </div>
           <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button variant="default" onClick={() => setIsAddOpen(true)} className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Aviso</Button>
+            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <Button variant="default" onClick={() => setIsAddOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20"><Plus className="size-4" /> Nuevo Aviso</Button>
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} onRowDelete={async (id) => { try { await remindersService.delete(id as string); toast.success('Recordatorio eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } }} />
+        <div className="p-0 sm:p-2">
+          <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} allowAddRow={false} onRowDelete={async (id) => { try { await remindersService.delete(id as string); toast.success('Recordatorio eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } }} />
+        </div>
       </Card>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -162,12 +171,17 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
                 <Input type="datetime-local" value={formData.reminderDate} onChange={e => setFormData({...formData, reminderDate: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <Label>Alcance (Scope)</Label>
-                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.scope} onChange={e => setFormData({...formData, scope: e.target.value, selectedUsers: [], selectedDept: ''})}>
-                  <option value="PERSONAL">Personal</option>
-                  <option value="DEPARTMENT">Departamento</option>
-                  <option value="GLOBAL">Global (Todos)</option>
-                </select>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Alcance (Scope)</Label>
+                <Select value={formData.scope} onValueChange={val => setFormData({...formData, scope: val, selectedUsers: [], selectedDept: ''})}>
+                  <SelectTrigger className="h-10 rounded-xl bg-background/50 border-border/50 font-bold focus:ring-primary/20 shadow-sm">
+                    <SelectValue placeholder="Alcance" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                    <SelectItem value="PERSONAL" className="font-bold">Personal</SelectItem>
+                    <SelectItem value="DEPARTMENT" className="font-bold">Departamento</SelectItem>
+                    <SelectItem value="GLOBAL" className="font-bold">Global (Todos)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -192,12 +206,18 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
             )}
 
             {formData.scope === 'DEPARTMENT' && (
-              <div className="space-y-2">
-                <Label>Seleccionar Departamento</Label>
-                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.selectedDept} onChange={e => setFormData({...formData, selectedDept: e.target.value})}>
-                  <option value="" disabled>Seleccione departamento...</option>
-                  {availableDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
+              <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Seleccionar Departamento</Label>
+                <Select value={formData.selectedDept} onValueChange={val => setFormData({...formData, selectedDept: val})}>
+                  <SelectTrigger className="h-11 rounded-xl bg-background/50 border-border/50 font-bold focus:ring-primary/20 shadow-sm">
+                    <SelectValue placeholder="Seleccione departamento..." />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                    {availableDepts.map(d => (
+                      <SelectItem key={d.id} value={d.id} className="font-bold">{d.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 

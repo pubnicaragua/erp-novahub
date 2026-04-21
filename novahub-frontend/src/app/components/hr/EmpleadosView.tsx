@@ -658,9 +658,16 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, ha
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
             <div className="flex items-center gap-2">
               <span>Mostrar</span>
-              <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
-                {PAGE_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
+              <Select value={String(pageSize)} onValueChange={(val) => setPageSize(Number(val))}>
+                <SelectTrigger className="h-8 w-[70px] rounded-lg border bg-background font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none shadow-sm">
+                  <SelectValue placeholder={String(pageSize)} />
+                </SelectTrigger>
+                <SelectContent className="rounded-lg border-border/50 shadow-xl min-w-[70px]">
+                  {PAGE_SIZE_OPTIONS.map(opt => (
+                    <SelectItem key={opt} value={String(opt)} className="font-bold">{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <span>por página</span>
             </div>
             <div className="h-4 w-px bg-border/40 hidden sm:block" />

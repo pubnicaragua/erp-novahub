@@ -19,6 +19,8 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { storageService } from '../../services/storage.service';
 import { generateExpensePDF } from '../../utils/pdfGenerator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { RotateCcw } from 'lucide-react';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'pending' } | { type: 'category'; category: string };
@@ -306,18 +308,22 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Categoría</p>
-                    <select
+                    <Select
                       disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={localDoc.category || 'OPERATIVO'}
-                      onChange={(e) => setLocalDoc({ ...localDoc, category: e.target.value })}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs uppercase"
+                      onValueChange={(val) => setLocalDoc({ ...localDoc, category: val })}
                     >
-                      <option value="OPERATIVO">Operativo</option>
-                      <option value="ADMINISTRATIVO">Administrativo</option>
-                      <option value="VENTAS">Ventas / Marketing</option>
-                      <option value="FINANCIERO">Financiero</option>
-                      <option value="OTRO">Otro</option>
-                    </select>
+                      <SelectTrigger className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase focus:ring-primary/20 shadow-sm">
+                        <SelectValue placeholder="Categoría" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                        <SelectItem value="OPERATIVO" className="font-bold text-xs uppercase">Operativo</SelectItem>
+                        <SelectItem value="ADMINISTRATIVO" className="font-bold text-xs uppercase">Administrativo</SelectItem>
+                        <SelectItem value="VENTAS" className="font-bold text-xs uppercase">Ventas / Marketing</SelectItem>
+                        <SelectItem value="FINANCIERO" className="font-bold text-xs uppercase">Financiero</SelectItem>
+                        <SelectItem value="OTRO" className="font-bold text-xs uppercase">Otro</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Fecha del Gasto</p>
@@ -361,16 +367,20 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Cuenta de Origen</p>
-                    <select
+                    <Select
                       disabled={!canMutate}
                       value={(localDoc.paymentSource as string) || 'EFECTIVO'}
-                      onChange={(e) => setLocalDoc({ ...localDoc, paymentSource: e.target.value as any })}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
+                      onValueChange={(val) => setLocalDoc({ ...localDoc, paymentSource: val as any })}
                     >
-                      {paymentSourceOptions.map(source => (
-                        <option key={source} value={source}>{source}</option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase focus:ring-primary/20 shadow-sm">
+                        <SelectValue placeholder="Cuenta" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                        {paymentSourceOptions.map(source => (
+                          <SelectItem key={source} value={source} className="font-bold text-xs uppercase">{source}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   {String(localDoc.category || '').toUpperCase() === 'OTRO' && (
                     <div className="col-span-2">
@@ -386,14 +396,20 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   )}
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                    <select
+                    <Select
                       disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={localDoc.status || 'PENDING'}
-                      onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
-                      className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
+                      onValueChange={(val) => setLocalDoc({ ...localDoc, status: val as any })}
                     >
-                      {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                      <SelectTrigger className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase focus:ring-primary/20 shadow-sm", currentStatus?.color || 'bg-background')}>
+                        <SelectValue placeholder="Estado" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                        {statusOpts.map(o => (
+                          <SelectItem key={o.value} value={o.value} className="font-bold text-xs uppercase">{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Referencia (Factura/Recibo)</p>
@@ -407,20 +423,29 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   </div>
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Adjuntar evidencia (PDF, imagen, XLSX)</p>
-                    <Input
-                      disabled={!canMutate}
-                      type="file"
-                      accept=".pdf,.xlsx,.xls,image/*"
-                      onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
-                      className="h-8 text-xs"
-                    />
-                    <p className="mt-1 text-[10px] text-muted-foreground">Imágenes max 2MB. Otros archivos max 10MB.</p>
-                    {(evidenceFile || localDoc.evidenceFileName) && (
-                      <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-primary">
-                        <FileText className="size-3" />
-                        {evidenceFile?.name || localDoc.evidenceFileName}
-                      </div>
-                    )}
+                    <div className="relative group">
+                      <Input
+                        disabled={!canMutate}
+                        type="file"
+                        id="expense-evidence"
+                        accept=".pdf,.xlsx,.xls,image/*"
+                        onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+                        className="hidden"
+                      />
+                      <label 
+                        htmlFor="expense-evidence" 
+                        className="flex items-center justify-between h-9 px-4 rounded-xl border border-dashed border-border/50 bg-background/50 hover:bg-primary/5 hover:border-primary/50 transition-all cursor-pointer group"
+                      >
+                        <span className="text-[10px] font-bold text-muted-foreground truncate max-w-[250px]">
+                          {evidenceFile ? evidenceFile.name : (localDoc.evidenceFileName || 'Seleccionar evidencia...')}
+                        </span>
+                        <div className="flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                          <Plus className="size-3" />
+                          Examinar
+                        </div>
+                      </label>
+                    </div>
+                    <p className="mt-1 text-[9px] text-muted-foreground/60 uppercase font-bold tracking-tight">Imágenes max 2MB. Otros archivos max 10MB.</p>
                   </div>
                 </div>
               </div>
@@ -434,15 +459,19 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                 <div className="flex justify-between items-center text-sm border-b border-border/50 pb-4">
                    <div className="w-1/2">
                       <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                      <select
+                      <Select
                         disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                         value={localDoc.currency || 'NIO'}
-                        onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
-                        className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
+                        onValueChange={(val) => setLocalDoc({ ...localDoc, currency: val as any, exchangeRate: globalRate })}
                       >
-                        <option value="NIO">NIO</option>
-                        <option value="USD">USD</option>
-                      </select>
+                        <SelectTrigger className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase focus:ring-primary/20 shadow-sm">
+                          <SelectValue placeholder="Moneda" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                          <SelectItem value="NIO" className="font-bold text-xs uppercase">NIO (C$)</SelectItem>
+                          <SelectItem value="USD" className="font-bold text-xs uppercase">USD ($)</SelectItem>
+                        </SelectContent>
+                      </Select>
                    </div>
                    <div className="w-1/2 flex flex-col items-end">
                       <p className="text-[10px] text-muted-foreground mb-1">Monto Total</p>
@@ -587,19 +616,22 @@ export function GastosView({ data, loading, onRefresh }: Props) {
 
             <div className="flex items-center gap-2 w-full xs:w-auto">
               {activeKpiFilter.type === 'category' && (
-                <select
+                <Select
                   value={selectedCategory}
-                  onChange={(e) => {
-                    const category = e.target.value;
-                    setSelectedCategory(category);
-                    setActiveKpiFilter({ type: 'category', category });
+                  onValueChange={(val) => {
+                    setSelectedCategory(val);
+                    setActiveKpiFilter({ type: 'category', category: val });
                   }}
-                  className="h-9 rounded-xl border border-input bg-background px-3 text-[10px] font-black uppercase flex-1 sm:flex-none"
                 >
-                  {uniqueCategories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-9 rounded-xl border border-input bg-background px-3 text-[10px] font-black uppercase flex-1 sm:flex-none min-w-[120px] focus:ring-primary/20 shadow-sm">
+                    <SelectValue placeholder="Categoría" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                    {uniqueCategories.map(cat => (
+                      <SelectItem key={cat} value={cat} className="font-bold text-[10px] uppercase">{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
               {activeKpiFilter.type !== 'none' && (
                 <Button

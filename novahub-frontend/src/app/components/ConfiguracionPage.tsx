@@ -30,6 +30,7 @@ import { cn } from './ui/utils';
 import { type RoleManagement, type Permission } from '../types';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Textarea } from './ui/textarea';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from './ui/select';
 
 const AVAILABLE_MODULES = [
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes' },
@@ -1010,31 +1011,37 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Industria</Label>
                   <div className="space-y-2">
-                    <select value={companyIndustry} onChange={e => setCompanyIndustry(e.target.value)}
-                      className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      {industryOptions.length > 0 ? (
-                        <>
-                          <optgroup label="Predeterminadas">
-                            {industryOptions.filter(o => o.isDefault).map(o => (
-                              <option key={o.code} value={o.code}>{o.name}</option>
-                            ))}
-                          </optgroup>
-                          {industryOptions.some(o => !o.isDefault) && (
-                            <optgroup label="Personalizadas">
-                              {industryOptions.filter(o => !o.isDefault).map(o => (
-                                <option key={o.code} value={o.code}>{o.name}</option>
+                    <Select value={companyIndustry} onValueChange={setCompanyIndustry}>
+                      <SelectTrigger className="h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 shadow-sm">
+                        <SelectValue placeholder="Seleccionar industria" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                        {industryOptions.length > 0 ? (
+                          <>
+                            <SelectGroup>
+                              <SelectLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">Predeterminadas</SelectLabel>
+                              {industryOptions.filter(o => o.isDefault).map(o => (
+                                <SelectItem key={o.code} value={o.code} className="font-bold text-xs">{o.name}</SelectItem>
                               ))}
-                            </optgroup>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <option value="RETAIL">Comercio / Retail</option>
-                          <option value="SERVICES">Servicios Profesionales</option>
-                          <option value="OTHER">Otro</option>
-                        </>
-                      )}
-                    </select>
+                            </SelectGroup>
+                            {industryOptions.some(o => !o.isDefault) && (
+                              <SelectGroup>
+                                <SelectLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">Personalizadas</SelectLabel>
+                                {industryOptions.filter(o => !o.isDefault).map(o => (
+                                  <SelectItem key={o.code} value={o.code} className="font-bold text-xs">{o.name}</SelectItem>
+                                ))}
+                              </SelectGroup>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <SelectItem value="RETAIL" className="font-bold text-xs">Comercio / Retail</SelectItem>
+                            <SelectItem value="SERVICES" className="font-bold text-xs">Servicios Profesionales</SelectItem>
+                            <SelectItem value="OTHER" className="font-bold text-xs">Otro</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
                     {/* Custom industry entries with delete */}
                     {industryOptions.filter(o => !o.isDefault).length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
@@ -1385,15 +1392,19 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 <div className="space-y-2 pt-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Tiempo de Expiración de Sesión</Label>
                   <div className="flex items-center gap-3">
-                    <select value={sessionTimeout} onChange={e => setSessionTimeout(e.target.value)}
-                      className="flex h-11 flex-1 rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      <option value="15">15 minutos</option>
-                      <option value="30">30 minutos</option>
-                      <option value="60">1 hora</option>
-                      <option value="240">4 horas</option>
-                      <option value="480">8 horas</option>
-                      <option value="1440">24 horas</option>
-                    </select>
+                    <Select value={sessionTimeout} onValueChange={setSessionTimeout}>
+                      <SelectTrigger className="h-11 flex-1 rounded-xl border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-primary/20 shadow-sm">
+                        <SelectValue placeholder="Seleccionar tiempo" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                        <SelectItem value="15" className="font-bold text-xs">15 minutos</SelectItem>
+                        <SelectItem value="30" className="font-bold text-xs">30 minutos</SelectItem>
+                        <SelectItem value="60" className="font-bold text-xs">1 hora</SelectItem>
+                        <SelectItem value="240" className="font-bold text-xs">4 horas</SelectItem>
+                        <SelectItem value="480" className="font-bold text-xs">8 horas</SelectItem>
+                        <SelectItem value="1440" className="font-bold text-xs">24 horas</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Button className="rounded-xl h-11 gap-2 font-bold" onClick={() => toast.success('Configuración guardada')}>
                       <Save className="size-4" />Guardar
                     </Button>
@@ -1573,14 +1584,18 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
                         {allowCurrencySwitch ? 'Moneda Global Inicial' : 'Moneda Bloqueada del Sistema'}
                       </Label>
-                      <select
+                      <Select
                         value={displayCurrencySetting}
-                        onChange={(e) => setDisplayCurrencySetting(e.target.value === 'USD' ? 'USD' : 'NIO')}
-                        className="h-11 w-full rounded-xl border border-input bg-background px-3 text-xs font-black uppercase tracking-widest"
+                        onValueChange={(val) => setDisplayCurrencySetting(val === 'USD' ? 'USD' : 'NIO')}
                       >
-                        <option value="NIO">NIO (Córdoba)</option>
-                        <option value="USD">USD (Dólar)</option>
-                      </select>
+                        <SelectTrigger className="h-11 w-full rounded-xl border border-input bg-background px-3 text-xs font-black uppercase tracking-widest shadow-sm">
+                          <SelectValue placeholder="Seleccionar moneda" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                          <SelectItem value="NIO" className="font-black text-xs uppercase">NIO (Córdoba)</SelectItem>
+                          <SelectItem value="USD" className="font-black text-xs uppercase">USD (Dólar)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 

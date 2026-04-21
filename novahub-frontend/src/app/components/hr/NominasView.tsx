@@ -10,6 +10,7 @@ import 'jspdf-autotable';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
   const { convertAmount, formatConvertedAmount, displayCurrency } = useCurrency();
@@ -46,16 +47,18 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Parámetros de procesamiento
+  const [procFrequency, setProcFrequency] = useState('MONTHLY');
+  const [procStartDate, setProcStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+  const [procEndDate, setProcEndDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]);
+
   const handleProcessPayroll = async () => {
     try {
-      const today = new Date();
-      const periodStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      const periodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-
       const payload: any = {
-        periodStart: periodStart.toISOString(),
-        periodEnd: periodEnd.toISOString(),
+        periodStart: new Date(procStartDate).toISOString(),
+        periodEnd: new Date(procEndDate).toISOString(),
         includeCommissions,
+        payFrequency: procFrequency
       };
       if (filterEmployee !== 'all') {
         payload.employeeIds = [filterEmployee];
@@ -207,8 +210,66 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      {/* Toolbar & Processing Controls */}
+      <div className="flex flex-col gap-4 p-4 border border-primary/20 rounded-xl bg-primary/5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Calculator className="size-5 text-primary" />
+            </div>
+            <div>
+              <h4 className="text-sm font-black uppercase tracking-widest">Procesar Nueva Nómina</h4>
+              <p className="text-[10px] text-muted-foreground font-bold">Selecciona frecuencia y periodo para generar registros masivos</p>
+            </div>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[9px] font-black uppercase tracking-tighter text-muted-foreground ml-1">Frecuencia</label>
+              <Select value={procFrequency} onValueChange={setProcFrequency}>
+                <SelectTrigger className="h-9 px-3 rounded-xl border-primary/20 bg-background text-xs font-bold w-[140px] focus:ring-primary/20 shadow-sm">
+                  <SelectValue placeholder="Frecuencia" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                  <SelectItem value="MONTHLY" className="font-bold text-xs uppercase">Mensual</SelectItem>
+                  <SelectItem value="BIWEEKLY" className="font-bold text-xs uppercase">Quincenal</SelectItem>
+                  <SelectItem value="WEEKLY" className="font-bold text-xs uppercase">Semanal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[9px] font-black uppercase tracking-tighter text-muted-foreground ml-1">Desde</label>
+              <input 
+                type="date" 
+                value={procStartDate} 
+                onChange={(e) => setProcStartDate(e.target.value)}
+                className="h-9 px-3 rounded-xl border border-primary/20 bg-background text-xs font-bold focus:ring-primary/20 outline-none shadow-sm"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[9px] font-black uppercase tracking-tighter text-muted-foreground ml-1">Hasta</label>
+              <input 
+                type="date" 
+                value={procEndDate} 
+                onChange={(e) => setProcEndDate(e.target.value)}
+                className="h-9 px-3 rounded-xl border border-primary/20 bg-background text-xs font-bold focus:ring-primary/20 outline-none shadow-sm"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1 pt-4">
+              <Button size="sm" onClick={handleProcessPayroll} className="bg-primary hover:bg-primary/90 !text-primary-foreground h-9 px-6 rounded-xl font-black uppercase tracking-widest text-[10px]">
+                <Calculator className="size-4 mr-2" />
+                Procesar
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters Toolbar */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between pt-2">
         <div className="flex items-center gap-2">
           <div className="w-[250px]">
             <Combobox
@@ -219,23 +280,24 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               emptyMessage="No se encontró el empleado"
             />
           </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="h-8 px-3 rounded-md border border-input bg-background text-xs font-medium w-[130px]"
-          >
-            <option value="all">Todos</option>
-            <option value="PENDING">Pendiente</option>
-            <option value="PAID">Pagado</option>
-          </select>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="h-8 px-3 rounded-md border border-input bg-background text-xs font-bold w-[130px] focus:ring-primary/20 shadow-sm">
+              <SelectValue placeholder="Estado" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+              <SelectItem value="all" className="font-bold text-xs">Todos</SelectItem>
+              <SelectItem value="PENDING" className="font-bold text-xs">Pendiente</SelectItem>
+              <SelectItem value="PAID" className="font-bold text-xs">Pagado</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleExportPDF}>
+          <Button variant="outline" size="sm" onClick={handleExportPDF} className="h-8 text-xs font-bold border-muted-foreground/20">
             <Download className="size-4 mr-2" />
-            Descargar PDF
+            Exportar PDF
           </Button>
           {pendingCount > 0 && (
-            <Button size="sm" onClick={handleMarkAllAsPaid} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
+            <Button size="sm" onClick={handleMarkAllAsPaid} className="bg-primary/10 hover:bg-primary/20 !text-primary border border-primary/20 h-8 text-xs font-bold">
               <CheckCircle className="size-4 mr-2" />
               Pagar Todas ({pendingCount})
             </Button>
@@ -248,14 +310,10 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               onChange={(e) => setIncludeCommissions(e.target.checked)}
               className="rounded border-border text-primary focus:ring-primary h-4 w-4 accent-primary"
             />
-            <label htmlFor="includeComm" className="text-xs font-bold text-muted-foreground uppercase tracking-widest cursor-pointer select-none">
-              Incluir Comisiones
+            <label htmlFor="includeComm" className="text-[10px] font-black text-muted-foreground uppercase tracking-widest cursor-pointer select-none">
+              Comisiones
             </label>
           </div>
-          <Button size="sm" onClick={handleProcessPayroll} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
-            <Calculator className="size-4 mr-2" />
-            Procesar Nómina
-          </Button>
         </div>
       </div>
 
@@ -502,9 +560,16 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
             <div className="flex items-center gap-2">
               <span>Mostrar</span>
-              <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
-                {PAGE_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
+              <Select value={String(pageSize)} onValueChange={(val) => setPageSize(Number(val))}>
+                <SelectTrigger className="h-8 w-[70px] rounded-lg border bg-background font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none shadow-sm">
+                  <SelectValue placeholder={String(pageSize)} />
+                </SelectTrigger>
+                <SelectContent className="rounded-lg border-border/50 shadow-xl min-w-[70px]">
+                  {PAGE_SIZE_OPTIONS.map(opt => (
+                    <SelectItem key={opt} value={String(opt)} className="font-bold">{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <span>por página</span>
             </div>
             <div className="h-4 w-px bg-border/40 hidden sm:block" />

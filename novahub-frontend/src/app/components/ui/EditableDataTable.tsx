@@ -18,6 +18,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './dialog';
 import { Label } from './label';
 import { Search, Edit3, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
 
 export interface ColumnDef<T> {
   key: keyof T | string;
@@ -388,21 +389,22 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                         {isEditing ? (
                           <div className="absolute inset-0 z-10 p-1 flex items-center bg-background border-2 border-primary shadow-xl">
                             {col.type === 'select' ? (
-                              <select
+                              <Select
                                 value={editValue}
-                                onChange={(e) => {
-                                  const newVal = e.target.value;
-                                  setEditValue(newVal);
-                                  // For select, we often want to save immediately
-                                  handleSave(rowId, colKey, newVal);
+                                onValueChange={(val) => {
+                                  setEditValue(val);
+                                  handleSave(rowId, colKey, val);
                                 }}
-                                onBlur={() => handleSave(rowId, colKey)}
-                                className="h-full w-full bg-transparent border-none focus:ring-0 text-[13px] font-medium px-2 outline-none cursor-pointer"
                               >
-                                {col.options?.map(opt => (
-                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                ))}
-                              </select>
+                                <SelectTrigger className="h-full w-full bg-transparent border-none focus:ring-0 text-[13px] font-medium px-2 outline-none cursor-pointer">
+                                  <SelectValue placeholder="Seleccione..." />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-xl border-border/50 shadow-xl">
+                                  {col.options?.map(opt => (
+                                    <SelectItem key={opt.value} value={opt.value} className="font-bold">{opt.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             ) : (
                               <Input
                                 ref={inputRef}
@@ -565,13 +567,16 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         <div className="flex flex-col sm:flex-row items-center gap-4 text-xs text-muted-foreground font-medium w-full md:w-auto">
           <div className="flex items-center gap-2">
             <span>Mostrar</span>
-            <select 
-              value={pageSize} 
-              onChange={e => setPageSize(Number(e.target.value))} 
-              className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer"
-            >
-              {PAGE_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
+            <Select value={String(pageSize)} onValueChange={val => setPageSize(Number(val))}>
+              <SelectTrigger className="h-8 w-[70px] rounded-lg border bg-background font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none shadow-sm">
+                <SelectValue placeholder={String(pageSize)} />
+              </SelectTrigger>
+              <SelectContent className="rounded-lg border-border/50 shadow-xl min-w-[70px]">
+                {PAGE_SIZE_OPTIONS.map(opt => (
+                  <SelectItem key={opt} value={String(opt)} className="font-bold">{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <span>filas por página</span>
           </div>
           <div className="h-4 w-px bg-border/40 hidden sm:block" />
@@ -642,14 +647,19 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               <div key={col.key as string} className="space-y-1.5">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">{col.header}</Label>
                 {col.type === 'select' ? (
-                  <select 
-                    className="flex h-10 w-full rounded-xl border border-input bg-background/50 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  <Select 
                     value={itemBeingEdited[col.key as keyof T] || ''}
-                    onChange={e => setItemBeingEdited({...itemBeingEdited, [col.key as keyof T]: e.target.value as any})}
+                    onValueChange={val => setItemBeingEdited({...itemBeingEdited, [col.key as keyof T]: val as any})}
                   >
-                    <option value="">Seleccione...</option>
-                    {(col.options || []).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                  </select>
+                    <SelectTrigger className="h-11 rounded-xl bg-background/50 border-border/50 font-bold focus:ring-primary/20 shadow-sm">
+                      <SelectValue placeholder="Seleccione..." />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                      {(col.options || []).map(opt => (
+                        <SelectItem key={opt.value} value={opt.value} className="font-bold">{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 ) : (
                   <Input 
                     type={col.type === 'number' ? 'number' : col.type?.includes('date') ? col.type : 'text'}

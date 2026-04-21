@@ -17,6 +17,7 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle
 } from '../ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -532,14 +533,19 @@ export function FinanceTableView({
               <div key={col.key} className="space-y-1.5">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">{col.label}</Label>
                 {col.type === 'select' ? (
-                  <select 
-                    className="flex h-10 w-full rounded-xl border border-input bg-background/50 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  <Select 
                     value={itemBeingEdited[col.key] || ''}
-                    onChange={e => setItemBeingEdited({...itemBeingEdited, [col.key]: e.target.value})}
+                    onValueChange={val => setItemBeingEdited({...itemBeingEdited, [col.key]: val})}
                   >
-                    <option value="">Seleccione...</option>
-                    {(col.options || []).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                  </select>
+                    <SelectTrigger className="h-10 w-full rounded-xl border border-input bg-background/50 px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 shadow-sm">
+                      <SelectValue placeholder="Seleccione..." />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                      {(col.options || []).map(opt => (
+                        <SelectItem key={opt.value} value={opt.value} className="font-bold text-xs">{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 ) : (
                   <Input 
                     type={col.type === 'number' ? 'number' : col.type.includes('date') ? 'date' : 'text'}
@@ -593,15 +599,34 @@ export function FinanceTableView({
                     <TableCell key={col.key} className={cn("p-1.5 transition-all", editingCell?.id === item.id && editingCell?.key === col.key ? "bg-primary/5 ring-1 ring-inset ring-primary" : "")} onDoubleClick={() => canEdit && col.editable && setEditingCell({ id: item.id, key: col.key })}>
                       {editingCell?.id === item.id && editingCell?.key === col.key ? (
                         col.type === 'select' ? (
-                          <select autoFocus className="w-full bg-transparent border-none outline-none text-sm px-1 font-medium" value={item[col.key] || ''}
-                            onChange={e => { if (e.target.value === '___NEW___') { setCategoryTargetItem({ id: item.id, key: col.key }); setIsCategoryDialogOpen(true); setEditingCell(null); } else handleCellEdit(item.id, col.key, e.target.value); }}
-                            onBlur={e => e.target.value !== '___NEW___' && handleBlur(item.id, col.key, data.find(d => d.id === item.id)?.[col.key], e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Escape') setEditingCell(null); }}>
-                            <option value="">Seleccione...</option>
-                            {item[col.key] && !(col.options || []).find(o => o.value === item[col.key]) && <option value={item[col.key]}>{item[col.key]}</option>}
-                            {(col.options || []).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                            {col.key === 'category' && <option value="___NEW___">+ Nueva Categoría...</option>}
-                          </select>
+                          <Select 
+                            value={item[col.key] || ''}
+                            onValueChange={val => { 
+                              if (val === '___NEW___') { 
+                                setCategoryTargetItem({ id: item.id, key: col.key }); 
+                                setIsCategoryDialogOpen(true); 
+                                setEditingCell(null); 
+                              } else {
+                                handleCellEdit(item.id, col.key, val);
+                                handleBlur(item.id, col.key, data.find(d => d.id === item.id)?.[col.key], val);
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="w-full bg-transparent border-none h-auto p-0 focus:ring-0 shadow-none font-medium">
+                              <SelectValue placeholder="Seleccione..." />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                              {item[col.key] && !(col.options || []).find(o => o.value === item[col.key]) && (
+                                <SelectItem value={item[col.key]} className="font-bold text-xs">{item[col.key]}</SelectItem>
+                              )}
+                              {(col.options || []).map(opt => (
+                                <SelectItem key={opt.value} value={opt.value} className="font-bold text-xs">{opt.label}</SelectItem>
+                              ))}
+                              {col.key === 'category' && (
+                                <SelectItem value="___NEW___" className="font-bold text-xs text-primary">+ Nueva Categoría...</SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
                         ) : (
                           <input autoFocus type={col.type === 'number' ? 'number' : col.type.includes('date') ? 'date' : 'text'} className="w-full bg-transparent border-none outline-none text-sm px-1 font-medium" value={item[col.key] || ''}
                             onChange={e => handleCellEdit(item.id, col.key, col.type === 'number' ? Number(e.target.value) : e.target.value)}
@@ -726,13 +751,20 @@ export function FinanceTableView({
       {/* Pagination Controls */}
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 pt-6 border-t border-border/20 pb-8 px-2">
         <div className="flex flex-col sm:flex-row items-center gap-4 text-xs text-muted-foreground font-medium w-full md:w-auto">
-          <div className="flex items-center gap-2">
-            <span>Mostrar</span>
-            <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
-              {PAGE_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-            <span>por página</span>
-          </div>
+            <div className="flex items-center gap-2">
+              <span>Mostrar</span>
+              <Select value={String(pageSize)} onValueChange={(val) => setPageSize(Number(val))}>
+                <SelectTrigger className="h-8 w-[70px] rounded-lg border bg-background font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none shadow-sm">
+                  <SelectValue placeholder={String(pageSize)} />
+                </SelectTrigger>
+                <SelectContent className="rounded-lg border-border/50 shadow-xl min-w-[70px]">
+                  {PAGE_SIZE_OPTIONS.map(opt => (
+                    <SelectItem key={opt} value={String(opt)} className="font-bold">{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span>por página</span>
+            </div>
           <div className="h-4 w-px bg-border/40 hidden sm:block" />
           <p className="bg-primary/5 px-4 py-1.5 rounded-full border border-primary/10 text-center sm:text-left">
             Mostrando <span className="text-foreground font-black">{paginatedData.length === 0 ? 0 : (currentPage-1)*pageSize + 1} - {Math.min(currentPage*pageSize, filteredData.length)}</span> de <span className="text-primary font-black">{filteredData.length}</span> registros totales

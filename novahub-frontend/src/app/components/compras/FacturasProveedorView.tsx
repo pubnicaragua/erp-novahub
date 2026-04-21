@@ -17,6 +17,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateSupplierInvoicePDF } from '../../utils/pdfGenerator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 interface Props {
   data: SupplierInvoice[];
@@ -485,15 +486,19 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                  <select 
+                  <Select 
                     disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
                     value={localDoc.currency || 'NIO'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any })}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
+                    onValueChange={(val) => setLocalDoc({ ...localDoc, currency: val as any })}
                   >
-                    <option value="NIO">NIO (Cordobas)</option>
-                    <option value="USD">USD (Dolares)</option>
-                  </select>
+                    <SelectTrigger className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase focus:ring-primary/20 shadow-sm">
+                      <SelectValue placeholder="Moneda" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                      <SelectItem value="NIO" className="font-bold text-xs uppercase">NIO (Cordobas)</SelectItem>
+                      <SelectItem value="USD" className="font-bold text-xs uppercase">USD (Dolares)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardContent>

@@ -12,6 +12,7 @@ import { format } from 'date-fns';
 import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 
 // Tipos para el nuevo log
@@ -226,47 +227,57 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
           <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={cn("p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-6", kpi.color)} /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black tracking-tight">{kpi.value}</p></div>
+            <CardContent className="p-4 sm:p-5 flex items-center gap-3 sm:gap-4">
+              <div className={cn("p-2 sm:p-3 rounded-2xl flex items-center justify-center", kpi.bg)}><kpi.icon className={cn("size-5 sm:size-6", kpi.color)} /></div>
+              <div className="min-w-0">
+                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 truncate">{kpi.title}</p>
+                <p className="text-lg sm:text-2xl font-black tracking-tight truncate">{kpi.value}</p>
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <Card className="border-none bg-background/50 backdrop-blur-xl shadow-sm">
-        <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Bitácora de Auditoría</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Registro de actividades del sistema</p></div>
+      <Card className="border-none bg-background/50 backdrop-blur-xl shadow-sm overflow-hidden">
+        <div className="p-4 sm:p-6 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight">Bitácora de Auditoría</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Registro de actividades del sistema</p>
+          </div>
           <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar evento..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar evento..." className="pl-9 h-10 w-full sm:w-64 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             <Button
               onClick={() => setIsAddOpen(true)}
               variant="default"
-              className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20"
             >
               <Plus className="size-4" />
               Nuevo Registro
             </Button>
           </div>
         </div>
-        <EditableDataTable
-          data={filtered}
-          columns={columns}
-          onRowUpdate={handleUpdate}
-          isLoading={loading}
-          onRowDelete={async (id) => {
-            try {
-              await activityLogsService.delete(String(id));
-              toast.success('Registro eliminado');
-              onRefresh();
-            } catch {
-              toast.error('Error al eliminar registro');
-            }
-          }}
-        />
+        
+        <div className="p-0 sm:p-2">
+          <EditableDataTable
+            data={filtered}
+            columns={columns}
+            onRowUpdate={handleUpdate}
+            isLoading={loading}
+            allowAddRow={false}
+            onRowDelete={async (id) => {
+              try {
+                await activityLogsService.delete(String(id));
+                toast.success('Registro eliminado');
+                onRefresh();
+              } catch {
+                toast.error('Error al eliminar registro');
+              }
+            }}
+          />
+        </div>
       </Card>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -276,40 +287,79 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label>Tipo de Vinculación</Label>
-              <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.activityType} onChange={e => setFormData({...formData, activityType: e.target.value as any, activityId: ''})}>
-                <option value="NONE">Sin Vínculo (Registro Libre)</option>
-                <option value="TASK">Tarea</option>
-                <option value="EVENT">Evento</option>
-              </select>
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Tipo de Vinculación</Label>
+              <Select value={formData.activityType} onValueChange={val => setFormData({...formData, activityType: val as any, activityId: ''})}>
+                <SelectTrigger className="h-11 rounded-xl bg-background/50 border-border/50 font-bold focus:ring-primary/20 shadow-sm">
+                  <SelectValue placeholder="Seleccione tipo..." />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                  <SelectItem value="NONE" className="font-bold">Sin Vínculo (Registro Libre)</SelectItem>
+                  <SelectItem value="TASK" className="font-bold">Tarea</SelectItem>
+                  <SelectItem value="EVENT" className="font-bold">Evento</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {formData.activityType === 'TASK' && (
-              <div className="space-y-2">
-                <Label>Seleccionar Tarea</Label>
-                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.activityId || ''} onChange={e => setFormData({...formData, activityId: e.target.value})}>
-                  <option value="" disabled>Seleccione tarea...</option>
-                  {availableTasks.map(t => <option key={t.id} value={t.id}>{t.title} ({format(new Date(t.createdAt), 'dd/MM/yyyy')})</option>)}
-                </select>
-                {availableTasks.length === 0 && <p className="text-xs text-amber-500">No hay tareas libres de bitácoras.</p>}
+              <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Seleccionar Tarea</Label>
+                <Select value={formData.activityId || ''} onValueChange={val => setFormData({...formData, activityId: val})}>
+                  <SelectTrigger className="h-11 rounded-xl bg-background/50 border-border/50 font-bold focus:ring-primary/20 shadow-sm">
+                    <SelectValue placeholder="Seleccione tarea..." />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                    {availableTasks.map(t => (
+                      <SelectItem key={t.id} value={t.id} className="font-bold">
+                        {t.title} ({format(new Date(t.createdAt), 'dd/MM/yyyy')})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {availableTasks.length === 0 && <p className="text-[10px] font-bold text-amber-500 uppercase tracking-tight ml-1">No hay tareas libres de bitácoras.</p>}
               </div>
             )}
             {formData.activityType === 'EVENT' && (
-              <div className="space-y-2">
-                <Label>Seleccionar Evento</Label>
-                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.activityId || ''} onChange={e => setFormData({...formData, activityId: e.target.value})}>
-                  <option value="" disabled>Seleccione evento...</option>
-                  {availableEvents.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
-                </select>
-                {availableEvents.length === 0 && <p className="text-xs text-amber-500">No hay eventos libres de bitácoras.</p>}
+              <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Seleccionar Evento</Label>
+                <Select value={formData.activityId || ''} onValueChange={val => setFormData({...formData, activityId: val})}>
+                  <SelectTrigger className="h-11 rounded-xl bg-background/50 border-border/50 font-bold focus:ring-primary/20 shadow-sm">
+                    <SelectValue placeholder="Seleccione evento..." />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                    {availableEvents.map(e => (
+                      <SelectItem key={e.id} value={e.id} className="font-bold">{e.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {availableEvents.length === 0 && <p className="text-[10px] font-bold text-amber-500 uppercase tracking-tight ml-1">No hay eventos libres de bitácoras.</p>}
               </div>
             )}
-            <div className="space-y-2 border-t pt-2">
-              <Label>Comentario / Detalles</Label>
-              <Input placeholder="Descripción breve..." value={formData.details} onChange={e => setFormData({...formData, details: e.target.value})} />
+            <div className="space-y-2 border-t border-border/50 pt-4">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Comentario / Detalles</Label>
+              <Input placeholder="Descripción breve..." value={formData.details} onChange={e => setFormData({...formData, details: e.target.value})} className="h-11 rounded-xl bg-background/50 font-bold border-border/50" />
             </div>
             <div className="space-y-2">
-              <Label>Adjuntar Archivo (Opcional, Máx 1GB)</Label>
-              <Input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" onChange={e => setFormData({...formData, file: e.target.files?.[0] || null})} className="text-muted-foreground file:text-primary file:font-bold" />
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Adjuntar Archivo (Opcional, Máx 1GB)</Label>
+              <div className="relative group">
+                <Input 
+                  type="file" 
+                  id="file-upload"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" 
+                  onChange={e => setFormData({...formData, file: e.target.files?.[0] || null})} 
+                  className="hidden"
+                />
+                <label 
+                  htmlFor="file-upload" 
+                  className="flex items-center justify-between h-11 px-4 rounded-xl border border-dashed border-border/50 bg-background/50 hover:bg-primary/5 hover:border-primary/50 transition-all cursor-pointer group"
+                >
+                  <span className="text-xs font-bold text-muted-foreground truncate max-w-[200px]">
+                    {formData.file ? formData.file.name : 'Seleccionar archivo...'}
+                  </span>
+                  <div className="flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                    <Folder className="size-3" />
+                    Examinar
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
           <DialogFooter>
