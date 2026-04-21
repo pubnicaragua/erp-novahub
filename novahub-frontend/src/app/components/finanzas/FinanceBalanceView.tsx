@@ -34,7 +34,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
   const { displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user } = useAuth();
   const { themeConfig } = useTheme();
-  const sym = displayCurrency === 'USD' ? '$' : 'C$';
+  const sym = displayCurrency === 'USD' ? '$ ' : 'C$ ';
 
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [viewType, setViewType] = useState<ViewType>('general');

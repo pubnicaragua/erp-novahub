@@ -31,7 +31,16 @@ const methodOptions = [
   { label: 'Efectivo', value: 'CASH', color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Tarjeta', value: 'CARD', color: 'bg-purple-500/10 text-purple-500' },
   { label: 'Cheque', value: 'CHECK', color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Otro', value: 'OTHER', color: 'bg-slate-500/10 text-slate-500' },
 ];
+
+const methodMap: Record<string, string> = { 
+  TRANSFER: 'Transferencia', 
+  CASH: 'Efectivo', 
+  CARD: 'Tarjeta', 
+  CHECK: 'Cheque',
+  OTHER: 'Otro'
+};
 
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [] }: PagosRecibidosViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
@@ -149,17 +158,20 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     },
     {
       key: 'method', header: 'Método', width: '120px',
-      render: (val) => {
-        const methodMap: Record<string, string> = { TRANSFER: 'Transferencia', CASH: 'Efectivo', CARD: 'Tarjeta', CHECK: 'Cheque' };
-        return <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none bg-blue-500/10 text-blue-500">{methodMap[(val || '').toUpperCase()] || val}</Badge>;
-      }
+      render: (val) => (
+        <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none bg-blue-500/10 text-blue-500">
+          {methodMap[(val || '').toUpperCase()] || val}
+        </Badge>
+      )
     },
   ];
 
-  const mainMethod = data.length > 0
+  const mainMethodRaw = data.length > 0
     ? Object.entries(data.reduce((acc, p) => { const m = (p.method || 'TRANSFER').toUpperCase(); acc[m] = (acc[m] || 0) + 1; return acc; }, {} as Record<string, number>))
       .sort(([, a], [, b]) => b - a)[0]?.[0] || 'N/A'
     : 'N/A';
+
+  const mainMethod = methodMap[mainMethodRaw] || mainMethodRaw;
 
   const totalCollectedInDisplayCurrency = data.reduce(
     (acc, payment) => acc + convertAmount(payment.amount || 0, payment.currency, payment.exchangeRate),

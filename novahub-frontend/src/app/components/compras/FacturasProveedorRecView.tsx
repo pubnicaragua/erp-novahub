@@ -311,7 +311,9 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                         />
                       </div>
                       <div className="col-span-2 flex items-center justify-end gap-2">
-                        <span className="text-xs font-black w-20 text-right tabular-nums">${Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        <span className="text-xs font-black w-20 text-right tabular-nums">
+                          {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        </span>
                         {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
                           <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
                             <Trash2 className="size-3" />

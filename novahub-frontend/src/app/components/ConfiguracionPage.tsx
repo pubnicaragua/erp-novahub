@@ -709,7 +709,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         name: cleanRole.name,
         description: cleanRole.description || '',
         // Asegurar compatibilidad: el backend usa 'write', el frontend granular usa 'create'/'edit'
-        permissions: (cleanRole.permissions || []).map((p: any) => ({
+        permissions: (Array.isArray(cleanRole.permissions) ? cleanRole.permissions : []).map((p: any) => ({
           ...p,
           write: !!(p.create || p.edit || p.write), // compat con backend
         })),
@@ -736,7 +736,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
   const togglePermission = (module: string, type: 'read' | 'write' | 'create' | 'edit' | 'delete') => {
     if (!editingRole) return;
-    let newPerms = [...(editingRole.permissions || []).map(p => ({ ...p }))];
+    let newPerms = [...(Array.isArray(editingRole.permissions) ? editingRole.permissions : []).map(p => ({ ...p }))];
 
     const targetPerm = newPerms.find(p => p.module === module);
     if (!targetPerm) return;
@@ -1175,7 +1175,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                 <h4 className="font-black text-base tracking-tight">{role.name}</h4>
                                 <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
                                   {(() => {
-                                    const activePerms = (role.permissions || []).filter((p: Permission) => p.read || p.create || p.edit || p.delete || p.write);
+                                    const activePerms = (Array.isArray(role.permissions) ? role.permissions : []).filter((p: Permission) => p.read || p.create || p.edit || p.delete || p.write);
                                     const parentModules = new Set(activePerms.map((p: Permission) => {
                                       const sub = SUBMODULES_FOR_PERMS.find(s => s.id === p.module);
                                       return sub ? sub.parent : p.module;
@@ -1208,7 +1208,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
                           {/* Permissions Matrix */}
                           <div className="space-y-1.5 mb-5">
-                            {(role.permissions || []).filter((p: Permission) => p.read || p.create || p.edit || p.delete || p.write).slice(0, 4).map((p: Permission) => {
+                            {(Array.isArray(role.permissions) ? role.permissions : []).filter((p: Permission) => p.read || p.create || p.edit || p.delete || p.write).slice(0, 4).map((p: Permission) => {
                               const mod = ALL_PERM_MODULES.find(m => m.id === p.module);
                               return (
                                 <div key={p.module} className="flex items-center justify-between text-[11px] px-2 py-1 rounded-lg hover:bg-muted/20">
@@ -1223,7 +1223,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                               );
                             })}
                             {(() => {
-                              const active = (role.permissions || []).filter((p: Permission) => p.read || p.create || p.edit || p.delete || p.write);
+                              const active = (Array.isArray(role.permissions) ? role.permissions : []).filter((p: Permission) => p.read || p.create || p.edit || p.delete || p.write);
                               return active.length > 4 ? (
                                 <p className="text-[10px] text-muted-foreground/50 italic pl-2">+ {active.length - 4} vistas más</p>
                               ) : null;
@@ -1307,7 +1307,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/30">
-                        {(editingRole?.permissions || []).map((p) => {
+                        {(Array.isArray(editingRole?.permissions) ? editingRole.permissions : []).map((p) => {
                           const mod = ALL_PERM_MODULES.find(m => m.id === p.module);
                           const isSubmodule = mod && 'parent' in mod;
                           const Icon = mod?.icon;

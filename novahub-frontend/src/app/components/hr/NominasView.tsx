@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, UserCheck } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
@@ -48,6 +48,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Parámetros de procesamiento
+  const [showProcessBar, setShowProcessBar] = useState(false);
   const [procFrequency, setProcFrequency] = useState('MONTHLY');
   const [procStartDate, setProcStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
   const [procEndDate, setProcEndDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]);
@@ -211,62 +212,64 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       </div>
 
       {/* Toolbar & Processing Controls */}
-      <div className="flex flex-col gap-4 p-4 border border-primary/20 rounded-xl bg-primary/5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Calculator className="size-5 text-primary" />
+      {showProcessBar && (
+        <div className="flex flex-col gap-4 p-4 border border-primary/20 rounded-xl bg-primary/5 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Calculator className="size-5 text-primary" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black uppercase tracking-widest text-primary">Cálculo de Nóminas Masivas</h4>
+                <p className="text-[10px] text-muted-foreground font-bold">Define las fechas y frecuencia para generar los registros del periodo</p>
+              </div>
             </div>
-            <div>
-              <h4 className="text-sm font-black uppercase tracking-widest">Procesar Nueva Nómina</h4>
-              <p className="text-[10px] text-muted-foreground font-bold">Selecciona frecuencia y periodo para generar registros masivos</p>
-            </div>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-black uppercase tracking-tighter text-muted-foreground ml-1">Frecuencia</label>
-              <Select value={procFrequency} onValueChange={setProcFrequency}>
-                <SelectTrigger className="h-9 px-3 rounded-xl border-primary/20 bg-background text-xs font-bold w-[140px] focus:ring-primary/20 shadow-sm">
-                  <SelectValue placeholder="Frecuencia" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl border-border/50 shadow-2xl">
-                  <SelectItem value="MONTHLY" className="font-bold text-xs uppercase">Mensual</SelectItem>
-                  <SelectItem value="BIWEEKLY" className="font-bold text-xs uppercase">Quincenal</SelectItem>
-                  <SelectItem value="WEEKLY" className="font-bold text-xs uppercase">Semanal</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] font-black uppercase tracking-tighter text-muted-foreground ml-1">Frecuencia</label>
+                <Select value={procFrequency} onValueChange={setProcFrequency}>
+                  <SelectTrigger className="h-9 px-3 rounded-xl border-primary/20 bg-background text-xs font-bold w-[140px] focus:ring-primary/20 shadow-sm">
+                    <SelectValue placeholder="Frecuencia" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                    <SelectItem value="MONTHLY" className="font-bold text-xs uppercase">Mensual</SelectItem>
+                    <SelectItem value="BIWEEKLY" className="font-bold text-xs uppercase">Quincenal</SelectItem>
+                    <SelectItem value="WEEKLY" className="font-bold text-xs uppercase">Semanal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-black uppercase tracking-tighter text-muted-foreground ml-1">Desde</label>
-              <input 
-                type="date" 
-                value={procStartDate} 
-                onChange={(e) => setProcStartDate(e.target.value)}
-                className="h-9 px-3 rounded-xl border border-primary/20 bg-background text-xs font-bold focus:ring-primary/20 outline-none shadow-sm"
-              />
-            </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] font-black uppercase tracking-tighter text-muted-foreground ml-1">Desde</label>
+                <input 
+                  type="date" 
+                  value={procStartDate} 
+                  onChange={(e) => setProcStartDate(e.target.value)}
+                  className="h-9 px-3 rounded-xl border border-primary/20 bg-background text-xs font-bold focus:ring-primary/20 outline-none shadow-sm"
+                />
+              </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-black uppercase tracking-tighter text-muted-foreground ml-1">Hasta</label>
-              <input 
-                type="date" 
-                value={procEndDate} 
-                onChange={(e) => setProcEndDate(e.target.value)}
-                className="h-9 px-3 rounded-xl border border-primary/20 bg-background text-xs font-bold focus:ring-primary/20 outline-none shadow-sm"
-              />
-            </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] font-black uppercase tracking-tighter text-muted-foreground ml-1">Hasta</label>
+                <input 
+                  type="date" 
+                  value={procEndDate} 
+                  onChange={(e) => setProcEndDate(e.target.value)}
+                  className="h-9 px-3 rounded-xl border border-primary/20 bg-background text-xs font-bold focus:ring-primary/20 outline-none shadow-sm"
+                />
+              </div>
 
-            <div className="flex flex-col gap-1 pt-4">
-              <Button size="sm" onClick={handleProcessPayroll} className="bg-primary hover:bg-primary/90 !text-primary-foreground h-9 px-6 rounded-xl font-black uppercase tracking-widest text-[10px]">
-                <Calculator className="size-4 mr-2" />
-                Procesar
-              </Button>
+              <div className="flex flex-col gap-1 pt-4">
+                <Button size="sm" onClick={handleProcessPayroll} className="bg-primary hover:bg-primary/90 !text-primary-foreground h-9 px-6 rounded-xl font-black uppercase tracking-widest text-[10px]">
+                  <Calculator className="size-4 mr-2" />
+                  Ejecutar Cálculo
+                </Button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Filters Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between pt-2">
@@ -280,6 +283,26 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               emptyMessage="No se encontró el empleado"
             />
           </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setShowProcessBar(!showProcessBar)}
+            className={`h-8 text-[10px] font-black uppercase tracking-widest px-4 rounded-xl transition-all ${showProcessBar ? 'bg-primary text-primary-foreground border-primary' : 'border-primary/30 text-primary hover:bg-primary/10'}`}
+          >
+            {showProcessBar ? <X className="size-3.5 mr-1.5" /> : <Calculator className="size-3.5 mr-1.5" />}
+            {showProcessBar ? 'Ocultar Opciones' : 'Nóminas Masivas'}
+          </Button>
+
+          {filterEmployee !== 'all' && (
+            <Button 
+              size="sm" 
+              onClick={handleProcessPayroll} 
+              className="bg-emerald-600 hover:bg-emerald-700 !text-white h-8 text-[10px] font-black uppercase tracking-widest px-4 rounded-xl shadow-lg shadow-emerald-500/20"
+            >
+              <UserCheck className="size-3.5 mr-1.5" />
+              Procesar Individual
+            </Button>
+          )}
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger className="h-8 px-3 rounded-md border border-input bg-background text-xs font-bold w-[130px] focus:ring-primary/20 shadow-sm">
               <SelectValue placeholder="Estado" />

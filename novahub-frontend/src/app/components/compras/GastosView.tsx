@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { storageService } from '../../services/storage.service';
 import { generateExpensePDF } from '../../utils/pdfGenerator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -37,7 +38,8 @@ const statusOpts = [
 ];
 
 export function GastosView({ data, loading, onRefresh }: Props) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
+  const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -51,6 +53,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<Expense> | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     suppliersService.getAll().then(res => {
@@ -228,18 +231,21 @@ export function GastosView({ data, loading, onRefresh }: Props) {
     }
 
     try {
+      setIsSaving(true);
       if (editingId === 'NEW') {
-        await expensesService.create(cleanedDoc as any);
+        await expensesService.create(payload as any);
         toast.success('Gasto registrado');
       } else {
-        await expensesService.update(editingId!, cleanedDoc as any);
-        toast.success('Gasto guardado');
+        await expensesService.update(editingId!, payload as any);
+        toast.success('Gasto actualizado');
       }
       setEditingId(null);
       setEvidenceFile(null);
       onRefresh();
     } catch (e: any) {
       toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -261,32 +267,34 @@ export function GastosView({ data, loading, onRefresh }: Props) {
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de transacción</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 hide-scrollbar justify-end">
              {!isNew && canPerform('compras', 'delete') && (
-                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4 h-9 whitespace-nowrap"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
             {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
-              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                Guardar Gasto
+              <Button onClick={handleSaveDoc} disabled={isSaving} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 hover:opacity-90 transition-all">
+                {isSaving ? 'Guardando...' : 'Guardar Gasto'}
               </Button>
             )}
-            <Button
-              variant="outline"
-              className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
-              onClick={() => generateExpensePDF({
-                expense: localDoc,
-                tenantName: user?.tenantName || 'Empresa',
-                tenantLogo: themeConfig?.logo,
-                formatAmount: (amount: number, currency?: string, rate?: number) =>
-                  formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
-                primaryColor: themeConfig?.colors.primary
-              })}
-            >
-              <Download className="size-3 mr-2" /> Exportar PDF
-            </Button>
+            {!isNew && (
+              <Button
+                variant="outline"
+                className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4 h-9 whitespace-nowrap"
+                onClick={() => generateExpensePDF({
+                  expense: localDoc,
+                  tenantName: user?.tenantName || 'Empresa',
+                  tenantLogo: themeConfig?.logo,
+                  formatAmount: (amount: number, currency?: string, rate?: number) =>
+                    formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
+                  primaryColor: themeConfig?.colors.primary
+                })}
+              >
+                <Download className="size-3 mr-2" /> PDF
+              </Button>
+            )}
           </div>
         </div>
 
@@ -298,22 +306,22 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Descripción / Concepto</p>
-                    <Input 
+                    <textarea 
                       disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={localDoc.description || ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, description: e.target.value })} 
-                      className="h-8 text-xs font-bold" 
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-bold focus:ring-primary/20 resize-none h-16 sm:h-12" 
                       placeholder="Ej. Pago de internet mensual" 
                     />
                   </div>
-                  <div>
+                  <div className="col-span-2 sm:col-span-1">
                     <p className="text-[10px] text-muted-foreground mb-1">Categoría</p>
                     <Select
                       disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={localDoc.category || 'OPERATIVO'}
                       onValueChange={(val) => setLocalDoc({ ...localDoc, category: val })}
                     >
-                      <SelectTrigger className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase focus:ring-primary/20 shadow-sm">
+                      <SelectTrigger className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase focus:ring-primary/20 shadow-sm">
                         <SelectValue placeholder="Categoría" />
                       </SelectTrigger>
                       <SelectContent className="rounded-xl border-border/50 shadow-2xl">
@@ -325,22 +333,22 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Fecha del Gasto</p>
+                  <div className="col-span-1">
+                    <p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
                     <Input 
                       disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       type="date" 
                       value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
-                      className="h-8 text-xs" 
+                      className="h-9 text-xs" 
                     />
                   </div>
-                  <div>
+                  <div className="col-span-1">
                     <p className="text-[10px] text-muted-foreground mb-1">Hora</p>
                     <Input
                       disabled
                       value={resolvedHour}
-                      className="h-8 text-xs"
+                      className="h-9 text-xs"
                     />
                   </div>
                   <div className="col-span-2">
@@ -355,24 +363,24 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                       placeholder="Asignar a un proveedor (opcional)"
                     />
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Pagado a</p>
                     <Input
                       disabled={!canMutate}
                       value={localDoc.paidTo || ''}
                       onChange={(e) => setLocalDoc({ ...localDoc, paidTo: e.target.value })}
-                      className="h-8 text-xs"
+                      className="h-9 text-xs"
                       placeholder="Nombre de persona o proveedor"
                     />
                   </div>
-                  <div>
+                  <div className="col-span-2 sm:col-span-1">
                     <p className="text-[10px] text-muted-foreground mb-1">Cuenta de Origen</p>
                     <Select
                       disabled={!canMutate}
                       value={(localDoc.paymentSource as string) || 'EFECTIVO'}
                       onValueChange={(val) => setLocalDoc({ ...localDoc, paymentSource: val as any })}
                     >
-                      <SelectTrigger className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase focus:ring-primary/20 shadow-sm">
+                      <SelectTrigger className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase focus:ring-primary/20 shadow-sm">
                         <SelectValue placeholder="Cuenta" />
                       </SelectTrigger>
                       <SelectContent className="rounded-xl border-border/50 shadow-2xl">
@@ -394,14 +402,14 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                       />
                     </div>
                   )}
-                  <div>
+                  <div className="col-span-2 sm:col-span-1">
                     <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                     <Select
                       disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={localDoc.status || 'PENDING'}
                       onValueChange={(val) => setLocalDoc({ ...localDoc, status: val as any })}
                     >
-                      <SelectTrigger className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase focus:ring-primary/20 shadow-sm", currentStatus?.color || 'bg-background')}>
+                      <SelectTrigger className={cn("h-9 w-full rounded-md border border-input px-2 text-xs font-bold uppercase focus:ring-primary/20 shadow-sm", currentStatus?.color || 'bg-background')}>
                         <SelectValue placeholder="Estado" />
                       </SelectTrigger>
                       <SelectContent className="rounded-xl border-border/50 shadow-2xl">
@@ -411,13 +419,13 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Referencia (Factura/Recibo)</p>
+                  <div className="col-span-2 sm:col-span-1">
+                    <p className="text-[10px] text-muted-foreground mb-1">Referencia</p>
                     <Input 
                       disabled={isNew ? !canPerform('compras', 'create') : !canPerform('compras', 'edit')}
                       value={localDoc.reference || ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} 
-                      className="h-8 text-xs" 
+                      className="h-9 text-xs" 
                       placeholder="N° Comprobante" 
                     />
                   </div>
@@ -669,14 +677,16 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                 toast.error('Error al eliminar');
               }
             } : undefined}
-            actions={(row) => (
+            actions={(row) => {
+              const rowUser = user;
+              return (
               <div className="flex gap-1">
                 <Button title={canPerform('compras', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                 <Button title="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
                   try {
                     await toast.promise(generateExpensePDF({
                       expense: row,
-                      tenantName: user?.tenantName || 'Empresa',
+                      tenantName: rowUser?.tenantName || 'Empresa',
                       tenantLogo: themeConfig?.logo,
                       formatAmount: formatConvertedAmount,
                       primaryColor: themeConfig?.colors.primary
@@ -691,7 +701,8 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                 )}
               </div>
-            )}
+              );
+            }}
           />
         </div>
         <ConfirmDialog

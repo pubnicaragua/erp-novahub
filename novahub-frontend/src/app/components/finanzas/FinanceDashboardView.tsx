@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { cn } from '../ui/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import {
   TrendingUp, TrendingDown, Wallet, BarChart3, ArrowUpRight, ArrowDownRight,
@@ -20,7 +21,7 @@ interface FinanceDashboardViewProps {
 
 export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes = [], accounts = [] }: FinanceDashboardViewProps) {
   const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
-  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const currencySymbol = displayCurrency === 'USD' ? '$ ' : 'C$ ';
 
   // ─── Core Calculations ────────────────────────
   const totalIncomes = incomes.reduce(
@@ -123,9 +124,11 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   }, [monthlyData]);
 
   const fmtShort = (v: number) => {
-    if (Math.abs(v) >= 1000000) return `${currencySymbol}${(v/1000000).toFixed(1)}M`;
-    if (Math.abs(v) >= 1000) return `${currencySymbol}${(v/1000).toFixed(1)}k`;
-    return `${currencySymbol}${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+    const absV = Math.abs(v);
+    const sign = v < 0 ? '-' : '';
+    if (absV >= 1000000) return `${sign}${currencySymbol}${(absV/1000000).toFixed(1)}M`;
+    if (absV >= 1000) return `${sign}${currencySymbol}${(absV/1000).toFixed(1)}k`;
+    return `${sign}${currencySymbol}${absV.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
   return (

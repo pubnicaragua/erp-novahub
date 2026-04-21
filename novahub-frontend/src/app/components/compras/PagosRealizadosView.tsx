@@ -42,6 +42,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PaymentMade> | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const normalizeMethod = (method?: string): 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER' => {
     const normalized = String(method || 'TRANSFER').toUpperCase();
@@ -243,6 +244,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     if (!isSupplierActive(localDoc.supplierId)) return toast.error('No se pueden registrar pagos a proveedores inactivos');
     
     try {
+      setIsSaving(true);
       const payload = {
         ...localDoc,
         method: normalizeMethod(localDoc.method as any),
@@ -276,6 +278,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       onRefresh();
     } catch (e: any) { 
         toast.error('Error al registrar: ' + (e.response?.data?.message || 'Error')); 
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -346,8 +350,12 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                 </Button>
              )}
             {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
-              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                Guardar
+              <Button 
+                onClick={handleSaveDoc} 
+                disabled={isSaving}
+                className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+              >
+                {isSaving ? 'Guardando...' : 'Guardar'}
               </Button>
             )}
           </div>

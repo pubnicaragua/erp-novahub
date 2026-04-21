@@ -290,16 +290,16 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const annualRunRateInDisplayCurrency = activeRecurringInDisplayCurrency * 12;
   const kpis = [
     {
-      title: `MRR Activo (${displayCurrency})`,
+      title: `Ingreso Mensual (MRR)`,
       value: formatConvertedAmount(activeRecurringInDisplayCurrency, displayCurrency),
       icon: RotateCcw,
       color: 'text-primary',
       bg: 'bg-primary/10',
     },
-    { title: 'Próximas 7 días', value: upcomingIn7Days, icon: Calendar,  color: 'text-blue-500',  bg: 'bg-blue-500/10'  },
-    { title: 'Activas',       value: data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length, icon: Clock,     color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Facturaciones (7 días)', value: upcomingIn7Days, icon: Calendar,  color: 'text-blue-500',  bg: 'bg-blue-500/10'  },
+    { title: 'Suscripciones Activas',       value: data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length, icon: Clock,     color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     {
-      title: `ARR (${displayCurrency})`,
+      title: `Ingreso Anual (ARR)`,
       value: formatConvertedAmount(annualRunRateInDisplayCurrency, displayCurrency),
       icon: TrendingUp,
       color: 'text-rose-500',

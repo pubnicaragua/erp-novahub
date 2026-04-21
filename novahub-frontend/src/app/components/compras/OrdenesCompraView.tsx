@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput, Download, FileText, PlusCircle, FilePlus, FileDown
+  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, XCircle, Send, Clock, TrendingDown, ChevronLeft, FileInput, Download, FileText, PlusCircle, FilePlus, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -52,6 +52,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseOrder> | null>(null);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [stateChangePending, setStateChangePending] = useState<{ id: string, status: string, label: string, isQuickConvert?: boolean } | null>(null);
 
   useEffect(() => {
     suppliersService.getAll().then(res => {
@@ -205,6 +207,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     }
     
     try {
+      setIsSaving(true);
       if (editingId === 'NEW') {
         await purchaseOrdersService.create(cleanedDoc);
         toast.success('Orden creada');
@@ -217,6 +220,76 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       onRefresh();
     } catch (e: any) {
       toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveAndInvoice = async () => {
+    if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
+    if (!String(localDoc.address || '').trim()) return toast.error('Debe ingresar la dirección');
+    if ((localDoc.items || []).length === 0) return toast.error('Debe agregar al menos un ítem');
+
+    try {
+      setIsSaving(true);
+      const cleanedDoc: any = {
+        ...localDoc,
+        includeTax: localDoc.includeTax !== false,
+        taxRate: Number(localDoc.taxRate || 0),
+        withholdingRate: Number(localDoc.withholdingRate || 0),
+        subtotal: Number(localDoc.subtotal || 0),
+        taxAmount: Number(localDoc.taxAmount || 0),
+        withholdingAmount: Number(localDoc.withholdingAmount || 0),
+        total: Number(localDoc.total || 0),
+        items: (localDoc.items || []).map((it: any) => ({
+          ...it,
+          description: it.description || it.name || '',
+          quantity: Number(it.quantity || 0),
+          unitPrice: Number(it.unitPrice || 0),
+          stock: it.stock === '' || it.stock === undefined || it.stock === null ? undefined : Number(it.stock),
+          total: Number(it.total || 0),
+        })),
+        status: 'RECEIVED'
+      };
+
+      let orderId = editingId;
+      if (editingId === 'NEW') {
+        const createdOrder = await purchaseOrdersService.create(cleanedDoc);
+        orderId = (createdOrder as any)?.data?.id || (createdOrder as any)?.id;
+      } else {
+        await purchaseOrdersService.update(editingId!, cleanedDoc);
+      }
+
+      // Crear Factura
+      await billsService.create({
+        supplierId: cleanedDoc.supplierId,
+        purchaseOrderId: orderId,
+        date: new Date().toISOString(),
+        dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+        currency: cleanedDoc.currency || 'NIO',
+        exchangeRate: cleanedDoc.exchangeRate || globalRate,
+        status: 'PENDING',
+        items: cleanedDoc.items.map((it: any) => ({
+          description: it.description,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          taxRate: 0,
+          total: it.total
+        })),
+        subtotal: cleanedDoc.subtotal,
+        taxAmount: cleanedDoc.taxAmount,
+        total: cleanedDoc.total,
+        number: `INV-${Date.now().toString().slice(-6)}`
+      });
+
+      toast.success('Orden facturada exitosamente');
+      setEditingId(null);
+      setEvidenceFile(null);
+      onRefresh();
+    } catch (e: any) {
+      toast.error('Error al facturar: ' + (e.response?.data?.message || 'Error'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -341,6 +414,43 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     ]);
   };
 
+  const handleQuickConvert = async (order: PurchaseOrder) => {
+    try {
+      setIsSaving(true);
+      // 1. Crear Factura
+      await billsService.create({
+        supplierId: order.supplierId,
+        purchaseOrderId: order.id,
+        date: new Date().toISOString(),
+        dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+        currency: order.currency || 'NIO',
+        exchangeRate: order.exchangeRate || globalRate,
+        status: 'PENDING',
+        items: (order.items || []).map((it: any) => ({
+          description: it.description || it.name || '',
+          quantity: Number(it.quantity || 0),
+          unitPrice: Number(it.unitPrice || 0),
+          taxRate: 0,
+          total: Number(it.total || 0)
+        })),
+        subtotal: Number(order.subtotal || 0),
+        taxAmount: Number(order.taxAmount || 0),
+        total: Number(order.total || 0),
+        number: `INV-${Date.now().toString().slice(-6)}`
+      });
+
+      // 2. Actualizar Orden
+      await purchaseOrdersService.update(order.id, { status: 'RECEIVED' });
+      
+      toast.success(`Orden ${order.number} convertida a factura correctamente`);
+      onRefresh();
+    } catch (e: any) {
+      toast.error('Error en conversión rápida: ' + (e.response?.data?.message || 'Error'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
@@ -396,9 +506,23 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 </Button>
              )}
             {((isNew && canPerform('compras', 'create')) || (!isNew && canPerform('compras', 'edit'))) && (
-              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                Guardar
-              </Button>
+              <>
+                <Button 
+                  variant="outline"
+                  disabled={isSaving}
+                  className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6 h-10 hover:bg-muted/50 transition-all"
+                  onClick={handleSaveDoc}
+                >
+                  {isSaving ? '...' : 'Guardar Borrador'}
+                </Button>
+                <Button 
+                  onClick={handleSaveAndInvoice} 
+                  disabled={isSaving}
+                  className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 hover:opacity-90 transition-all"
+                >
+                  {isSaving ? 'Procesando...' : 'Crear y Facturar'}
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -506,15 +630,21 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-bold tabular-nums">${Number(localDoc.subtotal||0).toLocaleString()}</span>
+                  <span className="font-bold tabular-nums">
+                    {displayCurrency === 'USD' ? '$ ' : 'C$ '} {Number(localDoc.subtotal||0).toLocaleString()}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">IVA</span>
-                  <span className="font-bold tabular-nums text-rose-500">${Number(localDoc.taxAmount||0).toLocaleString()}</span>
+                  <span className="font-bold tabular-nums text-rose-500">
+                    {displayCurrency === 'USD' ? '$ ' : 'C$ '} {Number(localDoc.taxAmount||0).toLocaleString()}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Retención IR</span>
-                  <span className="font-bold tabular-nums text-amber-500">-${Number(localDoc.withholdingAmount||0).toLocaleString()}</span>
+                  <span className="font-bold tabular-nums text-amber-500">
+                    -{displayCurrency === 'USD' ? '$ ' : 'C$ '} {Number(localDoc.withholdingAmount||0).toLocaleString()}
+                  </span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 border-t pt-3 border-border/50">
                   <div className="col-span-1">
@@ -557,8 +687,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black uppercase text-xs tracking-widest">Total</span>
                   <span className="font-black text-xl text-primary tabular-nums text-right">
-                     {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.total||0).toLocaleString()}
-                     {localDoc.currency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ $ {(Number(localDoc.total||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}</span>}
+                     {displayCurrency === 'USD' ? '$ ' : 'C$ '} {Number(localDoc.total||0).toLocaleString()}
+                     {displayCurrency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ $ {(Number(localDoc.total||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}</span>}
                   </span>
                 </div>
               </div>
@@ -770,21 +900,56 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
             } : undefined}
             actions={(row) => (
               <div className="flex gap-1">
-                <Button
-                  title="Convertir a Factura"
-                  variant="ghost"
-                  size="icon"
-                  disabled={String(row.status || '').toUpperCase() === 'RECEIVED' || supplierInvoices.some((inv) => inv.purchaseOrderId === row.id)}
-                  className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors disabled:opacity-50"
-                  onClick={() => handleConvertToInvoice(row)}
-                >
-                  <FileInput className="size-4" />
-                </Button>
+                {canPerform('compras', 'edit') && row.status === 'DRAFT' && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    title="Pasar a Pendiente"
+                    className="hover:bg-blue-500/10 text-foreground hover:text-foreground hover:scale-110 transition-transform" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStateChangePending({ id: row.id, status: 'PENDING', label: 'PENDIENTE' });
+                    }}
+                  >
+                    <Send className="size-4" />
+                  </Button>
+                )}
+
+                {canPerform('compras', 'edit') && (row.status === 'PENDING' || row.status === 'APPROVED') && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    title="Recibir y Facturar"
+                    className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStateChangePending({ id: row.id, status: 'RECEIVED', label: 'FACTURADA', isQuickConvert: true });
+                    }}
+                  >
+                    <CheckCircle2 className="size-4" />
+                  </Button>
+                )}
+
+                {canPerform('compras', 'edit') && (row.status === 'DRAFT' || row.status === 'PENDING' || row.status === 'APPROVED') && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    title="Cancelar"
+                    className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStateChangePending({ id: row.id, status: 'CANCELLED', label: 'CANCELADA' });
+                    }}
+                  >
+                    <XCircle className="size-4" />
+                  </Button>
+                )}
                 <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
+                  const rowUser = user;
                   try {
                     await toast.promise(generatePurchaseOrderPDF({
                       order: row,
-                      tenantName: user?.tenantName || 'Empresa',
+                      tenantName: rowUser?.tenantName || 'Empresa',
                       tenantLogo: themeConfig?.logo,
                       formatAmount: formatConvertedAmount,
                       primaryColor: themeConfig?.colors.primary
@@ -803,6 +968,25 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
             )}
           />
         </div>
+
+        <ConfirmDialog
+          open={stateChangePending !== null}
+          onOpenChange={(open) => !open && setStateChangePending(null)}
+          title={`Actualizar a ${stateChangePending?.label}`}
+          description={`Vas a cambiar el estado de la orden de compra. Esto mantendrá el flujo de abastecimiento actualizado.`}
+          confirmLabel="Continuar"
+          onConfirm={async () => {
+            if (!stateChangePending) return;
+            const order = data.find(o => o.id === stateChangePending.id);
+            if (stateChangePending.isQuickConvert && order) {
+              await handleQuickConvert(order);
+            } else {
+              await handleUpdate(stateChangePending.id, { status: stateChangePending.status as any });
+            }
+            setStateChangePending(null);
+          }}
+        />
+
         <ConfirmDialog
           open={!!pendingDeleteId}
           onOpenChange={(open) => !open && setPendingDeleteId(null)}
@@ -811,6 +995,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
           confirmLabel="Eliminar Orden"
           onConfirm={handleDeleteConfirm}
           loading={deleteLoading}
+          variant="destructive"
         />
       </div>
     </div>

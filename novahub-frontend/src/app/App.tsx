@@ -25,6 +25,7 @@ import { RolesPage } from './components/RolesPage';
 import { ConfiguracionPage } from './components/ConfiguracionPage';
 import { SuscripcionesPage } from './components/SuscripcionesPage';
 import { PrismaSchemaPage } from './components/PrismaSchemaPage';
+import { TrainingHubView } from './components/help/TrainingHubView';
 
 function DashboardLayout() {
   const { hasAccess, user } = useAuth();
@@ -91,7 +92,8 @@ function DashboardLayout() {
         'inventario', 'ventas', 'compras', 'finanzas', 'rh',
         'clientes', 'proveedores', 'actividades', 'tickets',
         'documentos', 'notificaciones', 'transferencias', 
-        'reportes', 'roles', 'configuracion', 'suscripciones', 'schema'
+        'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
+        'centro-capacitacion'
       ];
       
       const firstAllowed = preferredOrder.find(m => hasAccess(m));
@@ -154,6 +156,7 @@ function DashboardLayout() {
       case 'configuracion': return <ConfiguracionPage />;
       case 'suscripciones': return <SuscripcionesPage />;
       case 'schema': return <PrismaSchemaPage />;
+      case 'centro-capacitacion': return <TrainingHubView />;
       default: return <OverviewDashboard onNavigate={handleNavigate} />;
     }
   };

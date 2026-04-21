@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download, Banknote, FilePlus, PlusCircle, FileDown
+  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, CheckCircle, XCircle, ChevronLeft, Download, Banknote, FilePlus, PlusCircle, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -46,10 +46,12 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER'>('TRANSFER');
   const [statusLoading, setStatusLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<SupplierInvoice> | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const generateSupplierInvoiceNumber = () => `INV-${Date.now().toString().slice(-6)}`;
 
   useEffect(() => {
@@ -323,21 +325,16 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         if (!existingInvoice) return;
 
         const previousStatus = String(existingInvoice.status || '').toUpperCase();
-        const nextStatus = String(localDoc.status || '').toUpperCase();
-
-        if (nextStatus === 'PAID' && previousStatus !== 'PAID') {
-          setPendingPaidBill({ ...existingInvoice, ...localDoc });
-          return;
-        }
-
-        await billsService.update(editingId!, localDoc as any);
+        await billsService.update(editingId!, payload);
         toast.success('Factura guardada');
-        setEditingId(null);
-        setLocalDoc(null);
       }
+      setEditingId(null);
+      setLocalDoc(null);
       onRefresh();
     } catch (e: any) {
       toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -431,8 +428,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 </Button>
               )}
             {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
-              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                Guardar Factura
+              <Button onClick={handleSaveDoc} disabled={isSaving} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 hover:opacity-90 transition-all">
+                {isSaving ? 'Guardando...' : (isNew ? 'Registrar Factura' : 'Guardar Cambios')}
               </Button>
             )}
           </div>
@@ -510,16 +507,20 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-bold tabular-nums">${Number(localDoc.subtotal||0).toLocaleString()}</span>
+                  <span className="font-bold tabular-nums">
+                    {displayCurrency === 'USD' ? '$ ' : 'C$ '} {Number(localDoc.subtotal||0).toLocaleString()}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Impuesto</span>
-                  <span className="font-bold tabular-nums text-rose-500">${Number(localDoc.taxAmount||0).toLocaleString()}</span>
+                  <span className="text-muted-foreground">IVA</span>
+                  <span className="font-bold tabular-nums text-rose-500">
+                    {displayCurrency === 'USD' ? '$ ' : 'C$ '} {Number(localDoc.taxAmount||0).toLocaleString()}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black uppercase text-xs tracking-widest">Total</span>
-                  <span className="font-black text-xl text-primary tabular-nums text-right">
-                     {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.total||0).toLocaleString()}
+                  <span className="font-black text-xl text-primary tabular-nums">
+                     {displayCurrency === 'USD' ? '$ ' : 'C$ '} {Number(localDoc.total||0).toLocaleString()}
                      {localDoc.currency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ $ {(Number(localDoc.total||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}</span>}
                   </span>
                 </div>
@@ -595,7 +596,9 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     />
                   </div>
                   <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black w-20 text-right tabular-nums">${Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    <span className="text-xs font-black w-20 text-right tabular-nums">
+                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </span>
                     {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
                       <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
                         <Trash2 className="size-3" />
@@ -697,26 +700,34 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     variant="ghost"
                     size="icon"
                     className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
-                    onClick={() => onRegisterPaymentFromInvoice({
-                      supplierId: row.supplierId,
-                      supplierInvoiceId: row.id,
-                      date: new Date().toISOString(),
-                      amount: getBillPaymentAmount(row),
-                      currency: row.currency || displayCurrency,
-                      exchangeRate: row.exchangeRate || globalRate,
-                      method: 'TRANSFER',
-                      reference: `PAG-${(row.number || row.id || '').toString().replace(/[^A-Za-z0-9-]/g, '').slice(0, 20)}`,
-                      notes: `Pago de factura proveedor ${row.number || row.id || ''}`.trim(),
-                    })}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPendingPaidBill(row);
+                    }}
                   >
-                    <Banknote className="size-4" />
+                    <CheckCircle className="size-4" />
+                  </Button>
+                )}
+                {canPerform('compras', 'edit') && (row.status === 'PENDING' || row.status === 'PARTIAL') && (
+                  <Button
+                    title="Cancelar Factura"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPendingCancelId(row.id);
+                    }}
+                  >
+                    <XCircle className="size-4" />
                   </Button>
                 )}
                 <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-slate-500 hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => {
+                  const rowUser = user;
                   try {
                     await toast.promise(generateSupplierInvoicePDF({
                       invoice: row,
-                      tenantName: user?.tenantName || 'Empresa',
+                      tenantName: rowUser?.tenantName || 'Empresa',
                       tenantLogo: themeConfig?.logo,
                       formatAmount: (amount: number, currency?: string, rate?: number) =>
                         formatConvertedAmount(Number(amount || 0), currency || (row.currency as any), rate || row.exchangeRate),
@@ -780,11 +791,32 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       </ConfirmDialog>
 
       <ConfirmDialog
+        open={pendingCancelId !== null}
+        onOpenChange={(open) => !open && setPendingCancelId(null)}
+        title="Cancelar Factura"
+        description="¿Estás seguro de que deseas cancelar esta factura? Esta acción no se puede deshacer."
+        confirmLabel="Cancelar"
+        variant="destructive"
+        onConfirm={async () => {
+          if (!pendingCancelId) return;
+          try {
+            await handleUpdate(pendingCancelId, { status: 'REFUNDED' });
+            toast.success('Factura cancelada');
+          } catch {
+            toast.error('Error al cancelar factura');
+          } finally {
+            setPendingCancelId(null);
+          }
+        }}
+      />
+
+      <ConfirmDialog
         open={!!pendingDeleteId}
         onOpenChange={(open) => !open && setPendingDeleteId(null)}
         title="Eliminar Factura"
         description="¿Estás seguro de que deseas eliminar esta factura? Esta acción no se puede deshacer."
         confirmLabel="Eliminar Factura"
+        variant="destructive"
         onConfirm={handleDeleteConfirm}
         loading={deleteLoading}
       />

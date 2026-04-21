@@ -51,6 +51,7 @@ import {
   Layers,
   Archive,
   History,
+  GraduationCap
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -246,6 +247,7 @@ const menuItems: MenuItem[] = [
       { id: 'bitacora', label: 'Bitácora', icon: <Database className="size-4" /> }
     ]
   },
+  { id: 'centro-capacitacion', label: 'Centro de Capacitación', icon: <GraduationCap className="size-5" />, section: 'Ayuda' },
   { id: 'tickets', label: 'Tickets y Soporte', icon: <Headphones className="size-5" /> },
   {
     id: 'documentos',
@@ -305,6 +307,12 @@ const platformMenuItems: MenuItem[] = [
     label: 'Configuración Global',
     icon: <Settings className="size-5" />,
     section: 'Ajustes',
+  },
+  {
+    id: 'centro-capacitacion',
+    label: 'Capacitación ERP',
+    icon: <GraduationCap className="size-5" />,
+    section: 'Ayuda',
   },
 ];
 

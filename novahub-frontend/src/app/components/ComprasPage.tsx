@@ -204,7 +204,7 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
                    {section.id === 'gastos'        && <GastosView         {...commonProps} data={data.gastos} />}
                    {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} data={data.gastosRec} />}
                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} data={data.ordenes} supplierInvoices={data.facturasProv} onConvertToInvoice={handleConvertToInvoice} />}
-                   // {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} data={data.recepciones} />}
+
                    {section.id === 'facturas-prov' && (
                      <FacturasProveedorView
                        {...commonProps}
