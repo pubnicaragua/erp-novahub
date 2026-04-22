@@ -784,14 +784,14 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       const parentPerm = newPerms.find(p => p.module === submoduleDef.parent) as any;
       if (parentPerm) {
         const siblings = SUBMODULES_FOR_PERMS.filter(sub => sub.parent === submoduleDef.parent);
-        const siblingPerms = siblings.map(s => newPerms.find(p => p.module === s.id)).filter(Boolean);
+        const siblingPerms: any[] = siblings.map(s => newPerms.find(p => p.module === s.id)).filter(Boolean);
         
         // El padre está ON solo si TODOS los hijos tienen ese permiso ON
-        parentPerm[type] = siblingPerms.length > 0 && siblingPerms.every(sp => !!sp![type]);
+        parentPerm[type] = siblingPerms.length > 0 && siblingPerms.every(sp => !!sp[type]);
         
         // Recalcular también 'read' del padre
         if (type !== 'read') {
-          parentPerm.read = siblingPerms.length > 0 && siblingPerms.every(sp => !!sp!.read);
+          parentPerm.read = siblingPerms.length > 0 && siblingPerms.every(sp => !!sp.read);
         }
       }
     }
@@ -1328,10 +1328,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                 <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.read} onCheckedChange={() => togglePermission(p.module, 'read')} className="scale-[0.65] sm:scale-75" /></div>
                               </td>
                               <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.create} onCheckedChange={() => togglePermission(p.module, 'create')} className="scale-[0.65] sm:scale-75" /></div>
+                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!(p as any).create} onCheckedChange={() => togglePermission(p.module, 'create')} className="scale-[0.65] sm:scale-75" /></div>
                               </td>
                               <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.edit} onCheckedChange={() => togglePermission(p.module, 'edit')} className="scale-[0.65] sm:scale-75" /></div>
+                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!(p as any).edit} onCheckedChange={() => togglePermission(p.module, 'edit')} className="scale-[0.65] sm:scale-75" /></div>
                               </td>
                               <td className="px-0 py-1.5 text-center">
                                 <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} className="scale-[0.65] sm:scale-75" /></div>
