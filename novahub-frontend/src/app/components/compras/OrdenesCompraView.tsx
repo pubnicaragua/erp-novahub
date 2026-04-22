@@ -8,7 +8,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
 import { Combobox } from '../ui/Combobox';
-import { purchaseOrdersService, suppliersService } from '../../services/compras.service';
+import { purchaseOrdersService, suppliersService, billsService } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
 import type { PurchaseOrder, Supplier, SupplierInvoice } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -279,7 +279,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
         subtotal: cleanedDoc.subtotal,
         taxAmount: cleanedDoc.taxAmount,
         total: cleanedDoc.total,
-        number: `INV-${Date.now().toString().slice(-6)}`
+        number: `INV-${Date.now().toString().slice(-6)}`,
+        notes: `[Desde Orden ${cleanedDoc.number}] ${cleanedDoc.notes || ''}`
       });
 
       toast.success('Orden facturada exitosamente');
@@ -287,7 +288,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       setEvidenceFile(null);
       onRefresh();
     } catch (e: any) {
-      toast.error('Error al facturar: ' + (e.response?.data?.message || 'Error'));
+      toast.error('Error al facturar: ' + (e.message || 'Error'));
     } finally {
       setIsSaving(false);
     }
@@ -415,6 +416,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
   };
 
   const handleQuickConvert = async (order: PurchaseOrder) => {
+    // Validar si ya existe factura para esta orden
+    const alreadyInvoiced = supplierInvoices.some(inv => inv.purchaseOrderId === order.id);
+    if (alreadyInvoiced) {
+      return toast.error('Esta orden ya ha sido convertida a factura anteriormente');
+    }
+
     try {
       setIsSaving(true);
       // 1. Crear Factura
@@ -430,13 +437,14 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
           description: it.description || it.name || '',
           quantity: Number(it.quantity || 0),
           unitPrice: Number(it.unitPrice || 0),
-          taxRate: 0,
+          taxRate: Number(it.taxRate || 0),
           total: Number(it.total || 0)
         })),
         subtotal: Number(order.subtotal || 0),
         taxAmount: Number(order.taxAmount || 0),
         total: Number(order.total || 0),
-        number: `INV-${Date.now().toString().slice(-6)}`
+        number: `INV-${Date.now().toString().slice(-6)}`,
+        notes: `[Desde Orden ${order.number}] ${order.notes || ''}`
       });
 
       // 2. Actualizar Orden
@@ -445,7 +453,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       toast.success(`Orden ${order.number} convertida a factura correctamente`);
       onRefresh();
     } catch (e: any) {
-      toast.error('Error en conversión rápida: ' + (e.response?.data?.message || 'Error'));
+      toast.error('Error en conversión rápida: ' + (e.message || 'Error'));
     } finally {
       setIsSaving(false);
     }

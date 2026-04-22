@@ -145,7 +145,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       key: 'reference', header: 'Referencia', width: '130px', 
       render: (val, row) => {
         const isUUID = val && /SC-[0-9a-f]{8}-[0-9a-f]{4}/i.test(val);
-        const displayVal = isUUID ? 'Crédito Proveedor' : (val || '-');
+        const displayVal = isUUID ? 'Crédito Proveedor' : (val || row.number || '-');
         return (
           <div className="flex flex-col">
             <span className="text-xs font-bold text-rose-500">{displayVal}</span>

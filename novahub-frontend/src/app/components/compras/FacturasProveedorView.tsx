@@ -183,7 +183,16 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   const columns: ColumnDef<SupplierInvoice>[] = [
     { key: 'number',   header: 'Factura #',   width: '120px',
-      render: (val) => <span className="font-black font-mono text-primary text-xs">{val||'-'}</span> },
+      render: (val, row) => (
+        <div className="flex flex-col">
+          <span className="font-black font-mono text-primary text-xs cursor-pointer hover:underline">{val||'-'}</span>
+          {row.notes && (row.notes.includes('Orden') || row.notes.includes('Generado')) && (
+            <Badge className="text-[7px] font-black bg-orange-500/10 text-orange-500 border-none px-1.5 py-0 w-fit uppercase">
+              Desde Orden Compra
+            </Badge>
+          )}
+        </div>
+      ) },
     { key: 'supplier', header: 'Proveedor',
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'date',     header: 'Emisión',     width: '110px',
@@ -233,25 +242,24 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         return;
       }
 
-      const updatedResponse = await billsService.update(id, { status: 'PAID' });
-      const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
-      
-      try {
-        await ensureFinanceExpenseForInvoice({
-          ...pendingPaidBill,
-          ...updatedInvoice,
-          id: String(id),
-          status: 'PAID',
-        }, paymentMethod);
-      } catch (syncError: any) {
-        toast.warning(`Factura actualizada, pero no se pudo sincronizar pago/finanzas: ${syncError?.message || 'Error de sincronización'}`);
-      }
+      // 1. Registrar el pago real en lugar de solo cambiar el estado
+      const payNumber = `PAG-${Date.now().toString().slice(-6)}`;
+      await paymentsService.create({
+        number: payNumber,
+        reference: payNumber,
+        supplierId: pendingPaidBill.supplierId,
+        supplierInvoiceId: id,
+        amount: pendingPaidBill.total,
+        date: new Date().toISOString(),
+        method: paymentMethod,
+        notes: `Pago registrado desde vista de facturas`
+      });
 
-      toast.success('Factura marcada como pagada');
+      toast.success('Pago registrado y factura liquidada');
       setPendingPaidBill(null);
       onRefresh();
     } catch (e: any) {
-      toast.error('Error al procesar pago: ' + (e.response?.data?.message || 'Error'));
+      toast.error('Error al procesar pago: ' + (e.message || 'Error'));
     } finally {
       setStatusLoading(false);
     }
@@ -332,7 +340,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       setLocalDoc(null);
       onRefresh();
     } catch (e: any) {
-      toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
+      toast.error('Error al guardar: ' + (e.message || 'Error'));
     } finally {
       setIsSaving(false);
     }
@@ -694,7 +702,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             } : undefined}
             actions={(row) => (
               <div className="flex gap-1">
-                {canPerform('compras', 'create') && onRegisterPaymentFromInvoice && (
+                {canPerform('compras', 'create') && onRegisterPaymentFromInvoice && row.status !== 'PAID' && (
                   <Button
                     title="Registrar Pago"
                     variant="ghost"

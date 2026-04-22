@@ -14,7 +14,7 @@ import { ScrollArea } from '../ui/scroll-area';
 import { 
   purchaseOrdersService, supplierInvoicesService, 
   purchaseReceiptsService, vendorCreditsService,
-  paymentsService
+  paymentsService, suppliersService
 } from '../../services/compras.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -157,7 +157,28 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                       <TrendingUp className="size-6" />
                     </div>
                     <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">Saldo Pendiente</p>
+                      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-1 flex items-center gap-2">
+                        Saldo Pendiente
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="size-5 h-5 w-5 p-0 text-rose-500/50 hover:text-rose-500 hover:bg-rose-500/10 rounded-full"
+                          title="Recalcular Saldo"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const res = await suppliersService.recalculateBalance(supplier.id);
+                              toast.success(`Saldo recalculado: ${formatConvertedAmount(res.newBalance, 'NIO')}`);
+                              // Forzar recarga para ver el cambio
+                              window.location.reload();
+                            } catch (error) {
+                              toast.error('Error al recalcular saldo');
+                            }
+                          }}
+                        >
+                          <RefreshCw className="size-3" />
+                        </Button>
+                      </p>
                       <p className="text-2xl font-black text-rose-500 tabular-nums tracking-tighter leading-none">
                         {formatConvertedAmount(supplier.balance || 0, 'NIO')}
                       </p>
@@ -176,6 +197,12 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                       <p className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">Compras Totales</p>
                       <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter leading-none">
                         {formatConvertedAmount(transactions.reduce((acc, t) => {
+                          // Evitar doble conteo: si es una orden que ya tiene factura, no sumarla
+                          if (t.type === 'ORDER') {
+                            const hasInvoice = transactions.some(inv => inv.type === 'INVOICE' && inv.purchaseOrderId === t.id);
+                            if (hasInvoice) return acc;
+                          }
+                          
                           const isPurchase = ['INVOICE', 'ORDER'].includes(t.type);
                           return acc + (isPurchase ? convertAmount(t.total, t.currency, t.exchangeRate) : 0);
                         }, 0), displayCurrency)}

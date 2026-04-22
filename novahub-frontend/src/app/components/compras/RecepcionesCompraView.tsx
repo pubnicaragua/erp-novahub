@@ -110,7 +110,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
       setEditingId(null);
       onRefresh();
     } catch (e: any) {
-      toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
+      toast.error('Error al guardar: ' + (e.message || 'Error'));
     }
   };
 
