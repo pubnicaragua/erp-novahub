@@ -722,6 +722,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               Agregar
             </Button>
           )}
+        </div>
       </div>
 
       {/* Table */}
@@ -974,6 +975,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             </div>
           )}
         </DialogContent>
+      </Dialog>
       <Dialog open={importModalOpen} onOpenChange={(open) => {
         if (!importing) {
           setImportModalOpen(open);
