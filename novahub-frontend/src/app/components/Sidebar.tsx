@@ -128,7 +128,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   transferencias: ['INVENTORY_TRANSFERS'],
   ajustes: ['INVENTORY_ADJUSTMENTS'],
   movimientos: ['INVENTORY_MOVEMENTS'],
-  // Notificaciones
+  inbox: ['NOTIFICATIONS_INBOX'],
   alertas: ['NOTIFICATIONS_ALERTS'],
   mensajes: ['NOTIFICATIONS_MESSAGES'],
   push: ['NOTIFICATIONS_PUSH'],
@@ -265,6 +265,7 @@ const menuItems: MenuItem[] = [
     label: 'Notificaciones',
     icon: <BellRing className="size-5" />,
     submenu: [
+      { id: 'inbox', label: 'Bandeja de Entrada', icon: <Bell className="size-4" /> },
       { id: 'alertas', label: 'Alertas', icon: <AlertTriangle className="size-4" /> },
       { id: 'mensajes', label: 'Mensajes', icon: <MessageSquare className="size-4" /> },
       { id: 'push', label: 'Push', icon: <Send className="size-4" /> }
@@ -349,7 +350,6 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     }
     if (item.submenu) {
       toggleMenu(item.id);
-      onModuleChange(item.id as Module);
     } else {
       onModuleChange(item.id as Module);
       if (window.innerWidth < 1024) onClose();
@@ -363,13 +363,15 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
-    if (user.isTenantAdmin && subId in SUBMENU_MODULE_REQUIREMENTS) {
-      // Admin también respeta módulos habilitados del tenant.
-      return SUBMENU_MODULE_REQUIREMENTS[subId].some(mod => user.enabledModules.includes(mod));
-    }
-
+    
     const requiredModules = SUBMENU_MODULE_REQUIREMENTS[subId];
     if (!requiredModules || requiredModules.length === 0) return true;
+
+    if (user.isTenantAdmin) {
+      // Admin también respeta módulos habilitados del tenant.
+      return requiredModules.some(mod => user.enabledModules.includes(mod));
+    }
+
     return requiredModules.some(mod => user.enabledModules.includes(mod));
   };
 

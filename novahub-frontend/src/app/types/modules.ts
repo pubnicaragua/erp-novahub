@@ -78,6 +78,7 @@ export const PROJECTS_SUBMODULES: Submodule[] = [];
 
 // Submódulos de Notificaciones
 export const NOTIFICATIONS_SUBMODULES: Submodule[] = [
+  { id: 'NOTIFICATIONS_INBOX', label: 'Bandeja de Entrada', description: 'Historial unificado de notificaciones' },
   { id: 'NOTIFICATIONS_ALERTS', label: 'Alertas', description: 'Alertas del sistema' },
   { id: 'NOTIFICATIONS_MESSAGES', label: 'Mensajes', description: 'Mensajes y comunicaciones' },
   { id: 'NOTIFICATIONS_PUSH', label: 'Push', description: 'Notificaciones Push' },

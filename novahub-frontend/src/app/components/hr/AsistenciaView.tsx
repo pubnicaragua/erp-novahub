@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Clock, LogIn, LogOut, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Card, CardContent } from '../ui/card';
+import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
@@ -61,33 +63,47 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
     <div className="space-y-4">
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-sm text-muted-foreground">Presentes Hoy</p>
-              <h3 className="text-3xl font-bold text-blue-700 dark:text-blue-400">{presentToday}</h3>
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-blue-500/10 text-blue-500">
+                <Clock className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Presentes Hoy</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{presentToday}</p>
+              </div>
             </div>
-            <Clock className="size-8 text-blue-500" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-sm text-muted-foreground">Horas Totales Hoy</p>
-              <h3 className="text-3xl font-bold text-green-700 dark:text-green-400">{totalHoursToday.toFixed(1)}</h3>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-emerald-500/10 text-emerald-500">
+                <Calendar className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Horas Totales Hoy</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{totalHoursToday.toFixed(1)}</p>
+              </div>
             </div>
-            <Calendar className="size-8 text-green-500" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-sm text-muted-foreground">Ausentes Hoy</p>
-              <h3 className="text-3xl font-bold text-red-700 dark:text-red-400">{absentToday}</h3>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-rose-500/10 text-rose-500">
+                <Clock className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Ausentes Hoy</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{absentToday}</p>
+              </div>
             </div>
-            <Clock className="size-8 text-red-500" />
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Clock In/Out Panel */}

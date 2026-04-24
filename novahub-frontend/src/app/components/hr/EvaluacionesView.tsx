@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { Award, Plus, Star } from 'lucide-react';
+import { Award, Plus, Star, Save, Calendar, Edit2, FileText } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Card, CardContent } from '../ui/card';
+import { cn } from '../ui/utils';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
+import { motion } from 'motion/react';
+import { Badge } from '../ui/badge';
 
 export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
   const [showNewForm, setShowNewForm] = useState(false);
@@ -59,252 +63,325 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
     <div className="space-y-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Calificación Promedio</p>
-              <h3 className="text-3xl font-bold text-yellow-700 dark:text-yellow-400">{avgRating.toFixed(1)}</h3>
-              <div className="flex items-center gap-1 mt-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star
-                    key={star}
-                    className={`size-4 ${star <= avgRating ? 'fill-yellow-500 text-yellow-500' : 'text-gray-300'}`}
-                  />
-                ))}
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-amber-500/10 text-amber-500">
+                <Award className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Calificación Promedio</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{avgRating.toFixed(1)}</p>
+                  <div className="flex items-center gap-0.5 mb-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`size-2.5 ${star <= avgRating ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground/20'}`}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-            <Award className="size-8 text-yellow-500" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Completadas</p>
-              <h3 className="text-3xl font-bold text-green-700 dark:text-green-400">{completedReviews}</h3>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-emerald-500/10 text-emerald-500">
+                <Plus className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Completadas</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{completedReviews}</p>
+              </div>
             </div>
-            <Award className="size-8 text-green-500" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">En Progreso</p>
-              <h3 className="text-3xl font-bold text-blue-700 dark:text-blue-400">{inProgressReviews}</h3>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-blue-500/10 text-blue-500">
+                <Plus className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">En Progreso</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{inProgressReviews}</p>
+              </div>
             </div>
-            <Award className="size-8 text-blue-500" />
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* New Review Button */}
-      <div className="flex justify-end">
-        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
-          <Plus className="size-4 mr-2" />
-          Nueva Evaluación
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Evaluaciones de Desempeño</h3>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Seguimiento de objetivos, logros y áreas de crecimiento.</p>
+        </div>
+        <Button 
+          onClick={() => setShowNewForm(!showNewForm)} 
+          className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
+        >
+          <Plus className="size-4" /> Nueva Evaluación
         </Button>
       </div>
 
       {/* New Review Form */}
       {showNewForm && (
-        <div className="border border-primary/40 rounded-lg p-6 bg-primary/5">
-          <h3 className="text-lg font-semibold mb-4 text-primary">Nueva Evaluación de Desempeño</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-1 block">Empleado</label>
-              <Combobox
-                options={employees.map((emp: any) => ({
-                  label: `${emp.firstName} ${emp.lastName}`,
-                  value: emp.id,
-                  description: emp.employeeNumber,
-                }))}
-                value={newReview.employeeId}
-                onChange={(v) => setNewReview({ ...newReview, employeeId: v })}
-                placeholder="Buscar empleado..."
-                emptyMessage="No se encontró el empleado"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Evaluador</label>
-              <Combobox
-                options={employees
-                  .filter((emp: any) => emp.id !== newReview.employeeId)
-                  .map((emp: any) => ({
-                    label: `${emp.firstName} ${emp.lastName}`,
-                    value: emp.id,
-                    description: emp.employeeNumber,
-                  }))}
-                value={newReview.reviewerId}
-                onChange={(v) => setNewReview({ ...newReview, reviewerId: v })}
-                placeholder="Buscar evaluador..."
-                emptyMessage="No se encontró el evaluador"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Período Inicio</label>
-              <Input
-                type="date"
-                value={newReview.reviewPeriodStart}
-                onChange={(e) => setNewReview({ ...newReview, reviewPeriodStart: e.target.value })}
-                className="bg-background"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Período Fin</label>
-              <Input
-                type="date"
-                value={newReview.reviewPeriodEnd}
-                onChange={(e) => setNewReview({ ...newReview, reviewPeriodEnd: e.target.value })}
-                className="bg-background"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Calificación (1-5)</label>
-              <Input
-                type="number"
-                min="1"
-                max="5"
-                step="0.1"
-                value={newReview.overallRating}
-                onChange={(e) => setNewReview({ ...newReview, overallRating: parseFloat(e.target.value) })}
-                className="bg-background"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium mb-1 block">Objetivos</label>
-              <Textarea
-                value={newReview.goals}
-                onChange={(e) => setNewReview({ ...newReview, goals: e.target.value })}
-                placeholder="Objetivos del período"
-                className="bg-background"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium mb-1 block">Logros</label>
-              <Textarea
-                value={newReview.achievements}
-                onChange={(e) => setNewReview({ ...newReview, achievements: e.target.value })}
-                placeholder="Logros alcanzados"
-                className="bg-background"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium mb-1 block">Áreas de Mejora</label>
-              <Textarea
-                value={newReview.areasOfImprovement}
-                onChange={(e) => setNewReview({ ...newReview, areasOfImprovement: e.target.value })}
-                placeholder="Áreas a mejorar"
-                className="bg-background"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium mb-1 block">Comentarios</label>
-              <Textarea
-                value={newReview.comments}
-                onChange={(e) => setNewReview({ ...newReview, comments: e.target.value })}
-                placeholder="Comentarios adicionales"
-                className="bg-background"
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 mt-4">
-            <Button onClick={handleCreateReview} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              Crear Evaluación
-            </Button>
-            <Button variant="outline" onClick={() => setShowNewForm(false)}>
-              Cancelar
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Reviews List */}
-      <div className="grid grid-cols-1 gap-4">
-        {reviews.map((review: any) => (
-          <div key={review.id} className="border rounded-lg p-6 hover:shadow-md transition-shadow">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="size-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold">
-                  {review.employee?.firstName?.[0]}{review.employee?.lastName?.[0]}
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+          <Card className="border-primary/30 bg-primary/5 shadow-2xl rounded-3xl overflow-hidden">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="size-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                  <Award className="size-5" />
                 </div>
-                <div>
-                  <h3 className="font-semibold">
-                    {review.employee?.firstName} {review.employee?.lastName}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Evaluado por: {review.reviewer?.firstName} {review.reviewer?.lastName}
-                  </p>
-                </div>
+                <h3 className="text-xl font-black tracking-tight uppercase">Registrar Nueva Evaluación</h3>
               </div>
-              <div className="text-right">
-                <div className="flex items-center gap-1 mb-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Star
-                      key={star}
-                      className={`size-4 ${star <= (review.overallRating || 0) ? 'fill-yellow-500 text-yellow-500' : 'text-gray-300'}`}
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empleado</label>
+                  <Combobox
+                    options={employees.map((emp: any) => ({
+                      label: `${emp.firstName} ${emp.lastName}`,
+                      value: emp.id,
+                      description: emp.employeeNumber,
+                    }))}
+                    value={newReview.employeeId}
+                    onChange={(v) => setNewReview({ ...newReview, employeeId: v })}
+                    placeholder="Seleccionar empleado..."
+                    emptyMessage="No se encontró el empleado"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Evaluador</label>
+                  <Combobox
+                    options={employees
+                      .filter((emp: any) => emp.id !== newReview.employeeId)
+                      .map((emp: any) => ({
+                        label: `${emp.firstName} ${emp.lastName}`,
+                        value: emp.id,
+                        description: emp.employeeNumber,
+                      }))}
+                    value={newReview.reviewerId}
+                    onChange={(v) => setNewReview({ ...newReview, reviewerId: v })}
+                    placeholder="Seleccionar evaluador..."
+                    emptyMessage="No se encontró el evaluador"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Período de Evaluación</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="date"
+                      value={newReview.reviewPeriodStart}
+                      onChange={(e) => setNewReview({ ...newReview, reviewPeriodStart: e.target.value })}
+                      className="bg-background rounded-xl h-11"
                     />
-                  ))}
+                    <Input
+                      type="date"
+                      value={newReview.reviewPeriodEnd}
+                      onChange={(e) => setNewReview({ ...newReview, reviewPeriodEnd: e.target.value })}
+                      className="bg-background rounded-xl h-11"
+                    />
+                  </div>
                 </div>
-                <p className="text-sm font-bold text-yellow-600">{Number(review.overallRating || 0).toFixed(1)}/5.0</p>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Calificación Global (1-5)</label>
+                  <div className="flex items-center gap-3 bg-background rounded-xl border border-input p-1">
+                    <Input
+                      type="number"
+                      min="1"
+                      max="5"
+                      step="0.1"
+                      value={newReview.overallRating}
+                      onChange={(e) => setNewReview({ ...newReview, overallRating: parseFloat(e.target.value) })}
+                      className="border-none focus-visible:ring-0 h-9 font-black text-center text-lg"
+                    />
+                    <div className="flex items-center gap-1 pr-3 border-l border-border/50 pl-3">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={cn(
+                            "size-4 transition-all cursor-pointer",
+                            star <= newReview.overallRating ? "fill-amber-500 text-amber-500 scale-110" : "text-muted-foreground/20 hover:text-amber-200"
+                          )}
+                          onClick={() => setNewReview({ ...newReview, overallRating: star })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Objetivos del Período</label>
+                  <Textarea
+                    value={newReview.goals}
+                    onChange={(e) => setNewReview({ ...newReview, goals: e.target.value })}
+                    placeholder="Describa los objetivos acordados..."
+                    className="bg-background rounded-2xl min-h-[100px] resize-none"
+                  />
+                </div>
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Logros Alcanzados</label>
+                  <Textarea
+                    value={newReview.achievements}
+                    onChange={(e) => setNewReview({ ...newReview, achievements: e.target.value })}
+                    placeholder="Principales hitos y resultados..."
+                    className="bg-background rounded-2xl min-h-[100px] resize-none"
+                  />
+                </div>
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Áreas de Mejora</label>
+                    <Textarea
+                      value={newReview.areasOfImprovement}
+                      onChange={(e) => setNewReview({ ...newReview, areasOfImprovement: e.target.value })}
+                      placeholder="Oportunidades de crecimiento..."
+                      className="bg-background rounded-2xl min-h-[100px] resize-none"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Comentarios Adicionales</label>
+                    <Textarea
+                      value={newReview.comments}
+                      onChange={(e) => setNewReview({ ...newReview, comments: e.target.value })}
+                      placeholder="Notas del evaluador..."
+                      className="bg-background rounded-2xl min-h-[100px] resize-none"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Período</p>
-                <p className="text-sm font-medium">
-                  {new Date(review.reviewPeriodStart).toLocaleDateString()} - {new Date(review.reviewPeriodEnd).toLocaleDateString()}
-                </p>
+              <div className="flex items-center gap-3 mt-8 pt-6 border-t border-border/40">
+                <Button onClick={handleCreateReview} className="flex-1 h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest rounded-2xl gap-2 shadow-xl shadow-primary/20">
+                  <Save className="size-5" /> Guardar Evaluación
+                </Button>
+                <Button variant="outline" onClick={() => setShowNewForm(false)} className="h-12 px-8 rounded-2xl font-bold uppercase text-xs border-border/60">
+                  Cancelar
+                </Button>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Estado</p>
-                <span className={`text-xs px-2 py-1 rounded ${
-                  review.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                  review.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
-                  'bg-gray-100 text-gray-700'
-                }`}>
-                  {review.status === 'COMPLETED' ? 'Completada' : review.status === 'IN_PROGRESS' ? 'En Progreso' : review.status === 'PENDING' ? 'Pendiente' : review.status}
-                </span>
-              </div>
-            </div>
-
-            {review.goals && (
-              <div className="mb-3">
-                <p className="text-xs font-semibold text-muted-foreground mb-1">Objetivos</p>
-                <p className="text-sm">{review.goals}</p>
-              </div>
-            )}
-
-            {review.achievements && (
-              <div className="mb-3">
-                <p className="text-xs font-semibold text-muted-foreground mb-1">Logros</p>
-                <p className="text-sm">{review.achievements}</p>
-              </div>
-            )}
-
-            {review.areasOfImprovement && (
-              <div className="mb-3">
-                <p className="text-xs font-semibold text-muted-foreground mb-1">Áreas de Mejora</p>
-                <p className="text-sm">{review.areasOfImprovement}</p>
-              </div>
-            )}
-
-            {review.comments && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1">Comentarios</p>
-                <p className="text-sm italic">{review.comments}</p>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {reviews.length === 0 && (
-        <div className="text-center py-12">
-          <Award className="size-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">No hay evaluaciones de desempeño</p>
-        </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       )}
+
+      {/* Reviews Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {reviews.map((review: any) => (
+          <motion.div key={review.id} layout initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
+            <Card className="bg-card border-border/50 hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 overflow-hidden rounded-3xl group">
+              <div className="p-6">
+                <div className="flex items-start justify-between mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="size-14 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center text-primary border border-primary/10 shadow-inner">
+                      {review.employee?.firstName?.[0]}{review.employee?.lastName?.[0]}
+                    </div>
+                    <div>
+                      <h4 className="font-black text-lg tracking-tight text-foreground group-hover:text-primary transition-colors">
+                        {review.employee?.firstName} {review.employee?.lastName}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Evaluado por:</span>
+                        <span className="text-xs font-bold text-muted-foreground">{review.reviewer?.firstName} {review.reviewer?.lastName}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-right flex flex-col items-end">
+                    <div className="flex items-center gap-1 mb-1 bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20 shadow-sm">
+                      <Star className="size-4 fill-amber-500 text-amber-500" />
+                      <span className="font-black text-lg text-amber-600 tracking-tighter">{Number(review.overallRating || 0).toFixed(1)}</span>
+                      <span className="text-[10px] font-black text-amber-600/40 ml-0.5">/ 5.0</span>
+                    </div>
+                    <Badge className={cn(
+                      "text-[9px] font-black uppercase tracking-widest",
+                      review.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
+                      review.status === 'IN_PROGRESS' ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' :
+                      'bg-muted text-muted-foreground'
+                    )}>
+                      {review.status === 'COMPLETED' ? 'Completada' : review.status === 'IN_PROGRESS' ? 'En Progreso' : review.status}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="bg-muted/30 p-3 rounded-2xl border border-border/20">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1.5">Período Fiscal</p>
+                    <div className="flex items-center gap-2 text-xs font-bold">
+                      <Calendar className="size-3 text-primary" />
+                      <span>{new Date(review.reviewPeriodStart).toLocaleDateString()}</span>
+                      <span className="text-muted-foreground/30">→</span>
+                      <span>{new Date(review.reviewPeriodEnd).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  <div className="bg-muted/30 p-3 rounded-2xl border border-border/20">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1.5">Desempeño</p>
+                    <div className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`size-3 ${star <= (review.overallRating || 0) ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground/20'}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {review.goals && (
+                    <div className="space-y-1">
+                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-primary/60">Objetivos Estratégicos</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed italic">{review.goals}</p>
+                    </div>
+                  )}
+                  
+                  {review.achievements && (
+                    <div className="space-y-1">
+                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-600/60">Logros Destacados</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{review.achievements}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="px-6 py-4 bg-muted/20 border-t border-border/40 flex items-center justify-between">
+                <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest gap-2 text-muted-foreground hover:text-primary">
+                  <Edit2 className="size-3.5" /> Editar Informe
+                </Button>
+                <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest gap-2 text-muted-foreground hover:text-primary">
+                  <FileText className="size-3.5" /> Descargar PDF
+                </Button>
+              </div>
+            </Card>
+          </motion.div>
+        ))}
+
+        {reviews.length === 0 && !showNewForm && (
+          <div className="lg:col-span-2">
+            <Card className="border-dashed border-2 border-muted-foreground/20 bg-muted/5 rounded-3xl overflow-hidden">
+              <CardContent className="flex flex-col items-center justify-center text-center p-12">
+                <div className="size-20 rounded-3xl bg-amber-500/5 flex items-center justify-center mb-6 relative">
+                  <div className="absolute inset-0 bg-amber-500/10 blur-2xl rounded-full" />
+                  <Award className="size-10 text-amber-500 relative z-10" />
+                </div>
+                <h3 className="text-xl font-black uppercase tracking-tight text-foreground mb-2">Sin evaluaciones registradas</h3>
+                <p className="text-sm text-muted-foreground max-w-xs mx-auto mb-8 font-medium">
+                  Comienza a medir el rendimiento y crecimiento de tu equipo creando su primera evaluación de desempeño.
+                </p>
+                <Button 
+                  onClick={() => setShowNewForm(true)}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-8 h-12 rounded-2xl gap-3 shadow-2xl shadow-primary/20"
+                >
+                  <Plus className="size-5" /> Iniciar Evaluación
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
-

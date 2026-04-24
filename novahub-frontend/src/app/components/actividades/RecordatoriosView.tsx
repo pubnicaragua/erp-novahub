@@ -9,6 +9,7 @@ import { Plus, Search, Bell, BellRing, BellOff, Clock } from 'lucide-react';
 import { remindersService } from '../../services/actividades.service';
 import { tenantsService } from '../../services/tenants.service';
 import { hrService } from '../../services/hr.service';
+import { rolesService } from '../../services/roles.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
@@ -16,6 +17,7 @@ import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { MultiSelect } from '../ui/MultiSelect';
 
 interface RecordatoriosViewProps {
   data: Reminder[];
@@ -28,6 +30,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [availableUsers, setAvailableUsers] = useState<any[]>([]);
   const [availableDepts, setAvailableDepts] = useState<any[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<any[]>([]);
 
   const { user } = useAuth();
 
@@ -37,6 +40,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
     reminderDate: '',
     scope: 'PERSONAL',
     selectedUsers: [] as string[],
+    selectedRoles: [] as string[],
     selectedDept: ''
   });
 
@@ -48,6 +52,19 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
       hrService.getDepartments()
         .then(res => setAvailableDepts(Array.isArray(res) ? res : ((res as any).data || [])))
         .catch(() => {});
+      rolesService.getAll()
+        .then(res => {
+          const fetchedRoles = Array.isArray(res) ? res : ((res as any).data || []);
+          const hasAdmin = fetchedRoles.some((r: any) => r.name.toLowerCase() === 'admin');
+          if (!hasAdmin) {
+            setAvailableRoles([{ id: 'admin', name: 'Admin', description: 'Administrador del Sistema' }, ...fetchedRoles]);
+          } else {
+            setAvailableRoles(fetchedRoles);
+          }
+        })
+        .catch(() => {
+          setAvailableRoles([{ id: 'admin', name: 'Admin', description: 'Administrador del Sistema' }]);
+        });
     }
   }, [isAddOpen, user]);
 
@@ -69,7 +86,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
     {
       key: 'scope', header: 'Alcance', width: '120px', editable: true, type: 'select' as const, options: [
         { value: 'GLOBAL', label: 'Global' },
-        { value: 'DEPARTMENT', label: 'Departamental' },
+        { value: 'ROLE', label: 'Por Rol' },
         { value: 'PERSONAL', label: 'Personal' }
       ],
       render: (val: any) => <span className="text-xs font-medium capitalize">{String(val || 'PERSONAL').toLowerCase()}</span>
@@ -92,9 +109,9 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
       if (formData.scope === 'PERSONAL') {
         if (formData.selectedUsers.length === 0) { toast.error('Selecciona al menos un usuario'); return; }
         targetId = JSON.stringify(formData.selectedUsers);
-      } else if (formData.scope === 'DEPARTMENT') {
-        if (!formData.selectedDept) { toast.error('Selecciona un departamento'); return; }
-        targetId = formData.selectedDept;
+      } else if (formData.scope === 'ROLE') {
+        if (formData.selectedRoles.length === 0) { toast.error('Selecciona al menos un rol'); return; }
+        targetId = JSON.stringify(formData.selectedRoles);
       } else {
         targetId = 'ALL'; // GLOBAL
       }
@@ -109,7 +126,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
       });
       toast.success('Recordatorio programado'); 
       setIsAddOpen(false);
-      setFormData({ title: '', description: '', reminderDate: '', scope: 'PERSONAL', selectedUsers: [], selectedDept: '' });
+      setFormData({ title: '', description: '', reminderDate: '', scope: 'PERSONAL', selectedUsers: [], selectedRoles: [], selectedDept: '' });
       onRefresh();
     } catch { toast.error('Error al crear recordatorio'); }
   };
@@ -178,7 +195,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border-border/50 shadow-2xl">
                     <SelectItem value="PERSONAL" className="font-bold">Personal</SelectItem>
-                    <SelectItem value="DEPARTMENT" className="font-bold">Departamento</SelectItem>
+                    <SelectItem value="ROLE" className="font-bold">Por Rol</SelectItem>
                     <SelectItem value="GLOBAL" className="font-bold">Global (Todos)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -186,38 +203,27 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
             </div>
 
             {formData.scope === 'PERSONAL' && (
-              <div className="space-y-2">
-                <Label>Usuarios Destinatarios</Label>
-                <div className="border border-input rounded-md p-3 max-h-40 overflow-y-auto bg-background space-y-2">
-                  {availableUsers.length === 0 && <p className="text-xs text-muted-foreground">No hay usuarios disponibles</p>}
-                  {availableUsers.map(u => (
-                    <div key={u.id} className="flex items-center gap-2">
-                      <input type="checkbox" id={`usr-${u.id}`} checked={formData.selectedUsers.includes(u.id)} onChange={() => {
-                        const newU = formData.selectedUsers.includes(u.id) ? formData.selectedUsers.filter(x => x !== u.id) : [...formData.selectedUsers, u.id];
-                        setFormData({...formData, selectedUsers: newU});
-                      }} className="rounded border-input" />
-                      <label htmlFor={`usr-${u.id}`} className="text-sm font-medium leading-none cursor-pointer">
-                        {u.name} ({u.email})
-                      </label>
-                    </div>
-                  ))}
-                </div>
+              <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Usuarios Destinatarios</Label>
+                <MultiSelect
+                  options={availableUsers.map(u => ({ label: u.name, value: u.id, description: u.email }))}
+                  selected={formData.selectedUsers}
+                  onChange={vals => setFormData({...formData, selectedUsers: vals})}
+                  placeholder="Seleccionar usuarios..."
+                />
               </div>
             )}
 
-            {formData.scope === 'DEPARTMENT' && (
+            {formData.scope === 'ROLE' && (
               <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Seleccionar Departamento</Label>
-                <Select value={formData.selectedDept} onValueChange={val => setFormData({...formData, selectedDept: val})}>
-                  <SelectTrigger className="h-11 rounded-xl bg-background/50 border-border/50 font-bold focus:ring-primary/20 shadow-sm">
-                    <SelectValue placeholder="Seleccione departamento..." />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl border-border/50 shadow-2xl">
-                    {availableDepts.map(d => (
-                      <SelectItem key={d.id} value={d.id} className="font-bold">{d.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Seleccionar Roles</Label>
+                <MultiSelect
+                  options={availableRoles.map(r => ({ label: r.name, value: r.id || r.name, description: r.description }))}
+                  selected={formData.selectedRoles}
+                  onChange={vals => setFormData({...formData, selectedRoles: vals})}
+                  placeholder="Seleccionar roles..."
+                />
+                <p className="text-[10px] text-muted-foreground/40 mt-1 ml-1 font-medium">El aviso se enviará a todos los usuarios con los roles seleccionados.</p>
               </div>
             )}
 

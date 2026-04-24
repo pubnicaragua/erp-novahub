@@ -25,7 +25,19 @@ const createCrudService = <T>(endpoint: string) => ({
 
 export const alertsService = createCrudService<any>('/notifications/alerts');
 export const messagesService = createCrudService<any>('/notifications/messages');
-export const pushNotificationsService = createCrudService<any>('/notifications/push');
+export const pushNotificationsService = {
+  ...createCrudService<any>('/notifications/push'),
+  getCategories: () => api.get<any[]>('/notifications/push-categories'),
+  createCategory: (name: string) => api.post<any>('/notifications/push-categories', { name }),
+  deleteCategory: (id: string) => api.delete(`/notifications/push-categories/${id}`),
+};
+
+export const inboxService = {
+  getAll: () => api.get<any[]>('/notifications/inbox'),
+  readAll: () => api.patch('/notifications/inbox/read-all', {}),
+  markRead: (id: string) => api.patch(`/notifications/inbox/${id}/read`, {}),
+  delete: (id: string) => api.delete(`/notifications/inbox/${id}`),
+};
 
 export const notificationsCatalogService = {
   getCatalog: () => api.get<any>('/notifications/catalog'),

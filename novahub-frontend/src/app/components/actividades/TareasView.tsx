@@ -15,6 +15,7 @@ import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { MultiSelect } from '../ui/MultiSelect';
 
 interface TareasViewProps {
   data: Task[];
@@ -347,19 +348,14 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Asignar a Usuarios (Opcional)</Label>
-              <div className="border border-input rounded-md p-3 max-h-40 overflow-y-auto bg-background space-y-2">
-                {employees.length === 0 && <p className="text-xs text-muted-foreground">No hay usuarios disponibles</p>}
-                {employees.map(emp => (
-                  <div key={emp.id} className="flex items-center gap-2">
-                    <input type="checkbox" id={`emp-${emp.id}`} checked={newTask.assignedTo.includes(emp.id)} onChange={() => toggleAssignee(emp.id)} className="rounded border-input" />
-                    <label htmlFor={`emp-${emp.id}`} className="text-sm font-medium leading-none cursor-pointer">
-                      {emp.name} ({emp.email})
-                    </label>
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Selecciona uno o varios usuarios.</p>
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Asignar a Usuarios (Opcional)</Label>
+              <MultiSelect
+                options={employees.map(emp => ({ label: emp.name, value: emp.id, description: emp.email }))}
+                selected={newTask.assignedTo}
+                onChange={values => setNewTask({ ...newTask, assignedTo: values })}
+                placeholder="Seleccionar usuarios responsables..."
+              />
+              <p className="text-[10px] font-medium text-muted-foreground/40 mt-1 ml-1">Busca y selecciona uno o varios usuarios.</p>
             </div>
           </div>
           <DialogFooter>

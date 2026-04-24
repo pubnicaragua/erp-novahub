@@ -109,6 +109,7 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'DOCUMENTS_REPORTS', label: 'Reportes', parent: 'DOCUMENTS' },
 
   // Notificaciones
+  { id: 'NOTIFICATIONS_INBOX', label: 'Bandeja de Entrada', parent: 'NOTIFICATIONS' },
   { id: 'NOTIFICATIONS_ALERTS', label: 'Alertas', parent: 'NOTIFICATIONS' },
   { id: 'NOTIFICATIONS_MESSAGES', label: 'Mensajes', parent: 'NOTIFICATIONS' },
   { id: 'NOTIFICATIONS_PUSH', label: 'Push', parent: 'NOTIFICATIONS' },
@@ -322,7 +323,22 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const scenario = getScenario(user?.role);
   const visibleTabs = ALL_TABS.filter(t => {
     if (!t.scenario.includes(scenario)) return false;
-    if (t.id === 'roles' && !canPerform('roles', 'view')) return false;
+    
+    // Mapeo de tabs a permisos granulares de CONFIG_*
+    const tabToPermMap: Record<string, string> = {
+      branding: 'CONFIG_BRANDING',
+      empresa: 'CONFIG_COMPANY',
+      roles: 'CONFIG_ROLES',
+      seguridad: 'CONFIG_SECURITY',
+      currency: 'CONFIG_CURRENCY',
+      tenancy: 'CONFIG_TENANCY',
+      plataforma: 'CONFIG_PLATFORM',
+      dominios: 'CONFIG_DOMAINS'
+    };
+
+    const requiredPerm = tabToPermMap[t.id];
+    if (requiredPerm && !canPerform(requiredPerm, 'view')) return false;
+
     return true;
   });
   const canViewRoles = canPerform('roles', 'view');

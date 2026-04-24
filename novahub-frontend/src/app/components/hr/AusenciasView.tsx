@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Card, CardContent } from '../ui/card';
+import { cn } from '../ui/utils';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
@@ -102,33 +104,47 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     <div className="space-y-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Pendientes</p>
-              <h3 className="text-3xl font-bold text-orange-700">{pendingRequests.length}</h3>
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-amber-500/10 text-amber-500">
+                <FileText className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Pendientes</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{pendingRequests.length}</p>
+              </div>
             </div>
-            <FileText className="size-8 text-orange-500" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Aprobadas</p>
-              <h3 className="text-3xl font-bold text-green-700">{approvedRequests.length}</h3>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-emerald-500/10 text-emerald-500">
+                <Check className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Aprobadas</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{approvedRequests.length}</p>
+              </div>
             </div>
-            <Check className="size-8 text-green-500" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Rechazadas</p>
-              <h3 className="text-3xl font-bold text-red-700">{rejectedRequests.length}</h3>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-rose-500/10 text-rose-500">
+                <X className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Rechazadas</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{rejectedRequests.length}</p>
+              </div>
             </div>
-            <X className="size-8 text-red-500" />
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* New Request Button */}

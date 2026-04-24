@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, UserCheck } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
+import { cn } from '../ui/utils';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import jsPDF from 'jspdf';
@@ -173,42 +175,70 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="border border-orange-500/20 rounded-xl p-4 bg-gradient-to-br from-orange-500/5 to-orange-500/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Bruto (Costo Empresa)</p>
-              <h3 className="text-2xl font-black text-orange-600 dark:text-orange-400">{formatConvertedAmount(totalCostoEmpresa, displayCurrency)}</h3>
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-indigo-500/10 text-indigo-500">
+                <Building2 className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Total Bruto (Costo Empresa)</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{formatConvertedAmount(totalCostoEmpresa, displayCurrency)}</p>
+              </div>
             </div>
-            <Building2 className="size-8 text-orange-500/40" />
-          </div>
-        </div>
-        <div className="border border-blue-500/20 rounded-xl p-4 bg-gradient-to-br from-blue-500/5 to-blue-500/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Neto (Recibido)</p>
-              <h3 className="text-2xl font-black text-blue-600 dark:text-blue-400">{formatConvertedAmount(totalNet, displayCurrency)}</h3>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-blue-500/10 text-blue-500">
+                <DollarSign className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Total Neto (Recibido)</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{formatConvertedAmount(totalNet, displayCurrency)}</p>
+              </div>
             </div>
-            <DollarSign className="size-8 text-blue-500/40" />
-          </div>
-        </div>
-        <div className="border border-primary/20 rounded-xl p-4 bg-gradient-to-br from-primary/5 to-primary/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Impuestos Empresa</p>
-              <h3 className="text-2xl font-black text-primary">{formatConvertedAmount(totalCostoEmpresa - totalGross, displayCurrency)}</h3>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-violet-500/10 text-violet-500">
+                <DollarSign className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Total Impuestos Empresa</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{formatConvertedAmount(totalCostoEmpresa - totalGross, displayCurrency)}</p>
+              </div>
             </div>
-            <DollarSign className="size-8 text-primary/40" />
-          </div>
-        </div>
-        <div className={`border rounded-xl p-4 transition-colors ${overdueCount > 0 ? 'border-red-500/40 bg-gradient-to-br from-red-500/10 to-red-500/5' : 'border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-amber-500/10'}`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className={`text-[10px] font-black uppercase tracking-widest ${overdueCount > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>Pendientes {overdueCount > 0 && '(Vencidas)'}</p>
-              <h3 className={`text-3xl font-black ${overdueCount > 0 ? 'text-red-600' : 'text-amber-700 dark:text-amber-400'}`}>{pendingCount}</h3>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className={cn(
+                "p-3 rounded-xl shadow-inner",
+                overdueCount > 0 ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500"
+              )}>
+                <CheckCircle className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className={cn(
+                  "text-[10px] font-black uppercase tracking-widest",
+                  overdueCount > 0 ? "text-rose-500" : "text-muted-foreground/60"
+                )}>Pendientes {overdueCount > 0 && '(Vencidas)'}</p>
+                <p className={cn(
+                  "text-3xl font-black tabular-nums tracking-tighter",
+                  overdueCount > 0 ? "text-rose-500" : "text-foreground"
+                )}>{pendingCount}</p>
+              </div>
             </div>
-            <CheckCircle className={`size-8 ${overdueCount > 0 ? 'text-red-500/40' : 'text-amber-500/40'}`} />
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Toolbar & Processing Controls */}
@@ -272,9 +302,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       )}
 
       {/* Filters Toolbar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between pt-2">
-        <div className="flex items-center gap-2">
-          <div className="w-[250px]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between pt-2">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+          <div className="w-full sm:w-[220px] md:w-[250px]">
             <Combobox
               options={employeeOptions}
               value={filterEmployee}
@@ -283,38 +313,43 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               emptyMessage="No se encontró el empleado"
             />
           </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => setShowProcessBar(!showProcessBar)}
-            className={`h-8 text-[10px] font-black uppercase tracking-widest px-4 rounded-xl transition-all ${showProcessBar ? 'bg-primary text-primary-foreground border-primary' : 'border-primary/30 text-primary hover:bg-primary/10'}`}
-          >
-            {showProcessBar ? <X className="size-3.5 mr-1.5" /> : <Calculator className="size-3.5 mr-1.5" />}
-            {showProcessBar ? 'Ocultar Opciones' : 'Nóminas Masivas'}
-          </Button>
-
-          {filterEmployee !== 'all' && (
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <Button 
+              variant="outline" 
               size="sm" 
-              onClick={handleProcessPayroll} 
-              className="bg-emerald-600 hover:bg-emerald-700 !text-white h-8 text-[10px] font-black uppercase tracking-widest px-4 rounded-xl shadow-lg shadow-emerald-500/20"
+              onClick={() => setShowProcessBar(!showProcessBar)}
+              className={`h-9 text-[10px] font-black uppercase tracking-widest px-3 sm:px-4 rounded-xl transition-all ${showProcessBar ? 'bg-primary text-primary-foreground border-primary' : 'border-primary/30 text-primary hover:bg-primary/10'}`}
             >
-              <UserCheck className="size-3.5 mr-1.5" />
-              Procesar Individual
+              {showProcessBar ? <X className="size-3.5 mr-1.5" /> : <Calculator className="size-3.5 mr-1.5" />}
+              <span className="hidden xs:inline">{showProcessBar ? 'Ocultar Opciones' : 'Nóminas Masivas'}</span>
+              <span className="xs:hidden">{showProcessBar ? 'Ocultar' : 'Masivas'}</span>
             </Button>
-          )}
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="h-8 px-3 rounded-md border border-input bg-background text-xs font-bold w-[130px] focus:ring-primary/20 shadow-sm">
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl border-border/50 shadow-2xl">
-              <SelectItem value="all" className="font-bold text-xs">Todos</SelectItem>
-              <SelectItem value="PENDING" className="font-bold text-xs">Pendiente</SelectItem>
-              <SelectItem value="PAID" className="font-bold text-xs">Pagado</SelectItem>
-            </SelectContent>
-          </Select>
+
+            {filterEmployee !== 'all' && (
+              <Button 
+                size="sm" 
+                onClick={handleProcessPayroll} 
+                className="bg-emerald-600 hover:bg-emerald-700 !text-white h-9 text-[10px] font-black uppercase tracking-widest px-3 sm:px-4 rounded-xl shadow-lg shadow-emerald-500/20"
+              >
+                <UserCheck className="size-3.5 mr-1.5" />
+                <span className="hidden xs:inline">Procesar Individual</span>
+                <span className="xs:hidden">Procesar</span>
+              </Button>
+            )}
+            
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="h-9 px-3 sm:px-4 rounded-xl border-border/50 bg-background text-[10px] font-black uppercase tracking-widest w-[100px] sm:w-[130px] focus:ring-primary/20 shadow-sm">
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                <SelectItem value="all" className="font-bold text-xs">Todos</SelectItem>
+                <SelectItem value="PENDING" className="font-bold text-xs">Pendiente</SelectItem>
+                <SelectItem value="PAID" className="font-bold text-xs">Pagado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 pt-1 lg:pt-0">
           <Button variant="outline" size="sm" onClick={handleExportPDF} className="h-8 text-xs font-bold border-muted-foreground/20">
             <Download className="size-4 mr-2" />
             Exportar PDF

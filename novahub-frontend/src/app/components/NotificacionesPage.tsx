@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AlertasView } from './notificaciones/AlertasView';
 import { MensajesView } from './notificaciones/MensajesView';
 import { PushView } from './notificaciones/PushView';
-import { alertsService, messagesService, notificationsCatalogService, pushNotificationsService } from '../services/notificaciones.service';
+import { InboxView } from './notificaciones/InboxView';
+import { alertsService, messagesService, notificationsCatalogService, pushNotificationsService, inboxService } from '../services/notificaciones.service';
 import { toast } from 'sonner';
 
 interface NotificacionesPageProps {
@@ -17,13 +18,15 @@ interface NotificacionesPageProps {
 
 export const NotificacionesPage = ({ activeSubModule, onSubModuleChange }: NotificacionesPageProps) => {
   const tabs = [
+    { id: 'inbox', label: 'Bandeja de Entrada', icon: Bell },
     { id: 'alertas', label: 'Alertas', icon: AlertTriangle },
     { id: 'mensajes', label: 'Mensajes', icon: MessageSquare },
     { id: 'push', label: 'Push', icon: Send }
   ];
   const tabIds = tabs.map(tab => tab.id);
-  const [activeTab, setActiveTab] = useState(() => activeSubModule || 'alertas');
-  const [data, setData] = useState<{ alertas: any[], mensajes: any[], push: any[] }>({
+  const [activeTab, setActiveTab] = useState(() => activeSubModule || 'inbox');
+  const [data, setData] = useState<{ inbox: any[], alertas: any[], mensajes: any[], push: any[] }>({
+    inbox: [],
     alertas: [],
     mensajes: [],
     push: []
@@ -34,12 +37,13 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange }: Notif
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [alertas, mensajes, push] = await Promise.all([
+      const [inbox, alertas, mensajes, push] = await Promise.all([
+        inboxService.getAll().catch(() => []),
         alertsService.getAll().catch(() => []),
         messagesService.getAll().catch(() => []),
         pushNotificationsService.getAll().catch(() => [])
       ]);
-      setData({ alertas, mensajes, push });
+      setData({ inbox, alertas, mensajes, push });
     } catch (error) {
       console.error('Error fetching notificaciones:', error);
     } finally {
@@ -89,35 +93,6 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange }: Notif
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-[10px] font-black uppercase tracking-wider"
-                disabled={seedingPhase === 'fase-1-alertas'}
-                onClick={() => handleSeedPhase('fase-1-alertas')}
-              >
-                Fase 1 · Alertas
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-[10px] font-black uppercase tracking-wider"
-                disabled={seedingPhase === 'fase-2-mensajes'}
-                onClick={() => handleSeedPhase('fase-2-mensajes')}
-              >
-                Fase 2 · Mensajes
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-[10px] font-black uppercase tracking-wider"
-                disabled={seedingPhase === 'fase-3-push'}
-                onClick={() => handleSeedPhase('fase-3-push')}
-              >
-                Fase 3 · Push
-              </Button>
-            </div>
           </div>
 
           <Tabs
@@ -151,6 +126,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange }: Notif
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
+                {activeTab === 'inbox' && <InboxView data={data.inbox} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'alertas' && <AlertasView data={data.alertas} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'mensajes' && <MensajesView data={data.mensajes} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'push' && <PushView data={data.push} loading={loading} onRefresh={fetchData} />}

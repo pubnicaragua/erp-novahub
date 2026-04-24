@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { cn } from '../ui/utils';
 
 const BENEFIT_TYPE_COLORS: Record<string, string> = {
   HEALTH: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
@@ -79,21 +80,68 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   }, 0);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex gap-4 text-sm text-muted-foreground">
-            <span><strong className="text-foreground">{benefits.length}</strong> beneficios</span>
-            <span className="text-muted-foreground/40">·</span>
-            <span>Costo total: <strong className="text-foreground">{formatConvertedAmount(totalCost, displayCurrency)}/mes</strong></span>
-          </div>
+    <div className="space-y-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-rose-500/10 text-rose-500">
+                <HandHeart className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Beneficios Activos</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{benefits.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-emerald-500/10 text-emerald-500">
+                <DollarSign className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Costo Estimado</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">
+                  {formatConvertedAmount(benefits.reduce((acc: number, b: any) => acc + (b.cost || 0), 0))}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl shadow-inner bg-blue-500/10 text-blue-500">
+                <Users className="size-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Total Asignaciones</p>
+                <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">
+                  {benefits.reduce((acc: number, b: any) => acc + (b.assignments?.length || 0), 0)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Catálogo de Beneficios</h3>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Planes de salud, compensaciones y bienestar corporativo.</p>
         </div>
-        {!addingNew && (
-          <Button onClick={() => { setAddingNew(true); setForm(EMPTY_FORM); }} className="rounded-xl gap-2 font-bold bg-primary hover:bg-primary/90 !text-primary-foreground">
-            <Plus className="size-4" /> Nuevo Beneficio
-          </Button>
-        )}
+        <Button 
+          onClick={() => { setAddingNew(true); setForm(EMPTY_FORM); }} 
+          className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
+        >
+          <Plus className="size-4" /> Nuevo Beneficio
+        </Button>
       </div>
 
       {/* New benefit inline row */}
@@ -163,7 +211,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
       </AnimatePresence>
 
       {/* Benefits Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {benefits.map((benefit: any) => {
           const assignedCount = benefit.employeeBenefits?.length ?? benefit.assignments?.length ?? benefit._count?.benefitAssignments ?? 0;
           const typeColor = BENEFIT_TYPE_COLORS[benefit.type] || BENEFIT_TYPE_COLORS.OTHER;
@@ -171,91 +219,77 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
           const isEditing = editingId === benefit.id;
 
           return (
-            <motion.div key={benefit.id} layout initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>
-              <Card className="border-border/50 hover:border-primary/30 hover:shadow-md transition-all overflow-hidden">
+            <motion.div key={benefit.id} layout initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
+              <Card className="bg-card border-border/50 hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 overflow-hidden rounded-2xl group">
                 {isEditing ? (
-                  <CardContent className="p-4 space-y-3">
-                    <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nombre" className="rounded-xl h-9 text-sm font-bold" />
-                    <Input value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} placeholder="Descripción" className="rounded-xl h-9 text-sm" />
-                    <div className="grid grid-cols-2 gap-2">
-                      <select value={editForm.type} onChange={e => setEditForm({ ...editForm, type: e.target.value })}
-                        className="h-9 px-2 rounded-xl border border-input bg-background text-sm font-medium">
-                        {Object.entries(BENEFIT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                      </select>
-                      <div className="relative">
-                        <span className="absolute left-2 top-2.5 text-xs text-muted-foreground font-medium">
-                          {displayCurrency === 'USD' ? '$' : 'C$'}
-                        </span>
-                        <Input type="number" value={editForm.cost} onChange={e => setEditForm({ ...editForm, cost: e.target.value })} placeholder="Costo" className="rounded-xl h-9 text-sm pl-6" />
-                      </div>
+                  <CardContent className="p-5 space-y-4">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Nombre del Beneficio</label>
+                      <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nombre" className="rounded-xl h-10 text-sm font-bold bg-muted/20" />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empleados Asignados</label>
-                      <div className="border border-border/50 rounded-xl p-3 max-h-40 overflow-y-auto bg-background">
-                        {employees?.map((emp: any) => (
-                          <label key={emp.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-muted/30 px-2 rounded">
-                            <input 
-                              type="checkbox" 
-                              className="rounded border-input text-primary focus:ring-primary h-4 w-4"
-                              checked={editForm.employeeIds?.includes(emp.id) || false}
-                              onChange={(e) => {
-                                const isChecked = e.target.checked;
-                                setEditForm((prev: any) => ({
-                                  ...prev,
-                                  employeeIds: isChecked 
-                                    ? [...(prev.employeeIds || []), emp.id]
-                                    : (prev.employeeIds || []).filter((id: string) => id !== emp.id)
-                                }));
-                              }}
-                            />
-                            <span className="text-sm">{emp.firstName} {emp.lastName}</span>
-                          </label>
-                        ))}
+                      <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Descripción</label>
+                      <Input value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} placeholder="Descripción" className="rounded-xl h-10 text-sm bg-muted/20" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Tipo</label>
+                        <select value={editForm.type} onChange={e => setEditForm({ ...editForm, type: e.target.value })}
+                          className="w-full h-10 px-3 rounded-xl border border-input bg-muted/20 text-xs font-bold uppercase">
+                          {Object.entries(BENEFIT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Costo ({editForm.currency})</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-bold">
+                            {editForm.currency === 'USD' ? '$' : 'C$'}
+                          </span>
+                          <Input type="number" value={editForm.cost} onChange={e => setEditForm({ ...editForm, cost: e.target.value })} placeholder="0.00" className="rounded-xl h-10 text-sm pl-7 bg-muted/20" />
+                        </div>
                       </div>
                     </div>
-                    <div className="flex gap-2 mt-2">
-                      <Button size="sm" onClick={() => handleUpdate(benefit.id)} className="flex-1 rounded-xl gap-1 font-bold text-xs"><Save className="size-3" /> Guardar</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="rounded-xl"><X className="size-3" /></Button>
+                    <div className="flex gap-2 pt-2">
+                      <Button onClick={() => handleUpdate(benefit.id)} className="flex-1 rounded-xl gap-2 font-black uppercase text-[10px] tracking-widest h-10"><Save className="size-4" /> Guardar</Button>
+                      <Button variant="outline" onClick={() => setEditingId(null)} className="rounded-xl h-10 border-border/50"><X className="size-4" /></Button>
                     </div>
                   </CardContent>
                 ) : (
                   <>
-                    <div className="p-4 border-b border-border/30">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge className={`text-[9px] font-black uppercase ${typeColor}`}>{typeLabel}</Badge>
-                            {benefit.isActive && <CheckCircle className="size-3 text-emerald-500 flex-shrink-0" />}
-                          </div>
-                          <h4 className="font-black text-sm leading-tight">{benefit.name}</h4>
-                          {benefit.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{benefit.description}</p>}
-                        </div>
-                      </div>
-                    </div>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                          {benefit.cost && (
-                            <div className="flex items-center gap-1">
-                              <DollarSign className="size-3 text-emerald-500" />
-                              <span className="font-bold text-foreground">{formatConvertedAmount(Number(benefit.cost), benefit.currency || 'USD')}<span className="font-normal text-muted-foreground">/mes</span></span>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-1">
-                            <Users className="size-3 text-indigo-500" />
-                            <span>{assignedCount} asignados</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => startEdit(benefit)} className="size-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                    <div className="p-5">
+                      <div className="flex items-start justify-between mb-4">
+                        <Badge className={cn("px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm", typeColor)}>
+                          {typeLabel}
+                        </Badge>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => startEdit(benefit)} className="size-8 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-white flex items-center justify-center transition-all">
                             <Edit2 className="size-3.5" />
                           </button>
-                          <button onClick={() => handleDelete(benefit.id)} className="size-7 rounded-lg hover:bg-rose-500/10 flex items-center justify-center text-muted-foreground hover:text-rose-500 transition-colors">
+                          <button onClick={() => handleDelete(benefit.id)} className="size-8 rounded-xl bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white flex items-center justify-center transition-all">
                             <Trash2 className="size-3.5" />
                           </button>
                         </div>
                       </div>
-                    </CardContent>
+                      
+                      <div className="space-y-2">
+                        <h4 className="font-black text-lg leading-tight tracking-tight text-foreground group-hover:text-primary transition-colors">{benefit.name}</h4>
+                        {benefit.description && <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 italic">{benefit.description}</p>}
+                      </div>
+                    </div>
+                    
+                    <div className="px-5 py-4 bg-muted/20 border-t border-border/40 flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 mb-1">Costo Estimado</p>
+                        <p className="font-black text-sm text-foreground">
+                          {formatConvertedAmount(Number(benefit.cost), benefit.currency || 'USD')}
+                          <span className="text-[10px] font-medium text-muted-foreground ml-1">/mes</span>
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 bg-background/50 px-3 py-1.5 rounded-xl border border-border/40 shadow-sm">
+                        <Users className="size-3 text-primary" />
+                        <span className="text-xs font-black text-foreground">{assignedCount}</span>
+                      </div>
+                    </div>
                   </>
                 )}
               </Card>
@@ -264,10 +298,25 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
         })}
 
         {benefits.length === 0 && !addingNew && (
-          <div className="md:col-span-2 xl:col-span-3 flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <HandHeart className="size-12 opacity-20 mb-3" />
-            <p className="text-sm font-bold">Sin beneficios configurados</p>
-            <p className="text-xs mt-1">Haz clic en "Nuevo Beneficio" para agregar el primero</p>
+          <div className="md:col-span-2 xl:col-span-3">
+            <Card className="border-dashed border-2 border-muted-foreground/20 bg-muted/5 rounded-3xl overflow-hidden py-6">
+              <CardContent className="flex flex-col items-center justify-center text-center p-8">
+                <div className="size-20 rounded-3xl bg-primary/5 flex items-center justify-center mb-6 relative">
+                  <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-full" />
+                  <HandHeart className="size-10 text-primary relative z-10" />
+                </div>
+                <h3 className="text-xl font-black uppercase tracking-tight text-foreground mb-2">No hay beneficios activos</h3>
+                <p className="text-sm text-muted-foreground max-w-xs mx-auto mb-8 font-medium">
+                  Comienza configurando planes de salud, seguros o compensaciones adicionales para tus empleados.
+                </p>
+                <Button 
+                  onClick={() => { setAddingNew(true); setForm(EMPTY_FORM); }}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-8 h-12 rounded-2xl gap-3 shadow-2xl shadow-primary/20"
+                >
+                  <Plus className="size-5" /> Crear Primer Beneficio
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>
