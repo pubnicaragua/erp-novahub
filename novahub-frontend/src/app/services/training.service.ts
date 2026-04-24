@@ -4,8 +4,10 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
 
-// Inicializar cliente de Supabase
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Inicializar cliente de Supabase de forma segura
+const supabase = (SUPABASE_URL && SUPABASE_ANON_KEY) 
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
+  : null;
 
 export const trainingService = {
   getVideos: (filters?: any) => api.get('/training-videos', { params: filters }),
@@ -15,12 +17,13 @@ export const trainingService = {
   deleteVideo: (id: string) => api.delete(`/training-videos/${id}`),
   
   getPublicUrl: (path: string) => {
+    if (!supabase) return '';
     const { data } = supabase.storage.from('erp_capacitacion').getPublicUrl(path);
     return data.publicUrl;
   },
   
   uploadVideo: async (file: File, folder: string) => {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    if (!supabase) {
       throw new Error('Credenciales de Supabase no configuradas');
     }
 
