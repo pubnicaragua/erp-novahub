@@ -447,7 +447,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
           </div>
 
           {/* Navigation */}
-          <div className="flex-1 min-h-0 overflow-y-auto py-3 no-scrollbar">
+          <div className="flex-1 min-h-0 overflow-y-auto py-3 no-scrollbar overscroll-behavior-contain scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
             <nav className="px-3 space-y-0.5">
               {activeMenuArray.map((item) => {
                 if (item.id !== 'overview' && !hasAccess(item.id as Module)) return null;

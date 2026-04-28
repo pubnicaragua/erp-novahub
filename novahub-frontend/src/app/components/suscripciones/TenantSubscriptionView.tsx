@@ -16,7 +16,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { tenantsService } from '../../services/tenants.service';
 import { usersService } from '../../services/users.service';
 import { toast } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext';
 import { ALL_PERM_MODULES } from '../ConfiguracionPage';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
@@ -33,6 +35,7 @@ const SYSTEM_ROLE_OPTIONS = [
 ];
 
 export function TenantSubscriptionView({ tenant, availableModules, requests, customRoles = [], onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
+  const { user: currentUser } = useAuth();
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
@@ -42,6 +45,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [notes, setNotes] = useState('');
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [isConfirmSuspensionOpen, setIsConfirmSuspensionOpen] = useState(false);
+  const [userToToggle, setUserToToggle] = useState<any>(null);
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
   
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'EMPLOYEE' });
   const [uploading, setUploading] = useState(false);
@@ -143,13 +149,41 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     }
   };
 
-  const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
+  const toggleUserStatus = async (user: any) => {
+    if (user.isActive) {
+      // Bloqueo de auto-suspensión
+      if (user.id === currentUser?.id) {
+        toast.error("No puedes suspender tu propia cuenta.");
+        return;
+      }
+
+      // Bloqueo de último usuario activo
+      const activeUsers = users.filter(u => u.isActive);
+      if (activeUsers.length <= 1) {
+        toast.error("No se puede suspender al último usuario activo. Para dar de baja la empresa, contacte a SuperAdmin.");
+        return;
+      }
+
+      setUserToToggle(user);
+      setIsConfirmSuspensionOpen(true);
+    } else {
+      // Activar no requiere tanta seguridad, pero igual pasamos por proceso
+      executeToggleStatus(user.id, false);
+    }
+  };
+
+  const executeToggleStatus = async (userId: string, currentStatus: boolean) => {
     try {
+      setIsTogglingStatus(true);
       await tenantsService.updateUser(tenant.id, userId, { isActive: !currentStatus });
-      toast.success(currentStatus ? 'Usuario desactivado' : 'Usuario activado');
+      toast.success(currentStatus ? 'Usuario suspendido correctamente' : 'Usuario activado');
       fetchUsers();
+      setIsConfirmSuspensionOpen(false);
+      setUserToToggle(null);
     } catch (error) {
       toast.error('Error al actualizar estado');
+    } finally {
+      setIsTogglingStatus(false);
     }
   };
 
@@ -463,9 +497,12 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                         size="sm" 
                         className={cn(
                           "flex-1 text-[10px] font-black uppercase tracking-widest h-8",
-                          u.isActive ? "hover:bg-rose-500/10 hover:text-rose-500" : "hover:bg-emerald-500/10 hover:text-emerald-500"
+                          u.isActive ? "hover:bg-rose-500/10 hover:text-rose-500" : "hover:bg-emerald-500/10 hover:text-emerald-500",
+                          u.isActive && u.id === currentUser?.id && "opacity-50 cursor-not-allowed grayscale"
                         )}
-                        onClick={() => toggleUserStatus(u.id, u.isActive)}
+                        onClick={() => toggleUserStatus(u)}
+                        disabled={isTogglingStatus}
+                        title={u.isActive && u.id === currentUser?.id ? "No puedes suspender tu propia cuenta" : ""}
                       >
                         {u.isActive ? <><X className="size-3 mr-2" /> Suspender</> : <><Check className="size-3 mr-2" /> Activar</>}
                       </Button>
@@ -710,6 +747,18 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmación de Suspensión */}
+      <ConfirmDialog
+        open={isConfirmSuspensionOpen}
+        onOpenChange={setIsConfirmSuspensionOpen}
+        title={`¿Suspender a ${userToToggle?.name}?`}
+        description="El usuario perderá acceso inmediato a todos los módulos del sistema. Podrás reactivarlo más tarde si es necesario."
+        confirmLabel="Confirmar Suspensión"
+        variant="destructive"
+        loading={isTogglingStatus}
+        onConfirm={() => userToToggle ? executeToggleStatus(userToToggle.id, true) : Promise.resolve()}
+      />
     </div>
   );
 }

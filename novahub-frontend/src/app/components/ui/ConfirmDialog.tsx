@@ -108,10 +108,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
           <DialogFooter className="px-6 pb-8 pt-4 flex gap-3 sm:gap-3">
             <Button
-              variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={loading}
-              className="flex-1 h-12 rounded-2xl font-black uppercase text-[10px] tracking-widest border-border/50 hover:bg-muted/50 transition-all"
+              className="flex-1 h-12 rounded-2xl font-black uppercase text-[10px] tracking-widest border border-border bg-white text-black dark:bg-black dark:text-white hover:scale-105 transition-all active:scale-95"
             >
               {cancelLabel}
             </Button>
