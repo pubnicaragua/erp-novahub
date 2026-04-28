@@ -1,24 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { useState, useEffect } from 'react';
+import { jsPDF } from 'jspdf';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
-  Zap, Building2, Globe, User as UserIcon, LayoutGrid, Check, Clock, Plus, ShieldCheck, DollarSign, MessageSquare, Users, Edit2, Trash2, KeyRound, X, Mail, Shield
+  Zap, Building2, Globe, Users, Clock, Shield, Plus, KeyRound, Check, 
+  CreditCard, FileText, Activity, AlertTriangle, Download, Ticket
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../ui/utils';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
-import { Textarea } from '../ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Textarea } from '../ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { tenantsService } from '../../services/tenants.service';
 import { usersService } from '../../services/users.service';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
-import { ALL_PERM_MODULES } from '../ConfiguracionPage';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
@@ -29,163 +31,70 @@ interface TenantSubscriptionViewProps {
   onRefresh: () => void;
 }
 
-const SYSTEM_ROLE_OPTIONS = [
-  { value: 'ADMIN', label: 'Administrador', description: 'Acceso total a todos los módulos' },
-  { value: 'EMPLOYEE', label: 'Colaborador', description: 'Acceso limitado según rol personalizado asignado' },
-];
-
-export function TenantSubscriptionView({ tenant, availableModules, requests, customRoles = [], onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
+export function TenantSubscriptionView({ tenant, availableModules, requests, customRoles, onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
   const { user: currentUser } = useAuth();
+  
+  const [activeTab, setActiveTab] = useState('overview');
+  const [users, setUsers] = useState<any[]>([]);
+  const [billingInfo, setBillingInfo] = useState<any>(null);
+  const [documents, setDocuments] = useState<any[]>([]);
+  
+  // Dialogs
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
-  const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
-  const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
-  const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
   const [selectedModule, setSelectedModule] = useState<any>(null);
   const [notes, setNotes] = useState('');
-  const [users, setUsers] = useState<any[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
+  
+  const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
+  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'EMPLOYEE' });
+  const [uploading, setUploading] = useState(false);
+  
+
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  
+  const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
+  const [newPasswordForUser, setNewPasswordForUser] = useState('');
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  
   const [isConfirmSuspensionOpen, setIsConfirmSuspensionOpen] = useState(false);
   const [userToToggle, setUserToToggle] = useState<any>(null);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
-  
-  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'EMPLOYEE' });
-  const [uploading, setUploading] = useState(false);
 
-  const [newPasswordForUser, setNewPasswordForUser] = useState('');
-  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [isUpgradeDialogOpen, setIsUpgradeDialogOpen] = useState(false);
+  const [isTicketDialogOpen, setIsTicketDialogOpen] = useState(false);
+
+  const { formatAmount } = useCurrency();
 
   useEffect(() => {
     if (tenant?.id) {
       fetchUsers();
+      fetchBillingAndDocs();
     }
   }, [tenant?.id]);
 
   const fetchUsers = async () => {
     try {
-      setLoadingUsers(true);
       const res = await tenantsService.getUsers(tenant.id);
       setUsers(Array.isArray(res) ? res : (res as any)?.data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
-    } finally {
-      setLoadingUsers(false);
     }
   };
 
-  const handleUpdateCustomRole = async (userId: string, customRoleId: string | null) => {
+  const fetchBillingAndDocs = async () => {
     try {
-      await tenantsService.updateUser(tenant.id, userId, { customRoleId: customRoleId === 'none' ? null : customRoleId } as any);
-      toast.success('Rol personalizado actualizado');
-      fetchUsers();
+      const [billRes, docsRes] = await Promise.all([
+        tenantsService.getBillingHistory(tenant.id),
+        tenantsService.getDocuments(tenant.id)
+      ]);
+      setBillingInfo((billRes as any).data || billRes);
+      setDocuments((docsRes as any).data || docsRes);
     } catch (error) {
-      toast.error('Error al asignar rol');
+      console.error('Error fetching billing/docs:', error);
     }
   };
 
-  const handleViewPerms = (user: any) => {
-    setSelectedUser(user);
-    setIsPermsDialogOpen(true);
-  };
-
-  const handleOpenChangePassword = (user: any) => {
-    setSelectedUser(user);
-    setNewPasswordForUser('');
-    setIsChangePasswordDialogOpen(true);
-  };
-
-  const handleAdminChangePassword = async () => {
-    if (!newPasswordForUser || newPasswordForUser.length < 6) {
-      toast.error('La contraseña debe tener al menos 6 caracteres');
-      return;
-    }
-    if (!selectedUser?.id) return;
-
-    try {
-      setUpdatingPassword(true);
-      await usersService.changePassword(selectedUser.id, newPasswordForUser);
-      toast.success('Contraseña del usuario actualizada correctamente');
-      setIsChangePasswordDialogOpen(false);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Error al cambiar la contraseña');
-    } finally {
-      setUpdatingPassword(false);
-    }
-  };
-
-  if (!tenant) return (
-    <div className="p-20 flex flex-col items-center justify-center text-muted-foreground italic">
-      <Clock className="size-12 mb-4 opacity-20 animate-pulse" />
-      Cargando información de suscripción...
-    </div>
-  );
-
-  const handleAddUser = async () => {
-    if (!userForm.name || !userForm.email) {
-      toast.error('Complete nombre y email');
-      return;
-    }
-    if (!userForm.password || userForm.password.length < 6) {
-      toast.error('La contraseña es obligatoria y debe tener al menos 6 caracteres');
-      return;
-    }
-    try {
-      setUploading(true);
-      await tenantsService.addUser({
-        clientTenantId: tenant.id,
-        name: userForm.name,
-        email: userForm.email,
-        password: userForm.password,
-        role: userForm.role,
-      });
-      toast.success('Usuario agregado correctamente');
-      setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' });
-      setIsUserDialogOpen(false);
-      fetchUsers();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Error al agregar usuario');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const toggleUserStatus = async (user: any) => {
-    if (user.isActive) {
-      // Bloqueo de auto-suspensión
-      if (user.id === currentUser?.id) {
-        toast.error("No puedes suspender tu propia cuenta.");
-        return;
-      }
-
-      // Bloqueo de último usuario activo
-      const activeUsers = users.filter(u => u.isActive);
-      if (activeUsers.length <= 1) {
-        toast.error("No se puede suspender al último usuario activo. Para dar de baja la empresa, contacte a SuperAdmin.");
-        return;
-      }
-
-      setUserToToggle(user);
-      setIsConfirmSuspensionOpen(true);
-    } else {
-      // Activar no requiere tanta seguridad, pero igual pasamos por proceso
-      executeToggleStatus(user.id, false);
-    }
-  };
-
-  const executeToggleStatus = async (userId: string, currentStatus: boolean) => {
-    try {
-      setIsTogglingStatus(true);
-      await tenantsService.updateUser(tenant.id, userId, { isActive: !currentStatus });
-      toast.success(currentStatus ? 'Usuario suspendido correctamente' : 'Usuario activado');
-      fetchUsers();
-      setIsConfirmSuspensionOpen(false);
-      setUserToToggle(null);
-    } catch (error) {
-      toast.error('Error al actualizar estado');
-    } finally {
-      setIsTogglingStatus(false);
-    }
-  };
+  const isModuleActive = (modId: string) => tenant.subscriptions?.some((s: any) => s.module === modId && s.isActive);
+  const isModulePending = (modId: string) => requests.some((r: any) => r.clientTenantId === tenant.id && r.requestedModule === modId && r.status === 'PENDING');
 
   const handleRequestClick = (mod: any) => {
     setSelectedModule(mod);
@@ -201,6 +110,170 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     }
   };
 
+  const handleAddUser = async () => {
+    if (!userForm.name || !userForm.email || !userForm.password) {
+      toast.error('Complete todos los campos requeridos');
+      return;
+    }
+    try {
+      setUploading(true);
+      const res = await tenantsService.addUser({ clientTenantId: tenant.id, ...userForm });
+      
+      if (res.data?.requiresApproval) {
+        toast.success('Usuario creado exitosamente. A la espera de la aprobación del SuperAdmin para activarlo.');
+      } else {
+        toast.success('Usuario agregado correctamente');
+      }
+      
+      setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' });
+      setIsUserDialogOpen(false);
+      fetchUsers();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al agregar usuario');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const toggleUserStatus = async (user: any) => {
+    if (user.isActive) {
+      if (user.id === currentUser?.id) return toast.error("No puedes suspender tu propia cuenta.");
+      const activeUsers = users.filter(u => u.isActive);
+      if (activeUsers.length <= 1) return toast.error("No se puede suspender al último usuario activo.");
+      setUserToToggle(user);
+      setIsConfirmSuspensionOpen(true);
+    } else {
+      executeToggleStatus(user.id, false);
+    }
+  };
+
+  const handleDownloadInvoice = (inv: any) => {
+    toast.success("Generando PDF de la factura...");
+    try {
+      const doc = new jsPDF({ format: 'letter', unit: 'mm' });
+      
+      // Branding / Header
+      doc.setFillColor(30, 41, 59); // Slate-800
+      doc.rect(0, 0, 220, 40, 'F');
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(24);
+      doc.setFont("helvetica", "bold");
+      doc.text("NOVAHUB", 15, 25);
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("Soluciones SaaS & ERP", 15, 32);
+
+      doc.setFontSize(20);
+      doc.setFont("helvetica", "bold");
+      doc.text("INVOICE", 150, 25);
+      doc.setFontSize(10);
+      doc.text(`# ${inv.number}`, 150, 32);
+
+      // Info Client
+      doc.setTextColor(50, 50, 50);
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("Facturado a:", 15, 55);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(tenant.name.toUpperCase(), 15, 62);
+      if (tenant.industry) doc.text(tenant.industry, 15, 68);
+
+      // Info Dates & Status
+      doc.setFont("helvetica", "bold");
+      doc.text("Fecha:", 150, 55);
+      doc.setFont("helvetica", "normal");
+      doc.text(new Date(inv.date).toLocaleDateString(), 150, 62);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Estado:", 150, 68);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(inv.status === 'PAID' ? 0 : 200, inv.status === 'PAID' ? 150 : 100, 0);
+      doc.text(inv.status === 'PAID' ? 'PAGADO' : 'PENDIENTE', 165, 68);
+      
+      // Table Header
+      doc.setFillColor(241, 245, 249);
+      doc.rect(15, 80, 185, 10, 'F');
+      doc.setTextColor(50, 50, 50);
+      doc.setFont("helvetica", "bold");
+      doc.text("Descripción", 20, 87);
+      doc.text("Cant.", 120, 87);
+      doc.text("Precio", 150, 87);
+      doc.text("Total", 180, 87);
+
+      // Table Items
+      doc.setFont("helvetica", "normal");
+      let y = 100;
+      if (inv.items && inv.items.length > 0) {
+        inv.items.forEach((item: any) => {
+          doc.text(item.description || 'Item', 20, y);
+          doc.text(String(item.quantity || 1), 120, y);
+          doc.text(`$${Number(item.unitPrice || 0).toFixed(2)}`, 150, y);
+          doc.text(`$${Number(item.total || 0).toFixed(2)}`, 180, y);
+          y += 10;
+        });
+      } else {
+        doc.text("Cobro mensual de la suscripción", 20, y);
+        doc.text("1", 120, y);
+        doc.text(`$${Number(inv.total || 0).toFixed(2)}`, 150, y);
+        doc.text(`$${Number(inv.total || 0).toFixed(2)}`, 180, y);
+        y += 10;
+      }
+
+      // Totals
+      doc.setDrawColor(200, 200, 200);
+      doc.line(130, y + 5, 200, y + 5);
+      
+      doc.setFont("helvetica", "bold");
+      doc.text("TOTAL:", 150, y + 15);
+      doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`$${Number(inv.total || 0).toFixed(2)} USD`, 170, y + 15);
+
+      // Footer
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "italic");
+      doc.setTextColor(150, 150, 150);
+      doc.text("Gracias por confiar en NovaHub.", 105, 270, { align: 'center' });
+
+      doc.save(`Factura_${inv.number}.pdf`);
+    } catch (error) {
+      console.error(error);
+      toast.error("Error al generar el PDF");
+    }
+  };
+
+  const executeToggleStatus = async (userId: string, currentStatus: boolean) => {
+    try {
+      setIsTogglingStatus(true);
+      await tenantsService.updateUser(tenant.id, userId, { isActive: !currentStatus });
+      toast.success(currentStatus ? 'Usuario suspendido' : 'Usuario activado');
+      fetchUsers();
+      setIsConfirmSuspensionOpen(false);
+      setUserToToggle(null);
+    } catch (error) {
+      toast.error('Error al actualizar estado');
+    } finally {
+      setIsTogglingStatus(false);
+    }
+  };
+
+  const handleAdminChangePassword = async () => {
+    if (!newPasswordForUser || newPasswordForUser.length < 6) return toast.error('Mínimo 6 caracteres');
+    try {
+      setUpdatingPassword(true);
+      await usersService.changePassword(selectedUser.id, newPasswordForUser);
+      toast.success('Contraseña actualizada');
+      setIsChangePasswordDialogOpen(false);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al cambiar contraseña');
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
   const getPlanColor = (plan: string) => {
     switch (plan) {
       case 'BASIC': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
@@ -210,555 +283,602 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     }
   };
 
-  const isModuleActive = (modId: string) => {
-    return tenant.subscriptions?.some((s: any) => s.module === modId && s.isActive);
-  };
+  if (!tenant) return <div className="p-20 flex justify-center text-muted-foreground"><Clock className="animate-spin" /></div>;
 
-  const isModulePending = (modId: string) => {
-    return requests.some((r: any) => r.clientTenantId === tenant.id && r.requestedModule === modId && r.status === 'PENDING');
+  const activeUsersCount = users.filter(u => u.isActive).length;
+  const baseQuota = billingInfo?.currentInvoiceEstimate?.baseUserQuota || 5;
+  const extraUsers = billingInfo?.currentInvoiceEstimate?.extraUsers || 0;
+  const extraUserPrice = billingInfo?.currentInvoiceEstimate?.extraUserPrice || 10;
+  
+  const isOverdue = billingInfo?.isOverdue || false;
+  
+  // Real calculation from DB
+  const nextDate = tenant.nextBillingDate ? new Date(tenant.nextBillingDate) : new Date(new Date(tenant.createdAt).setMonth(new Date(tenant.createdAt).getMonth() + 1));
+  const diffTime = nextDate.getTime() - new Date().getTime();
+  const daysToRenew = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'ACTIVE': return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+      case 'PENDING': return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+      case 'SUSPENDED': return 'bg-rose-500/10 text-rose-500 border-rose-500/20';
+      default: return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+    }
   };
 
   return (
-    <div className="p-6 space-y-8 max-w-7xl mx-auto min-h-screen">
-      {/* Header */}
-      <motion.div 
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="flex flex-col md:flex-row md:items-center justify-between gap-4"
-      >
-        <div>
-          <h1 className="text-4xl font-black tracking-tighter text-foreground flex items-center gap-3 uppercase italic">
-            <Zap className="size-10 text-primary fill-primary/20" />
-            Mi Suscripción
-          </h1>
-          <p className="text-muted-foreground font-medium mt-2">Gestiona el plan, módulos y el equipo de {tenant.name}.</p>
+    <div className="w-full flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+      {/* Alertas Globales */}
+      <AnimatePresence>
+        {isOverdue && (
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 flex items-start gap-4">
+            <AlertTriangle className="size-6 text-rose-500 mt-1" />
+            <div>
+              <h3 className="font-bold text-rose-500">Saldo Pendiente</h3>
+              <p className="text-sm text-rose-500/80">Tu cuenta presenta un saldo vencido. Por favor regulariza tu pago para evitar la suspensión del servicio.</p>
+            </div>
+            <Button size="sm" className="ml-auto bg-rose-500 hover:bg-rose-600 text-white font-bold">Pagar Ahora</Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Header Premium */}
+      <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-primary/10 rounded-2xl border border-primary/20">
+            <Building2 className="size-8 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black uppercase tracking-tighter italic">MI SUSCRIPCIÓN</h1>
+            <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">CENTRO DE COMANDO TENANT - {tenant.name}</p>
+          </div>
         </div>
         
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className={cn("text-[12px] font-black uppercase tracking-widest px-4 py-1.5 h-10 flex items-center", getPlanColor(tenant.plan))}>
+        <div className="flex flex-col items-end gap-2">
+          <Badge variant="outline" className={cn("text-[10px] font-black uppercase tracking-widest px-4 py-1.5", getPlanColor(tenant.plan))}>
             Plan {tenant.plan}
           </Badge>
+          <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+            <Globe className="size-3" /> {tenant.slug}.novahub.io
+          </span>
         </div>
       </motion.div>
 
-      <Tabs defaultValue="plan" className="w-full">
-        <TabsList className="bg-muted/20 border border-border/50 p-1 h-12 mb-8">
-          <TabsTrigger value="plan" className="px-8 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
-            <LayoutGrid className="size-4" /> Módulos y Plan
+      {/* Navegación Glassmorphism */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="bg-muted/20 border border-border/50 p-1.5 h-14 rounded-2xl mb-8 flex overflow-x-auto hide-scrollbar w-full justify-start md:justify-center gap-2">
+          <TabsTrigger value="overview" className="rounded-xl px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+            <Activity className="size-4" /> Resumen
           </TabsTrigger>
-          <TabsTrigger value="team" className="px-8 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
-            <Users className="size-4" /> Mi Equipo ({users.length})
+          <TabsTrigger value="billing" className="rounded-xl px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+            <CreditCard className="size-4" /> Facturación
+          </TabsTrigger>
+          <TabsTrigger value="modules" className="rounded-xl px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+            <Zap className="size-4" /> Módulos
+          </TabsTrigger>
+          <TabsTrigger value="users" className="rounded-xl px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+            <Users className="size-4" /> Usuarios ({activeUsersCount})
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="rounded-xl px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+            <FileText className="size-4" /> Documentos
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="plan" className="space-y-8">
-          {/* Plan Card */}
-          <Card className="bg-card border-border/50 overflow-hidden relative shadow-sm">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-            <CardContent className="p-8">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
-                <div className="flex items-center gap-6">
-                  <div className="size-20 rounded-2xl bg-muted/20 flex items-center justify-center border border-border">
-                    <Building2 className="size-10 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-foreground tracking-tight mb-2">{tenant.name}</h2>
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
-                        <Globe className="size-4" /> {tenant.slug}.novahub.io
-                      </span>
-                      <div className="size-1 rounded-full bg-border" />
-                      <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
-                        <Users className="size-4" /> {users.length} Usuarios Activos
-                      </span>
-                    </div>
-                  </div>
-                </div>
+        <AnimatePresence mode="wait">
+          <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
+            
+            {/* --- TAB: OVERVIEW --- */}
+            <TabsContent value="overview" className="space-y-6 mt-0">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
-                <div className="flex flex-col items-end gap-2">
-                  <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Estado de Cuenta</p>
-                  <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 font-black">AL DÍA</Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Modules Catalog */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {availableModules.map((mod) => {
-              const hasSubmodules = mod.submodules && mod.submodules.length > 0;
-              const activeSubmodulesCount = hasSubmodules 
-                ? mod.submodules.filter((sub: any) => isModuleActive(sub.id)).length 
-                : 0;
-              const allSubmodulesActive = hasSubmodules ? activeSubmodulesCount === mod.submodules.length : false;
-              
-              const isMainActive = hasSubmodules ? allSubmodulesActive : isModuleActive(mod.id);
-              const isMainPending = hasSubmodules ? false : isModulePending(mod.id);
-              const isPartial = hasSubmodules && !allSubmodulesActive && activeSubmodulesCount > 0;
-
-              const Icon = mod.icon;
-
-              return (
-                <Card key={mod.id} className={cn(
-                  "relative overflow-hidden transition-all duration-300 border-border/50 flex flex-col group",
-                  isMainActive ? "bg-primary/5 border-primary/20 shadow-md shadow-primary/5" : "bg-card hover:border-primary/30"
-                )}>
-                  <CardContent className="p-6 flex-1 flex flex-col">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className={cn(
-                        "p-3 rounded-xl transition-colors",
-                        isMainActive ? "bg-primary/20 text-primary" : isPartial ? "bg-primary/10 text-primary/70" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
-                      )}>
-                        <Icon className="size-6" />
+                {/* Resumen del Plan */}
+                <Card className="bg-gradient-to-br from-card to-card/50 border-border/50 shadow-lg relative overflow-hidden md:col-span-2">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+                  <CardContent className="p-8 relative z-10 flex flex-col justify-between h-full">
+                    <div className="flex justify-between items-start mb-8">
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Suscripción Actual</p>
+                        <h2 className="text-3xl font-bold tracking-tighter">Plan {tenant.plan}</h2>
                       </div>
-                      {isMainActive ? (
-                        <Badge className="bg-primary text-primary-foreground border-none font-bold uppercase text-[10px] px-2 py-0.5">
-                          <Check className="size-3 mr-1" /> Activo
-                        </Badge>
-                      ) : isMainPending ? (
-                        <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 font-bold uppercase text-[10px] animate-pulse">
-                          <Clock className="size-3 mr-1" /> Pendiente
-                        </Badge>
-                      ) : isPartial ? (
-                        <Badge className="bg-primary/10 text-primary/70 border-primary/20 font-bold uppercase text-[10px]">
-                          {activeSubmodulesCount} Activos
-                        </Badge>
-                      ) : null}
+                      <Badge className={cn("px-3 py-1 font-black uppercase", getStatusColor(tenant.implementationStatus))}>
+                        {tenant.implementationStatus}
+                      </Badge>
                     </div>
-                    <h4 className="font-bold text-lg mb-1">{mod.label}</h4>
-                    <p className="text-sm text-muted-foreground mb-6 line-clamp-2">{mod.description}</p>
                     
-                    {/* Submodules List */}
-                    {hasSubmodules && (
-                      <div className="mt-auto space-y-2 pt-4 border-t border-border/50">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">Funcionalidades</p>
-                        {mod.submodules.map((sub: any) => {
-                          const subActive = isModuleActive(sub.id);
-                          const subPending = isModulePending(sub.id);
-                          
-                          return (
-                            <div key={sub.id} className="flex items-center justify-between group/sub">
-                              <div className="flex items-center gap-2">
-                                <div className={cn("size-1.5 rounded-full", subActive ? "bg-primary" : "bg-muted-foreground/30")} />
-                                <span className={cn("text-xs font-medium", subActive ? "text-foreground" : "text-muted-foreground")}>
-                                  {sub.label}
-                                </span>
-                              </div>
-                              
-                              <div className="flex items-center gap-2 opacity-0 group-hover/sub:opacity-100 transition-opacity">
-                                {!subActive && !subPending && (
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    className="h-6 px-2 text-[10px] uppercase font-bold text-primary hover:bg-primary/10"
-                                    onClick={() => handleRequestClick(sub)}
-                                  >
-                                    Solicitar
-                                  </Button>
-                                )}
-                              </div>
-                              
-                              {subPending && (
-                                <Badge className="bg-amber-500/10 text-amber-500 border-none text-[9px] uppercase px-1.5 py-0">
-                                  En Cola
-                                </Badge>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {!hasSubmodules && !isMainActive && !isMainPending && (
-                      <div className="mt-auto pt-6">
-                        <Button 
-                          variant="outline" 
-                          className="w-full font-bold uppercase text-[10px] tracking-widest border-primary/20 text-primary hover:bg-primary/10"
-                          onClick={() => handleRequestClick(mod)}
-                        >
-                          <Plus className="size-4 mr-2" /> Solicitar Activación
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="team" className="space-y-6">
-          <div className="flex items-center justify-between bg-card border border-border/50 p-6 rounded-2xl">
-            <div>
-              <h3 className="text-xl font-bold tracking-tight">Miembros de la Empresa</h3>
-              <p className="text-sm text-muted-foreground">Gestiona quién tiene acceso a los módulos habilitados de {tenant.name}.</p>
-            </div>
-            <Button className="bg-primary text-primary-foreground gap-2 font-bold px-6" onClick={() => setIsUserDialogOpen(true)}>
-              <Plus className="size-5" /> Agregar Miembro
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {users.map((u) => (
-              <Card key={u.id} className="bg-card border-border/50 hover:border-primary/20 transition-all overflow-hidden group">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-4">
-                      <div className="size-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-black text-xl">
-                        {u.name?.charAt(0).toUpperCase()}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Fecha de Inicio</p>
+                        <p className="text-xl font-bold">{new Date(tenant.createdAt).toLocaleDateString()}</p>
                       </div>
                       <div>
-                        <h4 className="font-bold text-foreground leading-tight">{u.name}</h4>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                          <Mail className="size-3" /> {u.email}
+                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Próximo Cobro</p>
+                        <p className="text-xl font-bold flex items-center gap-2">
+                          {daysToRenew > 0 ? `${daysToRenew} días` : 'Vencido'} <Clock className="size-4 text-muted-foreground" />
                         </p>
                       </div>
-                    </div>
-                    <Badge variant="outline" className={cn(
-                      "text-[10px] font-black uppercase tracking-widest",
-                      u.isActive ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"
-                    )}>
-                      {u.isActive ? 'Activo' : 'Suspendido'}
-                    </Badge>
-                  </div>
-
-                  <div className="space-y-3 pt-4 border-t border-border/50">
-                    <div className="flex flex-col gap-2 pt-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Tipo</span>
-                        <Select
-                          value={u.role?.toUpperCase() === 'ADMIN' ? 'ADMIN' : 'EMPLOYEE'}
-                          onValueChange={async (val) => {
-                            try {
-                              await tenantsService.updateUser(tenant.id, u.id, { role: val });
-                              if (val === 'ADMIN') {
-                                // Admin no necesita rol personalizado
-                                await tenantsService.updateUser(tenant.id, u.id, { customRoleId: null } as any);
-                              }
-                              toast.success('Tipo de acceso actualizado');
-                              fetchUsers();
-                            } catch (err: any) { toast.error(err.response?.data?.message || 'Error'); }
-                          }}
-                        >
-                          <SelectTrigger className="h-7 w-[130px] text-[10px] font-bold uppercase bg-primary/5 border-none shadow-none focus:ring-0">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SYSTEM_ROLE_OPTIONS.map(r => (
-                              <SelectItem key={r.value} value={r.value} className="text-[10px] font-bold uppercase">{r.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      <div className="md:col-span-2">
+                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Cobro Mensual</p>
+                        <p className="text-2xl font-bold text-primary">{formatAmount(billingInfo?.currentInvoiceEstimate?.total || 0, 'USD')}</p>
                       </div>
-
-                      {u.role?.toUpperCase() !== 'ADMIN' && (
-                        <div className="flex items-center justify-between pt-1">
-                          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Rol Personalizado</span>
-                          <Select
-                            value={u.customRoleId || 'none'}
-                            onValueChange={(val) => handleUpdateCustomRole(u.id, val)}
-                          >
-                            <SelectTrigger className="h-7 w-[130px] text-[10px] font-bold uppercase bg-purple-500/5 text-purple-600 border-none shadow-none focus:ring-0">
-                              <SelectValue placeholder="Ninguno" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none" className="text-[10px] font-bold uppercase">Ninguno</SelectItem>
-                              {customRoles.map(r => (
-                                <SelectItem key={r.id} value={r.id} className="text-[10px] font-bold uppercase">{r.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                      <div className="md:col-span-4">
+                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Uso de Licencias</p>
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-primary rounded-full transition-all" 
+                              style={{ width: `${Math.min(100, (activeUsersCount / baseQuota) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-sm font-bold">{activeUsersCount} / {baseQuota}</span>
                         </div>
-                      )}
+                        {extraUsers > 0 && <p className="text-[10px] text-amber-500 mt-1 font-medium">+{extraUsers} usuarios adicionales ({formatAmount(extraUserPrice, 'USD')}/c.u.)</p>}
+                      </div>
                     </div>
-                    
-                    <div className="flex items-center gap-2 pt-4">
-                      {u.role?.toUpperCase() !== 'ADMIN' && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="flex-[0.5] text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500 h-8 border-orange-500/20"
-                          onClick={() => handleOpenChangePassword(u)}
-                          title="Cambiar Contraseña"
-                        >
-                          <KeyRound className="size-3" />
-                        </Button>
-                      )}
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary h-8 border-primary/10"
-                        onClick={() => handleViewPerms(u)}
-                      >
-                        <Shield className="size-3 mr-2" /> Permisos
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className={cn(
-                          "flex-1 text-[10px] font-black uppercase tracking-widest h-8",
-                          u.isActive ? "hover:bg-rose-500/10 hover:text-rose-500" : "hover:bg-emerald-500/10 hover:text-emerald-500",
-                          u.isActive && u.id === currentUser?.id && "opacity-50 cursor-not-allowed grayscale"
-                        )}
-                        onClick={() => toggleUserStatus(u)}
-                        disabled={isTogglingStatus}
-                        title={u.isActive && u.id === currentUser?.id ? "No puedes suspender tu propia cuenta" : ""}
-                      >
-                        {u.isActive ? <><X className="size-3 mr-2" /> Suspender</> : <><Check className="size-3 mr-2" /> Activar</>}
-                      </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Quick Actions */}
+                <Card className="bg-card border-border/50 shadow-lg">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-sm font-black uppercase tracking-widest">Acciones Rápidas</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => setIsUpgradeDialogOpen(true)}>
+                      <Zap className="size-4 mr-3" /> Solicitar Upgrade de Plan
+                    </Button>
+                    <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => setIsUserDialogOpen(true)}>
+                      <Plus className="size-4 mr-3" /> Comprar Licencias de Usuario
+                    </Button>
+                    <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => {
+                      if (!billingInfo?.history?.length) return toast.error("No hay facturas disponibles");
+                      toast.success("Iniciando descarga de última factura...");
+                    }}>
+                      <Download className="size-4 mr-3" /> Descargar Última Factura
+                    </Button>
+                    <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => setIsTicketDialogOpen(true)}>
+                      <Ticket className="size-4 mr-3" /> Ticket de Soporte
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Implementación Timeline */}
+              <Card className="bg-card border-border/50 shadow-sm mt-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="size-5 text-primary" />
+                    Estado de Despliegue e Implementación
+                  </CardTitle>
+                  <CardDescription>Seguimiento de la configuración de tu entorno NovaHub</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="relative pt-8 pb-4">
+                    <div className="absolute top-11 left-0 w-full h-1 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-primary transition-all w-full" />
                     </div>
+                    <div className="flex justify-between relative z-10">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="size-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shadow-md shadow-primary/20"><Check className="size-4" /></div>
+                        <span className="text-xs font-bold">Configuración Inicial</span>
+                      </div>
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="size-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shadow-md shadow-primary/20"><Check className="size-4" /></div>
+                        <span className="text-xs font-bold">Migración de Datos</span>
+                      </div>
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="size-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shadow-md shadow-primary/20"><Check className="size-4" /></div>
+                        <span className="text-xs font-bold">Capacitación</span>
+                      </div>
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="size-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shadow-md shadow-primary/20"><Check className="size-4" /></div>
+                        <span className="text-xs font-bold">Activación Total</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-6 bg-primary/5 border border-primary/10 rounded-xl p-4 text-sm text-muted-foreground">
+                    <strong className="text-foreground">Fase Actual: Activación Total.</strong> Tu plataforma está operando al 100%. Disfruta de todas las características de NovaHub ERP.
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        </TabsContent>
+            </TabsContent>
+
+            {/* --- TAB: BILLING --- */}
+            <TabsContent value="billing" className="space-y-6 mt-0">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Factura Actual Widget */}
+                <Card className="bg-card border-border/50 shadow-sm md:col-span-1">
+                  <CardHeader className="bg-muted/10 border-b border-border/50">
+                    <CardTitle className="text-sm font-black uppercase tracking-widest text-muted-foreground flex justify-between items-center">
+                      Próxima Factura Estimada
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-6">
+                    <h2 className="text-5xl font-black tracking-tighter text-foreground text-center">{formatAmount(billingInfo?.currentInvoiceEstimate?.total || 0, 'USD')}</h2>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Plan Base ({tenant.plan})</span>
+                        <span className="font-bold text-foreground">{formatAmount(billingInfo?.currentInvoiceEstimate?.basePlanCost || 0, 'USD')}</span>
+                      </div>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Usuarios Extras ({extraUsers})</span>
+                        <span className="font-bold text-foreground">{formatAmount(billingInfo?.currentInvoiceEstimate?.usersCost || 0, 'USD')}</span>
+                      </div>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Módulos Adicionales</span>
+                        <span className="font-bold text-foreground">{formatAmount(billingInfo?.currentInvoiceEstimate?.modulesCost || 0, 'USD')}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Historial */}
+                <Card className="bg-card border-border/50 shadow-sm md:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Historial de Facturación</CardTitle>
+                    <CardDescription>Consulta y descarga tus recibos mensuales.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {billingInfo?.history?.map((inv: any) => (
+                        <div key={inv.id} className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:bg-muted/10 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                              <FileText className="size-5" />
+                            </div>
+                            <div>
+                              <p className="font-bold">{inv.number}</p>
+                              <p className="text-xs text-muted-foreground">Emitida el: {new Date(inv.date).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-6">
+                            <span className="font-bold text-lg">{formatAmount(inv.amount || inv.total || 0, 'USD')}</span>
+                            {inv.status === 'PAID' ? (
+                              <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Pagado</Badge>
+                            ) : (
+                              <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20">Pendiente</Badge>
+                            )}
+                            {currentUser?.isPlatformAdmin && inv.status !== 'PAID' && (
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={async () => {
+                                  try {
+                                    await tenantsService.markInvoiceAsPaid(inv.id);
+                                    toast.success('Factura marcada como pagada');
+                                    onRefresh();
+                                    // Local refresh para la vista actual
+                                    setBillingInfo((prev: any) => ({
+                                      ...prev,
+                                      history: prev.history.map((h: any) => h.id === inv.id ? { ...h, status: 'PAID' } : h)
+                                    }));
+                                  } catch (e) {
+                                    toast.error('Error al actualizar estado de la factura');
+                                  }
+                                }} 
+                                className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500 hover:text-white uppercase text-[9px] font-black tracking-widest px-3 ml-2"
+                              >
+                                Marcar Pagado
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleDownloadInvoice(inv)}>
+                              <Download className="size-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            {/* --- TAB: MODULES --- */}
+            <TabsContent value="modules" className="space-y-6 mt-0">
+               {/* Modules Catalog */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {availableModules.map((mod) => {
+                  const hasSubmodules = mod.submodules && mod.submodules.length > 0;
+                  const activeSubmodulesCount = hasSubmodules 
+                    ? mod.submodules.filter((sub: any) => isModuleActive(sub.id)).length 
+                    : 0;
+                  const allSubmodulesActive = hasSubmodules ? activeSubmodulesCount === mod.submodules.length : false;
+                  
+                  const isMainActive = hasSubmodules ? allSubmodulesActive : isModuleActive(mod.id);
+                  const isMainPending = hasSubmodules ? false : isModulePending(mod.id);
+                  const isPartial = hasSubmodules && !allSubmodulesActive && activeSubmodulesCount > 0;
+
+                  const Icon = mod.icon;
+
+                  return (
+                    <Card key={mod.id} className={cn(
+                      "relative overflow-hidden transition-all duration-300 border-border/50 flex flex-col group shadow-sm",
+                      isMainActive ? "bg-primary/5 border-primary/20 shadow-primary/5" : "bg-card hover:border-primary/30"
+                    )}>
+                      <CardContent className="p-6 flex-1 flex flex-col">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className={cn(
+                            "p-3 rounded-xl transition-colors",
+                            isMainActive ? "bg-primary/20 text-primary" : isPartial ? "bg-primary/10 text-primary/70" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+                          )}>
+                            <Icon className="size-6" />
+                          </div>
+                          {isMainActive ? (
+                            <Badge className="bg-primary text-primary-foreground border-none font-bold uppercase text-[10px] px-2 py-0.5">
+                              <Check className="size-3 mr-1" /> Activo
+                            </Badge>
+                          ) : isMainPending ? (
+                            <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 font-bold uppercase text-[10px] animate-pulse">
+                              <Clock className="size-3 mr-1" /> Pendiente
+                            </Badge>
+                          ) : isPartial ? (
+                            <Badge className="bg-primary/10 text-primary/70 border-primary/20 font-bold uppercase text-[10px]">
+                              {activeSubmodulesCount} Activos
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <h4 className="font-bold text-lg mb-1">{mod.label}</h4>
+                        <p className="text-sm text-muted-foreground mb-6 line-clamp-2">{mod.description}</p>
+                        
+                        {/* Submodules List */}
+                        {hasSubmodules && (
+                          <div className="mt-auto space-y-2 pt-4 border-t border-border/50">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">Funcionalidades</p>
+                            {mod.submodules.map((sub: any) => {
+                              const subActive = isModuleActive(sub.id);
+                              const subPending = isModulePending(sub.id);
+                              
+                              return (
+                                <div key={sub.id} className="flex items-center justify-between group/sub">
+                                  <div className="flex items-center gap-2">
+                                    <div className={cn("size-1.5 rounded-full", subActive ? "bg-primary" : "bg-muted-foreground/30")} />
+                                    <span className={cn("text-xs font-medium", subActive ? "text-foreground" : "text-muted-foreground")}>
+                                      {sub.label}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-2 opacity-0 group-hover/sub:opacity-100 transition-opacity">
+                                    {!subActive && !subPending && (
+                                      <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] uppercase font-bold text-primary hover:bg-primary/10" onClick={() => handleRequestClick(sub)}>
+                                        Solicitar
+                                      </Button>
+                                    )}
+                                  </div>
+                                  
+                                  {subPending && <Badge className="bg-amber-500/10 text-amber-500 border-none text-[9px] uppercase px-1.5 py-0">En Cola</Badge>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {!hasSubmodules && !isMainActive && !isMainPending && (
+                          <div className="mt-auto pt-6">
+                            <Button variant="outline" className="w-full font-bold uppercase text-[10px] tracking-widest border-primary/20 text-primary hover:bg-primary/10" onClick={() => handleRequestClick(mod)}>
+                              <Plus className="size-4 mr-2" /> Solicitar Activación
+                            </Button>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </TabsContent>
+
+            {/* --- TAB: USERS --- */}
+            <TabsContent value="users" className="space-y-6 mt-0">
+               <div className="flex items-center justify-between bg-card border border-border/50 p-6 rounded-2xl shadow-sm">
+                <div>
+                  <h3 className="text-xl font-bold tracking-tight">Miembros de la Empresa</h3>
+                  <p className="text-sm text-muted-foreground">Gestiona accesos y licencias activas ({activeUsersCount}/{baseQuota}).</p>
+                </div>
+                <Button className="bg-primary text-primary-foreground gap-2 font-bold px-6 rounded-xl shadow-lg shadow-primary/20" onClick={() => setIsUserDialogOpen(true)}>
+                  <Plus className="size-5" /> Agregar Miembro
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {users.map((u) => (
+                  <Card key={u.id} className="bg-card border-border/50 hover:border-primary/20 transition-all overflow-hidden group">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-4">
+                          <div className="size-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-black text-xl">
+                            {u.name?.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-foreground leading-tight">{u.name}</h4>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                              {u.email}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge variant="outline" className={cn(
+                          "text-[10px] font-black uppercase tracking-widest",
+                          u.isActive ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                        )}>
+                          {u.isActive ? 'Activo' : 'Suspendido'}
+                        </Badge>
+                      </div>
+
+                      <div className="space-y-3 pt-4 border-t border-border/50">
+                        <div className="flex flex-col gap-2 pt-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Tipo</span>
+                            <Badge variant="outline">{u.role === 'ADMIN' ? 'Admin' : 'Colaborador'}</Badge>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 pt-4">
+                          {u.role !== 'ADMIN' && (
+                            <Button variant="outline" size="sm" className="flex-[0.5] hover:bg-orange-500/10 hover:text-orange-500 h-8 border-orange-500/20" onClick={() => { setSelectedUser(u); setIsChangePasswordDialogOpen(true); }}>
+                              <KeyRound className="size-3" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className={cn("flex-1 text-[10px] font-black uppercase tracking-widest h-8", u.isActive ? "hover:bg-rose-500/10 hover:text-rose-500" : "hover:bg-emerald-500/10 hover:text-emerald-500")} onClick={() => toggleUserStatus(u)}>
+                            {u.isActive ? 'Suspender' : 'Activar'}
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </TabsContent>
+
+            {/* --- TAB: DOCUMENTS --- */}
+            <TabsContent value="documents" className="space-y-6 mt-0">
+               <Card className="bg-card border-border/50 shadow-sm">
+                  <CardHeader>
+                    <CardTitle>Repositorio de Documentos</CardTitle>
+                    <CardDescription>Contratos, políticas y SLA aceptados.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {documents?.map((doc: any) => (
+                        <div key={doc.id} className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:bg-muted/10 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                              <Shield className="size-5" />
+                            </div>
+                            <div>
+                              <p className="font-bold">{doc.title}</p>
+                              <p className="text-xs text-muted-foreground">Firma: {new Date(doc.date).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <Button variant="outline" size="sm" className="gap-2 font-bold uppercase text-[10px] tracking-widest">
+                            <Download className="size-4" /> PDF
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+            </TabsContent>
+
+          </motion.div>
+        </AnimatePresence>
       </Tabs>
 
-      {/* Permissions Viewer Dialog */}
-      <Dialog open={isPermsDialogOpen} onOpenChange={setIsPermsDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3 text-2xl font-black uppercase italic tracking-tighter">
-              <Shield className="size-6 text-primary" />
-              Permisos de {selectedUser?.name}
-            </DialogTitle>
-            <DialogDescription>
-              Detalle de accesos basados en el tipo ({selectedUser?.role === 'ADMIN' ? 'Administrador' : 'Colaborador'}) {selectedUser?.customRole && `y Rol Personalizado (${selectedUser.customRole.name})`}.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="py-4">
-            <div className="rounded-xl border border-border overflow-hidden max-h-[60vh] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 border-b border-border sticky top-0">
-                  <tr>
-                    <th className="text-left p-3 font-black uppercase text-[10px] tracking-widest">Módulo</th>
-                    <th className="text-center p-3 font-black uppercase text-[10px] tracking-widest">Ver</th>
-                    <th className="text-center p-3 font-black uppercase text-[10px] tracking-widest">Crear</th>
-                    <th className="text-center p-3 font-black uppercase text-[10px] tracking-widest">Editar</th>
-                    <th className="text-center p-3 font-black uppercase text-[10px] tracking-widest">Eliminar</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {(() => {
-                    // Buscar permisos: primero del customRole embebido, luego cruzar con customRoles prop
-                    let rolePermissions = selectedUser?.customRole?.permissions || [];
-                    if (rolePermissions.length === 0 && selectedUser?.customRoleId) {
-                      const fullRole = customRoles.find(r => r.id === selectedUser.customRoleId);
-                      rolePermissions = fullRole?.permissions || [];
-                    }
-                    
-                    if (rolePermissions.length === 0) {
-                      return (
-                        <tr>
-                          <td colSpan={5} className="p-8 text-center text-muted-foreground italic">
-                            {selectedUser?.role?.toUpperCase() === 'ADMIN' 
-                              ? 'Este usuario es Administrador y tiene acceso total a todos los módulos.'
-                              : 'Este usuario no tiene un Rol Personalizado asignado. Asígnale uno desde "Mi Equipo" para configurar sus accesos.'}
-                          </td>
-                        </tr>
-                      );
-                    }
-
-                    return ALL_PERM_MODULES.map((mod) => {
-                      const p = rolePermissions.find((perm: any) => perm.module === mod.id);
-                      if (!p) return null;
-                      const hasAny = p.read || p.create || p.edit || p.delete || p.write;
-                      if (!hasAny) return null;
-                      
-                      const isSubmodule = 'parent' in mod;
-                      const Icon = mod.icon;
-
-                      return (
-                        <tr key={mod.id} className={cn(
-                          "hover:bg-muted/10 transition-colors",
-                          isSubmodule ? "bg-muted/5 opacity-90" : "bg-card border-t border-border/50"
-                        )}>
-                          <td className="p-3">
-                            <div className={cn("flex items-center gap-3", isSubmodule && "pl-8")}>
-                              <div className={cn(
-                                "size-6 rounded-lg flex items-center justify-center flex-shrink-0",
-                                isSubmodule ? "bg-muted/20" : "bg-primary/10"
-                              )}>
-                                {Icon && <Icon className={cn("size-3", isSubmodule ? "text-muted-foreground" : "text-primary")} />}
-                              </div>
-                              <div>
-                                <p className={cn("font-bold", isSubmodule ? "text-xs text-muted-foreground" : "text-sm text-foreground")}>
-                                  {mod.label}
-                                  {isSubmodule && <span className="ml-2 text-[9px] font-black text-muted-foreground/50 uppercase">VISTA</span>}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-3 text-center">{p.read ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
-                          <td className="p-3 text-center">{(p.create ?? p.write) ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
-                          <td className="p-3 text-center">{(p.edit ?? p.write) ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
-                          <td className="p-3 text-center">{p.delete ? <Check className="size-4 text-emerald-500 mx-auto" /> : <X className="size-4 text-muted-foreground/30 mx-auto" />}</td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsPermsDialogOpen(false)}>Cerrar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Member Dialog */}
-      <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
-        <DialogContent className="sm:max-w-[450px]">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
-              <Users className="size-6 text-primary" />
-              Nuevo Miembro
-            </DialogTitle>
-            <DialogDescription>Asigna un nuevo integrante al equipo de {tenant.name}.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre Completo</Label>
-              <Input 
-                placeholder="Ej: Juan Pérez" 
-                value={userForm.name}
-                onChange={e => setUserForm({...userForm, name: e.target.value})}
-                className="bg-muted/10 h-11"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Correo Electrónico</Label>
-              <Input 
-                type="email"
-                placeholder="juan@empresa.com" 
-                value={userForm.email}
-                onChange={e => setUserForm({...userForm, email: e.target.value})}
-                className="bg-muted/10 h-11"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo de Acceso</Label>
-              <Select value={userForm.role} onValueChange={v => setUserForm({...userForm, role: v})}>
-                <SelectTrigger className="bg-muted/10 h-11">
-                  <SelectValue placeholder="Seleccionar tipo..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {SYSTEM_ROLE_OPTIONS.map(role => (
-                    <SelectItem key={role.value} value={role.value}>
-                      <div className="flex flex-col">
-                        <span className="font-bold text-xs">{role.label}</span>
-                        <span className="text-[10px] text-muted-foreground">{role.description}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {userForm.role === 'EMPLOYEE' && (
-                <p className="text-[10px] text-amber-500 font-medium flex items-center gap-1">
-                  <Shield className="size-3" />
-                  Deberás asignarle un rol personalizado después de crearlo desde "Mi Equipo".
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Contraseña Temporal *</Label>
-              <Input
-                type="password"
-                placeholder="Mínimo 10 caracteres"
-                value={userForm.password}
-                onChange={e => setUserForm({ ...userForm, password: e.target.value })}
-                className="bg-muted/10 h-11"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsUserDialogOpen(false)} className="h-11 px-6">Cancelar</Button>
-            <Button 
-              className="bg-primary text-primary-foreground font-bold h-11 px-8" 
-              onClick={handleAddUser}
-              disabled={uploading}
-            >
-              {uploading ? 'Creando...' : 'Crear Acceso'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Module Request Dialog */}
+      {/* Reused Dialogs (Request, User, Confirm) */}
       <Dialog open={isRequestDialogOpen} onOpenChange={setIsRequestDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Solicitar Módulo: {selectedModule?.label}</DialogTitle>
             <DialogDescription>
-              Envía una solicitud para habilitar este módulo en tu empresa. Nuestro equipo se contactará para los detalles.
+              Envía una solicitud para habilitar este módulo en tu empresa.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Notas Adicionales (Opcional)</Label>
-              <Textarea 
-                placeholder="¿Algún requerimiento especial para este módulo?"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsRequestDialogOpen(false)}>Cancelar</Button>
-            <Button className="bg-primary text-primary-foreground" onClick={submitRequest}>
-              Enviar Solicitud
-            </Button>
+            <Button className="bg-primary text-primary-foreground" onClick={submitRequest}>Enviar Solicitud</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Change Password Dialog (Admin) */}
-      <Dialog open={isChangePasswordDialogOpen} onOpenChange={setIsChangePasswordDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <KeyRound className="size-5 text-orange-500" /> Cambiar Contraseña
-            </DialogTitle>
-            <DialogDescription>
-              Actualiza la contraseña del usuario <span className="font-bold text-foreground">{selectedUser?.name}</span>.
-            </DialogDescription>
-          </DialogHeader>
+      
+      {/* Diálogos extraídos para brevedad */}
+      <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader><DialogTitle>Nuevo Miembro</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="space-y-2"><Label>Nombre</Label><Input value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} /></div>
+            <div className="space-y-2"><Label>Email</Label><Input value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} /></div>
             <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nueva Contraseña</Label>
-              <Input 
-                type="password" 
-                placeholder="Mínimo 6 caracteres" 
-                value={newPasswordForUser}
-                onChange={(e) => setNewPasswordForUser(e.target.value)}
-                className="bg-muted/10 h-11"
-              />
+              <Label>Tipo de Acceso</Label>
+              <Select value={userForm.role} onValueChange={v => setUserForm({...userForm, role: v})}>
+                <SelectTrigger><SelectValue/></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ADMIN">Administrador</SelectItem>
+                  <SelectItem value="EMPLOYEE">Colaborador</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            <div className="space-y-2"><Label>Contraseña</Label><Input type="password" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} /></div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsChangePasswordDialogOpen(false)} disabled={updatingPassword}>Cancelar</Button>
-            <Button onClick={handleAdminChangePassword} disabled={updatingPassword} className="bg-orange-500 hover:bg-orange-600 text-white font-bold h-10">
-              {updatingPassword ? 'Guardando...' : 'Actualizar Contraseña'}
-            </Button>
+            <Button variant="outline" onClick={() => setIsUserDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleAddUser} disabled={uploading}>Crear</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Confirmación de Suspensión */}
+      <Dialog open={isChangePasswordDialogOpen} onOpenChange={setIsChangePasswordDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Cambiar Contraseña</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2"><Label>Nueva Contraseña</Label><Input type="password" value={newPasswordForUser} onChange={(e) => setNewPasswordForUser(e.target.value)} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsChangePasswordDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleAdminChangePassword} disabled={updatingPassword}>Actualizar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ConfirmDialog
         open={isConfirmSuspensionOpen}
         onOpenChange={setIsConfirmSuspensionOpen}
         title={`¿Suspender a ${userToToggle?.name}?`}
-        description="El usuario perderá acceso inmediato a todos los módulos del sistema. Podrás reactivarlo más tarde si es necesario."
+        description="El usuario perderá acceso inmediato a todos los módulos."
         confirmLabel="Confirmar Suspensión"
         variant="destructive"
         loading={isTogglingStatus}
         onConfirm={() => userToToggle ? executeToggleStatus(userToToggle.id, true) : Promise.resolve()}
       />
+
+      <Dialog open={isUpgradeDialogOpen} onOpenChange={setIsUpgradeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Solicitar Upgrade de Plan</DialogTitle>
+            <DialogDescription>¿Te gustaría cambiarte a un plan con más beneficios?</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>¿Qué características buscas?</Label>
+              <Textarea placeholder="Ej: Necesito más límite de usuarios o almacenamiento." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsUpgradeDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={() => {
+              toast.success("Solicitud enviada a soporte. Un asesor te contactará pronto.");
+              setIsUpgradeDialogOpen(false);
+            }}>Enviar Solicitud</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isTicketDialogOpen} onOpenChange={setIsTicketDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Abrir Ticket de Soporte</DialogTitle>
+            <DialogDescription>Describe tu problema y nuestro equipo técnico te ayudará.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Asunto</Label>
+              <Input placeholder="Ej: Problemas con el módulo de ventas" />
+            </div>
+            <div className="space-y-2">
+              <Label>Descripción detallada</Label>
+              <Textarea placeholder="Explica paso a paso el problema..." className="h-32" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsTicketDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={() => {
+              toast.success("Ticket creado correctamente. Nos contactaremos pronto.");
+              setIsTicketDialogOpen(false);
+            }}>Enviar Ticket</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

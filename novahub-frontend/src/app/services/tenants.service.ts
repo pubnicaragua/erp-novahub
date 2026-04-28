@@ -34,6 +34,8 @@ export const tenantsService = {
   create: (data: CreateTenantDto) => api.post<any>('/tenants', data),
   update: (id: string, data: any) => api.patch<any>(`/tenants/${id}`, data),
   delete: (id: string) => api.delete(`/tenants/${id}`),
+  triggerBilling: (id: string) => api.post(`/tenants/${id}/trigger-billing`, {}),
+  markInvoiceAsPaid: (invoiceId: string) => api.patch(`/tenants/invoice/${invoiceId}/pay`, {}),
   
   // User management within a tenant
   getUsers: async (tenantId: string) => {
@@ -64,4 +66,7 @@ export const tenantsService = {
     password?: string;
   }) => api.patch(`/tenants/${tenantId}/users/${userId}`, data),
   deleteUser: (tenantId: string, userId: string) => api.delete(`/tenants/${tenantId}/users/${userId}`),
+  
+  getBillingHistory: (tenantId: string) => api.get<any>(`/tenants/${tenantId}/billing`),
+  getDocuments: (tenantId: string) => api.get<any[]>(`/tenants/${tenantId}/documents`),
 };

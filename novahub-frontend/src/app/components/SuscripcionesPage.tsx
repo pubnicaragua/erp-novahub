@@ -162,7 +162,9 @@ export function SuscripcionesPage() {
     industry: 'TECHNOLOGY',
     plan: 'BASIC',
     logo: '',
-    customPrice: ''
+    customPrice: '',
+    baseUserQuota: 5,
+    extraUserPrice: 10
   });
 
   useEffect(() => {
@@ -315,7 +317,9 @@ export function SuscripcionesPage() {
       industry: 'TECHNOLOGY',
       plan: 'BASIC',
       logo: '',
-      customPrice: ''
+      customPrice: '',
+      baseUserQuota: 5,
+      extraUserPrice: 10
     });
     setLogoFile(null);
     setLogoPreview('');
@@ -331,7 +335,9 @@ export function SuscripcionesPage() {
       industry: tenant.industry,
       plan: tenant.plan,
       logo: tenant.logo || '',
-      customPrice: tenant.customPrice || ''
+      customPrice: tenant.customPrice || '',
+      baseUserQuota: tenant.baseUserQuota || 5,
+      extraUserPrice: tenant.extraUserPrice || 10
     });
     setLogoPreview(tenant.logo || '');
     setIsTenantDialogOpen(true);
@@ -772,6 +778,7 @@ export function SuscripcionesPage() {
                       </SelectContent>
                     </Select>
                     
+                    
                     {tenantForm.plan === 'CUSTOM' && (
                       <div className="mt-3">
                         <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Precio Custom (USD)</Label>
@@ -787,6 +794,32 @@ export function SuscripcionesPage() {
                     )}
                     
                     <p className="text-[9px] text-muted-foreground ml-1 mt-1">Selecciona el plan de facturación mensual</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Usuarios Gratis Incluidos</Label>
+                    <Input 
+                      type="number" 
+                      min="1"
+                      placeholder="Ej. 5" 
+                      className="bg-muted/10 border-border/50 h-11 rounded-xl"
+                      value={tenantForm.baseUserQuota}
+                      onChange={e => setTenantForm({...tenantForm, baseUserQuota: Number(e.target.value)})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Costo por Usuario Extra (USD)</Label>
+                    <Input 
+                      type="number" 
+                      min="0"
+                      step="0.01"
+                      placeholder="Ej. 10.00" 
+                      className="bg-muted/10 border-border/50 h-11 rounded-xl"
+                      value={tenantForm.extraUserPrice}
+                      onChange={e => setTenantForm({...tenantForm, extraUserPrice: Number(e.target.value)})}
+                    />
                   </div>
                 </div>
                 
@@ -929,14 +962,16 @@ export function SuscripcionesPage() {
         </TabsList>
 
         <TabsContent value="active" className="mt-6 space-y-6">
-          <div className="flex items-center gap-4 bg-muted/10 p-3 rounded-xl border border-border/50">
-            <Search className="size-5 text-muted-foreground ml-2" />
-            <Input 
-              placeholder="Buscar por Empresa, Cliente o Industria..." 
-              className="bg-transparent border-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-            />
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4 bg-muted/10 p-3 rounded-xl border border-border/50 flex-1">
+              <Search className="size-5 text-muted-foreground ml-2" />
+              <Input 
+                placeholder="Buscar por Empresa, Cliente o Industria..." 
+                className="bg-transparent border-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-6">
@@ -994,6 +1029,23 @@ export function SuscripcionesPage() {
                         <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 rounded-xl" onClick={() => openGenerateInvoice(tenant)}>
                           <FileText className="size-5" />
                         </Button>
+                        {user?.isPlatformAdmin && tenant.slug === 'test' && (
+                          <Button 
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                await tenantsService.triggerBilling(tenant.id);
+                                toast.success('Facturación forzada para test');
+                                fetchData();
+                              } catch (e) {
+                                toast.error('Error al ejecutar facturación');
+                              }
+                            }}
+                            className="bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest px-4 ml-2"
+                          >
+                            Forzar Cobro
+                          </Button>
+                        )}
                       </div>
 
                       <div className="bg-muted/30 dark:bg-black/40 p-3 rounded-2xl border border-border/50">
@@ -1125,7 +1177,9 @@ export function SuscripcionesPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-lg font-bold text-foreground uppercase tracking-tight">{req.requestedModule}</h3>
+                        <h3 className="text-lg font-bold text-foreground uppercase tracking-tight">
+                          {req.requestedModule === 'CONFIG_USERS' ? 'Licencia Extra de Usuario' : req.requestedModule}
+                        </h3>
                         <Badge variant="outline" className={cn(
                           "uppercase text-[10px] font-black tracking-widest",
                           req.status === 'PENDING' ? "text-amber-500 border-amber-500/30 bg-amber-500/5" :
@@ -1135,9 +1189,13 @@ export function SuscripcionesPage() {
                           {req.status}
                         </Badge>
                       </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground uppercase font-bold tracking-tighter">
+                      <div className="flex flex-col md:flex-row md:items-center gap-x-4 gap-y-1 text-xs text-muted-foreground uppercase font-bold tracking-tighter">
                         <span className="flex items-center gap-1"><Building2 className="size-3" /> {req.clientTenant?.name}</span>
-                        <span className="flex items-center gap-1 text-primary/80"><DollarSign className="size-3" /> Precio Proyectado: ${req.customPrice || 0}</span>
+                        {req.requestedModule === 'CONFIG_USERS' ? (
+                          <span className="flex items-center gap-1 text-amber-500/80"><Users className="size-3" /> {req.notes?.split('|')[0] || 'Nuevo Usuario'}</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-primary/80"><DollarSign className="size-3" /> Precio Proyectado: ${req.customPrice || 0}</span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1192,16 +1250,21 @@ export function SuscripcionesPage() {
       </Dialog>
 
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto border-border/50">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
-              <Building2 className="size-6 text-primary" />
-              Detalles: {tenantDetails?.name}
-            </DialogTitle>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" className="w-full rounded-xl" onClick={() => setIsDetailsDialogOpen(false)}>Cerrar</Button>
-          </DialogFooter>
+        <DialogContent className="sm:max-w-[1200px] max-h-[95vh] overflow-y-auto border-border/50 bg-background/95 backdrop-blur-sm p-2">
+          {selectedTenant && (
+            <div className="w-full overflow-hidden">
+              <TenantSubscriptionView 
+                tenant={selectedTenant} 
+                availableModules={AVAILABLE_MODULES} 
+                requests={requests.filter((r: any) => r.clientTenantId === selectedTenant.id)}
+                customRoles={customRoles}
+                onRefresh={fetchData}
+                onRequestModule={(moduleId, notes) => {
+                  toast.info("Como SuperAdmin no necesitas solicitar módulos, puedes activarlos directamente.");
+                }}
+              />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
