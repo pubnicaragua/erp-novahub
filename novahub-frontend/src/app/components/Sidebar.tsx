@@ -151,6 +151,11 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'reportes-proveedores': ['REPORTS_PROVIDERS'],
   'reportes-suscripciones': ['REPORTS_SUBSCRIPTIONS'],
   'reportes-rrhh': ['REPORTS_HR'],
+  // Twilio
+  'twilio-dashboard': ['TWILIO_DASHBOARD'],
+  'twilio-accounts': ['TWILIO_ACCOUNTS'],
+  'twilio-messages': ['TWILIO_MESSAGES'],
+  'twilio-config': ['TWILIO_CONFIG'],
 };
 
 const menuItems: MenuItem[] = [
@@ -245,6 +250,18 @@ const menuItems: MenuItem[] = [
       { id: 'eventos', label: 'Eventos', icon: <CalendarDays className="size-4" /> },
       { id: 'recordatorios', label: 'Recordatorios', icon: <Bell className="size-4" /> },
       { id: 'bitacora', label: 'Bitácora', icon: <Database className="size-4" /> }
+    ]
+  },
+  {
+    id: 'twilio',
+    label: 'WhatsApp Twilio',
+    icon: <MessageSquare className="size-5" />,
+    section: 'Herramientas',
+    submenu: [
+      { id: 'twilio-dashboard', label: 'Dashboard', icon: <BarChart3 className="size-4" /> },
+      { id: 'twilio-accounts', label: 'Cuentas', icon: <Building2 className="size-4" /> },
+      { id: 'twilio-messages', label: 'Mensajes', icon: <Send className="size-4" /> },
+      { id: 'twilio-config', label: 'Configuración', icon: <Settings className="size-4" /> },
     ]
   },
   { id: 'centro-capacitacion', label: 'Centro de Capacitación', icon: <GraduationCap className="size-5" />, section: 'Ayuda' },

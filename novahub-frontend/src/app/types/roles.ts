@@ -5,7 +5,7 @@ export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'export' 
 export type ModuleName = 
   | 'inventario' | 'ventas' | 'compras' | 'finanzas' | 'rh' 
   | 'proyectos' | 'clientes' | 'proveedores' | 'reportes' 
-  | 'configuracion' | 'suscripciones' | 'roles' | 'usuarios';
+  | 'configuracion' | 'suscripciones' | 'roles' | 'usuarios' | 'twilio';
 
 export interface ModulePermissions {
   [action: string]: boolean;
@@ -49,6 +49,7 @@ export const PREDEFINED_ROLES: CustomRole[] = [
       suscripciones: { view: true, create: true, edit: true, delete: true, manage: true },
       roles: { view: true, create: true, edit: true, delete: true, manage: true },
       usuarios: { view: true, create: true, edit: true, delete: true, manage: true },
+      twilio: { view: true, create: true, edit: true, delete: true, manage: true },
     }
   },
   {
@@ -69,6 +70,7 @@ export const PREDEFINED_ROLES: CustomRole[] = [
       configuracion: { view: true, edit: true },
       roles: { view: true, create: true, edit: true, delete: false },
       usuarios: { view: true, create: true, edit: true, delete: false },
+      twilio: { view: true, create: true, edit: true, delete: false },
     }
   },
   {

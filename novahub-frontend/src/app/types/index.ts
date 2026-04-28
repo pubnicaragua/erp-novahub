@@ -91,7 +91,7 @@ export interface Estimate {
   id: string;
   tenantId: string;
   number: string;
-  customerId: string;
+  customerId?: string;
   customer?: Customer;
   date: string;
   expiryDate: string;
@@ -104,6 +104,9 @@ export interface Estimate {
   baseTotal?: number;
   status: DocumentStatus;
   notes?: string;
+  customCustomerName?: string;
+  customCustomerEmail?: string;
+  customCustomerPhone?: string;
   items: EstimateItem[];
   createdAt: string;
   updatedAt: string;

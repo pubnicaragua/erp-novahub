@@ -160,10 +160,10 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  const clienteNombre = estimate.customer?.name || 'Cliente sin registrar';
+  const clienteNombre = estimate.customer?.name || estimate.customCustomerName || 'Cliente sin registrar';
   const clienteContacto = estimate.customer?.contactName || '';
-  const clienteEmail = estimate.customer?.email || '';
-  const clienteTelf = estimate.customer?.phone || '';
+  const clienteEmail = estimate.customer?.email || estimate.customCustomerEmail || '';
+  const clienteTelf = estimate.customer?.phone || estimate.customCustomerPhone || '';
   
   let currentInfoY = 68;
   doc.text(clienteNombre, 14, currentInfoY);

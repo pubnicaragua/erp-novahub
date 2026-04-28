@@ -46,6 +46,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
 
 
   const [stateChangePending, setStateChangePending] = useState<{ id: string; status: string; label: string } | null>(null);
+  const [isCustomCustomer, setIsCustomCustomer] = useState(false);
 
   const handleUpdate = async (id: string | number, updates: Partial<Estimate>) => {
     if (id === 'new') {
@@ -85,6 +86,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
   };
 
   const handleAddEstimate = () => {
+    setIsCustomCustomer(false);
     setEditingId('new');
     setLocalDoc({
       id: 'new',
@@ -104,8 +106,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
   };
 
   const handleSaveDoc = async (status: string) => {
-    if (!localDoc?.customerId) {
-        toast.error('Selecciona un cliente');
+    if (!localDoc?.customerId && !localDoc?.customCustomerName) {
+        toast.error('Selecciona un cliente o ingresa el nombre de la empresa');
         return;
     }
     try {
@@ -147,7 +149,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
     if (editingId && editingId !== 'new') {
       const e = data.find(x => x.id === editingId);
       setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
-      if (e) setLocalRates(calculateRates(e));
+      if (e) {
+          setLocalRates(calculateRates(e));
+          setIsCustomCustomer(!!e.customCustomerName && !e.customerId);
+      }
     } else if (editingId === 'new') {
        // already handled by handleAddEstimate
     } else {
@@ -183,7 +188,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
     { 
       key: 'customerId', 
       header: 'Cliente', 
-      render: (_val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Varios'}</span>
+      render: (_val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || row.customCustomerName || 'Varios'}</span>
     },
     { 
       key: 'date', 
@@ -292,16 +297,63 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                   <p className="text-[10px] text-muted-foreground mb-1 uppercase font-black">Número</p>
                   <Input value={localDoc?.number} readOnly className="h-9 text-xs font-black uppercase bg-muted/10 cursor-not-allowed" />
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1 uppercase font-black">Cliente</p>
-                  <Combobox 
-                    options={(customers || [])
-                      .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
-                      .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))}
-                    value={localDoc?.customerId || ''}
-                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val } as any)}
-                    placeholder="Seleccionar Cliente"
-                  />
+                <div className="col-span-1 sm:col-span-2 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-muted-foreground uppercase font-black">Cliente / Empresa</p>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 text-[9px] font-black uppercase tracking-tighter hover:bg-primary/10 hover:text-primary rounded-lg px-2"
+                      onClick={() => {
+                        const next = !isCustomCustomer;
+                        setIsCustomCustomer(next);
+                        if (next) {
+                          setLocalDoc({ ...localDoc, customerId: '' } as any);
+                        } else {
+                          setLocalDoc({ ...localDoc, customCustomerName: '', customCustomerEmail: '', customCustomerPhone: '' } as any);
+                        }
+                      }}
+                    >
+                      {isCustomCustomer ? 'Cambiar a Cliente Registrado' : '¿Empresa No Registrada?'}
+                    </Button>
+                  </div>
+                  {!isCustomCustomer ? (
+                    <Combobox 
+                      options={(customers || [])
+                        .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
+                        .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))}
+                      value={localDoc?.customerId || ''}
+                      onChange={(val) => setLocalDoc({ ...localDoc, customerId: val } as any)}
+                      placeholder="Seleccionar Cliente"
+                    />
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="sm:col-span-1">
+                        <Input 
+                          placeholder="Nombre Empresa" 
+                          value={localDoc?.customCustomerName || ''} 
+                          onChange={(e) => setLocalDoc({ ...localDoc, customCustomerName: e.target.value } as any)}
+                          className="h-9 text-xs font-bold"
+                        />
+                      </div>
+                      <div className="sm:col-span-1">
+                        <Input 
+                          placeholder="Email" 
+                          value={localDoc?.customCustomerEmail || ''} 
+                          onChange={(e) => setLocalDoc({ ...localDoc, customCustomerEmail: e.target.value } as any)}
+                          className="h-9 text-xs font-bold"
+                        />
+                      </div>
+                      <div className="sm:col-span-1">
+                        <Input 
+                          placeholder="Teléfono" 
+                          value={localDoc?.customCustomerPhone || ''} 
+                          onChange={(e) => setLocalDoc({ ...localDoc, customCustomerPhone: e.target.value } as any)}
+                          className="h-9 text-xs font-bold"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1 uppercase font-black">Fecha Emisión</p>

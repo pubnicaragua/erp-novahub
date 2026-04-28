@@ -126,3 +126,11 @@ export const REPORTS_SUBMODULES: Submodule[] = [
   { id: 'REPORTS_HR', label: 'Recursos Humanos', description: 'Reportes de recursos humanos' },
   { id: 'REPORTS_SUBSCRIPTIONS', label: 'Suscripciones', description: 'Reportes de suscripciones' },
 ];
+
+// Submódulos de Twilio
+export const TWILIO_SUBMODULES: Submodule[] = [
+  { id: 'TWILIO_DASHBOARD', label: 'Dashboard', description: 'Vista general de WhatsApp' },
+  { id: 'TWILIO_ACCOUNTS', label: 'Cuentas', description: 'Gestión de números conectados' },
+  { id: 'TWILIO_MESSAGES', label: 'Mensajes', description: 'Bandeja de entrada multi-agente' },
+  { id: 'TWILIO_CONFIG', label: 'Configuración', description: 'Ajustes de API y Webhooks' },
+];

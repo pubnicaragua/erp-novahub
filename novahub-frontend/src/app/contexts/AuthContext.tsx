@@ -24,6 +24,7 @@ export type Module =
   | 'schema'
   | 'centro-capacitacion'
   | 'training_videos'
+  | 'twilio'
   | 'inventario_productos'
   | 'inventario_almacenes'
   | 'inventario_transferencias'
@@ -75,7 +76,7 @@ const ALL_MODULES: Module[] = [
   'clientes', 'proveedores', 'actividades', 'tickets',
   'documentos', 'notificaciones', 'transferencias',
   'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
-  'centro-capacitacion', 'training_videos',
+  'centro-capacitacion', 'training_videos', 'twilio',
 ];
 
 const getPermissionsByRole = (role: Role): Permission[] => {
@@ -162,7 +163,8 @@ const createUserObject = (apiPayload: any): User => {
     'DOCUMENTS': 'documentos',
     'NOTIFICATIONS': 'notificaciones',
     'REPORTS': 'reportes',
-    'TICKETS': 'tickets'
+    'TICKETS': 'tickets',
+    'TWILIO': 'twilio'
   };
 
   const defaultPermissions = getPermissionsByRole(role);
@@ -326,7 +328,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'tickets': 'TOOLS',
       'documentos': 'DOCUMENTS',
       'notificaciones': 'NOTIFICATIONS',
-      'reportes': 'REPORTS'
+      'reportes': 'REPORTS',
+      'twilio': 'TWILIO'
     };
     const moduleGroupMap: Record<string, string[]> = {
       ventas: [
@@ -376,6 +379,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ],
       clientes: [
         'CLIENTS', 'SALES_CLIENTS',
+      ],
+      twilio: [
+        'TWILIO', 'TWILIO_DASHBOARD', 'TWILIO_ACCOUNTS', 'TWILIO_MESSAGES', 'TWILIO_CONFIG',
       ],
     };
 

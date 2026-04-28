@@ -7,7 +7,7 @@ import {
   Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
-  CalendarDays, Headphones, BellRing, FileText, Activity, Settings
+  CalendarDays, Headphones, BellRing, FileText, Activity, Settings, MessageSquare
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -43,6 +43,7 @@ const AVAILABLE_MODULES = [
   { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
   { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
+  { id: 'TWILIO', label: 'Twilio WhatsApp', icon: MessageSquare, description: 'Integración multi-agente de WhatsApp' },
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
 ];
 
@@ -135,6 +136,11 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'CONFIG_TENANCY', label: 'Multi-Tenancy', parent: 'CONFIGURATION' },
   { id: 'CONFIG_PLATFORM', label: 'Plataforma', parent: 'CONFIGURATION' },
   { id: 'CONFIG_DOMAINS', label: 'Dominios', parent: 'CONFIGURATION' },
+  // Twilio
+  { id: 'TWILIO_DASHBOARD', label: 'Dashboard', parent: 'TWILIO' },
+  { id: 'TWILIO_ACCOUNTS', label: 'Cuentas', parent: 'TWILIO' },
+  { id: 'TWILIO_MESSAGES', label: 'Mensajes', parent: 'TWILIO' },
+  { id: 'TWILIO_CONFIG', label: 'Configuración', parent: 'TWILIO' },
 ];
 
 
@@ -320,6 +326,48 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const { themeConfig, updateTheme, updateConfig, resetTheme } = useTheme();
   const { user, canPerform } = useAuth();
   const { refreshRate: refreshCurrencyContext } = useCurrency();
+
+  const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<Partial<RoleManagement> | null>(null);
+
+  // Filtrar módulos de permisos basados en lo que el tenant tiene habilitado en su suscripción
+  const enabledPermModules = React.useMemo(() => {
+    return ALL_PERM_MODULES.filter(m => {
+      const coreModules = ['CONFIGURATION', 'DASHBOARD', 'NOTIFICATIONS', 'REPORTS'];
+      if (coreModules.includes(m.id)) return true;
+      if (user?.isPlatformAdmin) return true;
+      return user?.enabledModules.includes(m.id);
+    });
+  }, [user?.enabledModules, user?.isPlatformAdmin]);
+  
+  // Agrupar permisos por módulo padre para una visualización ordenada en la matriz
+  const groupedPermissions = React.useMemo(() => {
+    if (!editingRole?.permissions) return [];
+    
+    const perms = Array.isArray(editingRole.permissions) ? editingRole.permissions : [];
+    const groups: Record<string, { parentLabel: string, permissions: any[] }> = {};
+    
+    perms.forEach(p => {
+      const modInfo = ALL_PERM_MODULES.find(m => m.id === p.module);
+      const parentId = (modInfo as any)?.parent || p.module;
+      const parentMod = AVAILABLE_MODULES.find(m => m.id === parentId);
+      const parentLabel = parentMod?.label || (modInfo && !('parent' in modInfo) ? modInfo.label : parentId);
+      
+      if (!groups[parentId]) {
+        groups[parentId] = { parentLabel, permissions: [] };
+      }
+      groups[parentId].permissions.push(p);
+    });
+    
+    // Ordenar grupos según el orden de AVAILABLE_MODULES
+    return AVAILABLE_MODULES
+      .filter(m => groups[m.id])
+      .map(m => ({
+        parentId: m.id,
+        ...groups[m.id]
+      }));
+  }, [editingRole?.permissions]);
+
   const scenario = getScenario(user?.role);
   const visibleTabs = ALL_TABS.filter(t => {
     if (!t.scenario.includes(scenario)) return false;
@@ -641,9 +689,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     toast.info('La gestión de módulos se realiza desde la pestaña de Suscripciones para garantizar el registro de auditoría.');
   };
 
-  const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
-  const [editingRole, setEditingRole] = useState<Partial<RoleManagement> | null>(null);
-
   const handleCreateRole = () => {
     if (!canCreateRoles) {
       toast.error('No tienes permisos para crear roles');
@@ -652,7 +697,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setEditingRole({
       name: '',
       description: '',
-      permissions: ALL_PERM_MODULES.map(m => ({
+      permissions: enabledPermModules.map(m => ({
         module: m.id,
         read: true,
         create: false,
@@ -675,7 +720,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     }
     // Asegurar que el rol tenga todos los módulos actuales
     const currentPerms = role.permissions || [];
-    const fullPerms = ALL_PERM_MODULES.map(m => {
+    const fullPerms = enabledPermModules.map(m => {
       // Buscar permiso existente (ignorando mayúsculas/minúsculas y buscando por ID o Label)
       const existing = currentPerms.find(p => 
         p.module?.toUpperCase() === m.id.toUpperCase() ||
@@ -1225,7 +1270,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                           {/* Permissions Matrix */}
                           <div className="space-y-1.5 mb-5">
                             {(Array.isArray(role.permissions) ? role.permissions : []).filter((p: Permission) => p.read || p.create || p.edit || p.delete || p.write).slice(0, 4).map((p: Permission) => {
-                              const mod = ALL_PERM_MODULES.find(m => m.id === p.module);
+                              const mod = enabledPermModules.find(m => m.id === p.module);
                               return (
                                 <div key={p.module} className="flex items-center justify-between text-[11px] px-2 py-1 rounded-lg hover:bg-muted/20">
                                   <span className="font-bold text-muted-foreground truncate mr-2">{mod?.label || p.module}</span>
@@ -1287,7 +1332,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   <DialogDescription className="text-sm text-muted-foreground">Define nombre y matriz de permisos</DialogDescription>
                 </div>
               </div>
-              <div className="overflow-y-auto flex-1 p-3 sm:p-6 space-y-6">
+              <div className="overflow-y-auto flex-1 custom-scrollbar p-4 sm:p-6 space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre del Rol *</Label>
@@ -1311,61 +1356,74 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" />Borrar</span>
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-border/40 overflow-hidden overflow-x-auto">
-                    <table className="w-full text-sm table-fixed min-w-[320px] sm:min-w-full">
-                      <thead className="bg-muted/30">
-                        <tr>
-                          <th className="text-left px-2 sm:px-3 py-2 text-[10px] sm:text-xs font-black uppercase tracking-wider text-muted-foreground">Módulo</th>
-                          <th className="px-0 py-2 text-center text-[10px] sm:text-xs font-black text-blue-500 w-[52px] sm:w-[72px]">Leer</th>
-                          <th className="px-0 py-2 text-center text-[10px] sm:text-xs font-black text-emerald-500 w-[52px] sm:w-[72px]">Crear</th>
-                          <th className="px-0 py-2 text-center text-[10px] sm:text-xs font-black text-amber-500 w-[52px] sm:w-[72px]">Editar</th>
-                          <th className="px-0 py-2 text-center text-[10px] sm:text-xs font-black text-rose-500 w-[52px] sm:w-[72px]">Borrar</th>
+                  <div className="rounded-2xl border border-border/40 bg-card/50 overflow-hidden">
+                    <table className="w-full text-sm table-fixed min-w-[320px] sm:min-w-full border-separate border-spacing-0">
+                      <thead className="sticky top-0 z-[100]">
+                        <tr className="bg-card">
+                          <th className="text-left px-2 sm:px-3 py-3 text-[10px] sm:text-xs font-black uppercase tracking-wider text-muted-foreground bg-card border-b border-border/60 sticky top-0 z-[100]">Módulo</th>
+                          <th className="px-0 py-3 text-center text-[10px] sm:text-xs font-black text-blue-500 w-[52px] sm:w-[72px] bg-card border-b border-border/60 sticky top-0 z-[100]">Leer</th>
+                          <th className="px-0 py-3 text-center text-[10px] sm:text-xs font-black text-emerald-500 w-[52px] sm:w-[72px] bg-card border-b border-border/60 sticky top-0 z-[100]">Crear</th>
+                          <th className="px-0 py-3 text-center text-[10px] sm:text-xs font-black text-amber-500 w-[52px] sm:w-[72px] bg-card border-b border-border/60 sticky top-0 z-[100]">Editar</th>
+                          <th className="px-0 py-3 text-center text-[10px] sm:text-xs font-black text-rose-500 w-[52px] sm:w-[72px] bg-card border-b border-border/60 sticky top-0 z-[100]">Borrar</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/30">
-                        {(Array.isArray(editingRole?.permissions) ? editingRole.permissions : []).map((p) => {
-                          const mod = ALL_PERM_MODULES.find(m => m.id === p.module);
-                          const isSubmodule = mod && 'parent' in mod;
-                          const Icon = mod?.icon;
-                          
-                          return (
-                            <tr key={p.module} className={cn(
-                              "hover:bg-muted/10 transition-colors",
-                              isSubmodule ? "bg-muted/5 opacity-90" : "bg-card"
-                            )}>
-                              <td className="px-2 sm:px-3 py-1.5">
-                                <div className={cn("flex items-center gap-2", isSubmodule && "pl-4 sm:pl-6")}>
-                                  <div className={cn(
-                                    "hidden sm:flex size-7 rounded-lg items-center justify-center flex-shrink-0",
-                                    isSubmodule ? "bg-muted/20" : "bg-primary/10"
-                                  )}>
-                                    {Icon && <Icon className={cn("size-3.5", isSubmodule ? "text-muted-foreground" : "text-primary")} />}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className={cn("font-bold leading-tight truncate", isSubmodule ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm")}>
-                                      {mod?.label || p.module}
-                                      {isSubmodule && <span className="ml-1 text-[8px] font-black text-muted-foreground/50 uppercase">SUB</span>}
-                                      {(mod as any)?.status === 'pending' && <Badge variant="outline" className="ml-2 text-[7px] py-0 px-1 border-muted-foreground/30 text-muted-foreground/50">Próximamente</Badge>}
-                                    </p>
-                                    <p className="hidden lg:block text-[9px] text-muted-foreground truncate">{mod?.description || ''}</p>
-                                  </div>
+                        {groupedPermissions.map((group) => (
+                          <React.Fragment key={group.parentId}>
+                            {/* Header Row for Parent Module */}
+                            <tr className="bg-muted border-y border-border/60">
+                              <td colSpan={5} className="px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-primary bg-muted">
+                                <div className="flex items-center gap-2">
+                                  <div className="size-1.5 rounded-full bg-primary" />
+                                  {group.parentLabel}
                                 </div>
                               </td>
-                              <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles || (mod as any)?.status === 'pending'} checked={!!p.read} onCheckedChange={() => togglePermission(p.module, 'read')} className="scale-[0.65] sm:scale-75" /></div>
-                              </td>
-                              <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles || (mod as any)?.status === 'pending'} checked={!!p.create} onCheckedChange={() => togglePermission(p.module, 'create')} className="scale-[0.65] sm:scale-75" /></div>
-                              </td>
-                              <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles || (mod as any)?.status === 'pending'} checked={!!p.edit} onCheckedChange={() => togglePermission(p.module, 'edit')} className="scale-[0.65] sm:scale-75" /></div>
-                              </td>
-                              <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles || (mod as any)?.status === 'pending'} checked={!!p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} className="scale-[0.65] sm:scale-75" /></div>
-                              </td>
                             </tr>
-                          );
-                        })}
+                            {group.permissions.map((p) => {
+                              const mod = enabledPermModules.find(m => m.id === p.module);
+                              const isSubmodule = mod && 'parent' in mod;
+                              const Icon = mod?.icon;
+                              
+                              return (
+                                <tr key={p.module} className={cn(
+                                  "hover:bg-muted/10 transition-colors",
+                                  isSubmodule ? "bg-muted/5" : "bg-card"
+                                )}>
+                                  <td className="px-2 sm:px-3 py-1.5">
+                                    <div className={cn("flex items-center gap-2", isSubmodule && "pl-4 sm:pl-8")}>
+                                      <div className={cn(
+                                        "hidden sm:flex size-7 rounded-lg items-center justify-center flex-shrink-0",
+                                        isSubmodule ? "bg-muted/20" : "bg-primary/10"
+                                      )}>
+                                        {Icon && <Icon className={cn("size-3.5", isSubmodule ? "text-muted-foreground" : "text-primary")} />}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className={cn("font-bold leading-tight truncate", isSubmodule ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm")}>
+                                          {mod?.label || p.module}
+                                          {isSubmodule && <span className="ml-1 text-[8px] font-black text-muted-foreground/40 uppercase tracking-tighter">SUB-VISTA</span>}
+                                          {(mod as any)?.status === 'pending' && <Badge variant="outline" className="ml-2 text-[7px] py-0 px-1 border-muted-foreground/30 text-muted-foreground/50">Próximamente</Badge>}
+                                        </p>
+                                        <p className="hidden lg:block text-[9px] text-muted-foreground truncate opacity-70 italic">{mod?.description || ''}</p>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-0 py-1.5 text-center">
+                                    <div className="flex justify-center"><Switch disabled={!canEditRoles || (mod as any)?.status === 'pending'} checked={!!p.read} onCheckedChange={() => togglePermission(p.module, 'read')} className="scale-[0.65] sm:scale-75" /></div>
+                                  </td>
+                                  <td className="px-0 py-1.5 text-center">
+                                    <div className="flex justify-center"><Switch disabled={!canEditRoles || (mod as any)?.status === 'pending'} checked={!!p.create} onCheckedChange={() => togglePermission(p.module, 'create')} className="scale-[0.65] sm:scale-75" /></div>
+                                  </td>
+                                  <td className="px-0 py-1.5 text-center">
+                                    <div className="flex justify-center"><Switch disabled={!canEditRoles || (mod as any)?.status === 'pending'} checked={!!p.edit} onCheckedChange={() => togglePermission(p.module, 'edit')} className="scale-[0.65] sm:scale-75" /></div>
+                                  </td>
+                                  <td className="px-0 py-1.5 text-center">
+                                    <div className="flex justify-center"><Switch disabled={!canEditRoles || (mod as any)?.status === 'pending'} checked={!!p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} className="scale-[0.65] sm:scale-75" /></div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </React.Fragment>
+                        ))}
                       </tbody>
                     </table>
                   </div>

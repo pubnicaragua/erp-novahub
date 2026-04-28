@@ -69,6 +69,7 @@ import {
   DOCUMENTS_SUBMODULES,
   REPORTS_SUBMODULES,
   CONFIGURATION_SUBMODULES,
+  TWILIO_SUBMODULES,
   type Submodule 
 } from '../types/modules';
 import { storageService } from '../services/storage.service';
@@ -86,6 +87,7 @@ const AVAILABLE_MODULES = [
   { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema', submodules: NOTIFICATIONS_SUBMODULES },
   { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis', submodules: REPORTS_SUBMODULES },
+  { id: 'TWILIO', label: 'Twilio WhatsApp', icon: MessageSquare, description: 'Integración multi-agente de WhatsApp', submodules: TWILIO_SUBMODULES },
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema', submodules: CONFIGURATION_SUBMODULES },
 ];
 
@@ -139,7 +141,8 @@ export function SuscripcionesPage() {
     subItems: {} as Record<string, { active: boolean, price: number, label: string }>,
     userCount: 1,
     pricePerUser: 10,
-    currency: 'USD'
+    currency: 'USD',
+    customTenantName: ''
   });
 
   // Form state for module request
@@ -406,7 +409,7 @@ export function SuscripcionesPage() {
     }
   };
 
-  const handleToggleAllSubmodules = async (tenantId: string, submodules: any[], currentlyAllActive: boolean) => {
+  const handleToggleAllSubmodules = async (tenantId: string, parentModuleId: string, submodules: any[], currentlyAllActive: boolean) => {
     if (!user?.isPlatformAdmin) {
       toast.info('Solo administradores de NovaHub pueden realizar cambios masivos directos.');
       return;
@@ -414,6 +417,16 @@ export function SuscripcionesPage() {
     
     try {
       toast.loading(currentlyAllActive ? 'Desactivando catálogo...' : 'Activando catálogo...', { id: 'batch-toggle' });
+      
+      // 1. Primero el módulo padre
+      await subscriptionsService.toggleModuleStatus({ 
+        clientTenantId: tenantId, 
+        module: parentModuleId, 
+        isActive: !currentlyAllActive, 
+        notes: currentlyAllActive ? 'Desactivación masiva (Padre)' : 'Activación masiva por admin (Padre)' 
+      });
+
+      // 2. Luego todos los hijos
       for (const sub of submodules) {
         await subscriptionsService.toggleModuleStatus({ 
           clientTenantId: tenantId, 
@@ -501,13 +514,44 @@ export function SuscripcionesPage() {
       subItems: initialSubItems,
       userCount: tenant._count?.users || 1,
       pricePerUser: 10,
-      currency: 'USD'
+      currency: 'USD',
+      customTenantName: ''
+    });
+    setIsInvoiceDialogOpen(true);
+  };
+
+  const openGenerateQuoteAdHoc = () => {
+    setSelectedTenant(null);
+    
+    const initialItems: Record<string, { active: boolean, price: number, label: string }> = {};
+    const initialSubItems: Record<string, { active: boolean, price: number, label: string }> = {};
+
+    AVAILABLE_MODULES.forEach(mod => {
+      initialItems[mod.id] = { active: false, price: 35, label: mod.label };
+      mod.submodules?.forEach(sub => {
+        initialSubItems[sub.id] = { active: false, price: 5, label: sub.label };
+      });
+    });
+
+    setInvoiceForm({
+      type: 'quote',
+      pricingMode: 'granular',
+      globalPrice: 0,
+      items: initialItems,
+      subItems: initialSubItems,
+      userCount: 5,
+      pricePerUser: 10,
+      currency: 'USD',
+      customTenantName: ''
     });
     setIsInvoiceDialogOpen(true);
   };
 
   const handleGenerateInvoice = async () => {
-    if (!selectedTenant) return;
+    if (!selectedTenant && !invoiceForm.customTenantName) {
+      toast.error('Debe seleccionar una empresa o ingresar un nombre para el prospecto');
+      return;
+    }
     
     const finalItems: any[] = [];
     const isGlobal = invoiceForm.pricingMode === 'global';
@@ -555,7 +599,7 @@ export function SuscripcionesPage() {
 
     try {
       await generatePlatformDocumentPDF({
-        tenantName: selectedTenant.name,
+        tenantName: selectedTenant?.name || invoiceForm.customTenantName || 'Empresa Prospecto',
         documentType: invoiceForm.type,
         items: finalItems,
         totalPrice,
@@ -778,6 +822,14 @@ export function SuscripcionesPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          
+          <Button 
+            variant="outline" 
+            onClick={openGenerateQuoteAdHoc}
+            className="border-primary/50 text-primary hover:bg-primary/5 hover:text-primary gap-2 px-6 h-12 rounded-2xl font-bold border-2"
+          >
+            <FileText className="size-5" /> Cotización
+          </Button>
         </div>
       </motion.div>
 
@@ -954,7 +1006,8 @@ export function SuscripcionesPage() {
                             const hasSubmodules = mod.submodules ? mod.submodules.length > 0 : false;
                             
                             const activeSubmodulesCount = hasSubmodules ? mod.submodules!.filter((sub: any) => tenant.subscriptions?.some((s: any) => s.module === sub.id && s.isActive)).length : 0;
-                            const allSubmodulesActive = hasSubmodules ? activeSubmodulesCount === mod.submodules!.length : false;
+                            const eligibleSubmodules = hasSubmodules ? mod.submodules!.filter((sub: any) => sub.status !== 'pending') : [];
+                            const allSubmodulesActive = hasSubmodules ? eligibleSubmodules.every((sub: any) => tenant.subscriptions?.some((s: any) => s.module === sub.id && s.isActive)) : false;
                             const visualIsActive = hasSubmodules ? allSubmodulesActive : isActive;
                             const isPartial = hasSubmodules && !allSubmodulesActive && activeSubmodulesCount > 0;
                             
@@ -991,7 +1044,7 @@ export function SuscripcionesPage() {
                                           {hasSubmodules && (
                                             <div className="flex items-center gap-1.5" onClick={(e) => {
                                               e.stopPropagation();
-                                              handleToggleAllSubmodules(tenant.id, mod.submodules!, allSubmodulesActive);
+                                              handleToggleAllSubmodules(tenant.id, mod.id, mod.submodules!, allSubmodulesActive);
                                             }}>
                                               <div className={cn(
                                                 "flex items-center justify-center p-1 rounded-md transition-all",
@@ -1162,7 +1215,9 @@ export function SuscripcionesPage() {
                   {invoiceForm.type === 'quote' ? 'Crear Cotización' : 'Generar Factura'}
                 </DialogTitle>
                 <DialogDescription>
-                  Configure los componentes, precios y licencias para {selectedTenant?.name}.
+                  {selectedTenant 
+                    ? `Configure los componentes, precios y licencias para ${selectedTenant.name}.`
+                    : 'Cotización para empresa externa no registrada en el sistema.'}
                 </DialogDescription>
               </div>
               <div className="flex flex-col items-end gap-3">
@@ -1220,6 +1275,21 @@ export function SuscripcionesPage() {
                 </div>
               </div>
             </div>
+            
+            {!selectedTenant && (
+              <div className="mt-4 p-4 bg-primary/5 rounded-2xl border border-primary/20 animate-in fade-in zoom-in-95">
+                <Label className="text-[10px] font-black uppercase text-primary tracking-widest ml-1 mb-2 block">Nombre de Empresa Prospecto</Label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-primary/50" />
+                  <Input 
+                    placeholder="Ingrese nombre de la empresa..." 
+                    className="pl-10 h-11 bg-background border-primary/30 rounded-xl font-bold"
+                    value={invoiceForm.customTenantName}
+                    onChange={e => setInvoiceForm({...invoiceForm, customTenantName: e.target.value})}
+                  />
+                </div>
+              </div>
+            )}
           </DialogHeader>
 
           {invoiceForm.pricingMode === 'global' && (

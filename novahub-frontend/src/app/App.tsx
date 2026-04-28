@@ -26,6 +26,7 @@ import { ConfiguracionPage } from './components/ConfiguracionPage';
 import { SuscripcionesPage } from './components/SuscripcionesPage';
 import { PrismaSchemaPage } from './components/PrismaSchemaPage';
 import { TrainingHubView } from './components/help/TrainingHubView';
+import TwilioPage from './components/twilio/TwilioPage';
 
 function DashboardLayout() {
   const { hasAccess, user } = useAuth();
@@ -93,7 +94,7 @@ function DashboardLayout() {
         'clientes', 'proveedores', 'actividades', 'tickets',
         'documentos', 'notificaciones', 'transferencias', 
         'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
-        'centro-capacitacion'
+        'centro-capacitacion', 'twilio'
       ];
       
       const firstAllowed = preferredOrder.find(m => hasAccess(m));
@@ -157,6 +158,7 @@ function DashboardLayout() {
       case 'suscripciones': return <SuscripcionesPage />;
       case 'schema': return <PrismaSchemaPage />;
       case 'centro-capacitacion': return <TrainingHubView />;
+      case 'twilio': return <TwilioPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} />;
       default: return <OverviewDashboard onNavigate={handleNavigate} />;
     }
   };

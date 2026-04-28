@@ -7,7 +7,7 @@ import { motion } from 'motion/react';
 import { cn } from './ui/utils';
 import {
   Building2, Users, CheckCircle2, XCircle, Clock, Plus, Search, Edit2, Trash2,
-  UserPlus, TrendingUp, Activity, DollarSign, Zap, ShieldCheck, LayoutGrid, HandCoins, Globe, Headphones, BellRing, Settings, FileText, CalendarDays, Package, Users as UserIcon, Briefcase, BarChart3
+  UserPlus, TrendingUp, Activity, DollarSign, Zap, ShieldCheck, LayoutGrid, HandCoins, Globe, Headphones, BellRing, Settings, FileText, CalendarDays, Package, Users as UserIcon, Briefcase, BarChart3, MessageSquare
 } from 'lucide-react';
 import { subscriptionsService } from '../services/subscriptions.service';
 import { tenantsService } from '../services/tenants.service';
@@ -31,6 +31,7 @@ const AVAILABLE_MODULES = [
   { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
   { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
+  { id: 'TWILIO', label: 'Twilio WhatsApp', icon: MessageSquare, description: 'Integración multi-agente de WhatsApp' },
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
 ];
 
