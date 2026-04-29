@@ -36,6 +36,7 @@ export interface ToggleModuleStatusDto {
   module: string;
   isActive: boolean;
   notes?: string;
+  price?: number;
 }
 
 export const subscriptionsService = {

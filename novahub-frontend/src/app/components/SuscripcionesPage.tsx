@@ -49,7 +49,12 @@ import {
   X,
   KeyRound,
   ChevronRight,
-  UserPlus
+  UserPlus,
+  Coins,
+  Download,
+  Info,
+  CreditCard,
+  Filter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './ui/utils';
@@ -122,6 +127,7 @@ export function SuscripcionesPage() {
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('ALL');
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'EMPLOYEE' });
   const [tenantUsers, setTenantUsers] = useState<any[]>([]);
   const [editingUser, setEditingUser] = useState<any>(null);
@@ -131,6 +137,10 @@ export function SuscripcionesPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>('');
   const [uploading, setUploading] = useState(false);
+  const [isPriceDialogOpen, setIsPriceDialogOpen] = useState(false);
+  const [selectedTenantForPricing, setSelectedTenantForPricing] = useState<any>(null);
+  const [localPrices, setLocalPrices] = useState<Record<string, number>>({});
+  const [priceTargetTenant, setPriceTargetTenant] = useState<string>('');
 
   // Form state for platform document (Invoice/Quote)
   const [invoiceForm, setInvoiceForm] = useState({
@@ -164,7 +174,9 @@ export function SuscripcionesPage() {
     logo: '',
     customPrice: '',
     baseUserQuota: 5,
-    extraUserPrice: 10
+    extraUserPrice: 10,
+    showDetailedPricing: false,
+    implementationStatus: 'PENDING'
   });
 
   useEffect(() => {
@@ -319,7 +331,9 @@ export function SuscripcionesPage() {
       logo: '',
       customPrice: '',
       baseUserQuota: 5,
-      extraUserPrice: 10
+      extraUserPrice: 10,
+      showDetailedPricing: false,
+      implementationStatus: 'PENDING'
     });
     setLogoFile(null);
     setLogoPreview('');
@@ -335,9 +349,11 @@ export function SuscripcionesPage() {
       industry: tenant.industry,
       plan: tenant.plan,
       logo: tenant.logo || '',
-      customPrice: tenant.customPrice || '',
+      customPrice: tenant.customBasePrice || '',
       baseUserQuota: tenant.baseUserQuota || 5,
-      extraUserPrice: tenant.extraUserPrice || 10
+      extraUserPrice: tenant.extraUserPrice || 10,
+      showDetailedPricing: tenant.showDetailedPricing || false,
+      implementationStatus: tenant.implementationStatus || 'PENDING'
     });
     setLogoPreview(tenant.logo || '');
     setIsTenantDialogOpen(true);
@@ -388,8 +404,46 @@ export function SuscripcionesPage() {
       toast.error(error.response?.data?.message || 'Error al activar módulo');
       fetchData();
     }
-
   };
+
+  const openPricingManager = (tenant: any) => {
+    setSelectedTenantForPricing(tenant);
+    const prices: Record<string, number> = {};
+    tenant.subscriptions?.forEach((sub: any) => {
+      if (sub.isActive) {
+        prices[sub.module] = sub.price || 0;
+      }
+    });
+    setLocalPrices(prices);
+    setPriceTargetTenant(tenant.id);
+    setIsPriceDialogOpen(true);
+  };
+
+  const handleSaveAllPrices = async () => {
+    if (!priceTargetTenant) return;
+    try {
+      // Guardar cada precio modificado
+      const promises = Object.entries(localPrices).map(([module, price]) => 
+        subscriptionsService.toggleModuleStatus({
+          clientTenantId: priceTargetTenant,
+          module,
+          isActive: true,
+          price
+        })
+      );
+      
+      // También actualizar baseUserQuota y extraUserPrice si se desea desde aquí, 
+      // pero por ahora nos enfocamos en módulos.
+      
+      await Promise.all(promises);
+      toast.success('Precios granulares actualizados correctamente');
+      setIsPriceDialogOpen(false);
+      fetchData();
+    } catch (error) {
+      toast.error('Error al actualizar precios');
+    }
+  };
+
 
   const handleDirectDisable = async (tenantId: string, moduleName: string) => {
     if (!user?.isPlatformAdmin) return;
@@ -620,12 +674,6 @@ export function SuscripcionesPage() {
     }
   };
 
-  const filteredTenants = tenants.filter(t =>
-    t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.industry?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   const getIndustryIcon = (industry: string) => {
     switch (industry) {
       case 'ARCHITECTURE': return Globe;
@@ -670,8 +718,17 @@ export function SuscripcionesPage() {
     );
   }
 
+  const filteredTenants = tenants.filter(t => {
+    const matchesSearch = t.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          t.slug.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === 'ALL' || 
+                         (filterStatus === 'ACTIVE' && t.isActive) || 
+                         (filterStatus === 'INACTIVE' && !t.isActive);
+    return matchesSearch && matchesStatus;
+  });
+
   return (
-    <div className="p-6 space-y-8 max-w-7xl mx-auto min-h-screen">
+    <div className="p-6 space-y-8 w-full min-h-screen">
       {/* --- HEADER --- */}
       <motion.div 
         initial={{ opacity: 0, x: -20 }}
@@ -705,8 +762,8 @@ export function SuscripcionesPage() {
                 <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter">{selectedTenant ? 'Editar Entidad' : 'Nueva Entidad Tenant'}</DialogTitle>
                 <DialogDescription> Configura el entorno aislado para el cliente. </DialogDescription>
               </DialogHeader>
-              <div className="grid gap-6 py-6">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-6 py-6 overflow-y-auto max-h-[70vh] px-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Nombre Comercial</Label>
                     <Input 
@@ -738,7 +795,7 @@ export function SuscripcionesPage() {
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Administrador de Cuenta</Label>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Input 
                       placeholder="Nombre Completo" 
                       className="bg-muted/10 border-border/50 h-11 rounded-xl"
@@ -753,7 +810,7 @@ export function SuscripcionesPage() {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Vertical de Industria</Label>
                     <Input 
@@ -766,38 +823,44 @@ export function SuscripcionesPage() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Plan de Facturación</Label>
-                    <Select value={tenantForm.plan} onValueChange={v => setTenantForm({...tenantForm, plan: v})}>
+                    <Select value={tenantForm.plan} onValueChange={v => {
+                        let defaultPrice = '0';
+                        switch(v) {
+                          case 'BASIC': defaultPrice = '29'; break;
+                          case 'PROFESSIONAL': defaultPrice = '79'; break;
+                          case 'ENTERPRISE': defaultPrice = '199'; break;
+                        }
+                        setTenantForm({...tenantForm, plan: v, customPrice: defaultPrice});
+                      }}>
                       <SelectTrigger className="bg-muted/10 border-border/50 h-11 rounded-xl">
-                        <SelectValue placeholder="Seleccionar plan..." />
+                        <SelectValue placeholder="Seleccionar categoría..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="BASIC">Básico ($29/mes) - Funcionalidades esenciales</SelectItem>
-                        <SelectItem value="PROFESSIONAL">Profesional ($79/mes) - Para empresas en crecimiento</SelectItem>
-                        <SelectItem value="ENTERPRISE">Enterprise ($199/mes) - Solución completa</SelectItem>
-                        <SelectItem value="CUSTOM">Custom (A medida) - Personalizado según necesidades</SelectItem>
+                        <SelectItem value="BASIC">Básico (Categoría)</SelectItem>
+                        <SelectItem value="PROFESSIONAL">Profesional (Categoría)</SelectItem>
+                        <SelectItem value="ENTERPRISE">Enterprise (Categoría)</SelectItem>
                       </SelectContent>
                     </Select>
-                    
-                    
-                    {tenantForm.plan === 'CUSTOM' && (
-                      <div className="mt-3">
-                        <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Precio Custom (USD)</Label>
-                        <Input 
-                          type="number" 
-                          min="0"
-                          placeholder="Ej. 299"
-                          className="bg-muted/10 border-border/50 h-11 rounded-xl mt-1"
-                          value={tenantForm.customPrice || ''}
-                          onChange={e => setTenantForm({...tenantForm, customPrice: e.target.value})}
-                        />
-                      </div>
-                    )}
-                    
-                    <p className="text-[9px] text-muted-foreground ml-1 mt-1">Selecciona el plan de facturación mensual</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-black tracking-widest text-primary ml-1 italic">Precio Mensual Base (USD)</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold text-xs">$</span>
+                    <Input 
+                      type="number" 
+                      min="0"
+                      placeholder="Ej. 29"
+                      className="bg-muted/10 border-border/50 h-11 rounded-xl pl-7 font-bold text-lg"
+                      value={tenantForm.customPrice || ''}
+                      onChange={e => setTenantForm({...tenantForm, customPrice: e.target.value})}
+                    />
+                  </div>
+                  <p className="text-[9px] text-muted-foreground ml-1">Precio final de la suscripción (independiente del plan)</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Usuarios Gratis Incluidos</Label>
                     <Input 
@@ -846,6 +909,34 @@ export function SuscripcionesPage() {
                   </div>
                   <p className="text-[9px] text-muted-foreground ml-1">PNG, JPG o WEBP - Máx. 2MB</p>
                 </div>
+
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Fase de Implementación</Label>
+                  <Select value={tenantForm.implementationStatus} onValueChange={v => setTenantForm({...tenantForm, implementationStatus: v})}>
+                    <SelectTrigger className="bg-muted/10 border-border/50 h-11 rounded-xl">
+                      <SelectValue placeholder="Seleccionar fase..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PENDING">Pendiente de Inicio</SelectItem>
+                      <SelectItem value="CONFIG_INITIAL">Configuración Inicial</SelectItem>
+                      <SelectItem value="DATA_MIGRATION">Migración de Datos</SelectItem>
+                      <SelectItem value="TRAINING">Capacitación y Entrenamiento</SelectItem>
+                      <SelectItem value="ACTIVE">Activación Total (Producción)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[9px] text-muted-foreground ml-1">Controla el progreso visible en el dashboard del cliente.</p>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-primary/5 border border-primary/10 rounded-2xl">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-black uppercase tracking-widest text-primary italic">Mostrar Detalles al Cliente</Label>
+                    <p className="text-[10px] text-muted-foreground">El cliente podrá ver el desglose de precios por módulo en su suscripción.</p>
+                  </div>
+                  <Switch 
+                    checked={tenantForm.showDetailedPricing}
+                    onCheckedChange={checked => setTenantForm({...tenantForm, showDetailedPricing: checked})}
+                  />
+                </div>
               </div>
               <DialogFooter className="gap-3">
                 <Button variant="outline" className="border-border/50 rounded-xl h-11" onClick={() => { setIsTenantDialogOpen(false); setSelectedTenant(null); resetTenantForm(); }}>Cancelar</Button>
@@ -865,37 +956,6 @@ export function SuscripcionesPage() {
           </Button>
         </div>
       </motion.div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Empresas Activas', value: (tenants || []).length, icon: Building2, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-          { label: 'Servicios Habilitados', value: (tenants || []).reduce((acc, t) => acc + (t.subscriptions?.length || 0), 0), icon: Zap, color: 'text-primary', bg: 'bg-primary/10' },
-          { label: 'Pendientes Revisión', value: (requests || []).filter(r => r.status === 'PENDING').length, icon: Clock, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-          { label: 'Crecimiento Mes', value: '+12%', icon: TrendingUp, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-        ].map((stat, i) => (
-          <motion.div 
-            key={i}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: i * 0.1 }}
-          >
-            <Card className="bg-card/50 border-border/50 hover:border-primary/20 transition-all group overflow-hidden relative backdrop-blur-md rounded-2xl shadow-sm">
-              <div className={cn("absolute -top-2 -right-2 p-3 opacity-5 group-hover:opacity-10 transition-opacity", stat.color)}>
-                <stat.icon className="size-20" />
-              </div>
-              <CardContent className="p-5 flex items-center gap-5 relative z-10">
-                <div className={cn("p-3 rounded-2xl", stat.bg, stat.color)}>
-                  <stat.icon className="size-6" />
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-[10px] font-black uppercase tracking-widest">{stat.label}</p>
-                  <p className="text-3xl font-black text-foreground tabular-nums tracking-tighter">{stat.value}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
 
       <Dialog open={isRequestDialogOpen} onOpenChange={setIsRequestDialogOpen}>
         <DialogContent className="bg-card border-border text-card-foreground sm:max-w-[450px]">
@@ -947,7 +1007,7 @@ export function SuscripcionesPage() {
       </Dialog>
 
       <Tabs defaultValue="active" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 lg:w-[400px] bg-muted/20 border border-border/50 p-1 h-12">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[600px] bg-muted/20 border border-border/50 p-1 h-12">
           <TabsTrigger value="active" className="text-muted-foreground hover:text-foreground hover:bg-muted/40 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground uppercase text-[10px] font-black tracking-widest gap-2">
             <Building2 className="size-4" /> Gestión Empresas
           </TabsTrigger>
@@ -959,200 +1019,90 @@ export function SuscripcionesPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="billing" className="text-muted-foreground hover:text-foreground hover:bg-muted/40 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground uppercase text-[10px] font-black tracking-widest gap-2">
+            <CreditCard className="size-4" /> Control Facturas
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="active" className="mt-6 space-y-6">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4 bg-muted/10 p-3 rounded-xl border border-border/50 flex-1">
-              <Search className="size-5 text-muted-foreground ml-2" />
+          <div className="flex flex-col md:flex-row items-center gap-4 mb-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3 size-4 text-muted-foreground" />
               <Input 
-                placeholder="Buscar por Empresa, Cliente o Industria..." 
-                className="bg-transparent border-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground"
+                placeholder="Buscar por nombre o slug..." 
+                className="pl-10 h-11 bg-muted/10 border-border/50 rounded-xl"
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="h-11 w-full md:w-[200px] bg-muted/10 border-border/50 rounded-xl font-bold uppercase text-[10px] tracking-widest">
+                <div className="flex items-center gap-2">
+                  <Filter className="size-4" />
+                  <SelectValue placeholder="Estado" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos los Estados</SelectItem>
+                <SelectItem value="ACTIVE">Activos</SelectItem>
+                <SelectItem value="INACTIVE">Inactivos / Suspendidos</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredTenants.map(tenant => {
               const IndIcon = getIndustryIcon(tenant.industry);
               return (
-                <Card key={tenant.id} className="bg-card border-border/50 hover:border-primary/20 transition-all overflow-hidden group">
-                  <div className="p-6">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                      <div className="flex items-center gap-5">
-                        <div className="size-16 rounded-2xl bg-muted/20 flex items-center justify-center border border-border group-hover:bg-primary/10 group-hover:border-primary/30 transition-all relative">
-                          <IndIcon className="size-8 text-muted-foreground group-hover:text-primary" />
-                          <div className="absolute -bottom-1 -right-1 size-5 rounded-full bg-background border border-border flex items-center justify-center">
-                            <ShieldCheck className="size-3 text-primary" />
-                          </div>
+                <Card key={tenant.id} className="bg-card border-border/50 hover:border-primary/10 transition-all group rounded-2xl overflow-hidden shadow-sm">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="size-12 rounded-xl bg-muted/20 flex items-center justify-center border border-border group-hover:bg-primary/5 transition-colors shrink-0">
+                          <IndIcon className="size-6 text-muted-foreground group-hover:text-primary" />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-3">
-                            <h2 className="text-xl font-bold text-foreground tracking-tight">{tenant.name}</h2>
-                            <Badge variant="outline" className={cn("text-[10px] font-bold uppercase tracking-widest", getPlanColor(tenant.plan))}>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                            <h3 className="font-bold text-foreground text-sm leading-tight break-words">{tenant.name}</h3>
+                            <Badge variant="outline" className={cn("text-[9px] font-bold uppercase px-1.5 py-0 shrink-0", getPlanColor(tenant.plan))}>
                               {tenant.plan}
                             </Badge>
                           </div>
-                          <div className="flex flex-wrap items-center gap-4 mt-1 text-xs text-muted-foreground font-bold uppercase tracking-tighter">
-                            <span className="flex items-center gap-1.5"><Globe className="size-3.5" /> {tenant.slug}.novahub.io</span>
-                            <span className="flex items-center gap-1.5"><UserIcon className="size-3.5" /> {tenant._count?.users || 0} Usuarios</span>
-                            <span className="flex items-center gap-1.5 text-emerald-500/50"><Zap className="size-3.5" /> {tenant.industry}</span>
+                          <div className="flex flex-col mt-1 text-[10px] font-bold uppercase text-muted-foreground tracking-tighter">
+                            <span className="flex items-center gap-1 truncate" title={`${tenant.slug}.novahub.io`}>
+                              <Globe className="size-3 shrink-0" /> 
+                              <span className="truncate">{tenant.slug}.novahub.io</span>
+                            </span>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 opacity-70">
+                              <span className="flex items-center gap-1 shrink-0"><Users className="size-3" /> {tenant._count?.users || 0} Usuarios</span>
+                              <span className="flex items-center gap-1 text-primary/70 shrink-0"><Zap className="size-3" /> {tenant.industry}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-xl" onClick={() => openEditTenant(tenant)}>
-                          <Edit2 className="size-5" />
+                      
+                      <div className="flex flex-wrap items-center justify-end gap-1 shrink-0 max-w-[120px] 2xl:max-w-none">
+                        <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/5" onClick={() => openEditTenant(tenant)}>
+                          <Edit2 className="size-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10 rounded-xl" onClick={async () => { 
-                            setSelectedTenant(tenant); 
-                            setIsUserDialogOpen(true);
-                            try {
-                              const users = await tenantsService.getUsers(tenant.id);
-                              setTenantUsers(Array.isArray(users) ? users : (users as any)?.data || []);
-                            } catch (error: any) {
-                              setTenantUsers(tenant.users || []);
-                              toast.error(error?.message || 'No se pudieron cargar los usuarios del tenant');
-                            }
-                          }}>
-                          <Users className="size-5" />
+                        <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-blue-500 hover:bg-blue-500/5" onClick={() => { setSelectedTenant(tenant); setIsUserDialogOpen(true); }}>
+                          <Users className="size-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-purple-500 hover:bg-purple-500/10 rounded-xl" onClick={() => handleViewDetails(tenant)}>
-                          <Eye className="size-5" />
+                        <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-purple-500 hover:bg-purple-500/5" onClick={() => handleViewDetails(tenant)}>
+                          <Eye className="size-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded-xl" onClick={() => handleDeleteTenant(tenant.id, tenant.name)}>
-                          <Trash2 className="size-5" />
+                        <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-amber-500 hover:bg-amber-500/5" onClick={() => openPricingManager(tenant)} title="Gestionar Precios Granulares">
+                          <Coins className="size-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 rounded-xl" onClick={() => openGenerateInvoice(tenant)}>
-                          <FileText className="size-5" />
+                        <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/5" onClick={() => openGenerateInvoice(tenant)} title="Generar Factura">
+                          <FileText className="size-4" />
                         </Button>
-                        {user?.isPlatformAdmin && tenant.slug === 'test' && (
-                          <Button 
-                            variant="outline"
-                            onClick={async () => {
-                              try {
-                                await tenantsService.triggerBilling(tenant.id);
-                                toast.success('Facturación forzada para test');
-                                fetchData();
-                              } catch (e) {
-                                toast.error('Error al ejecutar facturación');
-                              }
-                            }}
-                            className="bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest px-4 ml-2"
-                          >
-                            Forzar Cobro
-                          </Button>
-                        )}
-                      </div>
-
-                      <div className="bg-muted/30 dark:bg-black/40 p-3 rounded-2xl border border-border/50">
-                        <p className="text-[10px] font-black uppercase text-muted-foreground/60 tracking-widest mb-2">Módulos Soportados</p>
-                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-                          {AVAILABLE_MODULES.map(mod => {
-                            const isActive = tenant.subscriptions?.some((s: any) => s.module === mod.id && s.isActive);
-                            const isPending = requests.some(r => r.clientTenantId === tenant.id && r.requestedModule === mod.id && r.status === 'PENDING');
-                            const isExpanded = expandedModules[`${tenant.id}-${mod.id}`];
-                            const hasSubmodules = mod.submodules ? mod.submodules.length > 0 : false;
-                            
-                            const activeSubmodulesCount = hasSubmodules ? mod.submodules!.filter((sub: any) => tenant.subscriptions?.some((s: any) => s.module === sub.id && s.isActive)).length : 0;
-                            const eligibleSubmodules = hasSubmodules ? mod.submodules!.filter((sub: any) => sub.status !== 'pending') : [];
-                            const allSubmodulesActive = hasSubmodules ? eligibleSubmodules.every((sub: any) => tenant.subscriptions?.some((s: any) => s.module === sub.id && s.isActive)) : false;
-                            const visualIsActive = hasSubmodules ? allSubmodulesActive : isActive;
-                            const isPartial = hasSubmodules && !allSubmodulesActive && activeSubmodulesCount > 0;
-                            
-                            return (
-                               <React.Fragment key={mod.id}>
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        onClick={() => setExpandedModules(prev => ({ ...prev, [`${tenant.id}-${mod.id}`]: !isExpanded }))}
-                                        disabled={isPending && !hasSubmodules}
-                                        className={cn(
-                                          "flex-1 flex items-center justify-between px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-tight transition-all",
-                                          visualIsActive 
-                                            ? "bg-primary text-primary-foreground border-primary/50 shadow-lg shadow-primary/10" 
-                                            : isPending
-                                              ? "bg-amber-500/20 text-amber-600 dark:text-amber-500 border-amber-500/30 animate-pulse"
-                                              : isPartial 
-                                                ? "bg-primary/20 text-primary border-primary/30"
-                                                : "bg-muted/50 text-muted-foreground/60 border-border/50 hover:border-primary/30 hover:text-foreground/80"
-                                        )}
-                                      >
-                                        <div className="flex items-center gap-2" onClick={(e) => {
-                                          if (!hasSubmodules) {
-                                            e.stopPropagation();
-                                            handleToggleModule(tenant.id, mod.id, isActive);
-                                          }
-                                        }}>
-                                          <mod.icon className={cn("size-3.5", visualIsActive ? "text-primary-foreground" : isPartial ? "text-primary" : "text-muted-foreground/50")} />
-                                          {mod.label}
-                                          {visualIsActive && !hasSubmodules && <Check className="size-3 ml-1" />}
-                                          {isPending && !hasSubmodules && <Clock className="size-3 ml-1" />}
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          {hasSubmodules && (
-                                            <div className="flex items-center gap-1.5" onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleToggleAllSubmodules(tenant.id, mod.id, mod.submodules!, allSubmodulesActive);
-                                            }}>
-                                              <div className={cn(
-                                                "flex items-center justify-center p-1 rounded-md transition-all",
-                                                visualIsActive ? "bg-white/20 hover:bg-white/30 text-primary-foreground" : "bg-muted dark:bg-black/40 hover:bg-primary hover:text-primary-foreground border border-border/50"
-                                              )} title={visualIsActive ? "Desactivar Todo" : "Activar Todo"}>
-                                                <Zap className={cn("size-3", isPartial && !visualIsActive ? "text-primary group-hover:text-primary-foreground" : "")} />
-                                              </div>
-                                            </div>
-                                          )}
-                                          <div className={cn("p-1 transition-transform", isExpanded ? "rotate-180" : "rotate-0")}>
-                                            {hasSubmodules && <span className="opacity-70 text-[10px]">▼</span>}
-                                          </div>
-                                        </div>
-                                      </button>
-                                    </div>
-
-                                    {hasSubmodules && isExpanded && (
-                                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="pl-6 space-y-1">
-                                        {mod.submodules!.map((sub: Submodule) => {
-                                          const subIsActive = tenant.subscriptions?.some((s: any) => s.module === sub.id && s.isActive);
-                                          const subIsPending = requests.some(r => r.clientTenantId === tenant.id && r.requestedModule === sub.id && r.status === 'PENDING');
-                                          return (
-                                            <button
-                                              key={sub.id}
-                                              onClick={() => handleToggleModule(tenant.id, sub.id, subIsActive)}
-                                              disabled={subIsPending || sub.status === 'pending'}
-                                              className={cn(
-                                                "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-tight transition-all",
-                                                sub.status === 'pending'
-                                                  ? "bg-muted/20 text-muted-foreground/30 border-dashed border-border/30 cursor-not-allowed opacity-60"
-                                                  : subIsActive 
-                                                    ? "bg-primary/80 text-primary-foreground border-primary/40" 
-                                                    : subIsPending
-                                                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-500 border-amber-500/20 animate-pulse"
-                                                      : "bg-muted/30 text-muted-foreground/50 border-border/30 hover:border-primary/20 hover:text-foreground/70"
-                                              )}
-                                              title={sub.description}
-                                            >
-                                              <span className="size-1.5 rounded-full bg-current" />
-                                              {sub.label}
-                                              {sub.status === 'pending' && <Badge variant="outline" className="ml-auto text-[7px] py-0 px-1 border-muted-foreground/30 text-muted-foreground/50">Próximamente</Badge>}
-                                              {subIsActive && !sub.status && <Check className="size-2.5 ml-auto" />}
-                                              {subIsPending && <Clock className="size-2.5 ml-auto" />}
-                                            </button>
-                                          );
-                                        })}
-                                      </motion.div>
-                                    )}
-                                  </div>
-                                </React.Fragment>
-                            );
-                          })}
-                        </div>
+                        <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5" onClick={() => handleDeleteTenant(tenant.id, tenant.name)} title="Eliminar Empresa">
+                          <Trash2 className="size-4" />
+                        </Button>
                       </div>
                     </div>
-                  </div>
+                  </CardContent>
                 </Card>
               );
             })}
@@ -1212,6 +1162,71 @@ export function SuscripcionesPage() {
             )}
           </div>
         </TabsContent>
+
+        <TabsContent value="billing" className="mt-6 space-y-6">
+          <div className="grid grid-cols-1 gap-4">
+             {tenants.map(t => {
+               // Buscar en billingHistory o invoices (compatibilidad con diferentes respuestas de API)
+               const history = t.billingHistory || t.invoices || [];
+               const pendingInvoices = history.filter((h: any) => 
+                 h.status?.toUpperCase() === 'PENDING'
+               );
+               
+               if (pendingInvoices.length === 0) return null;
+               
+               return (
+                 <Card key={t.id} className="p-6 bg-card border-border/50 border-l-4 border-l-amber-500 shadow-sm">
+                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                     <div className="flex items-center gap-4">
+                        <div className="size-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-black">
+                          <Building2 className="size-6" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold uppercase tracking-tighter italic">{t.name}</h3>
+                          <p className="text-[10px] font-black uppercase text-rose-500 tracking-widest">
+                            {pendingInvoices.length} Factura(s) Pendiente(s)
+                          </p>
+                        </div>
+                     </div>
+                     
+                     <div className="space-y-3 flex-1 max-w-md">
+                        {pendingInvoices.map((inv: any) => (
+                          <div key={inv.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/50">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-foreground">#{inv.number}</span>
+                              <span className="text-[9px] text-muted-foreground uppercase font-black">{new Date(inv.date).toLocaleDateString()}</span>
+                            </div>
+                            <span className="text-sm font-black text-primary">${inv.total || inv.amount}</span>
+                            <Button 
+                              size="sm" 
+                              onClick={async () => {
+                                try {
+                                  await api.patch(`/tenants/${t.id}/billing/${inv.id}`, { status: 'PAID' });
+                                  toast.success(`Factura ${inv.number} marcada como pagada`);
+                                  fetchData();
+                                } catch (e) {
+                                  toast.error('Error al actualizar factura');
+                                }
+                              }}
+                              className="bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase text-[9px] px-3 h-8 rounded-lg shadow-lg shadow-emerald-500/20"
+                            >
+                              Marcar Pagada
+                            </Button>
+                          </div>
+                        ))}
+                     </div>
+                   </div>
+                 </Card>
+               );
+             })}
+             {tenants.every(t => (t.billingHistory?.filter((h: any) => h.status === 'PENDING') || []).length === 0) && (
+               <div className="py-20 flex flex-col items-center gap-4">
+                  <ShieldCheck className="size-16 text-emerald-500/20" />
+                  <p className="text-muted-foreground italic text-sm">No hay facturas pendientes de cobro en la plataforma.</p>
+               </div>
+             )}
+          </div>
+        </TabsContent>
       </Tabs>
 
       <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
@@ -1250,21 +1265,39 @@ export function SuscripcionesPage() {
       </Dialog>
 
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="sm:max-w-[1200px] max-h-[95vh] overflow-y-auto border-border/50 bg-background/95 backdrop-blur-sm p-2">
-          {selectedTenant && (
-            <div className="w-full overflow-hidden">
+        <DialogContent className="sm:max-w-[1300px] w-[95vw] h-[90vh] p-0 overflow-hidden border-border/50 bg-background/95 backdrop-blur-md shadow-2xl">
+          <DialogHeader className="p-6 border-b bg-muted/30 shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                  <Building2 className="size-6 text-primary" />
+                </div>
+                <div>
+                  <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter text-foreground">
+                    Panel de Control: <span className="text-primary">{selectedTenant?.name}</span>
+                  </DialogTitle>
+                  <DialogDescription className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60">
+                    Gestión granular de suscripción, módulos y facturación.
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-primary/20">
+            {tenantDetails && (
               <TenantSubscriptionView 
-                tenant={selectedTenant} 
+                tenant={tenantDetails} 
                 availableModules={AVAILABLE_MODULES} 
-                requests={requests.filter((r: any) => r.clientTenantId === selectedTenant.id)}
+                requests={requests.filter((r: any) => r.clientTenantId === tenantDetails.id)}
                 customRoles={customRoles}
                 onRefresh={fetchData}
                 onRequestModule={(moduleId, notes) => {
                   toast.info("Como SuperAdmin no necesitas solicitar módulos, puedes activarlos directamente.");
                 }}
               />
-            </div>
-          )}
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1592,6 +1625,88 @@ export function SuscripcionesPage() {
                 Finalizar {invoiceForm.type === 'quote' ? 'Cotización' : 'Factura'}
               </Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isPriceDialogOpen} onOpenChange={setIsPriceDialogOpen}>
+        <DialogContent className="max-w-xl w-[95vw] p-0 border-none bg-background rounded-3xl shadow-2xl overflow-hidden">
+          <DialogHeader className="p-8 pb-4 bg-primary/5">
+            <DialogTitle className="flex items-center gap-3 italic uppercase font-black tracking-tighter text-2xl">
+              <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Coins className="size-6 text-primary" />
+              </div>
+              Precios Granulares: {selectedTenantForPricing?.name}
+            </DialogTitle>
+            <DialogDescription className="font-medium">
+              Define los costos mensuales individuales para cada funcionalidad activa.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="p-8 pt-4 space-y-6 max-h-[60vh] overflow-y-auto">
+            <div className="bg-muted/30 p-4 rounded-2xl border border-border/50 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Precio Base del Plan</p>
+                <p className="text-xl font-bold">{selectedTenantForPricing?.plan} Category</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Costo Actual</p>
+                <p className="text-2xl font-black text-primary">${selectedTenantForPricing?.customBasePrice || 0}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-primary italic px-1">Desglose por Módulo/Vista</h3>
+              <div className="grid gap-2">
+                {selectedTenantForPricing?.subscriptions?.filter((s: any) => s.isActive).length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic text-center py-8 bg-muted/10 rounded-2xl border border-dashed border-border/50">No hay módulos adicionales activos para este tenant.</p>
+                ) : (
+                  selectedTenantForPricing?.subscriptions?.filter((s: any) => s.isActive).map((sub: any) => {
+                    // Buscar etiqueta del módulo en AVAILABLE_MODULES
+                    let modLabel = sub.module;
+                    AVAILABLE_MODULES.forEach(m => {
+                      if (m.id === sub.module) modLabel = m.label;
+                      m.submodules?.forEach(sm => {
+                        if (sm.id === sub.module) modLabel = sm.label;
+                      });
+                    });
+
+                    return (
+                      <div key={sub.id} className="flex items-center justify-between p-3 rounded-2xl border border-border/50 bg-card hover:border-primary/30 transition-all group">
+                        <div className="flex items-center gap-3">
+                          <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                            <Zap className="size-4" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-tight">{modLabel}</p>
+                            <p className="text-[9px] text-muted-foreground font-medium uppercase tracking-widest">{sub.module}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-muted-foreground">$</span>
+                          <Input 
+                            type="number"
+                            className="w-24 h-9 bg-muted/20 border-none font-black text-sm text-right focus-visible:ring-1 focus-visible:ring-primary rounded-lg"
+                            value={localPrices[sub.module] || 0}
+                            onChange={(e) => setLocalPrices({...localPrices, [sub.module]: Number(e.target.value)})}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="p-6 bg-muted/5 border-t flex items-center justify-between gap-4">
+            <Button variant="outline" className="rounded-xl h-11 px-6 font-bold border-border/50" onClick={() => setIsPriceDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveAllPrices} className="bg-primary hover:bg-primary/90 text-primary-foreground h-11 px-8 rounded-xl font-black italic uppercase tracking-tighter gap-2 shadow-lg shadow-primary/20">
+              <Check className="size-4" />
+              Guardar Todos los Precios
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

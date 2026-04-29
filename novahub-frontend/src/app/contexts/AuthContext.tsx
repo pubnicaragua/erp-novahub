@@ -25,6 +25,7 @@ export type Module =
   | 'centro-capacitacion'
   | 'training_videos'
   | 'twilio'
+  | 'soporte-tecnico'
   | 'inventario_productos'
   | 'inventario_almacenes'
   | 'inventario_transferencias'
@@ -76,7 +77,7 @@ const ALL_MODULES: Module[] = [
   'clientes', 'proveedores', 'actividades', 'tickets',
   'documentos', 'notificaciones', 'transferencias',
   'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
-  'centro-capacitacion', 'training_videos', 'twilio',
+  'centro-capacitacion', 'training_videos', 'twilio', 'soporte-tecnico',
 ];
 
 const getPermissionsByRole = (role: Role): Permission[] => {
@@ -303,7 +304,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
-      const platformModules = ['dashboard', 'suscripciones', 'configuracion', 'notificaciones', 'centro-capacitacion'];
+      const platformModules = ['dashboard', 'suscripciones', 'configuracion', 'notificaciones', 'centro-capacitacion', 'soporte-tecnico'];
       return platformModules.includes(module);
     }
 
@@ -313,7 +314,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // 1. Verificar si el módulo está habilitado para el tenant (Suscripción)
     // Algunos módulos de sistema siempre están activos
-    const coreModules = ['configuracion', 'dashboard', 'suscripciones', 'centro-capacitacion'];
+    const coreModules = ['configuracion', 'dashboard', 'suscripciones', 'centro-capacitacion', 'soporte-tecnico'];
     const moduleEnumMap: Record<string, string> = {
       'ventas': 'SALES',
       'compras': 'PURCHASES',

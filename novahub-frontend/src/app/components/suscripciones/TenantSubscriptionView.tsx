@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
   Zap, Building2, Globe, Users, Clock, Shield, Plus, KeyRound, Check, 
-  CreditCard, FileText, Activity, AlertTriangle, Download, Ticket
+  CreditCard, FileText, Activity, AlertTriangle, Download, Ticket, UserPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -210,15 +210,15 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         inv.items.forEach((item: any) => {
           doc.text(item.description || 'Item', 20, y);
           doc.text(String(item.quantity || 1), 120, y);
-          doc.text(`$${Number(item.unitPrice || 0).toFixed(2)}`, 150, y);
-          doc.text(`$${Number(item.total || 0).toFixed(2)}`, 180, y);
+          doc.text(`C$ ${Number(item.unitPrice || 0).toLocaleString()}`, 150, y);
+          doc.text(`C$ ${Number(item.total || 0).toLocaleString()}`, 180, y);
           y += 10;
         });
       } else {
         doc.text("Cobro mensual de la suscripción", 20, y);
         doc.text("1", 120, y);
-        doc.text(`$${Number(inv.total || 0).toFixed(2)}`, 150, y);
-        doc.text(`$${Number(inv.total || 0).toFixed(2)}`, 180, y);
+        doc.text(`C$ ${Number(inv.total || 0).toLocaleString()}`, 150, y);
+        doc.text(`C$ ${Number(inv.total || 0).toLocaleString()}`, 180, y);
         y += 10;
       }
 
@@ -230,7 +230,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       doc.text("TOTAL:", 150, y + 15);
       doc.setFontSize(14);
       doc.setTextColor(15, 23, 42);
-      doc.text(`$${Number(inv.total || 0).toFixed(2)} USD`, 170, y + 15);
+      doc.text(`C$ ${Number(inv.total || 0).toLocaleString()} NIO`, 170, y + 15);
 
       // Footer
       doc.setFontSize(8);
@@ -292,10 +292,31 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   
   const isOverdue = billingInfo?.isOverdue || false;
   
-  // Real calculation from DB
-  const nextDate = tenant.nextBillingDate ? new Date(tenant.nextBillingDate) : new Date(new Date(tenant.createdAt).setMonth(new Date(tenant.createdAt).getMonth() + 1));
+  // Cálculo de Próximo Cobro (Día de Aniversario Forzado)
+  const getNextDate = () => {
+    const start = new Date(tenant.createdAt);
+    const anniversaryDay = start.getDate();
+    const now = new Date();
+    
+    // Determinar el mes objetivo (si ya pasamos el día de este mes, ir al siguiente)
+    let targetMonth = now.getMonth();
+    if (now.getDate() >= anniversaryDay) {
+      targetMonth++;
+    }
+    
+    const target = new Date(now.getFullYear(), targetMonth, anniversaryDay);
+    
+    // Manejo de meses cortos
+    const lastDayOfTarget = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+    if (anniversaryDay > lastDayOfTarget) {
+      target.setDate(lastDayOfTarget);
+    }
+    
+    return target;
+  };
+  const nextDate = getNextDate();
   const diffTime = nextDate.getTime() - new Date().getTime();
-  const daysToRenew = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const daysToRenew = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
   
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -378,10 +399,13 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                     <div className="flex justify-between items-start mb-8">
                       <div>
                         <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Suscripción Actual</p>
-                        <h2 className="text-3xl font-bold tracking-tighter">Plan {tenant.plan}</h2>
+                        <h2 className="text-3xl font-bold tracking-tighter">Plan {billingInfo?.plan || tenant.plan}</h2>
                       </div>
                       <Badge className={cn("px-3 py-1 font-black uppercase", getStatusColor(tenant.implementationStatus))}>
-                        {tenant.implementationStatus}
+                        {tenant.implementationStatus === 'ACTIVE' ? 'ACTIVO' : 
+                         tenant.implementationStatus === 'PENDING' ? 'PENDIENTE' : 
+                         tenant.implementationStatus === 'SUSPENDED' ? 'SUSPENDIDO' : 
+                         tenant.implementationStatus}
                       </Badge>
                     </div>
                     
@@ -393,15 +417,18 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                       <div>
                         <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Próximo Cobro</p>
                         <p className="text-xl font-bold flex items-center gap-2">
-                          {daysToRenew > 0 ? `${daysToRenew} días` : 'Vencido'} <Clock className="size-4 text-muted-foreground" />
+                          {nextDate.toLocaleDateString()}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground font-medium mt-0.5 italic">
+                          ({daysToRenew > 0 ? `${daysToRenew} días restantes` : 'Vencido'})
                         </p>
                       </div>
                       <div className="md:col-span-2">
-                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Cobro Mensual</p>
+                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Costo Total Mensual</p>
                         <p className="text-2xl font-bold text-primary">{formatAmount(billingInfo?.currentInvoiceEstimate?.total || 0, 'USD')}</p>
                       </div>
                       <div className="md:col-span-4">
-                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Uso de Licencias</p>
+                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Capacidad de Usuarios</p>
                         <div className="flex items-center gap-3">
                           <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                             <div 
@@ -411,7 +438,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                           </div>
                           <span className="text-sm font-bold">{activeUsersCount} / {baseQuota}</span>
                         </div>
-                        {extraUsers > 0 && <p className="text-[10px] text-amber-500 mt-1 font-medium">+{extraUsers} usuarios adicionales ({formatAmount(extraUserPrice, 'USD')}/c.u.)</p>}
+                        {extraUsers > 0 && <p className="text-[10px] text-amber-500 mt-1 font-medium">+{extraUsers} licencias adicionales ({formatAmount(extraUserPrice, 'USD')}/u)</p>}
                       </div>
                     </div>
                   </CardContent>
@@ -420,27 +447,76 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 {/* Quick Actions */}
                 <Card className="bg-card border-border/50 shadow-lg">
                   <CardHeader className="pb-4">
-                    <CardTitle className="text-sm font-black uppercase tracking-widest">Acciones Rápidas</CardTitle>
+                    <CardTitle className="text-sm font-black uppercase tracking-widest">Estado de Cuenta</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => setIsUpgradeDialogOpen(true)}>
-                      <Zap className="size-4 mr-3" /> Solicitar Upgrade de Plan
+                    {/* Módulos removidos por petición del usuario */}
+                    <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => setActiveTab('billing')}>
+                      <CreditCard className="size-4 mr-3" /> Historial de Facturación
                     </Button>
-                    <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => setIsUserDialogOpen(true)}>
-                      <Plus className="size-4 mr-3" /> Comprar Licencias de Usuario
+                    <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => setActiveTab('users')}>
+                      <Users className="size-4 mr-3" /> Gestionar Usuarios
+                    </Button>
+                    <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => setIsUpgradeDialogOpen(true)}>
+                      <Zap className="size-4 mr-3" /> Solicitar Nuevo Módulo
                     </Button>
                     <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => {
-                      if (!billingInfo?.history?.length) return toast.error("No hay facturas disponibles");
-                      toast.success("Iniciando descarga de última factura...");
+                      setIsUserDialogOpen(true);
                     }}>
-                      <Download className="size-4 mr-3" /> Descargar Última Factura
+                      <UserPlus className="size-4 mr-3" /> Solicitar Usuario Extra
                     </Button>
                     <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => setIsTicketDialogOpen(true)}>
-                      <Ticket className="size-4 mr-3" /> Ticket de Soporte
+                      <Ticket className="size-4 mr-3" /> Soporte Nova
                     </Button>
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Detalle Granular de Precios (SI ESTÁ HABILITADO) */}
+              {billingInfo?.showDetailedPricing && (
+                <Card className="bg-card border-border/50 shadow-sm mt-6 overflow-hidden">
+                  <CardHeader className="bg-primary/5 border-b border-primary/10">
+                    <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                      <CreditCard className="size-4" /> Desglose Detallado de Suscripción
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-muted/30 border-b border-border/40">
+                            <th className="text-left p-4 font-black uppercase text-[10px] tracking-widest text-muted-foreground">Concepto</th>
+                            <th className="text-right p-4 font-black uppercase text-[10px] tracking-widest text-muted-foreground">Costo Mensual</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b border-border/40 hover:bg-muted/5 transition-colors">
+                            <td className="p-4 font-bold italic">Costo Base Plan {billingInfo?.plan}</td>
+                            <td className="p-4 text-right font-black">{formatAmount(billingInfo?.currentInvoiceEstimate?.basePlanCost || 0, 'USD')}</td>
+                          </tr>
+                          {billingInfo?.subscriptions?.filter((s: any) => Number(s.price) > 0).map((s: any) => (
+                            <tr key={s.id} className="border-b border-border/40 hover:bg-muted/5 transition-colors">
+                              <td className="p-4 font-medium">Módulo: {s.module.replace(/_/g, ' ')}</td>
+                              <td className="p-4 text-right font-bold text-primary">{formatAmount(s.price, 'USD')}</td>
+                            </tr>
+                          ))}
+                          {extraUsers > 0 && (
+                            <tr className="border-b border-border/40 hover:bg-muted/5 transition-colors">
+                              <td className="p-4 font-medium italic">Usuarios Extras ({extraUsers})</td>
+                              <td className="p-4 text-right font-bold">{formatAmount(billingInfo?.currentInvoiceEstimate?.usersCost || 0, 'USD')}</td>
+                            </tr>
+                          )}
+                          <tr className="bg-primary/5">
+                            <td className="p-4 font-black uppercase text-xs tracking-tighter italic">Total Suscripción</td>
+                            <td className="p-4 text-right font-black text-xl text-primary">{formatAmount(billingInfo?.currentInvoiceEstimate?.total || 0, 'USD')}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
 
               {/* Implementación Timeline */}
               <Card className="bg-card border-border/50 shadow-sm mt-6">
@@ -454,17 +530,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 <CardContent>
                   <div className="relative pt-8 pb-4">
                     <div className="absolute top-11 left-0 w-full h-1 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary transition-all w-full" />
+              <div className="h-full bg-primary transition-all w-full" />
                     </div>
                     <div className="flex justify-between relative z-10">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="size-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shadow-md shadow-primary/20"><Check className="size-4" /></div>
-                        <span className="text-xs font-bold">Configuración Inicial</span>
-                      </div>
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="size-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shadow-md shadow-primary/20"><Check className="size-4" /></div>
-                        <span className="text-xs font-bold">Migración de Datos</span>
-                      </div>
                       <div className="flex flex-col items-center gap-2">
                         <div className="size-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shadow-md shadow-primary/20"><Check className="size-4" /></div>
                         <span className="text-xs font-bold">Capacitación</span>
@@ -482,36 +550,68 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               </Card>
             </TabsContent>
 
-            {/* --- TAB: BILLING --- */}
             <TabsContent value="billing" className="space-y-6 mt-0">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Factura Actual Widget */}
-                <Card className="bg-card border-border/50 shadow-sm md:col-span-1">
-                  <CardHeader className="bg-muted/10 border-b border-border/50">
-                    <CardTitle className="text-sm font-black uppercase tracking-widest text-muted-foreground flex justify-between items-center">
-                      Próxima Factura Estimada
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-6">
-                    <h2 className="text-5xl font-black tracking-tighter text-foreground text-center">{formatAmount(billingInfo?.currentInvoiceEstimate?.total || 0, 'USD')}</h2>
-                    <div className="space-y-3 text-sm">
-                      <div className="flex justify-between text-muted-foreground">
-                        <span>Plan Base ({tenant.plan})</span>
-                        <span className="font-bold text-foreground">{formatAmount(billingInfo?.currentInvoiceEstimate?.basePlanCost || 0, 'USD')}</span>
+                
+                {/* Columna Izquierda: Resumen Financiero */}
+                <div className="md:col-span-1 space-y-6">
+                  {/* Próxima Factura Estimada */}
+                  <Card className="bg-card border-border/50 shadow-sm h-fit">
+                    <CardHeader className="bg-muted/30 border-b border-border/40">
+                      <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                        <Clock className="size-3" /> Próxima Factura Estimada
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6 space-y-6">
+                      <h2 className="text-5xl font-black tracking-tighter text-foreground text-center">{formatAmount(billingInfo?.currentInvoiceEstimate?.total || 0, 'USD')}</h2>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>Plan Base ({tenant.plan})</span>
+                          <span className="font-bold text-foreground">{formatAmount(billingInfo?.currentInvoiceEstimate?.basePlanCost || 0, 'USD')}</span>
+                        </div>
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>Usuarios Extras ({extraUsers})</span>
+                          <span className="font-bold text-foreground">{formatAmount(billingInfo?.currentInvoiceEstimate?.usersCost || 0, 'USD')}</span>
+                        </div>
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>Módulos Adicionales</span>
+                          <span className="font-bold text-foreground">{formatAmount(billingInfo?.currentInvoiceEstimate?.modulesCost || 0, 'USD')}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-muted-foreground">
-                        <span>Usuarios Extras ({extraUsers})</span>
-                        <span className="font-bold text-foreground">{formatAmount(billingInfo?.currentInvoiceEstimate?.usersCost || 0, 'USD')}</span>
-                      </div>
-                      <div className="flex justify-between text-muted-foreground">
-                        <span>Módulos Adicionales</span>
-                        <span className="font-bold text-foreground">{formatAmount(billingInfo?.currentInvoiceEstimate?.modulesCost || 0, 'USD')}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
 
-                {/* Historial */}
+                  {/* Saldo Pendiente (Solo si existe) */}
+                  {billingInfo?.history?.some((h: any) => h.status !== 'PAID') && (
+                    <Card className="bg-amber-500/5 border-amber-500/20 shadow-sm">
+                      <CardHeader className="bg-amber-500/10 border-b border-amber-500/20">
+                        <CardTitle className="text-[10px] font-black uppercase tracking-widest text-amber-600 flex items-center gap-2">
+                          <AlertTriangle className="size-3" /> Saldo Pendiente Acumulado
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-6">
+                        <h2 className="text-4xl font-black tracking-tighter text-amber-700 text-center mb-4">
+                          {formatAmount(
+                            billingInfo.history
+                              .filter((h: any) => h.status !== 'PAID')
+                              .reduce((sum: number, inv: any) => sum + (inv.amount || inv.total || 0), 0),
+                            'USD'
+                          )}
+                        </h2>
+                        <div className="flex flex-col gap-2">
+                          <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white font-black italic uppercase tracking-tighter text-[10px] h-9 rounded-xl shadow-lg shadow-amber-500/20">
+                            Pagar Deuda Total
+                          </Button>
+                          <p className="text-[9px] text-amber-600/70 text-center font-medium italic">
+                            * Tienes {billingInfo.history.filter((h: any) => h.status !== 'PAID').length} facturas vencidas o pendientes.
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+
+                {/* Historial (Columna Derecha - Span 2) */}
                 <Card className="bg-card border-border/50 shadow-sm md:col-span-2">
                   <CardHeader>
                     <CardTitle>Historial de Facturación</CardTitle>
@@ -695,9 +795,10 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                         </div>
                         <Badge variant="outline" className={cn(
                           "text-[10px] font-black uppercase tracking-widest",
-                          u.isActive ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                          u.isActive ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : 
+                          (activeUsersCount >= baseQuota ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20")
                         )}>
-                          {u.isActive ? 'Activo' : 'Suspendido'}
+                          {u.isActive ? 'Activo' : (activeUsersCount >= baseQuota ? 'Pendiente Activación' : 'Suspendido')}
                         </Badge>
                       </div>
 
