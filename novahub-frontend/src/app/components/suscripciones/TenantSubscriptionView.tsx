@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
   Zap, Building2, Globe, Users, Clock, Shield, Plus, KeyRound, Check, 
-  CreditCard, FileText, Activity, AlertTriangle, Download, Ticket, UserPlus
+  CreditCard, FileText, Activity, AlertTriangle, Download, Ticket, UserPlus, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -529,22 +529,79 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 </CardHeader>
                 <CardContent>
                   <div className="relative pt-8 pb-4">
-                    <div className="absolute top-11 left-0 w-full h-1 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary transition-all w-full" />
-                    </div>
-                    <div className="flex justify-between relative z-10">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="size-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shadow-md shadow-primary/20"><Check className="size-4" /></div>
-                        <span className="text-xs font-bold">Capacitación</span>
-                      </div>
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="size-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shadow-md shadow-primary/20"><Check className="size-4" /></div>
-                        <span className="text-xs font-bold">Activación Total</span>
-                      </div>
-                    </div>
+                    {(() => {
+                      const phases = [
+                        { id: 'PENDING', label: 'Inicio' },
+                        { id: 'CONFIG_INITIAL', label: 'Configuración' },
+                        { id: 'DATA_MIGRATION', label: 'Migración' },
+                        { id: 'TRAINING', label: 'Capacitación' },
+                        { id: 'ACTIVE', label: 'Activación Total' }
+                      ];
+                      
+                      const currentIndex = tenant.implementationStatus === 'SUSPENDED' ? 4 : Math.max(0, phases.findIndex(p => p.id === tenant.implementationStatus));
+                      const progress = (currentIndex / (phases.length - 1)) * 100;
+                      
+                      return (
+                        <>
+                          <div className="absolute top-11 left-8 right-8 h-1 bg-muted rounded-full overflow-hidden">
+                            <div 
+                              className={cn("h-full transition-all duration-500", 
+                                tenant.implementationStatus === 'SUSPENDED' ? "bg-rose-500" : "bg-primary"
+                              )} 
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between relative z-10 px-4">
+                            {phases.map((phase, idx) => {
+                              const isPast = idx < currentIndex;
+                              const isCurrent = idx === currentIndex && tenant.implementationStatus !== 'SUSPENDED';
+                              const isSuspended = tenant.implementationStatus === 'SUSPENDED';
+                              const isFullyActive = tenant.implementationStatus === 'ACTIVE';
+                              
+                              return (
+                                <div key={phase.id} className="flex flex-col items-center gap-2 w-16 md:w-20">
+                                  <div className={cn("size-8 rounded-full flex items-center justify-center font-bold transition-all duration-500 z-10 border-[3px]", 
+                                      isSuspended ? "bg-rose-500 border-rose-500 text-white shadow-md shadow-rose-500/20" : 
+                                      isPast || isFullyActive ? "bg-primary border-primary text-white shadow-md shadow-primary/20" : 
+                                      isCurrent ? "bg-background border-primary text-primary shadow-md shadow-primary/20" :
+                                      "bg-muted border-muted text-muted-foreground"
+                                    )}>
+                                    {isSuspended ? <Check className="size-4" /> : 
+                                     isPast || isFullyActive ? <Check className="size-4" /> : 
+                                     isCurrent ? <Loader2 className="size-4 animate-spin" /> : 
+                                     <div className="size-2 rounded-full bg-muted-foreground/30" />}
+                                  </div>
+                                  <span className={cn("text-[9px] md:text-[10px] font-bold text-center leading-tight transition-colors", 
+                                    isCurrent ? "text-primary" : 
+                                    isSuspended ? "text-rose-500" :
+                                    isPast || isFullyActive ? "text-foreground" : "text-muted-foreground"
+                                  )}>{phase.label}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
-                  <div className="mt-6 bg-primary/5 border border-primary/10 rounded-xl p-4 text-sm text-muted-foreground">
-                    <strong className="text-foreground">Fase Actual: Activación Total.</strong> Tu plataforma está operando al 100%. Disfruta de todas las características de NovaHub ERP.
+                  <div className={cn("mt-6 border rounded-xl p-4 text-sm transition-colors duration-500", 
+                      tenant.implementationStatus === 'ACTIVE' ? "bg-primary/5 border-primary/10 text-muted-foreground" : 
+                      tenant.implementationStatus === 'SUSPENDED' ? "bg-rose-500/5 border-rose-500/10 text-rose-600 dark:text-rose-400" : 
+                      "bg-amber-500/5 border-amber-500/10 text-amber-600 dark:text-amber-400"
+                    )}>
+                    {tenant.implementationStatus === 'ACTIVE' ? (
+                      <><strong className="text-foreground">Fase Actual: Activación Total.</strong> Tu plataforma está operando al 100%. Disfruta de todas las características de NovaHub ERP.</>
+                    ) : tenant.implementationStatus === 'SUSPENDED' ? (
+                      <><strong className="text-rose-600 dark:text-rose-500">Fase Actual: Suspendido.</strong> El entorno y sus servicios han sido suspendidos temporalmente.</>
+                    ) : tenant.implementationStatus === 'TRAINING' ? (
+                      <><strong className="text-amber-600 dark:text-amber-500">Fase Actual: Capacitación y Entrenamiento.</strong> El equipo está recibiendo la formación para usar el sistema.</>
+                    ) : tenant.implementationStatus === 'DATA_MIGRATION' ? (
+                      <><strong className="text-amber-600 dark:text-amber-500">Fase Actual: Migración de Datos.</strong> Estamos subiendo tu información histórica al nuevo sistema.</>
+                    ) : tenant.implementationStatus === 'CONFIG_INITIAL' ? (
+                      <><strong className="text-amber-600 dark:text-amber-500">Fase Actual: Configuración Inicial.</strong> Estamos ajustando los parámetros básicos de tu empresa.</>
+                    ) : (
+                      <><strong className="text-amber-600 dark:text-amber-500">Fase Actual: Pendiente de Inicio.</strong> La implementación está en cola para comenzar en breve.</>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -737,7 +794,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                                   </div>
                                   
                                   <div className="flex items-center gap-2 opacity-0 group-hover/sub:opacity-100 transition-opacity">
-                                    {!subActive && !subPending && (
+                                    {!subActive && !subPending && !currentUser?.isPlatformAdmin && (
                                       <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] uppercase font-bold text-primary hover:bg-primary/10" onClick={() => handleRequestClick(sub)}>
                                         Solicitar
                                       </Button>
@@ -751,7 +808,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                           </div>
                         )}
 
-                        {!hasSubmodules && !isMainActive && !isMainPending && (
+                        {!hasSubmodules && !isMainActive && !isMainPending && !currentUser?.isPlatformAdmin && (
                           <div className="mt-auto pt-6">
                             <Button variant="outline" className="w-full font-bold uppercase text-[10px] tracking-widest border-primary/20 text-primary hover:bg-primary/10" onClick={() => handleRequestClick(mod)}>
                               <Plus className="size-4 mr-2" /> Solicitar Activación
@@ -772,9 +829,11 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                   <h3 className="text-xl font-bold tracking-tight">Miembros de la Empresa</h3>
                   <p className="text-sm text-muted-foreground">Gestiona accesos y licencias activas ({activeUsersCount}/{baseQuota}).</p>
                 </div>
-                <Button className="bg-primary text-primary-foreground gap-2 font-bold px-6 rounded-xl shadow-lg shadow-primary/20" onClick={() => setIsUserDialogOpen(true)}>
-                  <Plus className="size-5" /> Agregar Miembro
-                </Button>
+                {!currentUser?.isPlatformAdmin && (
+                  <Button className="bg-primary text-primary-foreground gap-2 font-bold px-6 rounded-xl shadow-lg shadow-primary/20" onClick={() => setIsUserDialogOpen(true)}>
+                    <Plus className="size-5" /> Agregar Miembro
+                  </Button>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -810,16 +869,18 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                           </div>
                         </div>
                         
-                        <div className="flex items-center gap-2 pt-4">
-                          {u.role !== 'ADMIN' && (
-                            <Button variant="outline" size="sm" className="flex-[0.5] hover:bg-orange-500/10 hover:text-orange-500 h-8 border-orange-500/20" onClick={() => { setSelectedUser(u); setIsChangePasswordDialogOpen(true); }}>
-                              <KeyRound className="size-3" />
+                        {!currentUser?.isPlatformAdmin && (
+                          <div className="flex items-center gap-2 pt-4">
+                            {u.role !== 'ADMIN' && (
+                              <Button variant="outline" size="sm" className="flex-[0.5] hover:bg-orange-500/10 hover:text-orange-500 h-8 border-orange-500/20" onClick={() => { setSelectedUser(u); setIsChangePasswordDialogOpen(true); }}>
+                                <KeyRound className="size-3" />
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="sm" className={cn("flex-1 text-[10px] font-black uppercase tracking-widest h-8", u.isActive ? "hover:bg-rose-500/10 hover:text-rose-500" : "hover:bg-emerald-500/10 hover:text-emerald-500")} onClick={() => toggleUserStatus(u)}>
+                              {u.isActive ? 'Suspender' : 'Activar'}
                             </Button>
-                          )}
-                          <Button variant="ghost" size="sm" className={cn("flex-1 text-[10px] font-black uppercase tracking-widest h-8", u.isActive ? "hover:bg-rose-500/10 hover:text-rose-500" : "hover:bg-emerald-500/10 hover:text-emerald-500")} onClick={() => toggleUserStatus(u)}>
-                            {u.isActive ? 'Suspender' : 'Activar'}
-                          </Button>
-                        </div>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

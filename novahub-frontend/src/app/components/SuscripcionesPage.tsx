@@ -192,6 +192,24 @@ export function SuscripcionesPage() {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (isUserDialogOpen && selectedTenant?.id) {
+      fetchTenantUsers(selectedTenant.id);
+    } else {
+      setTenantUsers([]);
+    }
+  }, [isUserDialogOpen, selectedTenant]);
+
+  const fetchTenantUsers = async (tenantId: string) => {
+    try {
+      const res = await tenantsService.getUsers(tenantId);
+      setTenantUsers(Array.isArray(res) ? res : (res as any).data || []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      toast.error('Error al cargar los usuarios de la empresa');
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -921,7 +939,7 @@ export function SuscripcionesPage() {
                       <SelectItem value="CONFIG_INITIAL">Configuración Inicial</SelectItem>
                       <SelectItem value="DATA_MIGRATION">Migración de Datos</SelectItem>
                       <SelectItem value="TRAINING">Capacitación y Entrenamiento</SelectItem>
-                      <SelectItem value="ACTIVE">Activación Total (Producción)</SelectItem>
+                      <SelectItem value="ACTIVE">Activación Total</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-[9px] text-muted-foreground ml-1">Controla el progreso visible en el dashboard del cliente.</p>
