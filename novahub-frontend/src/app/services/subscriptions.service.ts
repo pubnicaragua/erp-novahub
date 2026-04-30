@@ -25,6 +25,7 @@ export interface CreateSubscriptionRequestDto {
   requestedModule: string;
   customPrice?: number;
   notes?: string;
+  requestedPlan?: string;
 }
 
 export interface UpdateSubscriptionStatusDto {

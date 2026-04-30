@@ -69,4 +69,8 @@ export const tenantsService = {
   
   getBillingHistory: (tenantId: string) => api.get<any>(`/tenants/${tenantId}/billing`),
   getDocuments: (tenantId: string) => api.get<any[]>(`/tenants/${tenantId}/documents`),
+  createDocument: (tenantId: string, data: { title: string; type: string; url: string }) =>
+    api.post(`/tenants/${tenantId}/documents`, data),
+  deleteDocument: (tenantId: string, docId: string) =>
+    api.delete(`/tenants/${tenantId}/documents/${docId}`),
 };

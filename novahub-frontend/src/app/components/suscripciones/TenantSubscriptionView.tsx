@@ -5,7 +5,8 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
   Zap, Building2, Globe, Users, Clock, Shield, Plus, KeyRound, Check, 
-  CreditCard, FileText, Activity, AlertTriangle, Download, Ticket, UserPlus, Loader2
+  CreditCard, FileText, Activity, AlertTriangle, Download, Ticket, UserPlus, Loader2,
+  ArrowUpCircle, Trash2, Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -21,6 +22,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { subscriptionsService } from '../../services/subscriptions.service';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
@@ -61,6 +63,20 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
 
   const [isUpgradeDialogOpen, setIsUpgradeDialogOpen] = useState(false);
   const [isTicketDialogOpen, setIsTicketDialogOpen] = useState(false);
+  const [isDocDialogOpen, setIsDocDialogOpen] = useState(false);
+
+  // Plan change form
+  const [selectedPlan, setSelectedPlan] = useState('');
+  const [planChangeNotes, setPlanChangeNotes] = useState('');
+  const [submittingPlanChange, setSubmittingPlanChange] = useState(false);
+
+  // Document form
+  const [docForm, setDocForm] = useState({ title: '', type: 'CONTRACT', url: '' });
+  const [submittingDoc, setSubmittingDoc] = useState(false);
+
+  // Support ticket form
+  const [ticketForm, setTicketForm] = useState({ subject: '', description: '' });
+  const [submittingTicket, setSubmittingTicket] = useState(false);
 
   const { formatAmount } = useCurrency();
 
@@ -457,8 +473,8 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                     <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => setActiveTab('users')}>
                       <Users className="size-4 mr-3" /> Gestionar Usuarios
                     </Button>
-                    <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => setIsUpgradeDialogOpen(true)}>
-                      <Zap className="size-4 mr-3" /> Solicitar Nuevo Módulo
+                    <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => { setSelectedPlan(''); setPlanChangeNotes(''); setIsUpgradeDialogOpen(true); }}>
+                      <ArrowUpCircle className="size-4 mr-3" /> Solicitar Cambio de Plan
                     </Button>
                     <Button variant="outline" className="w-full justify-start h-12 rounded-xl hover:bg-primary/5 hover:text-primary border-border/50" onClick={() => {
                       setIsUserDialogOpen(true);
@@ -890,13 +906,25 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
 
             {/* --- TAB: DOCUMENTS --- */}
             <TabsContent value="documents" className="space-y-6 mt-0">
+               <div className="flex items-center justify-between bg-card border border-border/50 p-6 rounded-2xl shadow-sm">
+                <div>
+                  <h3 className="text-xl font-bold tracking-tight">Repositorio de Documentos</h3>
+                  <p className="text-sm text-muted-foreground">Contratos, políticas, SLA y comprobantes.</p>
+                </div>
+                <Button className="bg-primary text-primary-foreground gap-2 font-bold px-6 rounded-xl shadow-lg shadow-primary/20" onClick={() => { setDocForm({ title: '', type: 'CONTRACT', url: '' }); setIsDocDialogOpen(true); }}>
+                  <Upload className="size-5" /> Agregar Documento
+                </Button>
+               </div>
                <Card className="bg-card border-border/50 shadow-sm">
-                  <CardHeader>
-                    <CardTitle>Repositorio de Documentos</CardTitle>
-                    <CardDescription>Contratos, políticas y SLA aceptados.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-6">
                     <div className="space-y-4">
+                      {documents.length === 0 && (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <FileText className="size-12 mx-auto mb-4 opacity-30" />
+                          <p className="font-bold">Sin documentos</p>
+                          <p className="text-sm">Agrega contratos, comprobantes o políticas.</p>
+                        </div>
+                      )}
                       {documents?.map((doc: any) => (
                         <div key={doc.id} className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:bg-muted/10 transition-colors">
                           <div className="flex items-center gap-4">
@@ -905,12 +933,30 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                             </div>
                             <div>
                               <p className="font-bold">{doc.title}</p>
-                              <p className="text-xs text-muted-foreground">Firma: {new Date(doc.date).toLocaleDateString()}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <Badge variant="outline" className="text-[9px] uppercase font-bold">{doc.type}</Badge>
+                                <span className="text-xs text-muted-foreground">• {new Date(doc.date).toLocaleDateString()}</span>
+                              </div>
                             </div>
                           </div>
-                          <Button variant="outline" size="sm" className="gap-2 font-bold uppercase text-[10px] tracking-widest">
-                            <Download className="size-4" /> PDF
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            {doc.url && (
+                              <Button variant="outline" size="sm" className="gap-2 font-bold uppercase text-[10px] tracking-widest" onClick={() => window.open(doc.url, '_blank')}>
+                                <Download className="size-4" /> Ver
+                              </Button>
+                            )}
+                            {currentUser?.isPlatformAdmin && (
+                              <Button variant="ghost" size="icon" className="hover:text-rose-500 hover:bg-rose-500/10" onClick={async () => {
+                                try {
+                                  await tenantsService.deleteDocument(tenant.id, doc.id);
+                                  toast.success('Documento eliminado');
+                                  fetchBillingAndDocs();
+                                } catch { toast.error('Error al eliminar'); }
+                              }}>
+                                <Trash2 className="size-4" />
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -997,20 +1043,51 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       <Dialog open={isUpgradeDialogOpen} onOpenChange={setIsUpgradeDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Solicitar Upgrade de Plan</DialogTitle>
-            <DialogDescription>¿Te gustaría cambiarte a un plan con más beneficios?</DialogDescription>
+            <DialogTitle>Solicitar Cambio de Plan</DialogTitle>
+            <DialogDescription>Selecciona el plan al que deseas migrar. La solicitud será revisada por el equipo de NovaHub.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>¿Qué características buscas?</Label>
-              <Textarea placeholder="Ej: Necesito más límite de usuarios o almacenamiento." />
+              <Label>Plan Actual</Label>
+              <div className="p-3 rounded-xl bg-muted/30 border border-border/50">
+                <Badge className={cn('font-black uppercase', getPlanColor(tenant.plan))}>Plan {tenant.plan}</Badge>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Nuevo Plan Deseado</Label>
+              <Select value={selectedPlan} onValueChange={setSelectedPlan}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar plan..." /></SelectTrigger>
+                <SelectContent>
+                  {['BASIC', 'PROFESSIONAL', 'ENTERPRISE'].filter(p => p !== tenant.plan).map(p => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Motivo / Notas</Label>
+              <Textarea value={planChangeNotes} onChange={e => setPlanChangeNotes(e.target.value)} placeholder="Ej: Necesitamos más usuarios y módulos avanzados..." />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsUpgradeDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={() => {
-              toast.success("Solicitud enviada a soporte. Un asesor te contactará pronto.");
-              setIsUpgradeDialogOpen(false);
+            <Button disabled={!selectedPlan || submittingPlanChange} onClick={async () => {
+              try {
+                setSubmittingPlanChange(true);
+                await subscriptionsService.createRequest({
+                  clientTenantId: tenant.id,
+                  requestedModule: 'CONFIG_SUBSCRIPTION',
+                  notes: `Cambio de plan: ${tenant.plan} → ${selectedPlan}. ${planChangeNotes}`,
+                  requestedPlan: selectedPlan,
+                });
+                toast.success('Solicitud de cambio de plan enviada correctamente');
+                setIsUpgradeDialogOpen(false);
+                onRefresh();
+              } catch (e: any) {
+                toast.error(e.response?.data?.message || 'Error al enviar solicitud');
+              } finally {
+                setSubmittingPlanChange(false);
+              }
             }}>Enviar Solicitud</Button>
           </DialogFooter>
         </DialogContent>
@@ -1025,19 +1102,80 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Asunto</Label>
-              <Input placeholder="Ej: Problemas con el módulo de ventas" />
+              <Input value={ticketForm.subject} onChange={e => setTicketForm({...ticketForm, subject: e.target.value})} placeholder="Ej: Problemas con el módulo de ventas" />
             </div>
             <div className="space-y-2">
               <Label>Descripción detallada</Label>
-              <Textarea placeholder="Explica paso a paso el problema..." className="h-32" />
+              <Textarea value={ticketForm.description} onChange={e => setTicketForm({...ticketForm, description: e.target.value})} placeholder="Explica paso a paso el problema..." className="h-32" />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsTicketDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={() => {
-              toast.success("Ticket creado correctamente. Nos contactaremos pronto.");
-              setIsTicketDialogOpen(false);
+            <Button disabled={!ticketForm.subject || !ticketForm.description || submittingTicket} onClick={async () => {
+              try {
+                setSubmittingTicket(true);
+                const { api } = await import('../../services/api');
+                await api.post('/support-tickets', ticketForm);
+                toast.success('Ticket creado correctamente. Nos contactaremos pronto.');
+                setTicketForm({ subject: '', description: '' });
+                setIsTicketDialogOpen(false);
+              } catch (e: any) {
+                toast.error(e.response?.data?.message || 'Error al crear ticket');
+              } finally {
+                setSubmittingTicket(false);
+              }
             }}>Enviar Ticket</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Agregar Documento */}
+      <Dialog open={isDocDialogOpen} onOpenChange={setIsDocDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Agregar Documento</DialogTitle>
+            <DialogDescription>Sube un contrato, comprobante, SLA o política.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Título</Label>
+              <Input value={docForm.title} onChange={e => setDocForm({...docForm, title: e.target.value})} placeholder="Ej: Contrato de Servicio 2026" />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo de Documento</Label>
+              <Select value={docForm.type} onValueChange={v => setDocForm({...docForm, type: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CONTRACT">Contrato</SelectItem>
+                  <SelectItem value="SLA">SLA</SelectItem>
+                  <SelectItem value="TERMS">Términos y Condiciones</SelectItem>
+                  <SelectItem value="PRIVACY">Política de Privacidad</SelectItem>
+                  <SelectItem value="RECEIPT">Comprobante</SelectItem>
+                  <SelectItem value="LEGAL">Legal</SelectItem>
+                  <SelectItem value="OTHER">Otro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>URL del Documento</Label>
+              <Input value={docForm.url} onChange={e => setDocForm({...docForm, url: e.target.value})} placeholder="https://..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDocDialogOpen(false)}>Cancelar</Button>
+            <Button disabled={!docForm.title || !docForm.url || submittingDoc} onClick={async () => {
+              try {
+                setSubmittingDoc(true);
+                await tenantsService.createDocument(tenant.id, docForm);
+                toast.success('Documento agregado');
+                setIsDocDialogOpen(false);
+                fetchBillingAndDocs();
+              } catch (e: any) {
+                toast.error(e.response?.data?.message || 'Error al agregar documento');
+              } finally {
+                setSubmittingDoc(false);
+              }
+            }}>Guardar Documento</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
