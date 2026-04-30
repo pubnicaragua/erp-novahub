@@ -261,6 +261,22 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     }
   };
 
+  const handleRoleChange = async (userId: string, newRole: string, newCustomRoleId?: string | null) => {
+    try {
+      setUploading(true);
+      await tenantsService.updateUser(tenant.id, userId, { 
+        role: newRole, 
+        customRoleId: newRole === 'ADMIN' ? null : newCustomRoleId 
+      });
+      toast.success('Rol actualizado');
+      fetchUsers();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al actualizar rol');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const executeToggleStatus = async (userId: string, currentStatus: boolean) => {
     try {
       setIsTogglingStatus(true);
@@ -881,8 +897,51 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                         <div className="flex flex-col gap-2 pt-1">
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Tipo</span>
-                            <Badge variant="outline">{u.role === 'ADMIN' ? 'Admin' : 'Colaborador'}</Badge>
+                            {currentUser?.isPlatformAdmin || currentUser?.id === u.id ? (
+                              <Badge variant="outline">{u.role === 'ADMIN' ? 'Admin' : 'Colaborador'}</Badge>
+                            ) : (
+                              <Select
+                                disabled={uploading}
+                                value={u.role}
+                                onValueChange={(val) => handleRoleChange(u.id, val, u.customRoleId)}
+                              >
+                                <SelectTrigger className="h-7 text-[10px] w-28 bg-transparent border-border/40">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ADMIN">Admin</SelectItem>
+                                  <SelectItem value="EMPLOYEE">Colaborador</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
                           </div>
+                          
+                          {u.role === 'EMPLOYEE' && (
+                            <div className="flex items-center justify-between mt-1">
+                              <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Rol Asignado</span>
+                              {currentUser?.isPlatformAdmin || currentUser?.id === u.id ? (
+                                <Badge variant="secondary" className="text-[9px] bg-muted/50 border-transparent">
+                                  {customRoles?.find(cr => cr.id === u.customRoleId)?.name || 'Sin rol'}
+                                </Badge>
+                              ) : (
+                                <Select
+                                  disabled={uploading}
+                                  value={u.customRoleId || 'none'}
+                                  onValueChange={(val) => handleRoleChange(u.id, 'EMPLOYEE', val === 'none' ? null : val)}
+                                >
+                                  <SelectTrigger className="h-7 text-[10px] w-36 bg-muted/30 border-border/40">
+                                    <SelectValue placeholder="Rol..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="none">Sin rol específico</SelectItem>
+                                    {customRoles?.map(cr => (
+                                      <SelectItem key={cr.id} value={cr.id}>{cr.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            </div>
+                          )}
                         </div>
                         
                         {!currentUser?.isPlatformAdmin && (
@@ -999,7 +1058,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
             <div className="space-y-2"><Label>Email</Label><Input value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} /></div>
             <div className="space-y-2">
               <Label>Tipo de Acceso</Label>
-              <Select value={userForm.role} onValueChange={v => setUserForm({...userForm, role: v})}>
+              <Select value={userForm.role} onValueChange={v => setUserForm({...userForm, role: v, customRoleId: v === 'ADMIN' ? null : userForm.customRoleId})}>
                 <SelectTrigger><SelectValue/></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ADMIN">Administrador</SelectItem>
@@ -1007,6 +1066,20 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 </SelectContent>
               </Select>
             </div>
+            {userForm.role === 'EMPLOYEE' && (
+              <div className="space-y-2">
+                <Label>Rol Asignado (Opcional)</Label>
+                <Select value={userForm.customRoleId || 'none'} onValueChange={v => setUserForm({...userForm, customRoleId: v === 'none' ? null : v})}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar rol..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin rol específico</SelectItem>
+                    {customRoles?.map(cr => (
+                      <SelectItem key={cr.id} value={cr.id}>{cr.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2"><Label>Contraseña</Label><Input type="password" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} /></div>
           </div>
           <DialogFooter>

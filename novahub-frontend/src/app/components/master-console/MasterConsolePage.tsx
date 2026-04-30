@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import {
   Zap, Building2, Users, DollarSign, AlertTriangle, TrendingUp,
   Search, Eye, CreditCard, Clock, ShieldAlert, BarChart3,
-  BellRing, ChevronRight, Activity
+  BellRing, ChevronRight, Activity, Wrench
 } from 'lucide-react';
 import { masterConsoleService } from '../../services/master-console.service';
 import { ClientDetailPanel } from './ClientDetailPanel';
@@ -64,7 +64,11 @@ export function MasterConsolePage() {
   if (selectedClientId && clientDetail) {
     return (
       <div className="p-6 w-full">
-        <ClientDetailPanel data={clientDetail} onBack={() => { setSelectedClientId(null); setClientDetail(null); }} />
+        <ClientDetailPanel 
+          data={clientDetail} 
+          onBack={() => { setSelectedClientId(null); setClientDetail(null); }} 
+          onRefresh={() => openClientDetail(selectedClientId)}
+        />
       </div>
     );
   }
@@ -136,7 +140,7 @@ export function MasterConsolePage() {
       </div>
 
       {/* ── Operativa ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Distribución por Plan */}
         <Card className="bg-card border-border/50 shadow-sm">
           <CardHeader className="pb-3"><CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2"><BarChart3 className="size-4" /> Distribución por Plan</CardTitle></CardHeader>
@@ -178,6 +182,29 @@ export function MasterConsolePage() {
                     <p className="text-[10px] text-muted-foreground">{t.facturasVencidas} factura(s) vencida(s)</p>
                   </div>
                   <span className="text-sm font-black text-amber-500">{formatAmount(t.deuda, 'USD')}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Implementaciones Pendientes */}
+        <Card className="bg-card border-border/50 shadow-sm">
+          <CardHeader className="pb-3"><CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2"><Wrench className="size-4 text-blue-500" /> Implementaciones Pendientes</CardTitle></CardHeader>
+          <CardContent>
+            {o.implementacionesPendientes?.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">Todas las implementaciones completadas ✅</p>}
+            <div className="space-y-2 max-h-52 overflow-y-auto">
+              {o.implementacionesPendientes?.map((t: any) => (
+                <div key={t.id} className="flex items-center justify-between p-3 rounded-lg border border-blue-500/20 bg-blue-500/5 cursor-pointer hover:bg-blue-500/10 transition-colors" onClick={() => openClientDetail(t.id)}>
+                  <div>
+                    <p className="text-sm font-bold">{t.name}</p>
+                    <p className="text-[10px] text-muted-foreground">Fase: {t.status} • {new Date(t.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <Badge variant="outline" className={cn("text-[9px] font-black uppercase",
+                    t.plan === 'BASIC' ? 'text-blue-400 border-blue-500/20' :
+                    t.plan === 'PROFESSIONAL' ? 'text-purple-400 border-purple-500/20' :
+                    t.plan === 'ENTERPRISE' ? 'text-emerald-400 border-emerald-500/20' : ''
+                  )}>{t.plan}</Badge>
                 </div>
               ))}
             </div>
