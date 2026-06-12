@@ -200,6 +200,15 @@ export function SuscripcionesPage() {
     }
   }, [isUserDialogOpen, selectedTenant]);
 
+  useEffect(() => {
+    if (tenantDetails) {
+      const updated = tenants.find((t: any) => t.id === tenantDetails.id);
+      if (updated) {
+        setTenantDetails(updated);
+      }
+    }
+  }, [tenants]);
+
   const fetchTenantUsers = async (tenantId: string) => {
     try {
       const res = await tenantsService.getUsers(tenantId);
@@ -496,22 +505,33 @@ export function SuscripcionesPage() {
     try {
       toast.loading(currentlyAllActive ? 'Desactivando catálogo...' : 'Activando catálogo...', { id: 'batch-toggle' });
       
+      const tenantToUpdate = tenants.find((t: any) => t.id === tenantId);
+      const subs = tenantToUpdate?.subscriptions || [];
+
       // 1. Primero el módulo padre
-      await subscriptionsService.toggleModuleStatus({ 
-        clientTenantId: tenantId, 
-        module: parentModuleId, 
-        isActive: !currentlyAllActive, 
-        notes: currentlyAllActive ? 'Desactivación masiva (Padre)' : 'Activación masiva por admin (Padre)' 
-      });
+      const isParentActive = Boolean(subs.find((s: any) => s.module === parentModuleId)?.isActive);
+      if (currentlyAllActive === isParentActive) {
+        await subscriptionsService.toggleModuleStatus({ 
+          clientTenantId: tenantId, 
+          module: parentModuleId, 
+          isActive: !currentlyAllActive, 
+          notes: currentlyAllActive ? 'Desactivación masiva (Padre)' : 'Activación masiva por admin (Padre)' 
+        });
+        await new Promise(r => setTimeout(r, 200));
+      }
 
       // 2. Luego todos los hijos
       for (const sub of submodules) {
-        await subscriptionsService.toggleModuleStatus({ 
-          clientTenantId: tenantId, 
-          module: sub.id, 
-          isActive: !currentlyAllActive, 
-          notes: currentlyAllActive ? 'Desactivación masiva' : 'Activación masiva por admin' 
-        });
+        const isChildActive = Boolean(subs.find((s: any) => s.module === sub.id)?.isActive);
+        if (currentlyAllActive === isChildActive) {
+          await subscriptionsService.toggleModuleStatus({ 
+            clientTenantId: tenantId, 
+            module: sub.id, 
+            isActive: !currentlyAllActive, 
+            notes: currentlyAllActive ? 'Desactivación masiva' : 'Activación masiva por admin' 
+          });
+          await new Promise(r => setTimeout(r, 200)); // Delay para prevenir error masivo/race condition
+        }
       }
 
       toast.success(currentlyAllActive ? 'Catálogo desactivado exitosamente' : 'Catálogo activado exitosamente', { id: 'batch-toggle' });
@@ -719,6 +739,8 @@ export function SuscripcionesPage() {
         requests={requests.filter((r: any) => r.clientTenantId === user.tenantId)}
         customRoles={customRoles}
         onRefresh={fetchData}
+        onToggleModule={handleToggleModule}
+        onToggleAllSubmodules={handleToggleAllSubmodules}
         onRequestModule={(moduleId, notes) => {
           subscriptionsService.createRequest({
             clientTenantId: user.tenantId,
@@ -1310,6 +1332,8 @@ export function SuscripcionesPage() {
                 requests={requests.filter((r: any) => r.clientTenantId === tenantDetails.id)}
                 customRoles={customRoles}
                 onRefresh={fetchData}
+                onToggleModule={handleToggleModule}
+                onToggleAllSubmodules={handleToggleAllSubmodules}
                 onRequestModule={(moduleId, notes) => {
                   toast.info("Como SuperAdmin no necesitas solicitar módulos, puedes activarlos directamente.");
                 }}

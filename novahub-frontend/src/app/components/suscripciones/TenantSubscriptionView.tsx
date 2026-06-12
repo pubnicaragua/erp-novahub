@@ -16,6 +16,7 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Textarea } from '../ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Switch } from '../ui/switch';
 import { tenantsService } from '../../services/tenants.service';
 import { usersService } from '../../services/users.service';
 import { toast } from 'sonner';
@@ -30,10 +31,12 @@ interface TenantSubscriptionViewProps {
   requests: any[];
   customRoles?: any[];
   onRequestModule: (moduleId: string, notes: string) => void;
+  onToggleModule?: (tenantId: string, moduleName: string, currentlyActive: boolean) => void;
+  onToggleAllSubmodules?: (tenantId: string, parentModuleId: string, submodules: any[], currentlyAllActive: boolean) => void;
   onRefresh: () => void;
 }
 
-export function TenantSubscriptionView({ tenant, availableModules, requests, customRoles, onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
+export function TenantSubscriptionView({ tenant, availableModules, requests, customRoles, onRequestModule, onToggleModule, onToggleAllSubmodules, onRefresh }: TenantSubscriptionViewProps) {
   const { user: currentUser } = useAuth();
   
   const [activeTab, setActiveTab] = useState('overview');
@@ -831,6 +834,12 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                                         Solicitar
                                       </Button>
                                     )}
+                                    {currentUser?.isPlatformAdmin && (
+                                      <Switch 
+                                        checked={subActive} 
+                                        onCheckedChange={() => onToggleModule?.(tenant.id, sub.id, subActive)} 
+                                      />
+                                    )}
                                   </div>
                                   
                                   {subPending && <Badge className="bg-amber-500/10 text-amber-500 border-none text-[9px] uppercase px-1.5 py-0">En Cola</Badge>}
@@ -845,6 +854,28 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                             <Button variant="outline" className="w-full font-bold uppercase text-[10px] tracking-widest border-primary/20 text-primary hover:bg-primary/10" onClick={() => handleRequestClick(mod)}>
                               <Plus className="size-4 mr-2" /> Solicitar Activación
                             </Button>
+                          </div>
+                        )}
+
+                        {!hasSubmodules && currentUser?.isPlatformAdmin && (
+                          <div className="mt-auto pt-6 flex justify-between items-center border-t border-border/50">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mt-2">Estado del Módulo</span>
+                            <Switch 
+                              className="mt-2"
+                              checked={isMainActive} 
+                              onCheckedChange={() => onToggleModule?.(tenant.id, mod.id, isMainActive)} 
+                            />
+                          </div>
+                        )}
+
+                        {hasSubmodules && currentUser?.isPlatformAdmin && (
+                          <div className="mt-auto pt-6 flex justify-between items-center border-t border-border/50">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mt-2">Alternar Todo el Módulo</span>
+                            <Switch 
+                              className="mt-2"
+                              checked={allSubmodulesActive} 
+                              onCheckedChange={() => onToggleAllSubmodules?.(tenant.id, mod.id, mod.submodules, allSubmodulesActive)} 
+                            />
                           </div>
                         )}
                       </CardContent>
