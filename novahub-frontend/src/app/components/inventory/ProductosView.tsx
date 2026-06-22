@@ -1074,88 +1074,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={productDetail !== null} onOpenChange={(open) => !open && setProductDetail(null)}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Detalle del producto</DialogTitle>
-            <DialogDescription>
-              {productDetail?.name || '-'} · {productDetail?.code || '-'}
-            </DialogDescription>
-          </DialogHeader>
-
-          {productDetail && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <Card className="p-3">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Stock total</p>
-                  <p className="text-lg font-black">{Number(productDetail.stock || 0)}</p>
-                </Card>
-                <Card className="p-3">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Categoría</p>
-                  <p className="text-sm font-bold">{productDetail.category?.name || '-'}</p>
-                </Card>
-                <Card className="p-3">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Venta</p>
-                  <p className="text-sm font-bold">{formatAmount(Number(productDetail.salePrice || 0), 'NIO')}</p>
-                </Card>
-                <Card className="p-3">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Costo</p>
-                  <p className="text-sm font-bold">{formatAmount(Number(productDetail.costPrice || 0), 'NIO')}</p>
-                </Card>
-              </div>
-
-              <Card className="p-3 border rounded-xl">
-                <p className="font-semibold mb-2">Stock por almacén</p>
-                {stockByWarehouse.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Sin movimientos o stock detallado por almacén.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {stockByWarehouse.map((item: any) => (
-                      <div key={`${item.warehouseId}-${item.warehouseName}`} className="flex items-center justify-between text-sm">
-                        <span>{item.warehouseName}</span>
-                        <Badge variant="outline" className="font-mono">{Number(item.quantity || 0)}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
-
-              <Card className="p-3 border rounded-xl">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold">IMEI / Números de serie</p>
-                  <Badge variant="outline">{productSeries.length}</Badge>
-                </div>
-                {productSeries.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Aún no hay series para este producto. Se agregan en Ajustes de inventario &gt; Registrar Recepción.
-                  </p>
-                ) : (
-                  <div className="max-h-44 overflow-auto rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-[10px] uppercase tracking-widest">Serie/IMEI</TableHead>
-                          <TableHead className="text-[10px] uppercase tracking-widest">Estado</TableHead>
-                          <TableHead className="text-[10px] uppercase tracking-widest">Almacén</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {productSeries.map((item: any) => (
-                          <TableRow key={item.id || item.number}>
-                            <TableCell className="font-mono text-xs">{item.number || '-'}</TableCell>
-                            <TableCell className="text-xs">{item.status || 'AVAILABLE'}</TableCell>
-                            <TableCell className="text-xs">{item.warehouse?.name || warehouses.find((w: any) => w.id === item.warehouseId)?.name || '-'}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </Card>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ProductDetailDrawer
+        productId={productDetail?.id ?? null}
+        onOpenChange={(open) => !open && setProductDetail(null)}
+        productSnapshot={productDetail}
+        warehouses={warehouses}
+        movements={movements}
+        series={series}
+      />
       <Dialog open={importModalOpen} onOpenChange={(open) => {
         if (!importing) {
           setImportModalOpen(open);
