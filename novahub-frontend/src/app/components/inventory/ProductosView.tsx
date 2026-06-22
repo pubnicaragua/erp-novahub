@@ -348,57 +348,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     }
   };
 
-  const stockByWarehouse = useMemo(() => {
-    if (!productDetail) return [];
-    const stockLevels = Array.isArray(productDetail.stockLevels) ? productDetail.stockLevels : [];
-
-    if (stockLevels.length > 0) {
-      return stockLevels
-        .map((level: any) => {
-          const warehouseId = level.warehouseId || level.warehouse?.id;
-          const warehouseName =
-            level.warehouse?.name ||
-            warehouses.find((w: any) => w.id === warehouseId)?.name ||
-            'Sin bodega';
-          return {
-            warehouseId,
-            warehouseName,
-            quantity: Number(level.quantity || 0),
-          };
-        })
-        .sort((a: any, b: any) => b.quantity - a.quantity);
-    }
-
-    const summary = new Map<string, number>();
-    movements
-      .filter((move: any) => move.productId === productDetail.id || move.product?.id === productDetail.id)
-      .forEach((move: any) => {
-        const warehouseId = move.warehouseId || move.warehouse?.id || 'unknown';
-        const qty = Number(move.quantity || 0);
-        const delta = move.type === 'OUT' ? -qty : qty;
-        summary.set(warehouseId, Number(summary.get(warehouseId) || 0) + delta);
-      });
-
-    return Array.from(summary.entries())
-      .map(([warehouseId, quantity]) => ({
-        warehouseId,
-        warehouseName:
-          warehouses.find((w: any) => w.id === warehouseId)?.name ||
-          'Sin bodega',
-        quantity,
-      }))
-      .sort((a, b) => b.quantity - a.quantity);
-  }, [productDetail, warehouses, movements]);
-
-  const productSeries = useMemo(() => {
-    if (!productDetail) return [];
-    return series.filter(
-      (item: any) =>
-        item.productId === productDetail.id ||
-        item.product?.id === productDetail.id,
-    );
-  }, [productDetail, series]);
-
   const renderEditableRow = (product: EditingProduct) => {
     const isSaving = savingIds.has(product.id);
     return (
