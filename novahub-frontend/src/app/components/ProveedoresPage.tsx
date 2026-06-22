@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Truck, Plus, Search, Eye, Edit, Star, Download, Filter, MapPin, Phone, Mail, Building2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Truck, Plus, Search, Edit, Star, Download, Filter, Phone, Mail, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -11,10 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 
 import { suppliersService } from '../services/compras.service';
 import type { Supplier, EntityStatus } from '../types';
+import { useCurrency } from '../contexts/CurrencyContext';
 
 export function ProveedoresPage() {
+  const { formatConvertedAmount } = useCurrency();
   const [proveedoresData, setProveedoresData] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProveedor, setEditingProveedor] = useState<Supplier | null>(null);
@@ -210,7 +212,7 @@ export function ProveedoresPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col items-end">
-                          <span className="text-sm font-bold text-foreground">${(p.balance || 0).toLocaleString()}</span>
+                          <span className="text-sm font-bold text-foreground">{formatConvertedAmount(Number(p.balance || 0), 'NIO')}</span>
                           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Balance Actual</span>
                         </div>
                       </TableCell>

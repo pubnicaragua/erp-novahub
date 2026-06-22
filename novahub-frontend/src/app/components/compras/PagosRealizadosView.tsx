@@ -95,7 +95,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     } else {
       setLocalDoc(null);
     }
-  }, [editingId, data, globalRate, displayCurrency, draftPaymentFromInvoice, onDraftConsumed]);
+  }, [editingId, data, draftPaymentFromInvoice, onDraftConsumed]);
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const getMethodLabel = (method?: string) => methodOpts.find((opt) => opt.value === normalizeMethod(method))?.label || method || '-';

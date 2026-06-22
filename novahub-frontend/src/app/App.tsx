@@ -24,6 +24,11 @@ import { ReportesPage } from './components/ReportesPage';
 import { ConfiguracionPage } from './components/ConfiguracionPage';
 import { SuscripcionesPage } from './components/SuscripcionesPage';
 import { PrismaSchemaPage } from './components/PrismaSchemaPage';
+import { FinanciamientoPymePage } from './components/FinanciamientoPymePage';
+import { AsesoriaLegalPage } from './components/AsesoriaLegalPage';
+import { TrainingHubView } from './components/help/TrainingHubView';
+import { SoporteTecnicoView } from './components/help/SoporteTecnicoView';
+import { SoporteTecnicoAdminView } from './components/help/SoporteTecnicoAdminView';
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -101,7 +106,7 @@ function DashboardLayout() {
         handleToggleCollapse();
       }
       setActiveModule(module);
-      setActiveSubModule(module === 'inventario' ? (subModule || 'dashboard') : subModule);
+      setActiveSubModule(module === 'inventario' ? (subModule || 'productos') : subModule);
     }
   };
 
@@ -127,6 +132,7 @@ function DashboardLayout() {
       const preferredOrder: Module[] = [
         'inventario', 'ventas', 'compras', 'finanzas', 'rh',
         'clientes', 'proveedores', 'actividades', 'tickets',
+        'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal',
         'documentos', 'notificaciones', 'transferencias', 
         'reportes', 'roles', 'configuracion', 'suscripciones', 'schema'
       ];
@@ -191,6 +197,10 @@ function DashboardLayout() {
       case 'configuracion': return <ConfiguracionPage />;
       case 'suscripciones': return <SuscripcionesPage />;
       case 'schema': return <PrismaSchemaPage />;
+      case 'financiamiento-pyme': return <FinanciamientoPymePage />;
+      case 'centro-capacitacion': return <TrainingHubView />;
+      case 'soporte-tecnico': return user?.isPlatformAdmin ? <SoporteTecnicoAdminView /> : <SoporteTecnicoView />;
+      case 'asesoria-legal': return <AsesoriaLegalPage />;
       default: return <OverviewDashboard onNavigate={handleNavigate} />;
     }
   };

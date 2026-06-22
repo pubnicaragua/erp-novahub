@@ -35,8 +35,8 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
     { key: 'location', header: 'Ubicación', width: '20%', editable: true },
     { key: 'startDate', header: 'Fecha Inicio', width: '130px', editable: true, type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
     { key: 'endDate', header: 'Fecha Fin', width: '130px', editable: true, type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
-    { key: 'cost', header: 'Costo', width: '100px', editable: true, type: 'number', render: (val: any, row: Event) => <span className="text-rose-500 font-bold">{val ? formatAmount(Number(val), row.currency || 'USD') : formatAmount(0, row.currency || 'USD')}</span> },
-    { key: 'income', header: 'Ingreso', width: '100px', editable: true, type: 'number', render: (val: any, row: Event) => <span className="text-emerald-500 font-bold">{val ? formatAmount(Number(val), row.currency || 'USD') : formatAmount(0, row.currency || 'USD')}</span> },
+    { key: 'cost', header: 'Costo', width: '100px', editable: true, type: 'number', render: (val: any, row: Event) => <span className="text-rose-500 font-bold">{formatAmount(Number(val || 0), row.currency || 'USD')}</span> },
+    { key: 'income', header: 'Ingreso', width: '100px', editable: true, type: 'number', render: (val: any, row: Event) => <span className="text-emerald-500 font-bold">{formatAmount(Number(val || 0), row.currency || 'USD')}</span> },
     { key: 'balance', header: 'Balance', width: '100px', render: (_: any, row: Event) => {
         const balance = (Number(row.income) || 0) - (Number(row.cost) || 0);
         return <span className={cn("font-black text-[11px] px-2 py-0.5 rounded-md", balance >= 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500")}>{formatAmount(balance, row.currency || 'USD')}</span>;

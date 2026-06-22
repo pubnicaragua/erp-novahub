@@ -929,8 +929,8 @@ export interface Event { id: string; title: string; description?: string; startD
 export interface Reminder { id: string; title: string; description?: string; reminderDate: string; status: string; createdAt: string; }
 export interface ActivityLog { id: string; action: string; entity: string; entityId: string; userId: string; timestamp: string; details?: string; activityId?: string; fileUrl?: string; fileName?: string; }
 
-export interface Contract { id: string; number: string; title: string; clientId: string; startDate: string; endDate: string; value: number; status: string; createdAt: string; }
-export interface LegalInvoice { id: string; number: string; type: string; amount: number; issueDate: string; dueDate: string; status: string; createdAt: string; }
+export interface Contract { id: string; number: string; title: string; clientId: string; startDate: string; endDate: string; value: number; currency?: Currency; exchangeRate?: number; status: string; createdAt: string; }
+export interface LegalInvoice { id: string; number: string; type: string; amount: number; currency?: Currency; exchangeRate?: number; issueDate: string; dueDate: string; status: string; createdAt: string; }
 export interface Report { id: string; title: string; type: string; generatedDate: string; format: string; size: number; createdBy: string; }
 export interface File { id: string; name: string; type: string; size: number; uploadDate: string; uploadedBy: string; category: string; url: string; }
 

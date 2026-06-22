@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { UserCircle, Plus, Search, Eye, Edit, Trash2, Mail, Phone, MapPin, Download, Filter } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { UserCircle, Plus, Search, Edit, Mail, Phone, Download, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -11,13 +11,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 
 import { customersService } from '../services/ventas.service';
 import type { Customer } from '../types';
+import { useCurrency } from '../contexts/CurrencyContext';
 
 export function ClientesPage() {
+  const { formatConvertedAmount } = useCurrency();
   const [clientesData, setClientesData] = useState<Customer[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Customer | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   const [formData, setFormData] = useState<Partial<Customer>>({
     name: '',
@@ -199,15 +201,15 @@ export function ClientesPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium text-green-500">${(c as any).totalSales?.toLocaleString() || '0.00'}</span>
+                          <span className="text-sm font-medium text-green-500">{formatConvertedAmount(Number((c as any).totalSales || 0), 'NIO')}</span>
                           <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Monto Histórico</span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="w-48 space-y-1.5">
                           <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">Usado: ${usado.toLocaleString()}</span>
-                            <span className="font-medium text-foreground">Max: ${limite.toLocaleString()}</span>
+                            <span className="text-muted-foreground">Usado: {formatConvertedAmount(usado, 'NIO')}</span>
+                            <span className="font-medium text-foreground">Max: {formatConvertedAmount(limite, 'NIO')}</span>
                           </div>
                           <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                             <div className={`h-full ${isHigh ? 'bg-red-500' : 'bg-primary'} transition-all`} style={{ width: `${percent}%` }} />

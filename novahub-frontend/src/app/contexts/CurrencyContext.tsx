@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { useAuth } from './AuthContext';
 
 export type Currency = 'USD' | 'NIO';
 type MonetarySourceCurrency = string | undefined;
@@ -8,11 +9,13 @@ type DisplayCurrency = 'USD' | 'NIO';
 const STORAGE_CURRENCY_KEY = 'erp-currency';
 const STORAGE_CURRENCY_SWITCH_ENABLED_KEY = 'erp-currency-switch-enabled';
 const STORAGE_LOCKED_DISPLAY_CURRENCY_KEY = 'erp-locked-display-currency';
+const STORAGE_BASE_CURRENCY_KEY = 'erp-base-currency';
 
 interface CurrencyContextType {
   currency: Currency;
   setCurrency: (currency: Currency) => void;
   displayCurrency: DisplayCurrency;
+  baseCurrency: DisplayCurrency;
   lockedDisplayCurrency: DisplayCurrency;
   currencyInteractionEnabled: boolean;
   formatAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => string;
@@ -26,12 +29,17 @@ interface CurrencyContextType {
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuth();
   const [currency, setCurrencyState] = useState<Currency>(() => {
     const saved = (localStorage.getItem(STORAGE_CURRENCY_KEY) || '').toUpperCase();
     if (saved === 'COR') return 'NIO';
     return saved === 'USD' ? 'USD' : 'NIO';
   });
   const [exchangeRate, setExchangeRate] = useState<number>(36.5);
+  const [baseCurrency, setBaseCurrency] = useState<DisplayCurrency>(() => {
+    const saved = (localStorage.getItem(STORAGE_BASE_CURRENCY_KEY) || '').toUpperCase();
+    return saved === 'USD' ? 'USD' : 'NIO';
+  });
   const [currencyInteractionEnabled, setCurrencyInteractionEnabled] = useState<boolean>(() => {
     return localStorage.getItem(STORAGE_CURRENCY_SWITCH_ENABLED_KEY) !== 'false';
   });
@@ -62,7 +70,11 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
           setExchangeRate(data.rate);
         }
 
-        const nextLockedDisplayCurrency = normalizeDisplayCurrency(data.displayCurrency || data.baseCurrency);
+        const nextBaseCurrency = normalizeDisplayCurrency(data.baseCurrency);
+        setBaseCurrency(nextBaseCurrency);
+        localStorage.setItem(STORAGE_BASE_CURRENCY_KEY, nextBaseCurrency);
+
+        const nextLockedDisplayCurrency = normalizeDisplayCurrency(data.displayCurrency || nextBaseCurrency);
         setLockedDisplayCurrency(nextLockedDisplayCurrency);
         localStorage.setItem(STORAGE_LOCKED_DISPLAY_CURRENCY_KEY, nextLockedDisplayCurrency);
 
@@ -81,8 +93,9 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     refreshRate();
-  }, []);
+  }, [isAuthenticated, user?.tenantId]);
 
   const setCurrency = (c: Currency) => {
     if (!currencyInteractionEnabled) return;
@@ -99,12 +112,19 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const normalizeCurrency = (value?: MonetarySourceCurrency): DisplayCurrency => {
     const normalized = (value || '').toUpperCase();
     if (normalized === 'USD') return 'USD';
-    return 'NIO';
+    if (normalized === 'NIO' || normalized === 'COR' || normalized === 'C$') return 'NIO';
+    return baseCurrency;
   };
 
-  const resolveRate = (sourceExchangeRate?: number): number => {
+  const resolveRate = (sourceCurrency: DisplayCurrency, sourceExchangeRate?: number): number => {
     const rate = Number(sourceExchangeRate);
-    if (Number.isFinite(rate) && rate > 0) return rate;
+
+    // El backend guarda tasa 1 para documentos NIO porque ya estan en moneda base.
+    // Esa tasa identidad no sirve para convertir NIO a USD.
+    if (Number.isFinite(rate) && rate > 0 && (sourceCurrency === 'USD' || rate !== 1)) {
+      return rate;
+    }
+
     return exchangeRate > 0 ? exchangeRate : 36.5;
   };
 
@@ -112,32 +132,33 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
 
   const convertAmount = (
     amount: number,
-    sourceCurrency: MonetarySourceCurrency = 'USD',
+    sourceCurrency?: MonetarySourceCurrency,
     sourceExchangeRate?: number,
   ): number => {
-    const safeAmount = Number(amount || 0);
+    const parsedAmount = Number(amount);
+    const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
     const from = normalizeCurrency(sourceCurrency);
     const to = displayCurrency;
 
     if (from === to) return safeAmount;
 
-    const rate = resolveRate(sourceExchangeRate);
+    const rate = resolveRate(from, sourceExchangeRate);
     return from === 'USD' ? safeAmount * rate : safeAmount / rate;
   };
 
   const formatConvertedAmount = (
     amount: number,
-    sourceCurrency: MonetarySourceCurrency = 'USD',
+    sourceCurrency?: MonetarySourceCurrency,
     sourceExchangeRate?: number,
   ): string => {
     const converted = convertAmount(amount, sourceCurrency, sourceExchangeRate);
     const symbol = displayCurrency === 'USD' ? '$' : 'C$';
-    return `${symbol} ${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${symbol} ${converted.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatAmount = (
     amount: number,
-    sourceCurrency: MonetarySourceCurrency = 'USD',
+    sourceCurrency?: MonetarySourceCurrency,
     sourceExchangeRate?: number,
   ) => {
     return formatConvertedAmount(amount, sourceCurrency, sourceExchangeRate);
@@ -149,6 +170,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
         currency,
         setCurrency,
         displayCurrency,
+        baseCurrency,
         lockedDisplayCurrency,
         currencyInteractionEnabled,
         formatAmount,

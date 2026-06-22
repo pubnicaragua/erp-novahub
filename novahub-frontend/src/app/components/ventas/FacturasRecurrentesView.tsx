@@ -141,12 +141,6 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   };
 
   // Sync currency from topbar
-  useEffect(() => {
-    if (localDoc && isCreating) {
-      setLocalDoc((prev: any) => ({ ...prev, currency: displayCurrency === 'USD' ? 'USD' : 'NIO' }));
-    }
-  }, [displayCurrency]);
-
   const handleExportPDF = async (row: RecurringInvoice) => {
     try {
       const tenantName = user?.tenantName || 'Mi Empresa';

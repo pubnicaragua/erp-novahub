@@ -44,10 +44,12 @@ import {
   AlertTriangle,
   MessageSquare,
   Send,
-  CheckCircle2,
   Layers,
   Archive,
   History,
+  Landmark,
+  GraduationCap,
+  LifeBuoy,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -157,6 +159,11 @@ const menuItems: MenuItem[] = [
     section: 'General',
   },
   {
+    id: 'financiamiento-pyme',
+    label: 'Financiamiento PYME',
+    icon: <Landmark className="size-5" />,
+  },
+  {
     id: 'ventas',
     label: 'Ventas',
     icon: <ShoppingBag className="size-5" />,
@@ -193,8 +200,8 @@ const menuItems: MenuItem[] = [
     label: 'Inventario',
     icon: <Package className="size-5" />,
     submenu: [
-      { id: 'dashboard', label: 'Dashboard', icon: <BarChart3 className="size-4" /> },
-      { id: 'productos', label: 'Productos', icon: <Package className="size-4" /> },
+      { id: 'productos', label: 'Existencias', icon: <Package className="size-4" /> },
+      { id: 'dashboard', label: 'Resumen', icon: <BarChart3 className="size-4" /> },
       { id: 'almacenes', label: 'Almacenes', icon: <Archive className="size-4" /> },
       { id: 'transferencias', label: 'Transferencias', icon: <Truck className="size-4" /> },
       { id: 'ajustes', label: 'Ajustes', icon: <Scale className="size-4" /> },
@@ -244,6 +251,14 @@ const menuItems: MenuItem[] = [
     ]
   },
   { id: 'tickets', label: 'Tickets y Soporte', icon: <Headphones className="size-5" /> },
+  {
+    id: 'centro-capacitacion',
+    label: 'Centro de Capacitación',
+    icon: <GraduationCap className="size-5" />,
+    section: 'Ayuda',
+  },
+  { id: 'soporte-tecnico', label: 'Soporte Técnico', icon: <LifeBuoy className="size-5" /> },
+  { id: 'asesoria-legal', label: 'Asesoría Legal', icon: <Scale className="size-5" /> },
   {
     id: 'documentos',
     label: 'Documentos',
@@ -303,6 +318,14 @@ const platformMenuItems: MenuItem[] = [
     icon: <Settings className="size-5" />,
     section: 'Ajustes',
   },
+  {
+    id: 'centro-capacitacion',
+    label: 'Capacitación ERP',
+    icon: <GraduationCap className="size-5" />,
+    section: 'Ayuda',
+  },
+  { id: 'soporte-tecnico', label: 'Soporte Técnico', icon: <LifeBuoy className="size-5" /> },
+  { id: 'asesoria-legal', label: 'Asesoría Legal', icon: <Scale className="size-5" /> },
 ];
 
 export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview, onToggleCollapse }: SidebarProps) {
@@ -352,13 +375,15 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
-    if (user.isTenantAdmin && subId in SUBMENU_MODULE_REQUIREMENTS) {
-      // Admin también respeta módulos habilitados del tenant.
-      return SUBMENU_MODULE_REQUIREMENTS[subId].some(mod => user.enabledModules.includes(mod));
-    }
-
     const requiredModules = SUBMENU_MODULE_REQUIREMENTS[subId];
     if (!requiredModules || requiredModules.length === 0) return true;
+    if (parentId === 'inventario' && user.enabledModules.includes('INVENTORY')) return true;
+
+    if (user.isTenantAdmin && subId in SUBMENU_MODULE_REQUIREMENTS) {
+      // Admin también respeta módulos habilitados del tenant.
+      return requiredModules.some(mod => user.enabledModules.includes(mod));
+    }
+
     return requiredModules.some(mod => user.enabledModules.includes(mod));
   };
 

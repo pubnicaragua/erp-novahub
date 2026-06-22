@@ -544,15 +544,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-bold tabular-nums">${Number(localDoc.subtotal||0).toLocaleString()}</span>
+                  <span className="font-bold tabular-nums">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.subtotal||0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">IVA</span>
-                  <span className="font-bold tabular-nums text-rose-500">${Number(localDoc.taxAmount||0).toLocaleString()}</span>
+                  <span className="font-bold tabular-nums text-rose-500">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.taxAmount||0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Retención IR</span>
-                  <span className="font-bold tabular-nums text-amber-500">-${Number(localDoc.withholdingAmount||0).toLocaleString()}</span>
+                  <span className="font-bold tabular-nums text-amber-500">-{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.withholdingAmount||0).toLocaleString()}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 border-t pt-3 border-border/50">
                   <div className="col-span-1">

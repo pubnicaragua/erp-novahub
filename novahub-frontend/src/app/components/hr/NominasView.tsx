@@ -143,10 +143,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     }
   };
 
-  const totalGross = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.grossPay || 0), p.employee?.currency || p.currency), 0);
-  const totalNet = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.netPay || 0), p.employee?.currency || p.currency), 0);
-  const totalTaxes = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.taxes || 0), p.employee?.currency || p.currency), 0);
-  const totalCostoEmpresa = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.costoTotalEmpresa || 0), p.employee?.currency || p.currency), 0);
+  const totalGross = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.grossPay || 0), p.employee?.currency || p.currency || 'USD'), 0);
+  const totalNet = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.netPay || 0), p.employee?.currency || p.currency || 'USD'), 0);
+  const totalCostoEmpresa = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.costoTotalEmpresa || 0), p.employee?.currency || p.currency || 'USD'), 0);
   const pendingCount = filteredPayrolls.filter((p: any) => p.status === 'PENDING').length;
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
@@ -276,7 +275,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             </thead>
             <tbody className="divide-y">
               {paginatedPayrolls.map((payroll: any) => {
-                const currency = payroll.employee?.currency || 'USD';
+                const currency = payroll.employee?.currency || payroll.currency || 'USD';
                 return (
                   <React.Fragment key={payroll.id}>
                   <tr className="hover:bg-muted/50 cursor-pointer" onClick={() => setExpandedRow(expandedRow === payroll.id ? null : payroll.id)}>
@@ -399,7 +398,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         {/* Mobile View */}
         <div className="block md:hidden space-y-4 p-4 bg-muted/10">
           {paginatedPayrolls.map((payroll: any) => {
-            const currency = payroll.employee?.currency || 'USD';
+            const currency = payroll.employee?.currency || payroll.currency || 'USD';
             return (
               <div key={payroll.id} className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-card to-background p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4 border-b border-primary/10 pb-3">

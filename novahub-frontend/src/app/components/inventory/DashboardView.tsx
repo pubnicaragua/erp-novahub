@@ -1,4 +1,3 @@
-import React from 'react';
 import { Package, Warehouse, AlertTriangle, TrendingUp, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -53,7 +52,7 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
                 <div>
                   <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">{stat.label}</p>
                   <h3 className="text-2xl font-black mt-1 tracking-tighter italic">
-                    {stat.isCurrency ? formatAmount(stat.value as number) : stat.value}
+                    {stat.isCurrency ? formatAmount(stat.value as number, 'NIO') : stat.value}
                   </h3>
                 </div>
                 <div className={`p-2 rounded-lg ${stat.bg}`}>

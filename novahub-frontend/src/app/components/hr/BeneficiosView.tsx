@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { HandHeart, Plus, Save, X, Edit2, Trash2, Users, DollarSign, CheckCircle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -40,8 +40,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   const handleCreate = async () => {
     if (!form.name) { toast.error('El nombre es requerido'); return; }
     try {
-      const currency = displayCurrency === 'USD' ? 'USD' : 'NIO';
-      await hrService.createBenefit({ ...form, cost: form.cost ? Number(form.cost) : null, currency });
+      await hrService.createBenefit({ ...form, cost: form.cost ? Number(form.cost) : null, currency: form.currency || 'USD' });
       toast.success('Beneficio creado');
       setAddingNew(false);
       setForm(EMPTY_FORM);
@@ -90,7 +89,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
           </div>
         </div>
         {!addingNew && (
-          <Button onClick={() => { setAddingNew(true); setForm(EMPTY_FORM); }} className="rounded-xl gap-2 font-bold bg-primary hover:bg-primary/90 !text-primary-foreground">
+          <Button onClick={() => { setAddingNew(true); setForm({ ...EMPTY_FORM, currency: displayCurrency }); }} className="rounded-xl gap-2 font-bold bg-primary hover:bg-primary/90 !text-primary-foreground">
             <Plus className="size-4" /> Nuevo Beneficio
           </Button>
         )}
@@ -118,7 +117,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Costo/mes</label>
                     <div className="relative">
                       <span className="absolute left-2.5 top-2.5 text-xs text-muted-foreground font-medium">
-                        {displayCurrency === 'USD' ? '$' : 'C$'}
+                        {form.currency === 'USD' ? '$' : 'C$'}
                       </span>
                       <Input type="number" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })} placeholder="0.00" className="rounded-xl h-10 pl-7" />
                     </div>
@@ -184,7 +183,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                       </select>
                       <div className="relative">
                         <span className="absolute left-2 top-2.5 text-xs text-muted-foreground font-medium">
-                          {displayCurrency === 'USD' ? '$' : 'C$'}
+                          {editForm.currency === 'USD' ? '$' : 'C$'}
                         </span>
                         <Input type="number" value={editForm.cost} onChange={e => setEditForm({ ...editForm, cost: e.target.value })} placeholder="Costo" className="rounded-xl h-9 text-sm pl-6" />
                       </div>

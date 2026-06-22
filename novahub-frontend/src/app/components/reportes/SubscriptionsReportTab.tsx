@@ -316,7 +316,7 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
                 </div>
                 <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/10 text-center">
                    <p className="text-[10px] font-bold text-muted-foreground uppercase">ARPU (Prom)</p>
-                   <p className="text-2xl font-black text-orange-500">{currencySymbol}50</p>
+                   <p className="text-2xl font-black text-orange-500">{formatConvertedAmount(activeSubs.length > 0 ? mrr / activeSubs.length : 0, 'NIO')}</p>
                 </div>
              </div>
              <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10 flex items-center gap-4">

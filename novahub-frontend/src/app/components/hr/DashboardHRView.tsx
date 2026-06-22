@@ -1,5 +1,4 @@
-import React from 'react';
-import { Users, Briefcase, UserCheck, TrendingUp, TrendingDown, Clock, Award, DollarSign, Activity, Gift } from 'lucide-react';
+import { Users, Briefcase, UserCheck, Clock, Award, DollarSign, Activity, Gift } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { motion } from 'motion/react';
@@ -16,8 +15,8 @@ const DEPT_COLORS = [
   'from-sky-500 to-blue-600',
 ];
 
-export function DashboardHRView({ stats, employees, departments, leaveRequests, reviews }: any) {
-  const { convertAmount, displayCurrency } = useCurrency();
+export function DashboardHRView({ employees, departments, leaveRequests, reviews }: any) {
+  const { convertAmount, displayCurrency, formatConvertedAmount } = useCurrency();
   const activeEmployees = employees.filter((e: any) => e.employmentStatus === 'ACTIVE').length;
   const inactiveEmployees = employees.filter((e: any) => e.employmentStatus !== 'ACTIVE').length;
   const pendingLeaves = leaveRequests.filter((l: any) => l.status === 'PENDING').length;
@@ -26,8 +25,7 @@ export function DashboardHRView({ stats, employees, departments, leaveRequests, 
     return sum + convertAmount(Number(e.salary) || 0, e.currency || 'USD');
   }, 0);
 
-  const payrollSymbol = displayCurrency === 'USD' ? '$' : 'C$';
-  const formattedPayroll = `${payrollSymbol}${(totalPayroll / 1000).toFixed(1)}k`;
+  const formattedPayroll = formatConvertedAmount(totalPayroll, displayCurrency);
 
   const statCards = [
     { label: 'Total Empleados', value: employees.length, sub: `${activeEmployees} activos · ${inactiveEmployees} inactivos`, icon: Users, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20' },

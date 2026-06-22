@@ -435,7 +435,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                                 STOCK: {stock}
                               </Badge>
                               <span className="text-[9px] font-bold text-muted-foreground/60 uppercase">
-                                Costo: {formatConvertedAmount(Number(p.costPrice || 0))} | Venta: {formatConvertedAmount(Number(p.salePrice || 0))}
+                                Costo: {formatConvertedAmount(Number(p.costPrice || 0), 'NIO')} | Venta: {formatConvertedAmount(Number(p.salePrice || 0), 'NIO')}
                               </span>
                             </>
                           );

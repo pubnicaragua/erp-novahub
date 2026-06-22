@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Package, 
   Warehouse, 
@@ -6,7 +6,9 @@ import {
   Truck, 
   Scale, 
   History, 
-  Download
+  Download,
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -25,8 +27,8 @@ import { inventoryService } from '../services/inventario.service';
 import { motion } from 'motion/react';
 
 const INVENTORY_SECTIONS = [
-  { id: 'dashboard',       label: 'Dashboard',       icon: BarChart3, requiredModules: ['INVENTORY_PRODUCTS', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS', 'INVENTORY_ADJUSTMENTS', 'INVENTORY_MOVEMENTS'] },
-  { id: 'productos',       label: 'Productos',       icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
+  { id: 'productos',       label: 'Existencias',     icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
+  { id: 'dashboard',       label: 'Resumen',         icon: BarChart3, requiredModules: ['INVENTORY_PRODUCTS', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS', 'INVENTORY_ADJUSTMENTS', 'INVENTORY_MOVEMENTS'] },
   { id: 'almacenes',       label: 'Almacenes',       icon: Warehouse, requiredModules: ['INVENTORY_WAREHOUSES'] },
   { id: 'transferencias',  label: 'Transferencias',  icon: Truck,     requiredModules: ['INVENTORY_TRANSFERS'] },
   { id: 'ajustes',         label: 'Ajustes',         icon: Scale,     requiredModules: ['INVENTORY_ADJUSTMENTS'] },
@@ -42,6 +44,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [data, setData] = useState<any>({
     products: [],
     warehouses: [],
@@ -52,10 +55,11 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
     series: [],
     movements: []
   });
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('productos');
 
   const fetchData = useCallback(async (showRefresh = false) => {
     try {
+      setLoadError('');
       if (showRefresh) setRefreshing(true);
       else setLoading(true);
       
@@ -76,6 +80,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
         const v = (r as any).value;
         return v?.data || (Array.isArray(v) ? v : []);
       };
+      if (results[0].status === 'rejected') {
+        setLoadError('No pudimos cargar las existencias. Revisa la conexion e intenta nuevamente.');
+      }
       setData({
         products: safeVal(0),
         warehouses: safeVal(1),
@@ -139,9 +146,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
             <Package className="size-9 text-primary" />
           </div>
           <div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-              Inventario <span className="text-primary">General</span>
-            </h1>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-none">Inventario</h1>
+            <p className="mt-2 text-sm text-muted-foreground">Consulta existencias, precios y disponibilidad en un solo lugar.</p>
             <div className="flex items-center gap-2 mt-2">
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
                 {data.products.filter((p: any) => (p.itemType || 'PRODUCT').toUpperCase() !== 'SERVICE').length} productos · {data.products.filter((p: any) => (p.itemType || '').toUpperCase() === 'SERVICE').length} servicios · {data.warehouses.length} almacenes
@@ -151,6 +157,16 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
         </div>
         
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchData(true)}
+            disabled={refreshing}
+            className="rounded-xl font-bold"
+          >
+            <RefreshCw className={`size-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Actualizar
+          </Button>
           <Button 
             variant="outline" 
             size="sm"
@@ -175,6 +191,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
         <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40">
           {INVENTORY_SECTIONS.map((section) => {
             const hasAccess = section.requiredModules.length === 0 || !user?.enabledModules
+              || user.enabledModules.includes('INVENTORY')
               || section.requiredModules.some(mod => user.enabledModules.includes(mod));
             if (!hasAccess) return null;
             return (
@@ -192,9 +209,23 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
         </TabsList>
 
         <div className="mt-4 min-h-[600px]">
-          {loading ? (
-            <div className="flex items-center justify-center h-96">
-              <div className="size-10 border-4 border-muted border-t-primary rounded-full animate-spin" />
+          {loadError ? (
+            <div className="flex min-h-80 items-center justify-center rounded-2xl border border-destructive/20 bg-destructive/5 p-6 text-center">
+              <div className="max-w-md">
+                <AlertTriangle className="mx-auto size-9 text-destructive" />
+                <h2 className="mt-3 text-lg font-bold">No se pudo mostrar el inventario</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
+                <Button className="mt-5 rounded-xl" onClick={() => fetchData()}>
+                  <RefreshCw className="mr-2 size-4" /> Reintentar
+                </Button>
+              </div>
+            </div>
+          ) : loading ? (
+            <div className="space-y-4" aria-label="Cargando inventario">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[0, 1, 2, 3].map((item) => <div key={item} className="h-24 animate-pulse rounded-2xl bg-muted/60" />)}
+              </div>
+              <div className="h-96 animate-pulse rounded-2xl bg-muted/40" />
             </div>
           ) : (
             <>

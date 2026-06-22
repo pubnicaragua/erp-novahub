@@ -487,11 +487,11 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-bold tabular-nums">${Number(localDoc.subtotal||0).toLocaleString()}</span>
+                  <span className="font-bold tabular-nums">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.subtotal||0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Impuesto</span>
-                  <span className="font-bold tabular-nums text-rose-500">${Number(localDoc.taxAmount||0).toLocaleString()}</span>
+                  <span className="font-bold tabular-nums text-rose-500">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.taxAmount||0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black uppercase text-xs tracking-widest">Total</span>
@@ -572,7 +572,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     />
                   </div>
                   <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black w-20 text-right tabular-nums">${Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    <span className="text-xs font-black w-20 text-right tabular-nums">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                     {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
                       <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
                         <Trash2 className="size-3" />

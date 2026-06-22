@@ -19,6 +19,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     endDate: '',
     capacity: 20,
     cost: 0,
+    currency: displayCurrency,
     employeeIds: [] as string[],
   });
 
@@ -29,8 +30,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     }
 
     try {
-      const currency = displayCurrency === 'USD' ? 'USD' : 'NIO';
-      await hrService.createTraining({ ...newTraining, currency });
+      await hrService.createTraining(newTraining);
       toast.success('Capacitación creada');
       setShowNewForm(false);
       setNewTraining({
@@ -42,6 +42,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
         endDate: '',
         capacity: 20,
         cost: 0,
+        currency: displayCurrency,
         employeeIds: [],
       });
       onRefresh();
@@ -89,7 +90,10 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
 
       {/* New Training Button */}
       <div className="flex justify-end">
-        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
+        <Button onClick={() => {
+          if (!showNewForm) setNewTraining((current) => ({ ...current, currency: displayCurrency }));
+          setShowNewForm(!showNewForm);
+        }} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
           <Plus className="size-4 mr-2" />
           Nueva Capacitación
         </Button>
@@ -167,7 +171,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
               <label className="text-sm font-medium mb-1 block">Costo</label>
               <div className="relative">
                 <span className="absolute left-2.5 top-2 text-xs text-muted-foreground font-medium">
-                  {displayCurrency === 'USD' ? '$' : 'C$'}
+                  {newTraining.currency === 'USD' ? '$' : 'C$'}
                 </span>
                 <Input
                   type="number"
@@ -290,7 +294,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 <div className="pt-3 border-t mt-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Costo</span>
-                    <span className="font-bold text-primary">{formatConvertedAmount(training.cost, training.currency)}</span>
+                    <span className="font-bold text-primary">{formatConvertedAmount(training.cost, training.currency || 'USD')}</span>
                   </div>
                 </div>
               )}

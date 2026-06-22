@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Upload, Building2, Briefcase, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -11,7 +11,7 @@ import { hrService } from '../../services/hr.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh }: any) {
-  const { displayCurrency, formatConvertedAmount } = useCurrency();
+  const { formatConvertedAmount } = useCurrency();
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('all');
@@ -499,7 +499,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                         </div>
                       ) : (
                         <div className="flex flex-col">
-                          <span className="text-sm font-bold text-primary">{formatConvertedAmount(emp.salary, emp.currency)}</span>
+                          <span className="text-sm font-bold text-primary">{formatConvertedAmount(emp.salary, emp.currency || 'USD')}</span>
                           <span className="text-[9px] text-muted-foreground uppercase font-black">Original: {emp.currency}</span>
                         </div>
                       )}
@@ -588,7 +588,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Salario:</span>
                   <div className="flex flex-col items-end">
-                    <span className="font-bold text-primary">{formatConvertedAmount(emp.salary, emp.currency)}</span>
+                    <span className="font-bold text-primary">{formatConvertedAmount(emp.salary, emp.currency || 'USD')}</span>
                     <span className="text-[10px] text-muted-foreground uppercase font-medium">Contrato: {emp.currency}</span>
                   </div>
                 </div>

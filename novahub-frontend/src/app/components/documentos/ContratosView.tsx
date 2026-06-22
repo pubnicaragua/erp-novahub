@@ -10,6 +10,7 @@ import { contractsService } from '../../services/documentos.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface ContratosViewProps {
   data: Contract[];
@@ -18,6 +19,7 @@ interface ContratosViewProps {
 }
 
 export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onRefresh }) => {
+  const { baseCurrency, displayCurrency, exchangeRate, convertAmount, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
 
   const statusOpts = [
@@ -30,7 +32,7 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onR
   const columns: ColumnDef<Contract>[] = [
     { key: 'number', header: 'No.', width: '100px', editable: true },
     { key: 'title', header: 'Título', width: '30%', editable: true },
-    { key: 'value', header: 'Valor', width: '120px', editable: true, type: 'number', render: (val: any) => val ? `$${Number(val).toLocaleString()}` : '-' },
+    { key: 'value', header: 'Valor', width: '120px', editable: true, type: 'number', render: (val: any, row: Contract) => val ? formatConvertedAmount(Number(val), row.currency || baseCurrency, row.exchangeRate) : '-' },
     { key: 'endDate', header: 'Vencimiento', width: '140px', editable: true, type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, yyyy') : '-' },
     { key: 'status', header: 'Estado', width: '120px', editable: true, type: 'select', options: statusOpts,
       render: (val: any) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
@@ -43,16 +45,21 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onR
 
   const handleAdd = async () => {
     try {
-      await contractsService.create({ number: `CTR-${Date.now().toString().slice(-5)}`, title: 'Nuevo Contrato', status: 'DRAFT' as any, value: 0 });
+      await contractsService.create({ number: `CTR-${Date.now().toString().slice(-5)}`, title: 'Nuevo Contrato', status: 'DRAFT' as any, value: 0, currency: baseCurrency, exchangeRate });
       toast.success('Contrato creado'); onRefresh();
     } catch { toast.error('Error al crear'); }
   };
+
+  const totalValue = data.reduce(
+    (sum, contract) => sum + convertAmount(Number(contract.value || 0), contract.currency || baseCurrency, contract.exchangeRate),
+    0,
+  );
 
   const kpis = [
     { title: 'Total Contratos', value: data.length,                                                                    icon: Scale,         color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Activos',         value: data.filter(c => (c.status||'').toUpperCase() === 'ACTIVE').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Por Vencer',      value: data.filter(c => c.endDate && new Date(c.endDate) < new Date(Date.now() + 30*86400000) && (c.status||'').toUpperCase() === 'ACTIVE').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'Valor Total',     value: `$${data.reduce((a,c) => a + Number(c.value||0), 0).toLocaleString()}`,         icon: AlertTriangle, color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
+    { title: `Valor Total (${displayCurrency})`, value: formatConvertedAmount(totalValue, displayCurrency), icon: AlertTriangle, color: 'text-purple-500', bg: 'bg-purple-500/10' },
   ];
 
   const filtered = data.filter(c => c.title?.toLowerCase().includes(searchTerm.toLowerCase()) || c.number?.toLowerCase().includes(searchTerm.toLowerCase()));

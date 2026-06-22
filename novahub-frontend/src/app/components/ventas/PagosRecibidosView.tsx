@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, Trash2, ChevronLeft, FileDown
 } from 'lucide-react';
@@ -74,12 +74,6 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   };
 
   // Sync currency from topbar
-  useEffect(() => {
-    if (localDoc && isCreating) {
-      setLocalDoc((prev: any) => prev ? ({ ...prev, currency: displayCurrency === 'USD' ? 'USD' : 'NIO' }) : prev);
-    }
-  }, [displayCurrency]);
-
   const handleSave = async () => {
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
@@ -229,12 +223,12 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-2">Monto del Pago</p>
                   <div className="flex items-center gap-2">
-                    <span className="text-lg font-black text-muted-foreground">{displayCurrency === 'USD' ? '$' : 'C$'}</span>
+                    <span className="text-lg font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
                     <Input type="number" min="0" step="0.01" value={localDoc.amount || ''} onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })}
                       className="h-12 text-2xl font-black text-emerald-500 text-right" placeholder="0.00" />
                   </div>
-                  {displayCurrency === 'USD' && <p className="text-[10px] font-bold text-muted-foreground mt-2 italic">≈ C$ {(Number(localDoc.amount || 0) * globalRate).toLocaleString()}</p>}
-                  {displayCurrency !== 'USD' && Number(localDoc.amount) > 0 && <p className="text-[10px] font-bold text-muted-foreground mt-2 italic">≈ $ {(Number(localDoc.amount || 0) / globalRate).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>}
+                  {localDoc.currency === 'USD' && <p className="text-[10px] font-bold text-muted-foreground mt-2 italic">≈ C$ {(Number(localDoc.amount || 0) * (localDoc.exchangeRate || globalRate)).toLocaleString()}</p>}
+                  {localDoc.currency !== 'USD' && Number(localDoc.amount) > 0 && <p className="text-[10px] font-bold text-muted-foreground mt-2 italic">≈ $ {(Number(localDoc.amount || 0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>}
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Notas</p>
