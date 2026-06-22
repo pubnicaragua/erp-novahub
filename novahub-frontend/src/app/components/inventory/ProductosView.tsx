@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Pagination, PaginationContent, PaginationItem } from '../ui/pagination';
 import { toast } from 'sonner';
 import { MultiSelectFilter } from './MultiSelectFilter';
+import { ProductDetailDrawer } from './ProductDetailDrawer';
 import { inventoryService } from '../../services/inventario.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -47,10 +48,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const { formatAmount } = useCurrency();
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
-    const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
-    const [warehouseFilters, setWarehouseFilters] = useState<string[]>([]);
-    const [typeFilter, setTypeFilter] = useState<'all' | 'PRODUCT' | 'SERVICE'>('all');
-    const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out'>('all');
+  const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
+  const [warehouseFilters, setWarehouseFilters] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'PRODUCT' | 'SERVICE'>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out'>('all');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importData, setImportData] = useState<any[]>([]);
   const [importFileName, setImportFileName] = useState('');
@@ -736,48 +737,48 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             />
           </div>
           <MultiSelectFilter
-                      label="Categorías"
-                      placeholder="Buscar categoría..."
-                      options={categories.map((c: any) => ({ value: c.id, label: c.name }))}
-                      selected={categoryFilters}
-                      onChange={setCategoryFilters}
-                    />
-                    <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as any)}>
-                      <SelectTrigger className="h-9 w-full sm:w-[150px]">
-                        <SelectValue placeholder="Tipo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos los tipos</SelectItem>
-                        <SelectItem value="PRODUCT">🏷 Productos</SelectItem>
-                        <SelectItem value="SERVICE">⚙ Servicios</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <MultiSelectFilter
-                      label="Almacenes"
-                      placeholder="Buscar almacén..."
-                      searchable
-                      options={warehouses.map((w: any) => ({ value: w.id, label: w.name }))}
-                      selected={warehouseFilters}
-                      onChange={setWarehouseFilters}
-                    />
-                    {(categoryFilters.length > 0 || warehouseFilters.length > 0 || searchTerm || typeFilter !== 'all' || stockFilter !== 'all') && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-9 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
-                        onClick={() => {
-                          setSearchTerm('');
-                          setCategoryFilters([]);
-                          setWarehouseFilters([]);
-                          setTypeFilter('all');
-                          setStockFilter('all');
-                        }}
-                      >
-                        <X className="size-3.5 mr-1" />
-                        Limpiar filtros
-                      </Button>
-                    )}
-                  </div>
+            label="Categorías"
+            placeholder="Buscar categoría..."
+            options={categories.map((c: any) => ({ value: c.id, label: c.name }))}
+            selected={categoryFilters}
+            onChange={setCategoryFilters}
+          />
+          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as any)}>
+            <SelectTrigger className="h-9 w-full sm:w-[150px]">
+              <SelectValue placeholder="Tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los tipos</SelectItem>
+              <SelectItem value="PRODUCT">🏷 Productos</SelectItem>
+              <SelectItem value="SERVICE">⚙ Servicios</SelectItem>
+            </SelectContent>
+          </Select>
+          <MultiSelectFilter
+            label="Almacenes"
+            placeholder="Buscar almacén..."
+            searchable
+            options={warehouses.map((w: any) => ({ value: w.id, label: w.name }))}
+            selected={warehouseFilters}
+            onChange={setWarehouseFilters}
+          />
+          {(categoryFilters.length > 0 || warehouseFilters.length > 0 || searchTerm || typeFilter !== 'all' || stockFilter !== 'all') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                setSearchTerm('');
+                setCategoryFilters([]);
+                setWarehouseFilters([]);
+                setTypeFilter('all');
+                setStockFilter('all');
+              }}
+            >
+              <X className="size-3.5 mr-1" />
+              Limpiar filtros
+            </Button>
+          )}
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button
             size="sm"
@@ -844,21 +845,21 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     {products.length > 0 ? 'Cambia los filtros o busca otro nombre o codigo.' : 'Agrega un producto o importa tu catalogo para comenzar.'}
                   </p>
                   {products.length > 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-4"
-                      onClick={() => {
-                                              setSearchTerm('');
-                                              setCategoryFilters([]);
-                                              setWarehouseFilters([]);
-                                              setTypeFilter('all');
-                                              setStockFilter('all');
-                                            }}
-                    >
-                      Limpiar filtros
-                    </Button>
-                  )}
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="mt-4"
+                                        onClick={() => {
+                                          setSearchTerm('');
+                                          setCategoryFilters([]);
+                                          setWarehouseFilters([]);
+                                          setTypeFilter('all');
+                                          setStockFilter('all');
+                                        }}
+                                      >
+                                        Limpiar filtros
+                                      </Button>
+                                    )}
                 </TableCell>
               </TableRow>
             ) : (

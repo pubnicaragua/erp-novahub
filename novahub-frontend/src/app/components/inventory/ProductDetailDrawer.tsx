@@ -288,7 +288,7 @@ export function ProductDetailDrawer({
             maxStock: level.maxStock != null ? Number(level.maxStock) : undefined,
           };
         })
-        .sort((a, b) => b.quantity - a.quantity);
+        .sort((a: { quantity: number }, b: { quantity: number }) => b.quantity - a.quantity);
     }
 
     // Fallback: calcular desde los movements globales
@@ -315,11 +315,15 @@ export function ProductDetailDrawer({
           'Sin bodega',
         quantity,
       }))
-      .sort((a, b) => b.quantity - a.quantity);
+      .sort((a: { quantity: number }, b: { quantity: number }) => b.quantity - a.quantity);
   }, [product, warehouses, movements, kardexMovements]);
 
   const totalStockByWarehouse = useMemo(
-    () => stockByWarehouse.reduce((acc, item) => acc + item.quantity, 0),
+    () =>
+      stockByWarehouse.reduce(
+        (acc: number, item: { quantity: number }) => acc + item.quantity,
+        0,
+      ),
     [stockByWarehouse],
   );
 
@@ -624,7 +628,7 @@ export function ProductDetailDrawer({
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {stockByWarehouse.map((item) => {
+                          {stockByWarehouse.map((item: { warehouseId: string; warehouseName: string; quantity: number; minStock?: number; maxStock?: number }) => {
                             const pct = totalStockByWarehouse > 0
                               ? Math.round((item.quantity / totalStockByWarehouse) * 100)
                               : 0;
