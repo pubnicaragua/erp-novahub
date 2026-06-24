@@ -143,6 +143,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <p className="mt-6 text-center text-[11px] text-muted-foreground/50">
               Nova<span className="text-emerald-500/70">Hub</span> ERP v1.0.0 &copy; 2026
             </p>
+
+            <p className="mt-4 text-center text-sm text-muted-foreground">
+              ¿No tenés cuenta?{' '}
+              <a href="/register" className="font-medium text-emerald-500 hover:text-emerald-400 hover:underline transition-colors">
+                Probalo gratis
+              </a>
+            </p>
           </CardContent>
         </Card>
       </motion.div>

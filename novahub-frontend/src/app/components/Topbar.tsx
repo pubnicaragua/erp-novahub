@@ -43,6 +43,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from './ui/label';
 import { usersService } from '../services/users.service';
 import { Lock } from 'lucide-react';
+import { TrialCountdownBanner } from './auth/TrialCountdownBanner';
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -121,7 +122,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:px-6" >
+    <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <TrialCountdownBanner />
+      <header className="flex h-16 items-center gap-4 border-b border-border bg-background/95 px-4 lg:px-6" >
       {/* Menu Toggle (Mobile) */}
       <Button
         variant="ghost"
@@ -320,5 +323,6 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         </DialogContent>
       </Dialog>
     </header>
+    </div>
   );
 }

@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  Package, 
-  Warehouse, 
-  BarChart3, 
-  Truck, 
-  Scale, 
-  History, 
+import {
+  Package,
+  Warehouse,
+  Truck,
+  Scale,
+  History,
   Download,
   RefreshCw,
   AlertTriangle
@@ -16,7 +15,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
-import { DashboardView } from './inventory/DashboardView';
 import { ProductosView } from './inventory/ProductosView';
 import { AlmacenesView } from './inventory/AlmacenesView';
 import { TransferenciasView } from './inventory/TransferenciasView';
@@ -28,7 +26,6 @@ import { motion } from 'motion/react';
 
 const INVENTORY_SECTIONS = [
   { id: 'productos',       label: 'Existencias',     icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
-  { id: 'dashboard',       label: 'Resumen',         icon: BarChart3, requiredModules: ['INVENTORY_PRODUCTS', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS', 'INVENTORY_ADJUSTMENTS', 'INVENTORY_MOVEMENTS'] },
   { id: 'almacenes',       label: 'Almacenes',       icon: Warehouse, requiredModules: ['INVENTORY_WAREHOUSES'] },
   { id: 'transferencias',  label: 'Transferencias',  icon: Truck,     requiredModules: ['INVENTORY_TRANSFERS'] },
   { id: 'ajustes',         label: 'Ajustes',         icon: Scale,     requiredModules: ['INVENTORY_ADJUSTMENTS'] },
@@ -147,7 +144,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
           </div>
           <div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-none">Inventario</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Consulta existencias, precios y disponibilidad en un solo lugar.</p>
+            <p className="mt-2 text-sm text-muted-foreground">Gestiona existencias, precios, almacenes y movimientos en un solo lugar.</p>
             <div className="flex items-center gap-2 mt-2">
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
                 {data.products.filter((p: any) => (p.itemType || 'PRODUCT').toUpperCase() !== 'SERVICE').length} productos · {data.products.filter((p: any) => (p.itemType || '').toUpperCase() === 'SERVICE').length} servicios · {data.warehouses.length} almacenes
@@ -229,21 +226,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
             </div>
           ) : (
             <>
-              <TabsContent value="dashboard" className="m-0" asChild>
-                <motion.div 
-                  initial={{ opacity: 0, y: 16 }} 
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }} // Bounce-like slide up
-                >
-                  <DashboardView 
-                    products={data.products} 
-                    warehouses={data.warehouses} 
-                    movements={data.movements}
-                    transfers={data.transfers}
-                    adjustments={data.adjustments}
-                  />
-                </motion.div>
-              </TabsContent>
               <TabsContent value="productos" className="m-0" asChild>
                 <motion.div 
                   initial={{ opacity: 0, y: 16 }} 

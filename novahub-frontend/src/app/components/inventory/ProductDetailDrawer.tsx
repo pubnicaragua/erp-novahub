@@ -366,62 +366,67 @@ export function ProductDetailDrawer({
         side="right"
         className="w-full sm:max-w-3xl p-0 flex flex-col gap-0"
       >
-        {/* ===== Header sticky ===== */}
-        <SheetHeader className="sticky top-0 z-10 bg-background border-b px-6 py-4 space-y-2">
-          <div className="flex items-start gap-3 pr-8">
-            <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <Box className="size-5 text-primary" />
-            </div>
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <SheetTitle className="text-base font-bold truncate">
-                  {product?.name || 'Cargando…'}
-                </SheetTitle>
-                {product?.status && (
-                  <Badge
-                    variant="outline"
-                    className={`text-[9px] font-black uppercase tracking-wider border ${statusInfo.className}`}
-                  >
-                    {statusInfo.label}
-                  </Badge>
-                )}
-                {product?.trackSerialNumbers && (
-                  <Badge variant="outline" className="text-[9px] font-black uppercase tracking-wider border-violet-500/30 text-violet-600 bg-violet-500/10">
-                    IMEI
-                  </Badge>
-                )}
-                {isService && (
-                  <Badge variant="outline" className="text-[9px] font-black uppercase tracking-wider border-violet-500/30 text-violet-600 bg-violet-500/10">
-                    Servicio
-                  </Badge>
-                )}
+        {/* ===== Tabs envuelve header + contenido para que Radix comparta contexto ===== */}
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as TabKey)}
+          className="flex flex-col flex-1 min-h-0 gap-0"
+        >
+          {/* ===== Header sticky ===== */}
+          <SheetHeader className="sticky top-0 z-10 bg-background border-b px-6 py-4 space-y-2">
+            <div className="flex items-start gap-3 pr-8">
+              <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Box className="size-5 text-primary" />
               </div>
-              <SheetDescription className="flex items-center gap-3 text-xs">
-                <span className="font-mono">{product?.code || product?.sku || '—'}</span>
-                {product?.category?.name && (
-                  <>
-                    <span className="text-border">·</span>
-                    <span className="flex items-center gap-1">
-                      <Tag className="size-3" />
-                      {product.category.name}
-                    </span>
-                  </>
-                )}
-                {product?.updatedAt && (
-                  <>
-                    <span className="text-border">·</span>
-                    <span className="flex items-center gap-1">
-                      <Calendar className="size-3" />
-                      {format(new Date(product.updatedAt), 'dd MMM yyyy', { locale: es })}
-                    </span>
-                  </>
-                )}
-              </SheetDescription>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <SheetTitle className="text-base font-bold truncate">
+                    {product?.name || 'Cargando…'}
+                  </SheetTitle>
+                  {product?.status && (
+                    <Badge
+                      variant="outline"
+                      className={`text-[9px] font-black uppercase tracking-wider border ${statusInfo.className}`}
+                    >
+                      {statusInfo.label}
+                    </Badge>
+                  )}
+                  {product?.trackSerialNumbers && (
+                    <Badge variant="outline" className="text-[9px] font-black uppercase tracking-wider border-violet-500/30 text-violet-600 bg-violet-500/10">
+                      IMEI
+                    </Badge>
+                  )}
+                  {isService && (
+                    <Badge variant="outline" className="text-[9px] font-black uppercase tracking-wider border-violet-500/30 text-violet-600 bg-violet-500/10">
+                      Servicio
+                    </Badge>
+                  )}
+                </div>
+                <SheetDescription className="flex items-center gap-3 text-xs">
+                  <span className="font-mono">{product?.code || product?.sku || '—'}</span>
+                  {product?.category?.name && (
+                    <>
+                      <span className="text-border">·</span>
+                      <span className="flex items-center gap-1">
+                        <Tag className="size-3" />
+                        {product.category.name}
+                      </span>
+                    </>
+                  )}
+                  {product?.updatedAt && (
+                    <>
+                      <span className="text-border">·</span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="size-3" />
+                        {format(new Date(product.updatedAt), 'dd MMM yyyy', { locale: es })}
+                      </span>
+                    </>
+                  )}
+                </SheetDescription>
+              </div>
             </div>
-          </div>
 
-          {/* ===== Tabs ===== */}
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)} className="w-full">
+            {/* ===== Tabs (Radix Root sigue siendo el mismo de arriba) ===== */}
             <TabsList className="w-full justify-start overflow-x-auto">
               <TabsTrigger value="general" className="gap-1.5">
                 <Info className="size-3.5" />
@@ -444,8 +449,7 @@ export function ProductDetailDrawer({
                 Historial
               </TabsTrigger>
             </TabsList>
-          </Tabs>
-        </SheetHeader>
+          </SheetHeader>
 
         {/* ===== Contenido con scroll ===== */}
         <ScrollArea className="flex-1">
@@ -846,6 +850,7 @@ export function ProductDetailDrawer({
             <ChevronRight className="size-3" />
           </Button>
         </div>
+        </Tabs>
       </SheetContent>
     </Sheet>
   );

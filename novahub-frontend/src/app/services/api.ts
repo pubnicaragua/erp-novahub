@@ -80,15 +80,20 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   if (!response.ok) {
     let serverMessage = '';
+    let errorBody: any = null;
     try {
-      const error = await response.json();
-      if (Array.isArray(error?.message)) {
-        serverMessage = error.message.join(', ');
+      errorBody = await response.json();
+      if (Array.isArray(errorBody?.message)) {
+        serverMessage = errorBody.message.join(', ');
       } else {
-        serverMessage = error?.message || error?.error || '';
+        serverMessage = errorBody?.message || errorBody?.error || '';
       }
     } catch {
       serverMessage = '';
+    }
+    // Detectar 403 TRIAL_EXPIRED y emitir evento global para que la UI muestre el overlay
+    if (errorBody?.code === 'TRIAL_EXPIRED') {
+      window.dispatchEvent(new CustomEvent('trial-expired', { detail: errorBody }));
     }
     throw new Error(normalizeErrorMessage(serverMessage, response.status));
   }

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth, type Module } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { LoginPage } from './components/LoginPage';
+import { RegisterTenantPage } from './components/auth/RegisterTenantPage';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { OverviewDashboard } from './components/OverviewDashboard';
@@ -235,6 +237,7 @@ function DashboardLayout() {
 
 function AppContent() {
   const { isAuthenticated, login } = useAuth();
+  const location = useLocation();
 
   useEffect(() => {
     const isDark = localStorage.getItem('erp-theme-mode') === 'light' ? false : true;
@@ -244,6 +247,16 @@ function AppContent() {
       document.documentElement.classList.remove('dark');
     }
   }, []);
+
+  // Ruta pública de registro: no requiere autenticación y evita el guard.
+  if (location.pathname === '/register') {
+    return (
+      <>
+        <RegisterTenantPage />
+        <Toaster position="top-right" />
+      </>
+    );
+  }
 
   if (!isAuthenticated) {
     return (

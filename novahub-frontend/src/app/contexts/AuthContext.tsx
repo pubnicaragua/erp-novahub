@@ -65,7 +65,13 @@ interface AuthContextType {
   isAuthenticated: boolean;
   hasAccess: (module: string) => boolean;
   canPerform: (module: string, action: 'view' | 'create' | 'edit' | 'delete') => boolean;
-  login: (email: string, password: string) => void;
+  login: (email: string, password: string) => Promise<void>;
+  /**
+   * Sets the auth session from a pre-existing token + user pair.
+   * Used by the free-trial registration flow where the backend
+   * already returns a valid JWT and the user object.
+   */
+  setSession: (token: string, user: any) => void;
   logout: () => void;
   switchIdentity: (userId: string) => Promise<void>;
   refreshEnabledModules: () => Promise<void>;
@@ -453,12 +459,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     try {
       const response = await api.post<{ access_token: string; user: any }>('/auth/login', { email, password });
-      
+
       localStorage.setItem('nh-auth-token', response.access_token);
       setUser(createUserObject(response.user));
     } catch (error: any) {
       throw new Error(error.message || 'Error al iniciar sesión. Verifica tus credenciales.');
     }
+  }, []);
+
+  const setSession = useCallback((token: string, userData: any) => {
+    localStorage.setItem('nh-auth-token', token);
+    setUser(createUserObject(userData));
   }, []);
 
   const logout = useCallback(() => {
@@ -494,7 +505,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.tenantId]);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, logout, switchIdentity, refreshEnabledModules, isLoading }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, setSession, logout, switchIdentity, refreshEnabledModules, isLoading }}>
       {isLoading ? (
         <div className="min-h-screen flex items-center justify-center bg-background">
           <div className="flex flex-col items-center gap-4">

@@ -327,7 +327,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
       </div>
 
       <Dialog open={metaOpen} onOpenChange={setMetaOpen}>
-        <DialogContent className="rounded-3xl border-border/50 bg-card/95 backdrop-blur-xl">
+        <DialogContent className="rounded-3xl border-border/50 bg-popover">
           <DialogHeader>
             <DialogTitle>Establecer Meta de Ventas</DialogTitle>
             <DialogDescription>Define el objetivo mensual para el tenant actual.</DialogDescription>
@@ -357,7 +357,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
         </div>
       ) : kpisWithPrimary.length === 0 ? (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <Card className="border-border/50 rounded-3xl bg-card/50 backdrop-blur-sm shadow-sm">
+          <Card className="border-border/50 rounded-3xl bg-card shadow-sm">
             <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
               <AlertCircle className="size-12 text-muted-foreground/30" />
               <p className="text-sm text-muted-foreground font-bold">No hay módulos habilitados para mostrar métricas.</p>
@@ -373,7 +373,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
             return (
               <motion.div key={kpi.id} variants={itemVariants}>
                 <Card
-                  className={`relative overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer group border-border/50 rounded-3xl ${kpi.primary ? 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-transparent shadow-lg' : 'bg-card/50 backdrop-blur-sm shadow-sm'}`}
+                  className={`relative overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer group border-border/50 rounded-3xl ${kpi.primary ? 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-transparent shadow-lg' : 'bg-card shadow-sm'}`}
                   onClick={() => onNavigate?.(kpi.navModule)}
                 >
                   <div className={`absolute -right-6 -top-6 size-24 rounded-full blur-2xl opacity-50 transition-transform group-hover:scale-150 duration-500 ${kpi.primary ? 'bg-white/20' : kpi.bgColor}`} />
@@ -405,7 +405,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
       {modulesLoaded && kpisWithPrimary.length > 0 && (
         <div className="grid gap-6 lg:grid-cols-2">
           <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
-            <Card className="rounded-3xl border-border/50 bg-card/30 backdrop-blur-md overflow-hidden shadow-sm">
+            <Card className="rounded-3xl border-border/50 bg-card shadow-sm">
               <CardHeader><CardTitle className="text-lg font-bold uppercase tracking-tight">
                 {hasSales ? 'Actividad Reciente — Órdenes' : 'Resumen de Actividad'}
               </CardTitle></CardHeader>
@@ -416,11 +416,22 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
                       name: o.number || o.id?.slice(0,8),
                       total: Number(o.total || 0),
                     }))}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border/30" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 11 }} />
-                      <YAxis tick={{ fill: 'currentColor', fontSize: 11 }} />
-                      <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px' }} />
-                      <Bar dataKey="total" fill="hsl(var(--primary))" radius={[8,8,0,0]} name="Total" />
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 11 }} stroke="currentColor" className="text-muted-foreground" />
+                      <YAxis tick={{ fill: 'currentColor', fontSize: 11 }} stroke="currentColor" className="text-muted-foreground" />
+                      <Tooltip
+                        cursor={{ fill: 'hsl(var(--muted) / 0.4)' }}
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--popover))',
+                          color: 'hsl(var(--popover-foreground))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                        }}
+                        labelStyle={{ color: 'hsl(var(--popover-foreground))', fontWeight: 700 }}
+                        itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
+                      />
+                      <Bar dataKey="total" fill="var(--primary)" radius={[8,8,0,0]} name="Total" />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -433,7 +444,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
           </motion.div>
 
           <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }}>
-            <Card className="rounded-3xl bg-card/30 backdrop-blur-md shadow-sm border-border/50">
+            <Card className="rounded-3xl bg-card shadow-sm border-border/50">
               <CardHeader><CardTitle className="text-lg font-bold uppercase tracking-tight">Resumen Ejecutivo</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-4 pt-2">
@@ -459,7 +470,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
       {/* Recent Transactions — only if sales module is available */}
       {hasSales && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
-          <Card className="rounded-3xl bg-card/30 backdrop-blur-md border-border/50 shadow-sm overflow-hidden">
+          <Card className="rounded-3xl bg-card border-border/50 shadow-sm overflow-hidden">
             <CardHeader className="pb-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
