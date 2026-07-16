@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { motion, Variants } from 'motion/react';
 import {
-  TrendingUp, TrendingDown, Package, DollarSign, ShoppingCart, Users,
-  ArrowUpRight, Loader2, Target, Download, Building2, Briefcase, HandCoins,
-  UserCheck, BarChart3, AlertCircle
+  TrendingDown, Package, DollarSign, ShoppingCart, Users,
+  ArrowUpRight, Loader2, Target, Download, Briefcase, HandCoins,
+  UserCheck, AlertCircle
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { type Module, useAuth } from '../contexts/AuthContext';
+import { useCurrency } from '../contexts/CurrencyContext';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from './ui/table';
@@ -91,11 +92,14 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
 
   // Dynamic data store
   const [dataStore, setDataStore] = useState<Record<string, number>>({});
+  const [incomes, setIncomes] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
   const [recentInvoices, setRecentInvoices] = useState<any[]>([]);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [metaOpen, setMetaOpen] = useState(false);
   const [salesGoal, setSalesGoal] = useState(50000);
   const [isExporting, setIsExporting] = useState(false);
+  const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
 
   // ── Check which modules are available ──
   const isModuleAvailable = (requiredModule: string, permModule: string): boolean => {
@@ -160,15 +164,23 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
           try {
             const res = await incomeService.getAll();
             const list = Array.isArray(res) ? res : (res as any)?.data || [];
+            setIncomes(list);
             newData.income = list.reduce((sum: number, i: any) => sum + Number(i.amount || 0), 0);
-          } catch { newData.income = 0; }
+          } catch {
+            setIncomes([]);
+            newData.income = 0;
+          }
         })(),
         (async () => {
           try {
             const res = await finExpensesService.getAll();
             const list = Array.isArray(res) ? res : (res as any)?.data || [];
+            setExpenses(list);
             newData.expenses = list.reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
-          } catch { newData.expenses = 0; }
+          } catch {
+            setExpenses([]);
+            newData.expenses = 0;
+          }
         })()
       );
     }
@@ -249,13 +261,21 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
     setLoading(false);
   };
 
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+  const totalIncome = incomes.reduce(
+    (sum: number, i: any) => sum + convertAmount(Number(i.amount || 0), i.currency, i.exchangeRate), 0
+  );
+  const totalExpenses = expenses.reduce(
+    (sum: number, e: any) => sum + convertAmount(Number(e.amount || 0), e.currency, e.exchangeRate), 0
+  );
+
+  const formatCurrency = (n: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
+    formatConvertedAmount(n, sourceCurrency, sourceExchangeRate);
 
   const getKpiValue = (fetchKey: string): string => {
     if (loading) return '...';
+    if (fetchKey === 'income') return formatCurrency(totalIncome, displayCurrency);
+    if (fetchKey === 'expenses') return formatCurrency(totalExpenses, displayCurrency);
     const val = dataStore[fetchKey] ?? 0;
-    if (fetchKey === 'income' || fetchKey === 'expenses') return formatCurrency(val);
     return val.toString();
   };
 
@@ -289,7 +309,6 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
 
   // ── Determine what to show in bottom section ──
   const hasSales = isModuleAvailable('SALES', 'ventas');
-  const hasFinancial = isModuleAvailable('FINANCIAL', 'finanzas');
 
   return (
     <div className="space-y-8 p-4 md:p-6 pb-16">
@@ -369,7 +388,6 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
         <motion.div variants={containerVariants} initial="hidden" animate="show" className={`grid gap-5 md:grid-cols-2 lg:grid-cols-${Math.min(kpisWithPrimary.length, 4)}`}>
           {kpisWithPrimary.map((kpi) => {
             const Icon = kpi.icon;
-            const TrendIcon = TrendingUp;
             return (
               <motion.div key={kpi.id} variants={itemVariants}>
                 <Card
@@ -414,7 +432,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={recentOrders.map(o => ({
                       name: o.number || o.id?.slice(0,8),
-                      total: Number(o.total || 0),
+                      total: convertAmount(Number(o.total || 0), o.currency, o.exchangeRate),
                     }))}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" vertical={false} />
                       <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 11 }} stroke="currentColor" className="text-muted-foreground" />
@@ -430,6 +448,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
                         }}
                         labelStyle={{ color: 'hsl(var(--popover-foreground))', fontWeight: 700 }}
                         itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
+                        formatter={(value: any) => [formatCurrency(Number(value), displayCurrency), 'Total']}
                       />
                       <Bar dataKey="total" fill="var(--primary)" radius={[8,8,0,0]} name="Total" />
                     </BarChart>
@@ -520,7 +539,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
                             </div>
                           </TableCell>
                           <TableCell className="font-black text-right text-sm tabular-nums">
-                            {formatCurrency(Number(inv.total || 0))}
+                            {formatCurrency(Number(inv.total || 0), inv.currency, inv.exchangeRate)}
                           </TableCell>
                           <TableCell className="text-center">
                             <Badge variant="outline" className={cn("px-3 py-1 font-black uppercase text-[9px] tracking-widest border-none", statusColors[inv.paymentStatus] || 'bg-muted/10 text-muted-foreground')}>
