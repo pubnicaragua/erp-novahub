@@ -361,7 +361,6 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     }
     if (item.submenu) {
       toggleMenu(item.id);
-      onModuleChange(item.id as Module);
     } else {
       onModuleChange(item.id as Module);
       if (window.innerWidth < 1024) onClose();
