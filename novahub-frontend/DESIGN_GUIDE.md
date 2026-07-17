@@ -4,7 +4,7 @@
 
 Esta guía define el estilo visual, tipografía, animaciones y componentes que **TODOS** los módulos deben seguir para mantener consistencia profesional en todo el ERP.
 
----
+------
 
 ## 🎯 Filosofía de Diseño
 
