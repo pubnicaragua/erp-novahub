@@ -176,6 +176,8 @@ export interface Invoice {
   baseTotal?: number;
   status: PaymentStatus;
   notes?: string;
+  sellerEmployeeId?: string | null;
+  commissionRate?: number | null;
   items: InvoiceItem[];
   createdAt: string;
   updatedAt: string;

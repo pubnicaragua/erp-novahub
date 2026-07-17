@@ -32,7 +32,7 @@ export const sanitizeHtml2CanvasOklch = (elementId: string, clonedDoc: Document,
   `;
   clonedDoc.head.appendChild(styleTag);
 
-  const hasUnsupported = (s: string | null | undefined) => s ? /oklch|oklab|color\\(|lch\\(|lab\\(/i.test(s) : false;
+  const hasUnsupported = (s: string | null | undefined) => s ? /oklch|oklab|color\(|lch\(|lab\(/i.test(s) : false;
 
   const originalEl = document.getElementById(elementId);
   const clonedEl = clonedDoc.getElementById(elementId);

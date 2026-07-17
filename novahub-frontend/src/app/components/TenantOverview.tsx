@@ -438,16 +438,16 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
                       <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 11 }} stroke="currentColor" className="text-muted-foreground" />
                       <YAxis tick={{ fill: 'currentColor', fontSize: 11 }} stroke="currentColor" className="text-muted-foreground" />
                       <Tooltip
-                        cursor={{ fill: 'hsl(var(--muted) / 0.4)' }}
+                        cursor={{ fill: 'var(--muted)', opacity: 0.3 }}
                         contentStyle={{
-                          backgroundColor: 'hsl(var(--popover))',
-                          color: 'hsl(var(--popover-foreground))',
-                          border: '1px solid hsl(var(--border))',
+                          backgroundColor: 'var(--popover)',
+                          color: 'var(--popover-foreground)',
+                          border: '1px solid var(--border)',
                           borderRadius: '12px',
                           fontSize: '12px',
                         }}
-                        labelStyle={{ color: 'hsl(var(--popover-foreground))', fontWeight: 700 }}
-                        itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
+                        labelStyle={{ color: 'var(--popover-foreground)', fontWeight: 700 }}
+                        itemStyle={{ color: 'var(--popover-foreground)' }}
                         formatter={(value: any) => [formatCurrency(Number(value), displayCurrency), 'Total']}
                       />
                       <Bar dataKey="total" fill="var(--primary)" radius={[8,8,0,0]} name="Total" />
