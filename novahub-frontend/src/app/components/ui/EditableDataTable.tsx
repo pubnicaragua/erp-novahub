@@ -32,6 +32,7 @@ interface EditableDataTableProps<T> {
   onRowUpdate?: (id: string | number, updates: Partial<T>) => Promise<void>;
   onRowDelete?: (id: string | number) => Promise<void>;
   onBulkDelete?: (ids: (string | number)[]) => Promise<void>;
+  onBulkDuplicate?: (ids: (string | number)[]) => Promise<void>;
   onBulkUpdate?: (ids: (string | number)[], updates: Partial<T>) => Promise<void>;
   idField?: keyof T;
   isLoading?: boolean;
@@ -47,6 +48,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   onRowUpdate,
   onRowDelete,
   onBulkDelete,
+  onBulkDuplicate,
   idField = 'id' as keyof T,
   isLoading,
   actions,
@@ -62,6 +64,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const inputRef = useRef<HTMLInputElement>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | number | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [confirmBulkDeleteIds, setConfirmBulkDeleteIds] = useState<(string | number)[]>([]);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [bulkDuplicateLoading, setBulkDuplicateLoading] = useState(false);
 
   useEffect(() => {
     setData(initialData);
@@ -195,6 +200,17 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     }
   };
 
+  const handleBulkDuplicate = async () => {
+    if (!onBulkDuplicate || selectedIds.size === 0) return;
+    try {
+      setBulkDuplicateLoading(true);
+      await onBulkDuplicate(Array.from(selectedIds));
+      setSelectedIds(new Set());
+    } finally {
+      setBulkDuplicateLoading(false);
+    }
+  };
+
   return (
     <div className="w-full space-y-4" onPaste={handlePaste}>
       {/* Bulk Actions Toolbar */}
@@ -216,12 +232,27 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             </div>
             <div className="flex items-center gap-2">
                {bulkActions && bulkActions(Array.from(selectedIds))}
-               <Button variant="outline" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider">
-                  <Copy className="size-3 mr-2" /> Duplicar
-               </Button>
-               <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider" onClick={() => onBulkDelete && onBulkDelete(Array.from(selectedIds))}>
-                  <Trash2 className="size-3 mr-2" /> Eliminar
-               </Button>
+               {onBulkDuplicate && (
+                 <Button
+                   variant="outline"
+                   size="sm"
+                   className="h-8 text-[10px] font-black uppercase tracking-wider"
+                   onClick={handleBulkDuplicate}
+                   disabled={bulkDuplicateLoading}
+                 >
+                    <Copy className="size-3 mr-2" /> {bulkDuplicateLoading ? 'Duplicando...' : 'Duplicar'}
+                 </Button>
+               )}
+               {onBulkDelete && (
+                 <Button
+                   variant="destructive"
+                   size="sm"
+                   className="h-8 text-[10px] font-black uppercase tracking-wider"
+                   onClick={() => setConfirmBulkDeleteIds(Array.from(selectedIds))}
+                 >
+                    <Trash2 className="size-3 mr-2" /> Eliminar
+                 </Button>
+               )}
             </div>
           </motion.div>
         )}
@@ -403,6 +434,26 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           } finally {
             setDeleteLoading(false);
             setConfirmDeleteId(null);
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={confirmBulkDeleteIds.length > 0}
+        onOpenChange={(open) => { if (!open) setConfirmBulkDeleteIds([]); }}
+        title="¿Eliminar registros seleccionados?"
+        description={`Se eliminarán ${confirmBulkDeleteIds.length} registros. Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={bulkDeleteLoading}
+        onConfirm={async () => {
+          if (!onBulkDelete || confirmBulkDeleteIds.length === 0) return;
+          try {
+            setBulkDeleteLoading(true);
+            await onBulkDelete(confirmBulkDeleteIds);
+            setSelectedIds(new Set());
+            setConfirmBulkDeleteIds([]);
+          } finally {
+            setBulkDeleteLoading(false);
           }
         }}
       />

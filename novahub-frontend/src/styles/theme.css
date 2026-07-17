@@ -80,6 +80,45 @@
   --switch-background: oklch(0.35 0.01 155);
 }
 
+/* Revelado circular del tema, portado del patrón de ManagerLocal. */
+html[data-theme-transition="active"]::view-transition-group(root) {
+  animation-duration: 460ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html[data-theme-transition="active"]::view-transition-old(root),
+html[data-theme-transition="active"]::view-transition-new(root) {
+  pointer-events: none;
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html[data-theme-transition="active"]::view-transition-old(root) {
+  z-index: 1;
+}
+
+html[data-theme-transition="active"]::view-transition-new(root) {
+  z-index: 2;
+  animation: theme-circle-reveal 460ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes theme-circle-reveal {
+  from {
+    clip-path: circle(0 at var(--theme-transition-x) var(--theme-transition-y));
+  }
+
+  to {
+    clip-path: circle(var(--theme-transition-radius) at var(--theme-transition-x) var(--theme-transition-y));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-transition="active"]::view-transition-group(root),
+  html[data-theme-transition="active"]::view-transition-new(root) {
+    animation-duration: 0.01ms;
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

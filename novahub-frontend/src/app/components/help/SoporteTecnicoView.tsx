@@ -10,7 +10,11 @@ import { Input } from '../ui/input';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
-import { soporteTecnicoService } from '../../services/soporte-tecnico.service';
+import {
+  MAX_EVIDENCE_FILES,
+  soporteTecnicoService,
+  validateEvidenceFile,
+} from '../../services/soporte-tecnico.service';
 import { cn } from '../ui/utils';
 
 const CATEGORIES = [
@@ -57,7 +61,9 @@ export function SoporteTecnicoView() {
       setLoading(true);
       const res = await soporteTecnicoService.getMyTickets();
       setTickets(Array.isArray(res) ? res : []);
-    } catch { toast.error('Error al cargar tickets'); }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al cargar tickets');
+    }
     finally { setLoading(false); }
   };
 
@@ -66,19 +72,34 @@ export function SoporteTecnicoView() {
     try {
       setSaving(true);
       toast.loading('Enviando ticket...', { id: 'create-ticket' });
-      await soporteTecnicoService.create(form);
-      toast.success('Ticket enviado correctamente', { id: 'create-ticket' });
+      const createdTicket = await soporteTecnicoService.create(form);
+      setTickets(current => [createdTicket, ...current.filter(ticket => ticket.id !== createdTicket.id)]);
+      toast.success(
+        createdTicket.number ? `Ticket ${createdTicket.number} enviado correctamente` : 'Ticket enviado correctamente',
+        { id: 'create-ticket' },
+      );
       setShowCreateModal(false);
       setForm({ subject: '', description: '', category: 'BUG', priority: 'MEDIUM', evidenceFiles: [] });
-      fetchTickets();
-    } catch { toast.error('Error al enviar ticket', { id: 'create-ticket' }); }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error al enviar el ticket';
+      toast.error(message, { id: 'create-ticket', duration: 7000 });
+    }
     finally { setSaving(false); }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    if (form.evidenceFiles.length + files.length > 2) { toast.error('Máximo 2 imágenes'); return; }
-    setForm({ ...form, evidenceFiles: [...form.evidenceFiles, ...files].slice(0, 2) });
+    e.target.value = '';
+    if (form.evidenceFiles.length + files.length > MAX_EVIDENCE_FILES) {
+      toast.error(`Máximo ${MAX_EVIDENCE_FILES} imágenes por ticket`);
+      return;
+    }
+    try {
+      files.forEach(validateEvidenceFile);
+      setForm(current => ({ ...current, evidenceFiles: [...current.evidenceFiles, ...files] }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'El archivo seleccionado no es válido');
+    }
   };
 
   const removeFile = (idx: number) => {
@@ -298,7 +319,7 @@ export function SoporteTecnicoView() {
                     ))}
                     {form.evidenceFiles.length < 2 && (
                       <div className="relative group">
-                        <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                        <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
                         <div className="h-24 w-24 border-2 border-dashed rounded-xl flex flex-col items-center justify-center border-border/60 group-hover:border-primary/40 group-hover:bg-primary/5">
                           <ImagePlus className="size-6 text-muted-foreground/40 group-hover:text-primary/60" />
                           <span className="text-[8px] font-bold text-muted-foreground mt-1">Agregar</span>

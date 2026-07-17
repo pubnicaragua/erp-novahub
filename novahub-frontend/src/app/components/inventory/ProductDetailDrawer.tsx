@@ -258,7 +258,15 @@ export function ProductDetailDrawer({
 
   const salePrice = Number(product?.salePrice ?? product?.price ?? 0);
   const costPrice = Number(product?.costPrice ?? product?.cost ?? 0);
-  const totalStock = Number(product?.stock ?? 0);
+  // El endpoint de detalle incluye stockLevels. Derivarlo aquí también evita
+  // mostrar cero si se consume una versión anterior del backend sin `stock`.
+  const stockFromLevels = Array.isArray(product?.stockLevels)
+    ? product.stockLevels.reduce(
+        (total: number, level: any) => total + Number(level?.quantity ?? 0),
+        0,
+      )
+    : null;
+  const totalStock = stockFromLevels ?? Number(product?.stock ?? 0);
   const stockValue = totalStock * costPrice;
   const margin = salePrice > 0 ? ((salePrice - costPrice) / salePrice) * 100 : 0;
 

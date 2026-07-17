@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { Search, Plus, Trash2, X, Check, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Search, Plus, Trash2, X, Check, Copy, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
@@ -31,8 +31,8 @@ interface EditingProduct {
   code: string;
   name: string;
   categoryId: string;
-  salePrice: number;
-  costPrice: number;
+  salePrice: number | '';
+  costPrice: number | '';
   trackSerialNumbers?: boolean;
   itemType?: 'PRODUCT' | 'SERVICE';
   initialStock?: number;
@@ -59,6 +59,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingRows, setEditingRows] = useState<Map<string, EditingProduct>>(new Map());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [duplicatingIds, setDuplicatingIds] = useState<Set<string>>(new Set());
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
@@ -164,9 +165,17 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     const current = editingRows.get(id);
     if (current) {
       let finalValue = value;
-      // Validate prices are non-negative
-      if (field === 'salePrice' || field === 'costPrice' || field === 'initialStock') {
-        finalValue = Math.max(0, value);
+      // Keep an empty price as a valid editing draft so users can erase the
+      // initial zero before typing a new amount. It is normalized on save.
+      if (field === 'salePrice' || field === 'costPrice') {
+        if (value === '') {
+          finalValue = '';
+        } else {
+          const parsed = Number(value);
+          finalValue = Number.isFinite(parsed) ? Math.max(0, parsed) : current[field];
+        }
+      } else if (field === 'initialStock') {
+        finalValue = Math.max(0, Number(value) || 0);
       }
       setEditingRows(new Map(editingRows.set(id, { ...current, [field]: finalValue })));
     }
@@ -235,8 +244,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           code: product.code,
           name: product.name,
           categoryId: product.categoryId,
-          salePrice: product.salePrice,
-          costPrice: product.costPrice,
+          salePrice: Number(product.salePrice || 0),
+          costPrice: Number(product.costPrice || 0),
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           itemType: product.itemType || 'PRODUCT',
           initialStock: 0,
@@ -282,8 +291,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           code: product.code,
           name: product.name,
           categoryId: product.categoryId,
-          salePrice: product.salePrice,
-          costPrice: product.costPrice,
+          salePrice: Number(product.salePrice || 0),
+          costPrice: Number(product.costPrice || 0),
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           itemType: product.itemType || 'PRODUCT',
         });
@@ -302,6 +311,23 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
   const handleDeleteProduct = async (id: string) => {
     setPendingDeleteId(id);
+  };
+
+  const handleDuplicateProduct = async (product: any) => {
+    setDuplicatingIds((current) => new Set(current).add(product.id));
+    try {
+      await inventoryService.duplicateProduct(product.id);
+      toast.success(`Copia de ${product.name} creada`);
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al duplicar el producto');
+    } finally {
+      setDuplicatingIds((current) => {
+        const next = new Set(current);
+        next.delete(product.id);
+        return next;
+      });
+    }
   };
 
   const handleConfirmDelete = async () => {
@@ -488,8 +514,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         <TableCell>
           <Input
             type="number"
+            min={0}
+            step="any"
             value={product.salePrice}
-            onChange={(e) => handleUpdateField(product.id, 'salePrice', parseFloat(e.target.value) || 0)}
+            onChange={(e) => handleUpdateField(product.id, 'salePrice', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
             className="h-8 text-xs text-right"
             disabled={isSaving}
@@ -498,16 +526,18 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         <TableCell>
           <Input
             type="number"
+            min={0}
+            step="any"
             value={product.costPrice}
-            onChange={(e) => handleUpdateField(product.id, 'costPrice', parseFloat(e.target.value) || 0)}
+            onChange={(e) => handleUpdateField(product.id, 'costPrice', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
             className="h-8 text-xs text-right"
             disabled={isSaving}
           />
         </TableCell>
         <TableCell className="text-right">
-          <Badge className={(product.salePrice - product.costPrice) >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}>
-            {formatAmount((product.salePrice || 0) - (product.costPrice || 0), 'NIO')}
+          <Badge className={(Number(product.salePrice || 0) - Number(product.costPrice || 0)) >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}>
+            {formatAmount(Number(product.salePrice || 0) - Number(product.costPrice || 0), 'NIO')}
           </Badge>
         </TableCell>
         <TableCell className="text-right">
@@ -876,6 +906,24 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                      </TableCell>
                      <TableCell className="text-right">
                        <div className="flex items-center justify-end gap-1 transition-opacity">
+                        {canPerform('INVENTORY_PRODUCTS', 'edit') && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7"
+                              title="Duplicar producto"
+                              aria-label={`Duplicar ${product.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDuplicateProduct(product);
+                              }}
+                              disabled={duplicatingIds.has(product.id)}
+                            >
+                              {duplicatingIds.has(product.id)
+                                ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                : <Copy className="size-3.5" />}
+                            </Button>
+                         )}
                          {canPerform('INVENTORY_PRODUCTS', 'edit') && (
                             <Button 
                               variant="ghost" 
@@ -1163,4 +1211,3 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     </Card>
   );
 }
-

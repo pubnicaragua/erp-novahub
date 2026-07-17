@@ -2,6 +2,65 @@ import { api } from './api';
 
 const env = (import.meta as any).env;
 
+export const MAX_EVIDENCE_FILES = 2;
+export const MAX_EVIDENCE_FILE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_EVIDENCE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+export function validateEvidenceFile(file: File): void {
+  if (!ALLOWED_EVIDENCE_TYPES.has(file.type)) {
+    throw new Error(`No se puede adjuntar “${file.name}”: usa una imagen JPG, PNG, WEBP o GIF.`);
+  }
+  if (file.size > MAX_EVIDENCE_FILE_SIZE) {
+    throw new Error(`No se puede adjuntar “${file.name}”: el tamaño máximo es 5 MB.`);
+  }
+  if (file.size === 0) {
+    throw new Error(`No se puede adjuntar “${file.name}”: el archivo está vacío.`);
+  }
+}
+
+async function uploadEvidence(file: File, index: number): Promise<string> {
+  validateEvidenceFile(file);
+
+  const supabaseUrl = String(env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  const supabaseAnonKey = String(env.VITE_SUPABASE_ANON_KEY || '');
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('No se pudo adjuntar la evidencia: el almacenamiento no está configurado. Contacta al administrador.');
+  }
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const uniquePart = typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const fileName = `${uniquePart}-${index}-${safeName}`;
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${supabaseUrl}/storage/v1/object/soporte_tecnico/${encodeURIComponent(fileName)}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${supabaseAnonKey}`,
+          apikey: supabaseAnonKey,
+          'Content-Type': file.type,
+          'x-upsert': 'false',
+        },
+        body: file,
+      },
+    );
+  } catch {
+    throw new Error(`No se pudo adjuntar “${file.name}”: no hay conexión con el almacenamiento.`);
+  }
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null);
+    const detail = errorBody?.message || errorBody?.error || `error HTTP ${response.status}`;
+    throw new Error(`No se pudo adjuntar “${file.name}”: ${detail}.`);
+  }
+
+  return `${supabaseUrl}/storage/v1/object/public/soporte_tecnico/${encodeURIComponent(fileName)}`;
+}
+
 export const soporteTecnicoService = {
   // Tenant: mis tickets
   getMyTickets: () => api.get<any[]>('/support-tickets/my'),
@@ -17,44 +76,15 @@ export const soporteTecnicoService = {
     let evidenceUrl1: string | null = null;
     let evidenceUrl2: string | null = null;
 
-    // Upload evidence images to Supabase bucket soporte_tecnico
-    if (data.evidenceFiles && data.evidenceFiles.length > 0) {
-      const uploads = await Promise.all(
-        data.evidenceFiles.slice(0, 2).map(async (file, idx) => {
-          const fileName = `${Date.now()}_${idx}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-          // Direct upload to Supabase Storage public bucket
-          const SUPABASE_URL = env.VITE_SUPABASE_URL;
-          const SUPABASE_ANON_KEY = env.VITE_SUPABASE_ANON_KEY;
+    const evidenceFiles = data.evidenceFiles || [];
+    if (evidenceFiles.length > MAX_EVIDENCE_FILES) {
+      throw new Error(`Solo puedes adjuntar hasta ${MAX_EVIDENCE_FILES} imágenes por ticket.`);
+    }
 
-          if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-            try {
-              const res = await fetch(
-                `${SUPABASE_URL}/storage/v1/object/soporte_tecnico/${fileName}`,
-                {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                    'x-upsert': 'true',
-                  },
-                  body: file,
-                }
-              );
-              if (res.ok) {
-                return `${SUPABASE_URL}/storage/v1/object/public/soporte_tecnico/${fileName}`;
-              }
-            } catch (e) {
-              console.error('Error uploading evidence:', e);
-            }
-          }
-
-          // Fallback: base64
-          return new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.readAsDataURL(file);
-          });
-        })
-      );
+    if (evidenceFiles.length > 0) {
+      // No hay fallback base64: un fallo de Storage se informa y nunca se envía
+      // silenciosamente un JSON demasiado grande al backend.
+      const uploads = await Promise.all(evidenceFiles.map(uploadEvidence));
       evidenceUrl1 = uploads[0] || null;
       evidenceUrl2 = uploads[1] || null;
     }

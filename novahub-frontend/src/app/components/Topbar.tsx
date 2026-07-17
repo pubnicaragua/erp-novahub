@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   Search,
   Bell,
@@ -60,6 +61,24 @@ interface Notification {
   read: boolean;
   type: 'info' | 'warning' | 'success';
 }
+
+interface ThemeViewTransition {
+  finished: Promise<void>;
+  skipTransition?: () => void;
+}
+
+type ThemeTransitionDocument = Document & {
+  startViewTransition?: (update: () => void) => ThemeViewTransition;
+};
+
+let activeThemeTransition: ThemeViewTransition | null = null;
+let requestedDarkMode: boolean | null = null;
+let themeChangeVersion = 0;
+
+function getSavedDarkMode() {
+  return localStorage.getItem('erp-theme-mode') !== 'light';
+}
+
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
   const { user, logout } = useAuth();
   const { unreadCount, markAllAsRead, notifications } = useNotifications();
@@ -98,15 +117,93 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     onNavigate('configuracion');
   };
 
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
-  const toggleTheme = () => {
-    setIsDark(!isDark);
-    if (!isDark) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('erp-theme-mode', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('erp-theme-mode', 'light');
+  const [isDark, setIsDark] = useState(getSavedDarkMode);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const syncFromRoot = () => setIsDark(root.classList.contains('dark'));
+    const observer = new MutationObserver(syncFromRoot);
+
+    const syncFromStorage = (event: StorageEvent) => {
+      if (event.key !== 'erp-theme-mode') return;
+      const nextDark = event.newValue !== 'light';
+      root.classList.toggle('dark', nextDark);
+      setIsDark(nextDark);
+    };
+
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('storage', syncFromStorage);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', syncFromStorage);
+    };
+  }, []);
+
+  const toggleTheme = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const root = document.documentElement;
+    const transitionDocument = document as ThemeTransitionDocument;
+    // La clase del DOM es la fuente de verdad; así cada clic funciona aunque
+    // React tenga una actualización pendiente o el tema cambie desde otra pestaña.
+    const nextDark = !(requestedDarkMode ?? root.classList.contains('dark'));
+    const requestVersion = ++themeChangeVersion;
+    requestedDarkMode = nextDark;
+
+    const applyTheme = () => {
+      // Un callback de View Transitions puede ejecutarse después de un segundo
+      // clic. Si ya existe una intención más reciente, no debe sobrescribirla.
+      if (requestVersion !== themeChangeVersion) return;
+      root.classList.toggle('dark', nextDark);
+      localStorage.setItem('erp-theme-mode', nextDark ? 'dark' : 'light');
+      flushSync(() => setIsDark(nextDark));
+      requestedDarkMode = null;
+    };
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!transitionDocument.startViewTransition || reduceMotion) {
+      applyTheme();
+      return;
+    }
+
+    // Un segundo clic no espera a que termine la esfera: cancela solo el efecto
+    // visual anterior y aplica la nueva intención inmediatamente.
+    if (activeThemeTransition) {
+      const previousTransition = activeThemeTransition;
+      activeThemeTransition = null;
+      delete root.dataset.themeTransition;
+      previousTransition.skipTransition?.();
+      applyTheme();
+      return;
+    }
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = bounds.left + bounds.width / 2;
+    const y = bounds.top + bounds.height / 2;
+    const radius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y),
+    );
+
+    root.style.setProperty('--theme-transition-x', `${x}px`);
+    root.style.setProperty('--theme-transition-y', `${y}px`);
+    root.style.setProperty('--theme-transition-radius', `${Math.ceil(radius)}px`);
+    root.dataset.themeTransition = 'active';
+
+    try {
+      const transition = transitionDocument.startViewTransition(applyTheme);
+      activeThemeTransition = transition;
+      void transition.finished
+        .catch(() => undefined)
+        .finally(() => {
+          if (activeThemeTransition === transition) {
+            activeThemeTransition = null;
+            delete root.dataset.themeTransition;
+          }
+        });
+    } catch {
+      activeThemeTransition = null;
+      delete root.dataset.themeTransition;
+      applyTheme();
     }
   };
 
@@ -182,7 +279,14 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           <span className="text-xs font-bold">{currency}</span>
         </Button>
 
-        <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9" aria-label="Cambiar tema">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleTheme}
+          className="h-9 w-9"
+          aria-label={isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+          title={isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+        >
           {isDark ? <Sun className="size-5" /> : <Moon className="size-5" />}
         </Button>
 

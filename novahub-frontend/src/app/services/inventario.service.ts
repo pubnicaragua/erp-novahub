@@ -6,6 +6,7 @@ export const inventoryService = {
   getProducts: (filters?: ApiFilters) => api.get<PaginatedResponse<Product>>('/inventory/products', filters as any),
   getProduct: (id: string) => api.get<Product>(`/inventory/products/${id}`),
   createProduct: (data: Partial<Product> & { initialStock?: number }) => api.post<Product>('/inventory/products', data),
+  duplicateProduct: (id: string) => api.post<Product>(`/inventory/products/${id}/duplicate`, {}),
   updateProduct: (id: string, data: Partial<Product>) => api.patch<Product>(`/inventory/products/${id}`, data),
   deleteProduct: (id: string) => api.delete(`/inventory/products/${id}`),
 
