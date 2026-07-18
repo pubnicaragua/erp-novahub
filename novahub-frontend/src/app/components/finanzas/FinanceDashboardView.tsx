@@ -1,13 +1,34 @@
 import { useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import type { LucideIcon } from 'lucide-react';
 import {
-  TrendingUp, TrendingDown, Wallet, BarChart3, ArrowUpRight, ArrowDownRight,
-  CalendarClock, Activity, Percent, PieChart as PieChartIcon, Scale
+  Activity,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
+  CalendarClock,
+  CircleAlert,
+  CircleCheck,
+  Info,
+  Percent,
+  Scale,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
 } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  Legend, Cell, PieChart, Pie, LabelList, AreaChart, Area
+import {
+  Area,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from 'recharts';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface FinanceDashboardViewProps {
@@ -18,543 +39,683 @@ interface FinanceDashboardViewProps {
   accounts?: any[];
 }
 
-export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes = [], accounts = [] }: FinanceDashboardViewProps) {
+type MetricTone = 'positive' | 'negative' | 'neutral';
+
+interface MetricCardProps {
+  title: string;
+  value: string;
+  description: string;
+  icon: LucideIcon;
+  tone: MetricTone;
+  trend: number | null;
+  trendLabel: string;
+  positiveIsGood?: boolean;
+}
+
+const metricToneStyles: Record<MetricTone, { icon: string; value: string; surface: string }> = {
+  positive: {
+    icon: 'bg-emerald-500/10 text-emerald-500',
+    value: 'text-emerald-500',
+    surface: 'hover:border-emerald-500/30',
+  },
+  negative: {
+    icon: 'bg-rose-500/10 text-rose-500',
+    value: 'text-rose-500',
+    surface: 'hover:border-rose-500/30',
+  },
+  neutral: {
+    icon: 'bg-primary/10 text-primary',
+    value: 'text-foreground',
+    surface: 'hover:border-primary/30',
+  },
+};
+
+function MetricCard({
+  title,
+  value,
+  description,
+  icon: Icon,
+  tone,
+  trend,
+  trendLabel,
+  positiveIsGood = true,
+}: MetricCardProps) {
+  const styles = metricToneStyles[tone];
+  const trendIsUp = trend !== null && trend > 0;
+  const trendIsGood = trend === null || trend === 0
+    ? null
+    : positiveIsGood
+      ? trend > 0
+      : trend < 0;
+
+  return (
+    <Card
+      className={`group border-border/60 bg-card/65 shadow-none transition-colors duration-200 ${styles.surface}`}
+    >
+      <CardContent className="p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-muted-foreground">{title}</p>
+            <p className={`mt-2 truncate text-2xl font-semibold tracking-tight tabular-nums ${styles.value}`}>
+              {value}
+            </p>
+          </div>
+          <div className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${styles.icon}`}>
+            <Icon className="size-4.5" aria-hidden="true" />
+          </div>
+        </div>
+
+        <div className="mt-4 flex min-h-5 items-center justify-between gap-3 text-[11px]">
+          <span className="truncate text-muted-foreground">{description}</span>
+          {trend === null ? (
+            <span className="shrink-0 text-muted-foreground">Sin comparación</span>
+          ) : (
+            <span
+              className={`inline-flex shrink-0 items-center gap-1 font-semibold tabular-nums ${
+                trendIsGood === null
+                  ? 'text-muted-foreground'
+                  : trendIsGood
+                    ? 'text-emerald-500'
+                    : 'text-rose-500'
+              }`}
+              aria-label={`${Math.abs(trend).toFixed(1)} por ciento ${trendIsUp ? 'más' : 'menos'} ${trendLabel}`}
+            >
+              {trendIsUp ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
+              {Math.abs(trend).toFixed(1)}%
+            </span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+const percentChange = (current: number, previous: number) => {
+  if (previous === 0) return current === 0 ? 0 : null;
+  const change = ((current - previous) / Math.abs(previous)) * 100;
+  return Math.abs(change) > 500 ? null : change;
+};
+
+const humanizeCategory = (value: string) =>
+  value
+    .replace(/_/g, ' ')
+    .toLocaleLowerCase('es-NI')
+    .replace(/(^|\s)\S/g, (letter) => letter.toLocaleUpperCase('es-NI'));
+
+export function FinanceDashboardView({
+  incomes,
+  expenses,
+  recurringExpenses,
+  recurringIncomes = [],
+  accounts = [],
+}: FinanceDashboardViewProps) {
   const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
 
-  // ─── Core Calculations ────────────────────────
   const totalIncomes = incomes.reduce(
-    (acc, i) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0
+    (total, item) => total + convertAmount(item.amount || 0, item.currency, item.exchangeRate),
+    0,
   );
   const totalExpenses = expenses.reduce(
-    (acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0
+    (total, item) => total + convertAmount(item.amount || 0, item.currency, item.exchangeRate),
+    0,
   );
-  const totalRecurring = recurringExpenses.reduce(
-    (acc, r) => acc + convertAmount(r.amount || 0, r.currency, r.exchangeRate), 0
+  const totalRecurringExpenses = recurringExpenses.reduce(
+    (total, item) => total + convertAmount(item.amount || 0, item.currency, item.exchangeRate),
+    0,
   );
-  const netUtility = totalIncomes - totalExpenses;
-  const margin = totalIncomes > 0 ? ((netUtility / totalIncomes) * 100) : 0;
-  const avgIncome = incomes.length > 0 ? totalIncomes / incomes.length : 0;
-  const avgExpense = expenses.length > 0 ? totalExpenses / expenses.length : 0;
-  const savingsRatio = totalIncomes > 0 ? ((netUtility / totalIncomes) * 100) : 0;
-
-  // New metrics
   const totalRecurringIncomes = recurringIncomes.reduce(
-    (acc, r) => acc + convertAmount(r.amount || 0, r.currency, r.exchangeRate), 0
+    (total, item) => total + convertAmount(item.amount || 0, item.currency, item.exchangeRate),
+    0,
   );
-  const netRecurringFlow = totalRecurringIncomes - totalRecurring;
-  const expenseToIncomeRatio = totalIncomes > 0 ? ((totalExpenses / totalIncomes) * 100) : 0;
 
-  // Accounts summary
-  const accountsByType = accounts.reduce((acc: Record<string, { count: number; total: number }>, a: any) => {
-    const type = String(a.type || 'OTHER').toUpperCase();
-    if (!acc[type]) acc[type] = { count: 0, total: 0 };
-    acc[type].count++;
-    acc[type].total += Number(a.balance || 0);
-    return acc;
-  }, {} as Record<string, { count: number; total: number }>);
+  const netUtility = totalIncomes - totalExpenses;
+  const margin = totalIncomes > 0 ? (netUtility / totalIncomes) * 100 : 0;
+  const expenseToIncomeRatio = totalIncomes > 0 ? (totalExpenses / totalIncomes) * 100 : 0;
+  const netRecurringFlow = totalRecurringIncomes - totalRecurringExpenses;
+  const recurringCoverage = totalRecurringExpenses > 0
+    ? (totalRecurringIncomes / totalRecurringExpenses) * 100
+    : totalRecurringIncomes > 0
+      ? 100
+      : 0;
+  const activeAccounts = accounts.filter((account) => {
+    const status = String(account.status || '').toUpperCase();
+    return account.isActive !== false && status !== 'INACTIVE' && status !== 'CLOSED';
+  }).length;
 
-  // ─── Expense by Category (Pie Chart) ──────────
-  const pieData = useMemo(() => {
-    const cats: Record<string, number> = {};
-    expenses.forEach(curr => {
-      const cat = curr.category || 'Otros';
-      cats[cat] = (cats[cat] || 0) + convertAmount(curr.amount || 0, curr.currency, curr.exchangeRate);
-    });
-    const result = Object.entries(cats).map(([name, value]) => ({ name, value: Math.round(value) }));
-    return result.length > 0 ? result.sort((a, b) => b.value - a.value) : [{ name: 'Sin gastos', value: 1 }];
-  }, [expenses]);
-
-  const COLORS = ['#10b981', '#ef4444', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
-
-  // ─── Monthly Data (Last 6 months) ─────────────
   const monthlyData = useMemo(() => {
-    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-    const data = [];
+    const now = new Date();
+    const data: Array<{
+      mes: string;
+      monthIndex: number;
+      year: number;
+      ingresos: number;
+      gastos: number;
+      balance: number;
+    }> = [];
 
-    for (let i = 5; i >= 0; i--) {
-      const monthIdx = (currentMonth - i + 12) % 12;
-      const year = currentMonth - i < 0 ? currentYear - 1 : currentYear;
-      const monthIncomes = incomes.filter(inc => {
-        const d = new Date(inc.date || inc.createdAt);
-        return d.getMonth() === monthIdx && d.getFullYear() === year;
-      });
-      const monthExpenses = expenses.filter(exp => {
-        const d = new Date(exp.date || exp.createdAt);
-        return d.getMonth() === monthIdx && d.getFullYear() === year;
-      });
-      
-      const inc = monthIncomes.reduce((acc: number, i: any) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0);
-      const exp = monthExpenses.reduce((acc: number, e: any) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
-      
+    for (let offset = 5; offset >= 0; offset -= 1) {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const monthIndex = monthDate.getMonth();
+      const year = monthDate.getFullYear();
+
+      const monthIncomes = incomes.reduce((total, item) => {
+        const itemDate = new Date(item.date || item.createdAt);
+        if (Number.isNaN(itemDate.getTime()) || itemDate.getMonth() !== monthIndex || itemDate.getFullYear() !== year) {
+          return total;
+        }
+        return total + convertAmount(item.amount || 0, item.currency, item.exchangeRate);
+      }, 0);
+
+      const monthExpenses = expenses.reduce((total, item) => {
+        const itemDate = new Date(item.date || item.createdAt);
+        if (Number.isNaN(itemDate.getTime()) || itemDate.getMonth() !== monthIndex || itemDate.getFullYear() !== year) {
+          return total;
+        }
+        return total + convertAmount(item.amount || 0, item.currency, item.exchangeRate);
+      }, 0);
+
       data.push({
-        mes: monthNames[monthIdx],
-        ingresos: Math.round(inc),
-        gastos: Math.round(exp),
-        balance: Math.round(inc - exp),
+        mes: monthNames[monthIndex],
+        monthIndex,
+        year,
+        ingresos: Math.round(monthIncomes),
+        gastos: Math.round(monthExpenses),
+        balance: Math.round(monthIncomes - monthExpenses),
       });
     }
+
     return data;
-  }, [incomes, expenses]);
+  }, [convertAmount, expenses, incomes]);
 
-  // ─── Top items ────────────────────────────────
-  const topIncomes = useMemo(() => 
-    [...incomes]
-      .sort((a, b) => convertAmount(b.amount || 0, b.currency, b.exchangeRate) - convertAmount(a.amount || 0, a.currency, a.exchangeRate))
-      .slice(0, 5),
-    [incomes]
-  );
-  const topExpenses = useMemo(() => 
-    [...expenses]
-      .sort((a, b) => convertAmount(b.amount || 0, b.currency, b.exchangeRate) - convertAmount(a.amount || 0, a.currency, a.exchangeRate))
-      .slice(0, 5),
-    [expenses]
-  );
+  const activeMonths = monthlyData.filter((month) => month.ingresos > 0 || month.gastos > 0);
+  const comparableMonths = monthlyData
+    .slice(0, -1)
+    .filter((month) => month.ingresos > 0 || month.gastos > 0);
+  const latestMonth = comparableMonths.at(-1);
+  const previousMonth = comparableMonths.at(-2);
 
-  // ─── Balance trend for sparkline ──────────────
-  const balanceTrend = useMemo(() => {
-    let cumulative = 0;
-    return monthlyData.map(d => {
-      cumulative += d.balance;
-      return { mes: d.mes, balance: cumulative };
+  const incomeTrend = latestMonth && previousMonth
+    ? percentChange(latestMonth.ingresos, previousMonth.ingresos)
+    : null;
+  const expenseTrend = latestMonth && previousMonth
+    ? percentChange(latestMonth.gastos, previousMonth.gastos)
+    : null;
+  const utilityTrend = latestMonth && previousMonth
+    ? percentChange(latestMonth.balance, previousMonth.balance)
+    : null;
+  const comparisonLabel = previousMonth ? `vs. ${previousMonth.mes} (mes cerrado)` : 'vs. periodo anterior';
+
+  const categoryData = useMemo(() => {
+    const categoryTotals: Record<string, number> = {};
+
+    expenses.forEach((expense) => {
+      const category = humanizeCategory(String(expense.category || 'Otros'));
+      categoryTotals[category] = (categoryTotals[category] || 0)
+        + convertAmount(expense.amount || 0, expense.currency, expense.exchangeRate);
     });
-  }, [monthlyData]);
 
-  const fmtShort = (v: number) => {
-    if (Math.abs(v) >= 1000000) return `${currencySymbol}${(v/1000000).toFixed(1)}M`;
-    if (Math.abs(v) >= 1000) return `${currencySymbol}${(v/1000).toFixed(1)}k`;
-    return `${currencySymbol}${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+    return Object.entries(categoryTotals)
+      .map(([name, value]) => ({
+        name,
+        value: Math.round(value),
+        share: totalExpenses > 0 ? (value / totalExpenses) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+  }, [convertAmount, expenses, totalExpenses]);
+
+  const completedActiveMonths = monthlyData
+    .slice(0, -1)
+    .filter((month) => month.ingresos > 0 || month.gastos > 0);
+  const baselineMonths = (completedActiveMonths.length > 0 ? completedActiveMonths : activeMonths).slice(-3);
+  const averageHistoricalIncome = baselineMonths.length > 0
+    ? baselineMonths.reduce((total, month) => total + month.ingresos, 0) / baselineMonths.length
+    : 0;
+  const averageHistoricalExpense = baselineMonths.length > 0
+    ? baselineMonths.reduce((total, month) => total + month.gastos, 0) / baselineMonths.length
+    : 0;
+  const projectedIncome = Math.max(averageHistoricalIncome, totalRecurringIncomes);
+  const projectedExpense = Math.max(averageHistoricalExpense, totalRecurringExpenses);
+  const projectedNet = projectedIncome - projectedExpense;
+
+  const projectionData = useMemo(() => {
+    const now = new Date();
+    const history = monthlyData.map((month) => ({
+      mes: month.mes,
+      ingresos: month.ingresos,
+      gastos: month.gastos,
+      forecastBalance: null as number | null,
+      confidence: null as [number, number] | null,
+    }));
+
+    if (history.length > 0) {
+      const lastHistoryPoint = history[history.length - 1];
+      lastHistoryPoint.forecastBalance = monthlyData[monthlyData.length - 1].balance;
+      lastHistoryPoint.confidence = [monthlyData[monthlyData.length - 1].balance, monthlyData[monthlyData.length - 1].balance];
+    }
+
+    const uncertainty = Math.max(Math.abs(projectedNet) * 0.2, (projectedIncome + projectedExpense) * 0.04);
+    const forecast = Array.from({ length: 3 }, (_, index) => {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() + index + 1, 1);
+      return {
+        mes: `${monthNames[monthDate.getMonth()]} est.`,
+        ingresos: null,
+        gastos: null,
+        forecastBalance: Math.round(projectedNet),
+        confidence: [Math.round(projectedNet - uncertainty), Math.round(projectedNet + uncertainty)] as [number, number],
+      };
+    });
+
+    return [...history, ...forecast];
+  }, [monthlyData, projectedExpense, projectedIncome, projectedNet]);
+
+  const topCategory = categoryData[0];
+  const signals = [
+    margin < 0
+      ? {
+          tone: 'critical' as const,
+          title: 'Resultado operativo negativo',
+          description: 'Los gastos superan los ingresos registrados.',
+        }
+      : margin < 15
+        ? {
+            tone: 'warning' as const,
+            title: 'Margen ajustado',
+            description: `${margin.toFixed(1)}% de margen; conviene revisar los gastos de mayor peso.`,
+          }
+        : {
+            tone: 'healthy' as const,
+            title: 'Margen en rango saludable',
+            description: `${margin.toFixed(1)}% de los ingresos queda como utilidad.`,
+          },
+    netRecurringFlow < 0
+      ? {
+          tone: 'warning' as const,
+          title: 'Compromisos recurrentes sin cobertura',
+          description: `Faltan ${formatConvertedAmount(Math.abs(netRecurringFlow), displayCurrency)} por ciclo.`,
+        }
+      : {
+          tone: 'healthy' as const,
+          title: 'Flujo recurrente cubierto',
+          description: `Cobertura estimada de ${recurringCoverage.toFixed(0)}%.`,
+        },
+    topCategory && topCategory.share >= 40
+      ? {
+          tone: 'warning' as const,
+          title: 'Gasto concentrado',
+          description: `${topCategory.name} representa ${topCategory.share.toFixed(0)}% del gasto total.`,
+        }
+      : {
+          tone: 'info' as const,
+          title: 'Distribución de gasto estable',
+          description: topCategory
+            ? `La categoría principal concentra ${topCategory.share.toFixed(0)}%.`
+            : 'Aún no hay gastos suficientes para analizar concentración.',
+        },
+    activeMonths.length < 3
+      ? {
+          tone: 'info' as const,
+          title: 'Proyección con confianza limitada',
+          description: 'Se necesitan al menos tres meses con actividad para una base más sólida.',
+        }
+      : {
+          tone: 'healthy' as const,
+          title: 'Base histórica disponible',
+          description: `La estimación usa ${baselineMonths.length} meses recientes con actividad.`,
+        },
+  ];
+
+  const fmtShort = (value: number) => {
+    if (Math.abs(value) >= 1_000_000) return `${currencySymbol}${(value / 1_000_000).toFixed(1)}M`;
+    if (Math.abs(value) >= 1_000) return `${currencySymbol}${(value / 1_000).toFixed(1)}k`;
+    return `${currencySymbol}${value.toLocaleString('es-NI', { maximumFractionDigits: 0 })}`;
+  };
+
+  const chartTooltipStyle = {
+    backgroundColor: 'var(--popover)',
+    border: '1px solid var(--border)',
+    borderRadius: '12px',
+    color: 'var(--popover-foreground)',
+    boxShadow: '0 14px 34px rgba(0, 0, 0, 0.16)',
+    fontSize: '12px',
   };
 
   return (
-    <div className="space-y-6">
-      {/* Title */}
-      <div>
-        <h2 className="text-xl font-black tracking-tight uppercase">Panel de Control Financiero</h2>
-        <p className="text-sm text-muted-foreground">
-          {incomes.length} ingresos · {expenses.length} gastos · {recurringExpenses.length} recurrentes
-        </p>
+    <section className="space-y-5" aria-labelledby="finance-dashboard-title" data-testid="finance-dashboard">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 id="finance-dashboard-title" className="text-xl font-semibold tracking-tight">
+            Resumen financiero
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Una lectura rápida del rendimiento actual, los compromisos y la tendencia de caja.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground">
+          <span className="rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1.5">
+            Tendencia: últimos 6 meses
+          </span>
+          {activeAccounts > 0 && (
+            <span className="rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1.5">
+              {activeAccounts} {activeAccounts === 1 ? 'cuenta activa' : 'cuentas activas'}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* ═══ KPI Cards ═══ */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* Total Ingresos */}
-        <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg hover:shadow-emerald-500/5 transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><TrendingUp className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <ArrowUpRight className="size-3.5 text-emerald-500" /> Ingresos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(totalIncomes, displayCurrency)}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{incomes.length} transacciones</p>
-          </CardContent>
-        </Card>
-
-        {/* Total Gastos */}
-        <Card className="border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent relative overflow-hidden group hover:shadow-lg hover:shadow-rose-500/5 transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><TrendingDown className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <ArrowDownRight className="size-3.5 text-rose-500" /> Gastos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-rose-500">{formatConvertedAmount(totalExpenses, displayCurrency)}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{expenses.length} transacciones</p>
-          </CardContent>
-        </Card>
-
-        {/* Utilidad Neta */}
-        <Card className={`border-${netUtility >= 0 ? 'emerald' : 'orange'}-500/20 bg-gradient-to-br from-${netUtility >= 0 ? 'emerald' : 'orange'}-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all`}>
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Wallet className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Scale className="size-3.5" /> Utilidad Neta
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className={`text-xl font-black ${netUtility >= 0 ? 'text-emerald-500' : 'text-orange-500'}`}>
-              {formatConvertedAmount(netUtility, displayCurrency)}
-            </p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Ingresos - Gastos</p>
-          </CardContent>
-        </Card>
-
-        {/* Margen */}
-        <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent relative overflow-hidden group hover:shadow-lg hover:shadow-blue-500/5 transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Percent className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Percent className="size-3.5 text-blue-500" /> Margen
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-blue-500">{margin.toFixed(1)}%</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{margin >= 20 ? 'Saludable' : margin >= 0 ? 'Bajo' : 'Negativo'}</p>
-          </CardContent>
-        </Card>
-
-        {/* Gastos Recurrentes */}
-        <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent relative overflow-hidden group hover:shadow-lg hover:shadow-purple-500/5 transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><CalendarClock className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Activity className="size-3.5 text-purple-500" /> Recurrentes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-purple-500">{formatConvertedAmount(totalRecurring, displayCurrency)}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{recurringExpenses.length} compromisos</p>
-          </CardContent>
-        </Card>
-
-        {/* Ratio Ahorro */}
-        <Card className="border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-transparent relative overflow-hidden group hover:shadow-lg hover:shadow-amber-500/5 transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Wallet className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Wallet className="size-3.5 text-amber-500" /> Ratio Ahorro
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-amber-500">{savingsRatio.toFixed(1)}%</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Prom. Ing: {fmtShort(avgIncome)} · Gto: {fmtShort(avgExpense)}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Ingresos Recurrentes */}
-        <Card className="border-teal-500/20 bg-gradient-to-br from-teal-500/5 to-transparent relative overflow-hidden group hover:shadow-lg hover:shadow-teal-500/5 transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><TrendingUp className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <ArrowUpRight className="size-3.5 text-teal-500" /> Ing. Recurrentes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-teal-500">{formatConvertedAmount(totalRecurringIncomes, displayCurrency)}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{recurringIncomes.length} compromisos</p>
-          </CardContent>
-        </Card>
-
-        {/* Flujo Recurrente Neto */}
-        <Card className={`border-${netRecurringFlow >= 0 ? 'sky' : 'orange'}-500/20 bg-gradient-to-br from-${netRecurringFlow >= 0 ? 'sky' : 'orange'}-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all`}>
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Activity className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Activity className="size-3.5" /> Flujo Rec. Neto
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className={`text-xl font-black ${netRecurringFlow >= 0 ? 'text-sky-500' : 'text-orange-500'}`}>{formatConvertedAmount(netRecurringFlow, displayCurrency)}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Ing. rec. - Gtos. rec.</p>
-          </CardContent>
-        </Card>
-
-        {/* Ratio Gastos/Ingresos */}
-        <Card className="border-pink-500/20 bg-gradient-to-br from-pink-500/5 to-transparent relative overflow-hidden group hover:shadow-lg hover:shadow-pink-500/5 transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Percent className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Percent className="size-3.5 text-pink-500" /> Ratio Gto/Ing
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-pink-500">{expenseToIncomeRatio.toFixed(1)}%</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{expenseToIncomeRatio <= 70 ? 'Óptimo' : expenseToIncomeRatio <= 90 ? 'Ajustado' : 'Crítico'}</p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="finance-kpi-grid">
+        <MetricCard
+          title="Ingresos"
+          value={formatConvertedAmount(totalIncomes, displayCurrency)}
+          description={`${incomes.length} transacciones registradas`}
+          icon={TrendingUp}
+          tone="positive"
+          trend={incomeTrend}
+          trendLabel={comparisonLabel}
+        />
+        <MetricCard
+          title="Gastos"
+          value={formatConvertedAmount(totalExpenses, displayCurrency)}
+          description={`${expenses.length} transacciones registradas`}
+          icon={TrendingDown}
+          tone="negative"
+          trend={expenseTrend}
+          trendLabel={comparisonLabel}
+          positiveIsGood={false}
+        />
+        <MetricCard
+          title="Utilidad neta"
+          value={formatConvertedAmount(netUtility, displayCurrency)}
+          description="Ingresos menos gastos"
+          icon={Scale}
+          tone={netUtility >= 0 ? 'positive' : 'negative'}
+          trend={utilityTrend}
+          trendLabel={comparisonLabel}
+        />
+        <MetricCard
+          title="Margen"
+          value={`${margin.toFixed(1)}%`}
+          description={`${expenseToIncomeRatio.toFixed(1)}% se destina a gastos`}
+          icon={Percent}
+          tone="neutral"
+          trend={null}
+          trendLabel=""
+        />
       </div>
 
-      {/* ═══ Charts Row ═══ */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Bar Chart - Ingresos vs Gastos */}
-        <Card className="lg:col-span-2 border-border/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <BarChart3 className="size-4 text-primary" /> Ingresos vs Gastos (Últimos 6 meses)
-            </CardTitle>
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.8fr)]">
+        <Card className="min-w-0 border-border/60 bg-card/65 shadow-none" data-testid="cashflow-projection-chart">
+          <CardHeader className="gap-3 pb-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                <BarChart3 className="size-4 text-primary" aria-hidden="true" />
+                Flujo real y proyección
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Historial mensual y estimación base para los próximos 3 meses.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-medium text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-sm bg-emerald-500" />Ingresos</span>
+              <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-sm bg-rose-400" />Gastos</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-3 bg-amber-500" />Proyección neta</span>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="h-[320px] w-full pt-2">
-              {monthlyData.some(d => d.ingresos > 0 || d.gastos > 0) ? (
+            <div className="h-[330px] min-w-0 w-full pt-2">
+              {activeMonths.length > 0 || totalRecurringExpenses > 0 || totalRecurringIncomes > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyData} barGap={6}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
-                    <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11, fontWeight: 600 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
-                    <Tooltip 
-                      cursor={{ fill: 'rgba(0,0,0,0.04)' }}
-                      contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                      formatter={(value: number, name: string) => [`${currencySymbol}${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, name]}
+                  <ComposedChart data={projectionData} margin={{ top: 16, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 5" opacity={0.75} />
+                    <XAxis
+                      dataKey="mes"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11, fontWeight: 500 }}
                     />
-                    <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 700 }} />
-                    <Bar dataKey="ingresos" name="Ingresos" fill="#10b981" radius={[6, 6, 0, 0]}>
-                      <LabelList dataKey="ingresos" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 9, fill: '#10b981', fontWeight: 700 }} />
-                    </Bar>
-                    <Bar dataKey="gastos" name="Gastos" fill="#ef4444" radius={[6, 6, 0, 0]}>
-                      <LabelList dataKey="gastos" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 9, fill: '#ef4444', fontWeight: 700 }} />
-                    </Bar>
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
+                      tickFormatter={fmtShort}
+                      width={54}
+                    />
+                    <Tooltip
+                      contentStyle={chartTooltipStyle}
+                      labelStyle={{ color: 'var(--popover-foreground)', fontWeight: 600 }}
+                      formatter={(value: any, name: string) => {
+                        if (Array.isArray(value)) {
+                          return [`${fmtShort(Number(value[0]))} – ${fmtShort(Number(value[1]))}`, 'Rango estimado'];
+                        }
+                        const names: Record<string, string> = {
+                          ingresos: 'Ingresos',
+                          gastos: 'Gastos',
+                          forecastBalance: 'Flujo neto estimado',
+                        };
+                        return [fmtShort(Number(value)), names[name] || name];
+                      }}
+                    />
+                    <ReferenceLine
+                      x={monthlyData.at(-1)?.mes}
+                      stroke="var(--muted-foreground)"
+                      strokeDasharray="3 4"
+                      opacity={0.55}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="confidence"
+                      stroke="none"
+                      fill="#f59e0b"
+                      fillOpacity={0.12}
+                      connectNulls
+                    />
+                    <Bar dataKey="ingresos" fill="#10b981" radius={[5, 5, 0, 0]} maxBarSize={24} />
+                    <Bar dataKey="gastos" fill="#fb7185" radius={[5, 5, 0, 0]} maxBarSize={24} />
+                    <Line
+                      type="monotone"
+                      dataKey="forecastBalance"
+                      stroke="#f59e0b"
+                      strokeWidth={2.5}
+                      strokeDasharray="6 5"
+                      dot={{ r: 3, fill: '#f59e0b', strokeWidth: 0 }}
+                      connectNulls
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-center text-muted-foreground">
+                  <div>
+                    <BarChart3 className="mx-auto mb-3 size-9 opacity-35" />
+                    <p className="text-sm font-medium text-foreground">Aún no hay una tendencia que proyectar</p>
+                    <p className="mt-1 text-xs">Registra ingresos y gastos para construir el histórico.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="mt-2 flex flex-col gap-1 border-t border-border/50 pt-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>Base: promedio de hasta 3 meses recientes + compromisos recurrentes.</span>
+              <span className="font-medium tabular-nums text-foreground">
+                Flujo mensual estimado: {formatConvertedAmount(projectedNet, displayCurrency)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="min-w-0 border-border/60 bg-card/65 shadow-none" data-testid="expense-category-chart">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <TrendingDown className="size-4 text-rose-500" aria-hidden="true" />
+              Gastos por categoría
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Las cinco categorías con mayor peso.</p>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px] min-w-0 w-full">
+              {categoryData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={categoryData}
+                    layout="vertical"
+                    margin={{ top: 8, right: 16, bottom: 0, left: 0 }}
+                  >
+                    <CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 5" opacity={0.65} />
+                    <XAxis
+                      type="number"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
+                      tickFormatter={fmtShort}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      width={92}
+                      tick={{ fill: 'var(--foreground)', fontSize: 10, fontWeight: 500 }}
+                    />
+                    <Tooltip
+                      contentStyle={chartTooltipStyle}
+                      labelStyle={{ color: 'var(--popover-foreground)', fontWeight: 600 }}
+                      formatter={(value: any) => [fmtShort(Number(value)), 'Gasto']}
+                    />
+                    <Bar dataKey="value" fill="var(--primary)" radius={[0, 6, 6, 0]} maxBarSize={24} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <BarChart3 className="size-12 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm font-medium">Sin datos suficientes</p>
-                    <p className="text-xs">Agrega ingresos y gastos para ver el análisis</p>
+                <div className="flex h-full items-center justify-center text-center text-muted-foreground">
+                  <div>
+                    <TrendingDown className="mx-auto mb-3 size-9 opacity-35" />
+                    <p className="text-sm font-medium text-foreground">Sin gastos registrados</p>
+                    <p className="mt-1 text-xs">Las categorías aparecerán aquí.</p>
                   </div>
                 </div>
               )}
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Pie Chart - Distribución de Gastos */}
-        <Card className="border-border/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <PieChartIcon className="size-4 text-primary" /> Distribución de Gastos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[320px] w-full">
-              {expenses.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      innerRadius={55}
-                      outerRadius={90}
-                      paddingAngle={3}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      labelLine={{ stroke: '#9ca3af', strokeWidth: 1 }}
-                    >
-                      {pieData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="transparent" />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                      formatter={(value: number) => [`${currencySymbol}${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, '']}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <TrendingDown className="size-12 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm font-medium">Sin gastos registrados</p>
-                  </div>
+            {topCategory && (
+              <div className="rounded-xl bg-muted/35 px-3 py-2.5 text-xs">
+                <span className="text-muted-foreground">Mayor concentración</span>
+                <div className="mt-1 flex items-center justify-between gap-3">
+                  <span className="truncate font-medium">{topCategory.name}</span>
+                  <span className="shrink-0 font-semibold tabular-nums">{topCategory.share.toFixed(1)}%</span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* ═══ Balance Trend + Composición ═══ */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Balance Trend Sparkline */}
-        <Card className="border-border/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <Activity className="size-4 text-primary" /> Evolución del Balance Acumulado
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Card className="border-border/60 bg-card/65 shadow-none" data-testid="recurring-summary">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <CalendarClock className="size-4 text-primary" aria-hidden="true" />
+              Flujo recurrente
             </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[200px] w-full">
-              {balanceTrend.some(d => d.balance !== 0) ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={balanceTrend}>
-                    <defs>
-                      <linearGradient id="balanceGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
-                    <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={v => fmtShort(v)} />
-                    <Tooltip 
-                      contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '12px' }}
-                      formatter={(v: number) => [`${currencySymbol}${v.toLocaleString()}`, 'Balance']}
-                    />
-                    <Area type="monotone" dataKey="balance" stroke="#10b981" strokeWidth={2.5} fill="url(#balanceGrad)" dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Sin datos</div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Composición del Flujo */}
-        <Card className="border-border/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <Scale className="size-4 text-primary" /> Composición del Flujo
-            </CardTitle>
+            <p className="text-xs text-muted-foreground">Ingresos comprometidos frente a obligaciones periódicas.</p>
           </CardHeader>
           <CardContent className="space-y-5">
-            {/* Progress bar */}
+            <div className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-muted/20 p-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Flujo neto por ciclo</p>
+                <p className={`mt-1 text-2xl font-semibold tracking-tight tabular-nums ${netRecurringFlow >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  {formatConvertedAmount(netRecurringFlow, displayCurrency)}
+                </p>
+              </div>
+              <div className="text-left sm:text-right">
+                <p className="text-xs text-muted-foreground">Cobertura</p>
+                <p className="mt-1 font-semibold tabular-nums">{recurringCoverage.toFixed(0)}%</p>
+              </div>
+            </div>
+
             <div>
-              <div className="w-full bg-muted h-5 rounded-full overflow-hidden flex">
-                <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all flex items-center justify-center" 
-                  style={{width: `${totalIncomes + totalExpenses > 0 ? (totalIncomes / (totalIncomes + totalExpenses)) * 100 : 50}%`}}>
-                  <span className="text-[9px] font-black text-white drop-shadow-sm">
-                    {totalIncomes + totalExpenses > 0 ? ((totalIncomes / (totalIncomes + totalExpenses)) * 100).toFixed(0) : 50}%
-                  </span>
-                </div>
-                <div className="h-full bg-gradient-to-r from-rose-400 to-rose-500 transition-all flex items-center justify-center" 
-                  style={{width: `${totalIncomes + totalExpenses > 0 ? (totalExpenses / (totalIncomes + totalExpenses)) * 100 : 50}%`}}>
-                  <span className="text-[9px] font-black text-white drop-shadow-sm">
-                    {totalIncomes + totalExpenses > 0 ? ((totalExpenses / (totalIncomes + totalExpenses)) * 100).toFixed(0) : 50}%
-                  </span>
-                </div>
+              <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>Cobertura de compromisos</span>
+                <span className="tabular-nums">{Math.min(recurringCoverage, 100).toFixed(0)}%</span>
               </div>
-              <div className="flex justify-between mt-2 text-[10px] font-black uppercase">
-                <span className="text-emerald-500 flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-500 inline-block" /> Ingresos</span>
-                <span className="text-rose-500 flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" /> Gastos</span>
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full transition-[width] duration-500 ${recurringCoverage >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                  style={{ width: `${Math.max(0, Math.min(recurringCoverage, 100))}%` }}
+                />
               </div>
             </div>
 
-            {/* Key stats */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase">Prom. Ingreso</p>
-                <p className="text-lg font-black text-emerald-500">{formatConvertedAmount(avgIncome, displayCurrency)}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-border/50 p-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <ArrowUpRight className="size-3.5 text-emerald-500" /> Ingresos recurrentes
+                </div>
+                <p className="mt-2 font-semibold tabular-nums text-emerald-500">
+                  {formatConvertedAmount(totalRecurringIncomes, displayCurrency)}
+                </p>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  {recurringIncomes.length} {recurringIncomes.length === 1 ? 'compromiso' : 'compromisos'}
+                </p>
               </div>
-              <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/10">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase">Prom. Gasto</p>
-                <p className="text-lg font-black text-rose-500">{formatConvertedAmount(avgExpense, displayCurrency)}</p>
+              <div className="rounded-xl border border-border/50 p-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <ArrowDownRight className="size-3.5 text-rose-500" /> Gastos recurrentes
+                </div>
+                <p className="mt-2 font-semibold tabular-nums text-rose-500">
+                  {formatConvertedAmount(totalRecurringExpenses, displayCurrency)}
+                </p>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  {recurringExpenses.length} {recurringExpenses.length === 1 ? 'compromiso' : 'compromisos'}
+                </p>
               </div>
             </div>
+          </CardContent>
+        </Card>
 
-            {/* Recurring breakdown */}
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-purple-500/5 border border-purple-500/10">
-              <div className="p-2 rounded-lg bg-purple-500/10">
-                <CalendarClock className="size-4 text-purple-500" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs font-bold">Gastos Recurrentes</p>
-                <p className="text-[10px] text-muted-foreground">{recurringExpenses.length} compromisos activos · {formatConvertedAmount(totalRecurring, displayCurrency)}/ciclo</p>
-              </div>
-            </div>
+        <Card className="border-border/60 bg-card/65 shadow-none" data-testid="financial-signals">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <Activity className="size-4 text-primary" aria-hidden="true" />
+              Señales financieras
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Lecturas que merecen atención según los datos actuales.</p>
+          </CardHeader>
+          <CardContent className="space-y-2.5">
+            {signals.map((signal, index) => {
+              const Icon = signal.tone === 'healthy'
+                ? CircleCheck
+                : signal.tone === 'info'
+                  ? Info
+                  : CircleAlert;
+              const styles = signal.tone === 'healthy'
+                ? 'bg-emerald-500/8 text-emerald-500'
+                : signal.tone === 'critical'
+                  ? 'bg-rose-500/8 text-rose-500'
+                  : signal.tone === 'warning'
+                    ? 'bg-amber-500/8 text-amber-500'
+                    : 'bg-primary/8 text-primary';
+
+              return (
+                <div key={`${signal.title}-${index}`} className="flex gap-3 rounded-xl border border-border/45 p-3">
+                  <div className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg ${styles}`}>
+                    <Icon className="size-3.5" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-foreground">{signal.title}</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{signal.description}</p>
+                  </div>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       </div>
 
-      {/* ═══ Top Items ═══ */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Top Ingresos */}
-        <Card className="border-emerald-500/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <ArrowUpRight className="size-4 text-emerald-500" /> Top 5 Ingresos
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {topIncomes.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic py-4 text-center">Sin ingresos</p>
-            ) : topIncomes.map((inc: any, idx: number) => (
-              <div key={inc.id || idx} className="flex items-start justify-between p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 transition-colors group">
-                <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <div className="size-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-[10px] font-black text-emerald-600 shrink-0 mt-0.5">
-                    #{idx + 1}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold break-words">{inc.source || inc.notes || 'Ingreso'}</p>
-                    <p className="text-[10px] text-muted-foreground break-words">{inc.category || 'Sin cat.'} · {new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI')}</p>
-                  </div>
-                </div>
-                <span className="text-sm font-black text-emerald-500 shrink-0 ml-3 mt-0.5">+{formatConvertedAmount(inc.amount || 0, inc.currency, inc.exchangeRate)}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* Top Gastos */}
-        <Card className="border-rose-500/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <ArrowDownRight className="size-4 text-rose-500" /> Top 5 Gastos
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {topExpenses.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic py-4 text-center">Sin gastos</p>
-            ) : topExpenses.map((exp: any, idx: number) => (
-              <div key={exp.id || idx} className="flex items-start justify-between p-3 rounded-xl bg-rose-500/5 border border-rose-500/10 hover:bg-rose-500/10 transition-colors group">
-                <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <div className="size-7 rounded-lg bg-rose-500/20 flex items-center justify-center text-[10px] font-black text-rose-600 shrink-0 mt-0.5">
-                    #{idx + 1}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold break-words">{exp.description || 'Gasto'}</p>
-                    <p className="text-[10px] text-muted-foreground break-words">{exp.source ? `${exp.source} · ` : ''}{exp.category || 'Sin cat.'} · {new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI')}</p>
-                  </div>
-                </div>
-                <span className="text-sm font-black text-rose-500 shrink-0 ml-3 mt-0.5">-{formatConvertedAmount(exp.amount || 0, exp.currency, exp.exchangeRate)}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+      <div className="flex items-start gap-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+        <Info className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
+        <span>
+          La proyección es una estimación orientativa basada en el histórico reciente y los registros recurrentes; no sustituye un presupuesto aprobado.
+        </span>
       </div>
-
-      {/* ═══ Monthly Details Table ═══ */}
-      <Card className="border-border/50">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-            <BarChart3 className="size-4 text-primary" /> Detalle Mensual
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border/50">
-                  <th className="text-left py-2 px-3 text-[10px] font-black text-muted-foreground uppercase tracking-wider">Mes</th>
-                  <th className="text-right py-2 px-3 text-[10px] font-black text-muted-foreground uppercase tracking-wider">Ingresos</th>
-                  <th className="text-right py-2 px-3 text-[10px] font-black text-muted-foreground uppercase tracking-wider">Gastos</th>
-                  <th className="text-right py-2 px-3 text-[10px] font-black text-muted-foreground uppercase tracking-wider">Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {monthlyData.map((row, i) => (
-                  <tr key={i} className="border-b border-border/20 hover:bg-muted/30 transition-colors">
-                    <td className="py-2.5 px-3 font-bold">{row.mes}</td>
-                    <td className="py-2.5 px-3 text-right text-emerald-500 font-bold">{row.ingresos > 0 ? fmtShort(row.ingresos) : '-'}</td>
-                    <td className="py-2.5 px-3 text-right text-rose-500 font-bold">{row.gastos > 0 ? fmtShort(row.gastos) : '-'}</td>
-                    <td className={`py-2.5 px-3 text-right font-black ${row.balance >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                      {fmtShort(row.balance)}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="border-t-2 border-primary/30 bg-muted/20">
-                  <td className="py-2.5 px-3 font-black uppercase text-xs">Total</td>
-                  <td className="py-2.5 px-3 text-right text-emerald-500 font-black">
-                    {fmtShort(monthlyData.reduce((a, r) => a + r.ingresos, 0))}
-                  </td>
-                  <td className="py-2.5 px-3 text-right text-rose-500 font-black">
-                    {fmtShort(monthlyData.reduce((a, r) => a + r.gastos, 0))}
-                  </td>
-                  <td className={`py-2.5 px-3 text-right font-black ${monthlyData.reduce((a, r) => a + r.balance, 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {fmtShort(monthlyData.reduce((a, r) => a + r.balance, 0))}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    </section>
   );
 }

@@ -937,5 +937,34 @@ export interface Report { id: string; title: string; type: string; generatedDate
 export interface File { id: string; name: string; type: string; size: number; uploadDate: string; uploadedBy: string; category: string; url: string; }
 
 export interface Alert { id: string; title: string; content: string; type: string; severity?: string; isRead: boolean; createdAt: string; }
-export interface Message { id: string; title: string; content: string; type: string; from?: string; to?: string; isRead: boolean; createdAt: string; }
+export interface MessageParticipant {
+  id: string;
+  name: string;
+  email?: string;
+  avatar?: string | null;
+  role?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  content: string;
+  createdAt: string;
+  isRead: boolean;
+  mine: boolean;
+  sender: MessageParticipant;
+  recipient: MessageParticipant;
+  link?: string | null;
+}
+
+export interface Message {
+  id: string;
+  title: string;
+  kind: 'DIRECT' | 'SYSTEM';
+  participant: MessageParticipant;
+  preview: string;
+  lastMessageAt: string;
+  unreadCount: number;
+  canReply: boolean;
+  messages: ChatMessage[];
+}
 export interface PushNotification { id: string; title: string; content: string; type: string; sent?: boolean; isRead: boolean; createdAt: string; deviceId?: string; }
