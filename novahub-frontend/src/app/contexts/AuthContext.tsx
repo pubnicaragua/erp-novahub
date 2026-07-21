@@ -32,7 +32,8 @@ export type Module =
   | 'centro-capacitacion'
   | 'soporte-tecnico'
   | 'asesoria-legal'
-  | 'inventario_productos';
+  | 'inventario_productos'
+  | 'contabilidad';
 
 export type SubModule = string;
 
@@ -86,6 +87,7 @@ const ALL_MODULES: Module[] = [
   'documentos', 'notificaciones', 'transferencias',
   'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
   'financiamiento-pyme', 'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal',
+  'contabilidad',
 ];
 
 const getPermissionsByRole = (role: Role): Permission[] => {
@@ -345,7 +347,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'tickets': 'TOOLS',
       'documentos': 'DOCUMENTS',
       'notificaciones': 'NOTIFICATIONS',
-      'reportes': 'REPORTS'
+      'reportes': 'REPORTS',
+      'contabilidad': 'ACCOUNTING'
     };
     const moduleGroupMap: Record<string, string[]> = {
       ventas: [
@@ -389,6 +392,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ],
       tickets: [
         'TICKETS',
+      ],
+      contabilidad: [
+        'ACCOUNTING',
+        'ACCOUNTING_CHART', 'ACCOUNTING_JOURNAL', 'ACCOUNTING_TRIAL_BALANCE',
+        'ACCOUNTING_PROFIT_LOSS', 'ACCOUNTING_BALANCE_SHEET', 'ACCOUNTING_CASH_FLOW',
+        'ACCOUNTING_RECONCILIATION', 'ACCOUNTING_PERIODS', 'ACCOUNTING_FISCAL',
       ],
     };
 

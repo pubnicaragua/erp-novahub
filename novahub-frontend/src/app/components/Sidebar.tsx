@@ -50,6 +50,7 @@ import {
   Landmark,
   GraduationCap,
   LifeBuoy,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -92,6 +93,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'pagos-recibidos': ['SALES_PAYMENTS'],
   'devoluciones-venta': ['SALES_RETURNS'],
   'notas-credito': ['SALES_CREDIT_NOTES'],
+  'facturacion-caja': ['SALES_INVOICES'],
   // Compras
   proveedores: ['PURCHASES_PROVIDERS'],
   gastos: ['PURCHASES_EXPENSES'],
@@ -177,6 +179,7 @@ const menuItems: MenuItem[] = [
       { id: 'pagos-recibidos', label: 'Pagos recibidos', icon: <CreditCard className="size-4" /> },
       { id: 'devoluciones-venta', label: 'Devoluciones de venta', icon: <FileOutput className="size-4" /> },
       { id: 'notas-credito', label: 'Notas de credito', icon: <FileMinus className="size-4" /> },
+      { id: 'facturacion-caja', label: 'Facturación por Caja', icon: <ShoppingCart className="size-4" /> },
     ]
   },
   {
@@ -221,6 +224,12 @@ const menuItems: MenuItem[] = [
       { id: 'ingresos-recurrentes', label: 'Ingresos recurrentes', icon: <RotateCcw className="size-4" /> },
       { id: 'balance', label: 'Balance General', icon: <BarChart3 className="size-4" /> },
     ]
+  },
+  {
+    id: 'contabilidad',
+    label: 'Contabilidad',
+    icon: <BookOpen className="size-5" />,
+    section: 'Administracion',
   },
   {
     id: 'rh',
@@ -372,10 +381,26 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     if (window.innerWidth < 1024) onClose();
   };
 
+  const PARENT_MODULE_MAP: Record<string, string> = {
+    ventas: 'SALES',
+    compras: 'PURCHASES',
+    inventario: 'INVENTORY',
+    finanzas: 'FINANCIAL',
+    'rrhh': 'HR',
+    proyectos: 'PROJECTS',
+    reportes: 'REPORTS',
+    documentos: 'DOCUMENTS',
+    actividades: 'ACTIVITIES',
+    notificaciones: 'NOTIFICATIONS',
+    contabilidad: 'ACCOUNTING',
+  };
+
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
     const requiredModules = SUBMENU_MODULE_REQUIREMENTS[subId];
     if (!requiredModules || requiredModules.length === 0) return true;
+    const parentMod = PARENT_MODULE_MAP[parentId];
+    if (parentMod && user.enabledModules.includes(parentMod)) return true;
     if (parentId === 'inventario' && user.enabledModules.includes('INVENTORY')) return true;
 
     if (user.isTenantAdmin && subId in SUBMENU_MODULE_REQUIREMENTS) {

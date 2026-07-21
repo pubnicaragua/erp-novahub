@@ -168,6 +168,7 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
             <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
               {COMPRAS_SECTIONS.map((section) => {
                 const hasAccess = !section.requiredModules || !user?.enabledModules
+                  || user.enabledModules.includes('PURCHASES')
                   || section.requiredModules.some(mod => user.enabledModules.includes(mod));
                 if (!hasAccess) return null;
                 return (

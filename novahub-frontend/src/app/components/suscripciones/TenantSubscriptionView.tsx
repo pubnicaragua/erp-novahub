@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { tenantsService } from '../../services/tenants.service';
 import { usersService } from '../../services/users.service';
 import { toast } from 'sonner';
-import { ALL_PERM_MODULES } from '../ConfiguracionPage';
+import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
@@ -506,10 +506,10 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 <tbody className="divide-y divide-border">
                   {(() => {
                     // Buscar permisos: primero del customRole embebido, luego cruzar con customRoles prop
-                    let rolePermissions = selectedUser?.customRole?.permissions || [];
+                    let rolePermissions = normalizePermissions(selectedUser?.customRole?.permissions);
                     if (rolePermissions.length === 0 && selectedUser?.customRoleId) {
                       const fullRole = customRoles.find(r => r.id === selectedUser.customRoleId);
-                      rolePermissions = fullRole?.permissions || [];
+                      rolePermissions = normalizePermissions(fullRole?.permissions);
                     }
                     
                     if (rolePermissions.length === 0) {

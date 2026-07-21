@@ -108,3 +108,16 @@ export const REPORTS_SUBMODULES: Submodule[] = [
   { id: 'REPORTS_HR', label: 'Recursos Humanos', description: 'Reportes de recursos humanos' },
   { id: 'REPORTS_SUBSCRIPTIONS', label: 'Suscripciones', description: 'Reportes de suscripciones' },
 ];
+
+// Submódulos de Contabilidad
+export const ACCOUNTING_SUBMODULES: Submodule[] = [
+  { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', description: 'Catálogo de cuentas contables' },
+  { id: 'ACCOUNTING_JOURNAL', label: 'Libro Diario', description: 'Asientos contables' },
+  { id: 'ACCOUNTING_TRIAL_BALANCE', label: 'Balance de Comprobación', description: 'Balance de comprobación' },
+  { id: 'ACCOUNTING_PROFIT_LOSS', label: 'Estado de Resultados', description: 'Pérdidas y ganancias' },
+  { id: 'ACCOUNTING_BALANCE_SHEET', label: 'Balance General', description: 'Balance general' },
+  { id: 'ACCOUNTING_CASH_FLOW', label: 'Flujo de Efectivo', description: 'Estado de flujo de efectivo' },
+  { id: 'ACCOUNTING_RECONCILIATION', label: 'Conciliación Bancaria', description: 'Conciliación de cuentas bancarias' },
+  { id: 'ACCOUNTING_PERIODS', label: 'Períodos Contables', description: 'Gestión de períodos contables' },
+  { id: 'ACCOUNTING_FISCAL', label: 'Reportes Fiscales', description: 'IVA, IR, INSS, INATEC' },
+];

@@ -7,7 +7,8 @@ import {
   Crown, Lock, CheckCircle2, AlertCircle, Copy, RefreshCw,
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
-  CalendarDays, Headphones, BellRing, FileText, Activity, Settings
+  CalendarDays, Headphones, BellRing, FileText, Activity, Settings,
+  BookOpen, Search
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -28,6 +29,18 @@ import { toast } from 'sonner';
 import { cn } from './ui/utils';
 import { type RoleManagement, type Permission } from '../types';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
+import { modulePricingService, type ModulePriceItem } from '../services/module-pricing.service';
+
+export const normalizePermissions = (perms: any): any[] => {
+  if (Array.isArray(perms)) return perms;
+  if (perms && typeof perms === 'object') {
+    return Object.entries(perms).map(([module, vals]: [string, any]) => ({
+      module,
+      ...(typeof vals === 'object' ? vals : {}),
+    }));
+  }
+  return [];
+};
 
 export type ExtendedPermission = Permission & { create?: boolean; edit?: boolean; };
 export type ExtendedRoleManagement = Omit<RoleManagement, 'permissions'> & { permissions: ExtendedPermission[] };
@@ -305,10 +318,34 @@ const ALL_TABS: TabDef[] = [
   { id: 'tenancy', label: 'Multi-Tenancy', icon: Layers, scenario: ['superadmin', 'partner'] },
   { id: 'currency', label: 'Moneda & Cambio', icon: Coins, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'plataforma', label: 'Plataforma', icon: Server, scenario: ['superadmin'] },
+  { id: 'precios', label: 'Precios Módulos', icon: DollarSign, scenario: ['superadmin'] },
   { id: 'dominios', label: 'Dominios', icon: Globe, scenario: ['superadmin', 'partner', 'client'] },
 ];
 
 // ---- Main Component ----
+const PRICING_MODULES = [
+  { category: 'Operaciones', modules: [
+    { id: 'SALES', label: 'Ventas', icon: TrendingUp },
+    { id: 'PURCHASES', label: 'Compras', icon: HandCoins },
+    { id: 'INVENTORY', label: 'Inventario', icon: Package },
+  ]},
+  { category: 'Administración', modules: [
+    { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign },
+    { id: 'HR', label: 'Recursos Humanos', icon: UserIcon },
+    { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen },
+  ]},
+  { category: 'Herramientas', modules: [
+    { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays },
+    { id: 'DOCUMENTS', label: 'Documentos', icon: FileText },
+    { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing },
+    { id: 'REPORTS', label: 'Reportes', icon: BarChart3 },
+  ]},
+  { category: 'Soporte', modules: [
+    { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones },
+    { id: 'CONFIGURATION', label: 'Configuración', icon: Settings },
+  ]},
+];
+
 export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: string }) {
   const { themeConfig, updateTheme, updateConfig, resetTheme } = useTheme();
   const { user, canPerform } = useAuth();
@@ -538,6 +575,21 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
 
   useEffect(() => {
+    if (scenario === 'superadmin') {
+      fetchPricing();
+    }
+  }, [scenario]);
+
+  const fetchPricing = async () => {
+    setPricingLoading(true);
+    try {
+      const res = await modulePricingService.getAll();
+      setPricingData(Array.isArray(res) ? res : []);
+    } catch { /* ignore */ }
+    finally { setPricingLoading(false); }
+  };
+
+  useEffect(() => {
     if (user?.tenantId && canViewRoles) {
       fetchRoles();
     }
@@ -624,6 +676,13 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Partial<ExtendedRoleManagement> | null>(null);
 
+  // Pricing state
+  const [pricingData, setPricingData] = useState<ModulePriceItem[]>([]);
+  const [pricingLoading, setPricingLoading] = useState(false);
+  const [pricingSaving, setPricingSaving] = useState(false);
+  const [pricingSearch, setPricingSearch] = useState('');
+  const [pricingEdits, setPricingEdits] = useState<Record<string, number>>({});
+
   const handleCreateRole = () => {
     if (!canCreateRoles) {
       toast.error('No tienes permisos para crear roles');
@@ -654,7 +713,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       return;
     }
     // Asegurar que el rol tenga todos los módulos actuales
-    const currentPerms = role.permissions || [];
+    const currentPerms = normalizePermissions(role.permissions);
     const fullPerms = ALL_PERM_MODULES.map(m => {
       // Buscar permiso existente (ignorando mayúsculas/minúsculas y buscando por ID o Label)
       const existing = currentPerms.find(p => 
@@ -705,7 +764,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         name: cleanRole.name,
         description: cleanRole.description || '',
         // Asegurar compatibilidad: el backend usa 'write', el frontend granular usa 'create'/'edit'
-        permissions: (cleanRole.permissions || []).map((p: any) => ({
+        permissions: normalizePermissions(cleanRole.permissions).map((p: any) => ({
           ...p,
           write: !!(p.create || p.edit || p.write), // compat con backend
         })),
@@ -732,7 +791,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
   const togglePermission = (module: string, type: 'read' | 'write' | 'create' | 'edit' | 'delete') => {
     if (!editingRole) return;
-    let newPerms = [...(editingRole.permissions || []).map(p => ({ ...p }))];
+    let newPerms = [...normalizePermissions(editingRole.permissions).map(p => ({ ...p }))];
 
     const targetPerm = newPerms.find(p => p.module === module) as any;
     if (!targetPerm) return;
@@ -1165,7 +1224,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                 <h4 className="font-black text-base tracking-tight">{role.name}</h4>
                                 <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
                                   {(() => {
-                                    const activePerms = (role.permissions || []).filter((p: any) => p.read || p.create || p.edit || p.delete || p.write);
+                                    const permsArray = Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : []);
+                                    const activePerms = permsArray.filter((p: any) => p.read || p.create || p.edit || p.delete || p.write);
                                     const parentModules = new Set(activePerms.map((p: any) => {
                                       const sub = SUBMODULES_FOR_PERMS.find(s => s.id === p.module);
                                       return sub ? sub.parent : p.module;
@@ -1198,7 +1258,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
                           {/* Permissions Matrix */}
                           <div className="space-y-1.5 mb-5">
-                            {(role.permissions || []).filter((p: any) => p.read || p.create || p.edit || p.delete || p.write).slice(0, 4).map((p: any) => {
+                            {(Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : [])).filter((p: any) => p.read || p.create || p.edit || p.delete || p.write).slice(0, 4).map((p: any) => {
                               const mod = ALL_PERM_MODULES.find(m => m.id === p.module);
                               return (
                                 <div key={p.module} className="flex items-center justify-between text-[11px] px-2 py-1 rounded-lg hover:bg-muted/20">
@@ -1213,7 +1273,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                               );
                             })}
                             {(() => {
-                              const active = (role.permissions || []).filter((p: any) => p.read || p.create || p.edit || p.delete || p.write);
+                              const permsArr = Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : []);
+                              const active = permsArr.filter((p: any) => p.read || p.create || p.edit || p.delete || p.write);
                               return active.length > 4 ? (
                                 <p className="text-[10px] text-muted-foreground/50 italic pl-2">+ {active.length - 4} vistas más</p>
                               ) : null;
@@ -1297,7 +1358,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/30">
-                        {(editingRole?.permissions || []).map((p) => {
+                        {normalizePermissions(editingRole?.permissions).map((p) => {
                           const mod = ALL_PERM_MODULES.find(m => m.id === p.module);
                           const isSubmodule = mod && 'parent' in mod;
                           const Icon = mod?.icon;
@@ -1692,6 +1753,146 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </TabsContent>
+
+        {/* ══════════ TAB: PRECIOS (Super Admin only) ══════════ */}
+        <TabsContent value="precios" className="space-y-6 mt-0">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 font-black text-lg">
+                      <DollarSign className="size-5 text-primary" />Precificación de Módulos
+                    </CardTitle>
+                    <CardDescription>Administrá los precios mensuales de cada módulo del ERP</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                      <Input 
+                        placeholder="Buscar módulo..." 
+                        value={pricingSearch}
+                        onChange={e => setPricingSearch(e.target.value)}
+                        className="h-9 w-48 rounded-xl pl-9 text-xs" 
+                      />
+                    </div>
+                    <Button 
+                      onClick={async () => {
+                        setPricingSaving(true);
+                        try {
+                          const entries = Object.entries(pricingEdits).map(([mod, price]) => ({ module: mod, price }));
+                          if (entries.length > 0) {
+                            await modulePricingService.bulkUpsert(entries);
+                          }
+                          setPricingEdits({});
+                          await fetchPricing();
+                          toast.success('Precios actualizados correctamente');
+                        } catch {
+                          toast.error('Error al guardar precios');
+                        } finally {
+                          setPricingSaving(false);
+                        }
+                      }}
+                      disabled={pricingSaving || Object.keys(pricingEdits).length === 0}
+                      className="rounded-xl gap-2 font-bold h-9 text-xs"
+                    >
+                      {pricingSaving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
+                      Guardar Cambios
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                {pricingLoading ? (
+                  <div className="flex items-center justify-center h-40">
+                    <RefreshCw className="size-8 animate-spin text-primary/30" />
+                  </div>
+                ) : (
+                  <div className="space-y-8">
+                    {PRICING_MODULES.map(group => {
+                      const filtered = group.modules.filter(m => 
+                        m.label.toLowerCase().includes(pricingSearch.toLowerCase())
+                      );
+                      if (filtered.length === 0) return null;
+                      return (
+                        <div key={group.category}>
+                          <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-3 ml-1">
+                            {group.category}
+                          </h4>
+                          <div className="rounded-2xl border border-border/40 overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/20">
+                                <tr>
+                                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-wider text-muted-foreground w-1/3">Módulo</th>
+                                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Precio Mensual (USD)</th>
+                                  <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Acción</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border/30">
+                                {filtered.map(mod => {
+                                  const currentPrice = pricingEdits[mod.id] ?? pricingData.find(p => p.module === mod.id)?.price ?? 0;
+                                  const hasChanged = pricingEdits[mod.id] !== undefined && pricingEdits[mod.id] !== pricingData.find(p => p.module === mod.id)?.price;
+                                  return (
+                                    <tr key={mod.id} className={cn('hover:bg-muted/10 transition-colors', hasChanged && 'bg-amber-500/5')}>
+                                      <td className="px-4 py-3">
+                                        <div className="flex items-center gap-3">
+                                          <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                            <mod.icon className="size-4 text-primary" />
+                                          </div>
+                                          <div>
+                                            <p className="text-sm font-bold">{mod.label}</p>
+                                            <p className="text-[10px] text-muted-foreground">{mod.id}</p>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <div className="flex items-center gap-2 max-w-[200px]">
+                                          <span className="text-xs text-muted-foreground font-bold">$</span>
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={currentPrice}
+                                            onChange={e => {
+                                              const val = parseFloat(e.target.value) || 0;
+                                              setPricingEdits(prev => ({ ...prev, [mod.id]: val }));
+                                            }}
+                                            className="h-9 rounded-xl text-sm font-bold w-28"
+                                          />
+                                          <span className="text-[10px] text-muted-foreground">/mes</span>
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-3 text-right">
+                                        {pricingData.find(p => p.module === mod.id)?.id ? (
+                                          <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-black">
+                                            Creado
+                                          </Badge>
+                                        ) : (
+                                          <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[9px] font-black">
+                                            Nuevo
+                                          </Badge>
+                                        )}
+                                        {hasChanged && (
+                                          <Badge className="ml-2 bg-blue-500/10 text-blue-500 border-blue-500/20 text-[9px] font-black">
+                            Editado
+                                          </Badge>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>

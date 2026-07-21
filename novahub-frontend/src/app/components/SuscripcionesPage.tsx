@@ -43,7 +43,8 @@ import {
   Headphones,
   BellRing,
   X,
-  KeyRound
+  KeyRound,
+  BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './ui/utils';
@@ -62,6 +63,7 @@ import {
   ACTIVITIES_SUBMODULES,
   DOCUMENTS_SUBMODULES,
   REPORTS_SUBMODULES,
+  ACCOUNTING_SUBMODULES,
   type Submodule 
 } from '../types/modules';
 import { storageService } from '../services/storage.service';
@@ -78,6 +80,7 @@ const AVAILABLE_MODULES = [
   { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
   { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema', submodules: NOTIFICATIONS_SUBMODULES },
   { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis', submodules: REPORTS_SUBMODULES },
+  { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Plan de Cuentas, Asientos y Reportes Fiscales', submodules: ACCOUNTING_SUBMODULES },
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
 ];
 

@@ -31,6 +31,7 @@ import { AsesoriaLegalPage } from './components/AsesoriaLegalPage';
 import { TrainingHubView } from './components/help/TrainingHubView';
 import { SoporteTecnicoView } from './components/help/SoporteTecnicoView';
 import { SoporteTecnicoAdminView } from './components/help/SoporteTecnicoAdminView';
+import { ContabilidadPage } from './components/contabilidad/ContabilidadPage';
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -132,7 +133,7 @@ function DashboardLayout() {
     if (isDeny || isOverview) {
       // Intentar encontrar el primer módulo operativo disponible
       const preferredOrder: Module[] = [
-        'inventario', 'ventas', 'compras', 'finanzas', 'rh',
+        'inventario', 'ventas', 'compras', 'finanzas', 'contabilidad', 'rh',
         'clientes', 'proveedores', 'actividades', 'tickets',
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal',
         'documentos', 'notificaciones', 'transferencias', 
@@ -202,6 +203,7 @@ function DashboardLayout() {
       case 'financiamiento-pyme': return <FinanciamientoPymePage />;
       case 'centro-capacitacion': return <TrainingHubView />;
       case 'soporte-tecnico': return user?.isPlatformAdmin ? <SoporteTecnicoAdminView /> : <SoporteTecnicoView />;
+      case 'contabilidad': return <ContabilidadPage />;
       case 'asesoria-legal': return <AsesoriaLegalPage />;
       default: return <OverviewDashboard onNavigate={handleNavigate} />;
     }
