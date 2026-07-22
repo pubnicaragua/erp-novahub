@@ -35,7 +35,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
   // Complete Task form state
   const [evidenceUrl, setEvidenceUrl] = useState('');
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   
   useEffect(() => {
     const fetchUsers = async () => {

@@ -106,9 +106,6 @@ function DashboardLayout() {
 
   const handleModuleChange = (module: Module, subModule?: string) => {
     if (hasAccess(module)) {
-      if (isCollapsed) {
-        handleToggleCollapse();
-      }
       setActiveModule(module);
       setActiveSubModule(module === 'inventario' ? (subModule || 'productos') : subModule);
     }
@@ -221,7 +218,6 @@ function DashboardLayout() {
         isCollapsed={isCollapsed}
         onClose={() => setSidebarOpen(false)}
         onOverview={handleOverview}
-        onToggleCollapse={handleToggleCollapse}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar

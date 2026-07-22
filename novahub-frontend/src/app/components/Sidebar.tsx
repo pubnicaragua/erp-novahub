@@ -66,7 +66,6 @@ interface SidebarProps {
   isCollapsed?: boolean;
   onClose: () => void;
   onOverview: () => void;
-  onToggleCollapse?: () => void;
 }
 
 interface SubMenuItem {
@@ -340,7 +339,7 @@ const platformMenuItems: MenuItem[] = [
   { id: 'asesoria-legal', label: 'Asesoría Legal', icon: <Scale className="size-5" /> },
 ];
 
-export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview }: SidebarProps) {
   const { hasAccess, user } = useAuth();
   const { themeConfig } = useTheme();
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(['ventas', 'compras']));
@@ -354,9 +353,6 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
   const activeMenuArray = user?.isPlatformAdmin ? platformMenuItems : menuItems;
 
   const toggleMenu = (id: string) => {
-    if (isCollapsed && onToggleCollapse) {
-      onToggleCollapse(); // Expand first
-    }
     setExpandedMenus(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -372,6 +368,20 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       return;
     }
     if (item.submenu) {
+      if (isCollapsed) {
+        const visibleSubmenu = item.submenu.filter(subItem => hasSubmenuAccess(item.id, subItem.id));
+        const currentSubmenu = activeModule === item.id
+          ? visibleSubmenu.find(subItem => subItem.id === activeSubModule)
+          : undefined;
+        const targetSubmenu = currentSubmenu || visibleSubmenu[0];
+
+        if (targetSubmenu) {
+          onModuleChange(item.id as Module, targetSubmenu.id);
+          if (window.innerWidth < 1024) onClose();
+        }
+        return;
+      }
+
       toggleMenu(item.id);
     } else {
       onModuleChange(item.id as Module);
@@ -517,6 +527,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                     <div>
                       <button
                         onClick={() => handleMenuClick(item)}
+                        aria-label={isCollapsed ? item.label : undefined}
+                        title={isCollapsed ? item.label : undefined}
                         className={cn(
                           'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-all duration-150',
                           'hover:bg-sidebar-accent hover:text-sidebar-foreground',

@@ -28,7 +28,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
   const [availableUsers, setAvailableUsers] = useState<any[]>([]);
   const [availableDepts, setAvailableDepts] = useState<any[]>([]);
 
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
 
   const [formData, setFormData] = useState({
     title: '',
@@ -223,4 +223,3 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
     </div>
   );
 };
-

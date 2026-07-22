@@ -457,7 +457,7 @@ export function FacturacionCajaView() {
                     aria-pressed={catalogView === 'list'}
                     onClick={() => setCatalogView('list')}
                     className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition-all ${
-                      catalogView === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                      catalogView === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     <List className="size-3.5" /> Lista
