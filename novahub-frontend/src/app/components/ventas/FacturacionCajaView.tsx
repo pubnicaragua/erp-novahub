@@ -11,6 +11,7 @@ import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { ProductThumbnail } from '../ui/ProductImage';
 import {
   cajaService,
   type CashRegister,
@@ -454,7 +455,17 @@ export function FacturacionCajaView() {
                     {filteredProducts.map((prod) => (
                       <tr key={prod.id} className="hover:bg-muted/20 transition-colors">
                         <td className="px-3 py-2 font-mono text-primary font-bold">{prod.code}</td>
-                        <td className="px-3 py-2 font-bold">{prod.name}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2.5">
+                            <ProductThumbnail src={prod.imageUrl} alt={prod.name} size="sm" />
+                            <div className="min-w-0">
+                              <p className="truncate font-bold">{prod.name}</p>
+                              {prod.description && (
+                                <p className="max-w-[280px] truncate text-[10px] text-muted-foreground">{prod.description}</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
                         <td className="px-3 py-2 text-right font-mono">{formatCurrency(prod.salePrice)}</td>
                         <td className="px-3 py-2 text-center">
                           <Button size="sm" variant="ghost" onClick={() => addItem(prod)}

@@ -16,6 +16,8 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { ProductImagePicker, ProductThumbnail } from '../ui/ProductImage';
+import { storageService } from '../../services/storage.service';
 
 interface ProductosViewProps {
   products: any[];
@@ -35,6 +37,11 @@ interface EditingProduct {
   costPrice: number | '';
   trackSerialNumbers?: boolean;
   itemType?: 'PRODUCT' | 'SERVICE';
+  imageUrl?: string;
+  imageStorageUri?: string;
+  imageFile?: File;
+  imagePreviewUrl?: string;
+  removeImage?: boolean;
   initialStock?: number;
   initialAllocations?: Array<{
     id: string;
@@ -128,6 +135,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       costPrice: 0,
       trackSerialNumbers: false,
       itemType: 'PRODUCT',
+      imageUrl: undefined,
       initialStock: 0,
       initialAllocations: [{ id: `alloc-${Date.now()}`, warehouseId: '', quantity: 0 }],
       isNew: true,
@@ -151,14 +159,43 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         String(product.trackingType || '').toUpperCase() === 'SERIAL',
       ),
       itemType: (product.itemType || 'PRODUCT').toUpperCase() as 'PRODUCT' | 'SERVICE',
+      imageUrl: product.imageUrl,
+      imageStorageUri: product.imageUrlStorageUri || (String(product.imageUrl || '').startsWith('storage://') ? product.imageUrl : undefined),
     };
     setEditingRows(new Map(editingRows.set(product.id, editProduct)));
   };
 
   const handleCancelEdit = (id: string) => {
+    const current = editingRows.get(id);
+    if (current?.imagePreviewUrl) URL.revokeObjectURL(current.imagePreviewUrl);
     const newMap = new Map(editingRows);
     newMap.delete(id);
     setEditingRows(newMap);
+  };
+
+  const handleImageSelected = (id: string, file: File) => {
+    const current = editingRows.get(id);
+    if (!current) return;
+    if (current.imagePreviewUrl) URL.revokeObjectURL(current.imagePreviewUrl);
+    const previewUrl = URL.createObjectURL(file);
+    const next = new Map(editingRows);
+    next.set(id, { ...current, imageFile: file, imagePreviewUrl: previewUrl, removeImage: false });
+    setEditingRows(next);
+  };
+
+  const handleImageRemoved = (id: string) => {
+    const current = editingRows.get(id);
+    if (!current) return;
+    if (current.imagePreviewUrl) URL.revokeObjectURL(current.imagePreviewUrl);
+    const next = new Map(editingRows);
+    next.set(id, {
+      ...current,
+      imageFile: undefined,
+      imagePreviewUrl: undefined,
+      imageUrl: undefined,
+      removeImage: true,
+    });
+    setEditingRows(next);
   };
 
   const handleUpdateField = (id: string, field: keyof EditingProduct, value: any) => {
@@ -222,24 +259,33 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       return;
     }
 
-    setSavingIds(new Set(savingIds.add(id)));
+    const validAllocations = product.isNew
+      ? (product.initialAllocations || []).filter((item) => item.warehouseId && Number(item.quantity || 0) > 0)
+      : [];
+    const initialStock = validAllocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
+    const uniqueWarehouses = new Set(validAllocations.map((item) => item.warehouseId));
+
+    if (initialStock > 0 && warehouses.length === 0) {
+      toast.error('No hay bodegas registradas para asignar stock inicial');
+      return;
+    }
+    if (initialStock > 0 && uniqueWarehouses.size !== validAllocations.length) {
+      toast.error('No repitas la misma bodega en la distribución inicial');
+      return;
+    }
+
+    setSavingIds((current) => new Set(current).add(id));
+    let uploadedImageUri: string | undefined;
     try {
+      if (product.imageFile) {
+        const uploaded = await storageService.uploadFile('product-image', product.imageFile, {
+          folder: product.isNew ? 'catalog' : product.id,
+        });
+        uploadedImageUri = uploaded.uri;
+      }
+      const nextImageUrl = uploadedImageUri ?? (product.removeImage ? null : product.imageStorageUri);
+
       if (product.isNew) {
-        const validAllocations = (product.initialAllocations || []).filter(
-          (item) => item.warehouseId && Number(item.quantity || 0) > 0,
-        );
-        const initialStock = validAllocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
-        const uniqueWarehouses = new Set(validAllocations.map((item) => item.warehouseId));
-
-        if (initialStock > 0 && warehouses.length === 0) {
-          toast.error('No hay bodegas registradas para asignar stock inicial');
-          return;
-        }
-        if (initialStock > 0 && uniqueWarehouses.size !== validAllocations.length) {
-          toast.error('No repitas la misma bodega en la distribución inicial');
-          return;
-        }
-
         const createdResponse = await inventoryService.createProduct({
           code: product.code,
           name: product.name,
@@ -249,6 +295,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           itemType: product.itemType || 'PRODUCT',
           initialStock: 0,
+          imageUrl: nextImageUrl || undefined,
         });
         const created = (createdResponse as any)?.data || createdResponse;
         const createdId = created?.id;
@@ -295,17 +342,26 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           costPrice: Number(product.costPrice || 0),
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           itemType: product.itemType || 'PRODUCT',
+          imageUrl: nextImageUrl,
         });
         toast.success('Producto actualizado');
+      }
+      if (!product.isNew && product.imageStorageUri && product.imageStorageUri !== uploadedImageUri && (uploadedImageUri || product.removeImage)) {
+        storageService.deleteFile(product.imageStorageUri).catch((error) => {
+          console.warn('No se pudo eliminar la imagen anterior del producto', error);
+        });
       }
       handleCancelEdit(id);
       onRefresh();
     } catch (e: any) {
+      if (uploadedImageUri) storageService.deleteFile(uploadedImageUri).catch(() => undefined);
       toast.error(e.message || 'Error al guardar');
     } finally {
-      const newSet = new Set(savingIds);
-      newSet.delete(id);
-      setSavingIds(newSet);
+      setSavingIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -390,25 +446,34 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           />
         </TableCell>
         <TableCell>
-          <div className="space-y-1.5">
-            <Input
-              value={product.name}
-              onChange={(e) => handleUpdateField(product.id, 'name', e.target.value)}
-              onKeyDown={(e) => handleKeyDown(e, product.id)}
-              placeholder="Nombre del producto"
-              className="h-8 text-xs"
+          <div className="flex min-w-[220px] items-start gap-3">
+            <ProductImagePicker
+              src={product.imagePreviewUrl || product.imageUrl}
+              productName={product.name}
               disabled={isSaving}
+              onSelect={(file) => handleImageSelected(product.id, file)}
+              onRemove={() => handleImageRemoved(product.id)}
             />
-            <Button
-              type="button"
-              variant={product.trackSerialNumbers ? 'default' : 'outline'}
-              size="sm"
-              className={`h-6 text-[9px] uppercase tracking-wider px-2 ${product.trackSerialNumbers ? 'bg-primary text-primary-foreground' : ''}`}
-              onClick={() => handleUpdateField(product.id, 'trackSerialNumbers', !product.trackSerialNumbers)}
-              disabled={isSaving}
-            >
-              IMEI {product.trackSerialNumbers ? 'Activado' : 'Desactivado'}
-            </Button>
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Input
+                value={product.name}
+                onChange={(e) => handleUpdateField(product.id, 'name', e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, product.id)}
+                placeholder="Nombre del producto"
+                className="h-8 text-xs"
+                disabled={isSaving}
+              />
+              <Button
+                type="button"
+                variant={product.trackSerialNumbers ? 'default' : 'outline'}
+                size="sm"
+                className={`h-6 text-[9px] uppercase tracking-wider px-2 ${product.trackSerialNumbers ? 'bg-primary text-primary-foreground' : ''}`}
+                onClick={() => handleUpdateField(product.id, 'trackSerialNumbers', !product.trackSerialNumbers)}
+                disabled={isSaving}
+              >
+                IMEI {product.trackSerialNumbers ? 'Activado' : 'Desactivado'}
+              </Button>
+            </div>
           </div>
         </TableCell>
         <TableCell>
@@ -798,7 +863,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Código</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest">Nombre</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Producto</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Categoría</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-24">Tipo</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
@@ -858,28 +923,46 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     >
                     <TableCell className="font-mono text-xs text-muted-foreground">{product.code}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="font-medium text-sm hover:text-primary underline-offset-2 hover:underline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setProductDetail(product);
-                          }}
-                        >
-                          {product.name}
-                        </button>
-                        {Boolean(
-                          product.trackSerialNumbers ||
-                          product.serialTracking ||
-                          product.serialNumberTracking ||
-                          String(product.trackingType || '').toUpperCase() === 'SERIAL',
-                        ) && (
-                          <Badge variant="outline" className="text-[9px] font-black">IMEI</Badge>
+                      <div className="flex min-w-[190px] items-center gap-3">
+                        {canPerform('INVENTORY_PRODUCTS', 'edit') ? (
+                          <button
+                            type="button"
+                            className="rounded-xl transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditRow(product);
+                            }}
+                            aria-label={`${product.imageUrl ? 'Cambiar' : 'Agregar'} foto de ${product.name}`}
+                            title={product.imageUrl ? 'Cambiar foto' : 'Agregar foto'}
+                          >
+                            <ProductThumbnail src={product.imageUrl} alt={product.name} size="md" />
+                          </button>
+                        ) : (
+                          <ProductThumbnail src={product.imageUrl} alt={product.name} size="md" />
                         )}
-                        {status.label !== 'OK' && (
-                          <Badge className={`${status.color} text-[10px] px-1.5 py-0`}>{status.label}</Badge>
-                        )}
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            className="truncate font-medium text-sm hover:text-primary underline-offset-2 hover:underline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProductDetail(product);
+                            }}
+                          >
+                            {product.name}
+                          </button>
+                          {Boolean(
+                            product.trackSerialNumbers ||
+                            product.serialTracking ||
+                            product.serialNumberTracking ||
+                            String(product.trackingType || '').toUpperCase() === 'SERIAL',
+                          ) && (
+                            <Badge variant="outline" className="text-[9px] font-black">IMEI</Badge>
+                          )}
+                          {status.label !== 'OK' && (
+                            <Badge className={`${status.color} text-[10px] px-1.5 py-0`}>{status.label}</Badge>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>

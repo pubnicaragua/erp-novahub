@@ -24,7 +24,6 @@ import {
   ArrowLeftRight,
   Activity,
   ChevronRight,
-  Box,
   User as UserIcon,
 } from 'lucide-react';
 
@@ -59,6 +58,7 @@ import {
 } from '../ui/table';
 import { inventoryService } from '../../services/inventario.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { ProductThumbnail } from '../ui/ProductImage';
 
 // ============================================================================
 // Tipos del componente
@@ -383,9 +383,12 @@ export function ProductDetailDrawer({
           {/* ===== Header sticky ===== */}
           <SheetHeader className="sticky top-0 z-10 bg-background border-b px-6 py-4 space-y-2">
             <div className="flex items-start gap-3 pr-8">
-              <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <Box className="size-5 text-primary" />
-              </div>
+              <ProductThumbnail
+                src={product?.imageUrl}
+                alt={product?.name || 'Producto'}
+                size="lg"
+                className="ring-1 ring-primary/10"
+              />
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <SheetTitle className="text-base font-bold truncate">

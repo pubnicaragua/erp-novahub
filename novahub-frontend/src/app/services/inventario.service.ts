@@ -1,10 +1,17 @@
 import { api } from './api';
 import type { Product, Warehouse, PaginatedResponse, ApiFilters } from '../types';
+import { resolveStorageReferences } from './storage.service';
 
 export const inventoryService = {
   // ==================== PRODUCTS ====================
-  getProducts: (filters?: ApiFilters) => api.get<PaginatedResponse<Product>>('/inventory/products', filters as any),
-  getProduct: (id: string) => api.get<Product>(`/inventory/products/${id}`),
+  getProducts: async (filters?: ApiFilters) => {
+    const products = await api.get<PaginatedResponse<Product>>('/inventory/products', filters as any);
+    return resolveStorageReferences(products);
+  },
+  getProduct: async (id: string) => {
+    const product = await api.get<Product>(`/inventory/products/${id}`);
+    return resolveStorageReferences(product);
+  },
   createProduct: (data: Partial<Product> & { initialStock?: number }) => api.post<Product>('/inventory/products', data),
   duplicateProduct: (id: string) => api.post<Product>(`/inventory/products/${id}/duplicate`, {}),
   updateProduct: (id: string, data: Partial<Product>) => api.patch<Product>(`/inventory/products/${id}`, data),

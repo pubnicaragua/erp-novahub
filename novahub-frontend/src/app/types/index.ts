@@ -680,6 +680,8 @@ export interface Product {
   sku: string;
   name: string;
   description?: string;
+  imageUrl?: string | null;
+  imageUrlStorageUri?: string;
   categoryId?: string;
   brand?: string;
   unit?: string;

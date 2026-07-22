@@ -4,6 +4,7 @@ import { api, apiRequest } from './api';
 export type StoragePurpose =
   | 'tenant-branding'
   | 'user-avatar'
+  | 'product-image'
   | 'training'
   | 'support-evidence'
   | 'purchase-evidence'

@@ -1,4 +1,5 @@
 import { api } from './api';
+import { resolveStorageReferences } from './storage.service';
 
 export interface CashRegister {
   id: string;
@@ -17,6 +18,8 @@ export interface PosProduct {
   salePrice: number;
   taxRate: number;
   description?: string;
+  imageUrl?: string | null;
+  imageUrlStorageUri?: string;
   trackInventory: boolean;
 }
 
@@ -132,8 +135,10 @@ export const cajaService = {
   updateRegisterAccess: (id: string, userIds: string[]) =>
     api.put<{ success: boolean }>(`/caja/registers/${id}/access`, { userIds }),
 
-  getProducts: (search?: string) =>
-    api.get<PosProduct[]>('/caja/products', { params: search ? { search } : undefined }),
+  getProducts: async (search?: string) => {
+    const products = await api.get<PosProduct[]>('/caja/products', { params: search ? { search } : undefined });
+    return resolveStorageReferences(products);
+  },
 
   getCustomers: () =>
     api.get<PosCustomer[]>('/caja/customers'),
