@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '../ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { useAuth } from '../../contexts/AuthContext';
+import { storageService } from '../../services/storage.service';
 
 // Tipos para el nuevo log
 type LogFormData = {
@@ -45,10 +46,6 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
     file: null,
     activityId: undefined
   });
-
-  // Mocking the supabase URL & Key from env
-  const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL || '';
-  const SUPABASE_ANON_KEY = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
 
   // Fetch Tasks and Events
   React.useEffect(() => {
@@ -133,49 +130,9 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
           return;
         }
 
-        // Simulación o Subida Real si existen las variables
-        if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-          toast.info('Optimizando y subiendo archivo...');
-          
-          try {
-            // Se asume la existencia de compresión local si fuese implementada
-            // const imageCompression = (await import('browser-image-compression')).default;
-            // let fileToUpload = file;
-            // if (file.type.startsWith('image/')) {
-            //    fileToUpload = await imageCompression(file, { maxSizeMB: 2, maxWidthOrHeight: 1920 });
-            // }
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${Math.random()}.${fileExt}`;
-            const filePath = `${fileName}`;
-
-            // Petición REST directa a Supabase Storage sin necesidad de librería
-            const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/bitacora_actividades/${filePath}`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                'apikey': SUPABASE_ANON_KEY,
-                'Content-Type': file.type || 'application/octet-stream'
-              },
-              body: file
-            });
-            
-            if (!uploadRes.ok) {
-               const errData = await uploadRes.json().catch(() => ({}));
-               console.error('Supabase raw error:', errData);
-               throw new Error(errData?.message || errData?.error || 'HTTP ' + uploadRes.status);
-            }
-            
-            fileUrl = `${SUPABASE_URL}/storage/v1/object/public/bitacora_actividades/${filePath}`;
-          } catch (e: any) {
-            toast.error('Error de subida a Supabase: ' + e.message);
-            setIsUploading(false);
-            return;
-          }
-        } else {
-          // Fallback visual si el enviroment no esta listo
-          toast.warning('Credenciales de Supabase ausentes. Link simulado.', { duration: 4000 });
-          fileUrl = `https://mock-supabase.com/bitacora_actividades/${file.name}`;
-        }
+        toast.info('Subiendo archivo...');
+        const uploaded = await storageService.uploadFile('activity-log', file, { folder: 'bitacora' });
+        fileUrl = uploaded.uri;
       }
 
       await activityLogsService.create({
@@ -313,4 +270,3 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
     </div>
   );
 };
-

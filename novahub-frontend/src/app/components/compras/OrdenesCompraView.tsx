@@ -200,8 +200,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
         return toast.error('El archivo es muy pesado. Máximo 10MB');
       }
       try {
-        const evidenceFileUrl = await storageService.fileToBase64(evidenceFile);
-        cleanedDoc.evidenceFileUrl = evidenceFileUrl;
+        const evidence = await storageService.uploadFile('purchase-evidence', evidenceFile, { folder: 'ordenes' });
+        cleanedDoc.evidenceFileUrl = evidence.uri;
         cleanedDoc.evidenceFileName = evidenceFile.name;
         cleanedDoc.evidenceFileType = evidenceFile.type;
         cleanedDoc.evidenceFileSize = evidenceFile.size;
@@ -853,4 +853,3 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     </div>
   );
 }
-

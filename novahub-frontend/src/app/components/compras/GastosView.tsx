@@ -390,8 +390,8 @@ export function GastosView({ data, loading, onRefresh }: Props) {
         return toast.error('El archivo es muy pesado. Máximo 10MB');
       }
       try {
-        const evidenceFileUrl = await storageService.fileToBase64(evidenceFile);
-        (cleanedDoc as any).evidenceFileUrl = evidenceFileUrl;
+        const evidence = await storageService.uploadFile('purchase-evidence', evidenceFile, { folder: 'gastos' });
+        (cleanedDoc as any).evidenceFileUrl = evidence.uri;
         (cleanedDoc as any).evidenceFileName = evidenceFile.name;
         (cleanedDoc as any).evidenceFileType = evidenceFile.type;
         (cleanedDoc as any).evidenceFileSize = evidenceFile.size;
@@ -870,4 +870,3 @@ export function GastosView({ data, loading, onRefresh }: Props) {
     </div>
   );
 }
-

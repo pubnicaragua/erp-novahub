@@ -14,6 +14,7 @@ import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
+import { storageService } from '../../services/storage.service';
 
 interface TareasViewProps {
   data: Task[];
@@ -33,6 +34,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
 
   // Complete Task form state
   const [evidenceUrl, setEvidenceUrl] = useState('');
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const { user } = useAuth();
   
   useEffect(() => {
@@ -92,10 +94,16 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
   const handleCompleteTask = async () => {
     if (!selectedTask) return;
     try {
-      await tasksService.complete(selectedTask.id, { fileUrl: evidenceUrl });
+      let fileUrl = evidenceUrl.trim();
+      if (evidenceFile) {
+        const uploaded = await storageService.uploadFile('task-evidence', evidenceFile, { folder: selectedTask.id });
+        fileUrl = uploaded.uri;
+      }
+      await tasksService.complete(selectedTask.id, { fileUrl });
       toast.success('Tarea completada exitosamente con evidencia');
       setIsCompleteOpen(false);
       setEvidenceUrl('');
+      setEvidenceFile(null);
       setSelectedTask(null);
       onRefresh();
     } catch {
@@ -266,13 +274,15 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           <div className="grid gap-4 py-4">
             <p className="text-sm text-muted-foreground">Estás a punto de marcar la tarea <strong>{selectedTask?.title}</strong> como completada.</p>
             <div className="space-y-2 mt-2">
-              <Label>Evidencia (URL de archivo / imagen)</Label>
+              <Label>Archivo de evidencia</Label>
+              <Input type="file" onChange={e => setEvidenceFile(e.target.files?.[0] || null)} />
+              <Label className="text-xs text-muted-foreground">O usa un enlace externo</Label>
               <Input 
                 placeholder="https://ejemplo.com/imagen.jpg" 
                 value={evidenceUrl} 
                 onChange={e => setEvidenceUrl(e.target.value)} 
               />
-              <p className="text-[10px] text-muted-foreground">Puedes adjuntar el link del archivo o imagen como comprobante del trabajo realizado.</p>
+              <p className="text-[10px] text-muted-foreground">El archivo se guarda de forma privada y solo usuarios autorizados podrán abrirlo.</p>
             </div>
           </div>
           <DialogFooter>
@@ -284,4 +294,3 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
     </div>
   );
 };
-

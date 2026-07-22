@@ -1,13 +1,14 @@
 import { api } from './api';
+import { resolveStorageReferences } from './storage.service';
 
 const createCrudService = <T>(endpoint: string) => ({
   getAll: async () => {
     const data = await api.get(endpoint) as T[];
-    return data;
+    return resolveStorageReferences(data);
   },
   getById: async (id: string) => {
     const data = await api.get(`${endpoint}/${id}`) as T;
-    return data;
+    return resolveStorageReferences(data);
   },
   create: async (payload: Partial<T>) => {
     const data = await api.post(endpoint, payload) as T;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { File as FileModel } from '../../types';
 import { Card, CardContent } from '../ui/card';
@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
+import { storageService } from '../../services/storage.service';
 
 interface ArchivosViewProps {
   data: FileModel[];
@@ -20,9 +21,11 @@ interface ArchivosViewProps {
 export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const { canPerform } = useAuth();
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const columns: ColumnDef<FileModel>[] = [
-    { key: 'name', header: 'Nombre', width: '40%', editable: canPerform('DOCUMENTS_FILES', 'edit') },
+    { key: 'name', header: 'Nombre', width: '40%', editable: canPerform('DOCUMENTS_FILES', 'edit'), render: (value: any, row: any) => row.url ? <a href={row.url} target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">{value}</a> : value },
     { key: 'type', header: 'Tipo', width: '15%' },
     { key: 'size', header: 'Tamaño', width: '100px', render: (val: any) => val ? `${(Number(val)/1024).toFixed(1)} KB` : '-' },
     { key: 'category', header: 'Categoría', width: '150px', editable: canPerform('DOCUMENTS_FILES', 'edit') },
@@ -34,11 +37,23 @@ export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, onRef
     catch { toast.error('Error al actualizar'); }
   };
 
-  const handleAdd = async () => {
+  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    let storageUri = '';
     try {
-      await filesService.create({ name: 'Nuevo_Documento.pdf', type: 'application/pdf', size: 1024, category: 'General', uploadDate: new Date().toISOString() });
+      setUploading(true);
+      const uploaded = await storageService.uploadFile('documents', file, { folder: 'general' });
+      storageUri = uploaded.uri;
+      await filesService.create({ name: file.name, type: file.type, size: file.size, category: 'General', uploadDate: new Date().toISOString(), url: uploaded.uri });
       toast.success('Archivo subido'); onRefresh();
-    } catch { toast.error('Error al subir'); }
+    } catch (error: any) {
+      if (storageUri) await storageService.deleteFile(storageUri).catch(() => undefined);
+      toast.error(error?.message || 'Error al subir');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const kpis = [
@@ -68,8 +83,9 @@ export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, onRef
           <div><h2 className="text-xl font-black uppercase tracking-tight">Archivos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Almacenamiento en la nube</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
             {canPerform('DOCUMENTS_FILES', 'create') && (
-              <Button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Subir Archivo</Button>
+              <Button disabled={uploading} onClick={() => fileInputRef.current?.click()} className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> {uploading ? 'Subiendo...' : 'Subir Archivo'}</Button>
             )}
           </div>
         </div>
@@ -84,4 +100,3 @@ export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, onRef
     </div>
   );
 };
-

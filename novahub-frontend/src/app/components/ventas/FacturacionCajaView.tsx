@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
-  CreditCard, Clock,
+  CreditCard, Clock, CircleHelp, ShoppingCart,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -10,6 +10,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import {
   cajaService,
   type CashRegister,
@@ -36,6 +37,65 @@ const GENERAL_CUSTOMER_NAME = 'Cliente General';
 const MIN_QUANTITY = 1;
 const MIN_DISCOUNT_PERCENT = 0;
 const MAX_DISCOUNT_PERCENT = 100;
+
+const POS_TOUR_STEPS: GuidedTourStep[] = [
+  {
+    target: '[data-tour="pos-register"]',
+    title: '1. Selecciona la caja operativa',
+    description: 'Toda factura debe registrarse en una caja. Elige la caja donde estás atendiendo para que el ingreso, el movimiento de caja y la contabilidad queden relacionados correctamente.',
+    tip: 'Si no aparece ninguna opción, primero debes crear o habilitar una caja desde el módulo de Caja.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="pos-customer"]',
+    title: '2. Identifica al cliente',
+    description: 'Selecciona un cliente registrado cuando necesites conservar su historial y saldo. Para una venta rápida sin datos específicos, puedes dejar “Cliente General”.',
+    tip: 'Usar un cliente registrado facilita después consultar facturas, pagos y cuentas pendientes.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="pos-date"]',
+    title: '3. Confirma la fecha de emisión',
+    description: 'Esta fecha se guardará como la fecha oficial de la venta y se utilizará en los reportes financieros y contables.',
+    tip: 'Normalmente se utiliza la fecha de hoy. Cámbiala solamente cuando estés registrando una operación autorizada de otra fecha.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="pos-catalog"]',
+    title: '4. Agrega productos desde el catálogo',
+    description: 'Busca por código o nombre y presiona “Agregar”. Puedes agregar varios productos; si agregas el mismo nuevamente, aumentará su cantidad en la factura.',
+    tip: 'El precio mostrado proviene del catálogo de inventario. Verifica que productos, precios e IVA estén configurados antes de facturar.',
+    placement: 'right',
+  },
+  {
+    target: '[data-tour="pos-cart"]',
+    title: '5. Revisa el detalle de la factura',
+    description: 'Aquí puedes cambiar cantidades, comprobar precios y eliminar líneas antes de cobrar. El subtotal se recalcula automáticamente con cada ajuste.',
+    tip: 'Revisa cuidadosamente el detalle antes de emitir: después de facturar, las correcciones deben manejarse mediante los procesos de devolución o nota de crédito.',
+    placement: 'right',
+  },
+  {
+    target: '[data-tour="pos-summary"]',
+    title: '6. Comprueba descuento, IVA y total',
+    description: 'Aplica un descuento porcentual si corresponde. El sistema calcula el IVA según la tasa configurada en cada producto y muestra el total final en córdobas (C$).',
+    tip: 'El descuento afecta el subtotal. El IVA no se escribe manualmente aquí: se toma de la configuración del producto.',
+    placement: 'left',
+  },
+  {
+    target: '[data-tour="pos-pay"]',
+    title: '7. Cobra y emite la factura',
+    description: 'Cuando todo esté correcto, presiona “Pagar y Emitir Factura”. El sistema registrará la venta y alimentará los movimientos financieros, de caja y contabilidad.',
+    tip: 'El botón solo se habilita cuando agregas al menos un producto y existe una caja seleccionada.',
+    placement: 'left',
+  },
+  {
+    target: '[data-tour="pos-history"]',
+    title: '8. Verifica la operación en el historial',
+    description: 'Después de emitir, la factura aparecerá aquí con su número, cliente, fecha, estado y total. El historial cambia cuando seleccionas otra caja.',
+    tip: 'Ya conoces el flujo completo. Puedes volver a abrir este tutorial cuando quieras desde el botón “Cómo facturar”.',
+    placement: 'left',
+  },
+];
 
 function getTodayInputDate() {
   return new Date().toISOString().split('T')[0];
@@ -116,6 +176,7 @@ export function FacturacionCajaView() {
   const [productSearch, setProductSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
 
   const loadInitialData = useCallback(async () => {
     setLoading(true);
@@ -304,18 +365,29 @@ export function FacturacionCajaView() {
   }
 
   return (
-    <>
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/40 bg-gradient-to-r from-primary/10 via-background to-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl bg-primary/15 p-2.5"><ShoppingCart className="size-5 text-primary" /></div>
+          <div>
+            <h2 className="text-base font-black uppercase tracking-tight">Facturación por Caja</h2>
+            <p className="text-xs text-muted-foreground">Venta rápida, cobro y registro contable en un mismo flujo.</p>
+          </div>
+        </div>
+        <Button type="button" variant="outline" onClick={() => setShowTutorial(true)} className="h-10 rounded-xl border-primary/30 bg-background/80 text-xs font-black text-primary shadow-sm hover:bg-primary/10">
+          <CircleHelp className="mr-2 size-4" /> Cómo facturar
+        </Button>
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
-        <div className="space-y-5">
-          <Card className="border-border/50 shadow-sm">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
-                <Receipt className="size-4 text-primary" /> Configuración de Emisión
-              </h3>
-            </div>
+      <div className="space-y-5">
+        <Card className="border-border/50 shadow-sm">
+          <CardContent className="p-5">
+            <h3 className="text-sm font-black uppercase tracking-tight mb-4 flex items-center gap-2">
+              <Receipt className="size-4 text-primary" /> Configuración de Emisión
+            </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
+              <div className="space-y-1.5" data-tour="pos-register">
                 <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Caja Operativa</Label>
                 <Select value={selectedRegisterId} onValueChange={setSelectedRegisterId}>
                   <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
@@ -326,7 +398,7 @@ export function FacturacionCajaView() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5" data-tour="pos-customer">
                 <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Cliente / Empresa</Label>
                 <Select
                   value={selectedCustomerId ?? GENERAL_CUSTOMER_SELECT_VALUE}
@@ -341,7 +413,7 @@ export function FacturacionCajaView() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5" data-tour="pos-date">
                 <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Fecha de Emisión</Label>
                 <Input type="date" value={emitDate} onChange={(e) => setEmitDate(e.target.value)} className="h-11 rounded-xl" />
               </div>
@@ -349,7 +421,7 @@ export function FacturacionCajaView() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/50 shadow-sm">
+        <Card className="border-border/50 shadow-sm" data-tour="pos-catalog">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-black uppercase tracking-tight">Catálogo de Productos</h3>
@@ -402,7 +474,7 @@ export function FacturacionCajaView() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/50 shadow-sm">
+        <Card className="border-border/50 shadow-sm" data-tour="pos-cart">
           <CardContent className="p-5">
             <h3 className="text-sm font-black uppercase tracking-tight mb-4">
               Detalle Factura{' '}
@@ -463,7 +535,7 @@ export function FacturacionCajaView() {
       </div>
 
       <div className="space-y-5">
-        <Card className="border-border/50 shadow-sm sticky top-24">
+        <Card className="border-border/50 shadow-sm sticky top-24" data-tour="pos-summary">
           <CardContent className="p-5 space-y-4">
             <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
               <Calculator className="size-4 text-primary" /> Resumen Financiero
@@ -502,6 +574,7 @@ export function FacturacionCajaView() {
             </div>
             <Button
               size="lg"
+              data-tour="pos-pay"
               onClick={handlePay}
               disabled={submitting || cart.length === 0}
               className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest gap-2 shadow-lg shadow-primary/20"
@@ -515,7 +588,7 @@ export function FacturacionCajaView() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/50 shadow-sm">
+        <Card className="border-border/50 shadow-sm" data-tour="pos-history">
           <CardContent className="p-5">
             <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2 mb-3">
               <Clock className="size-4 text-primary" /> Historial Reciente por Caja
@@ -545,7 +618,8 @@ export function FacturacionCajaView() {
           </CardContent>
         </Card>
       </div>
+      </div>
+      {showTutorial && <GuidedTour steps={POS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Facturación por Caja" />}
     </div>
-  </>
-);
+  );
 }

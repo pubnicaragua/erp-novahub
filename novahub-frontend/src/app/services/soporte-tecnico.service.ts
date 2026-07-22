@@ -1,6 +1,5 @@
 import { api } from './api';
-
-const env = (import.meta as any).env;
+import { resolveStorageReferences, storageService } from './storage.service';
 
 export const MAX_EVIDENCE_FILES = 2;
 export const MAX_EVIDENCE_FILE_SIZE = 5 * 1024 * 1024;
@@ -20,50 +19,15 @@ export function validateEvidenceFile(file: File): void {
 
 async function uploadEvidence(file: File, index: number): Promise<string> {
   validateEvidenceFile(file);
-
-  const supabaseUrl = String(env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
-  const supabaseAnonKey = String(env.VITE_SUPABASE_ANON_KEY || '');
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('No se pudo adjuntar la evidencia: el almacenamiento no está configurado. Contacta al administrador.');
-  }
-
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const uniquePart = typeof globalThis.crypto?.randomUUID === 'function'
-    ? globalThis.crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const fileName = `${uniquePart}-${index}-${safeName}`;
-
-  let response: Response;
-  try {
-    response = await fetch(
-      `${supabaseUrl}/storage/v1/object/soporte_tecnico/${encodeURIComponent(fileName)}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${supabaseAnonKey}`,
-          apikey: supabaseAnonKey,
-          'Content-Type': file.type,
-          'x-upsert': 'false',
-        },
-        body: file,
-      },
-    );
-  } catch {
-    throw new Error(`No se pudo adjuntar “${file.name}”: no hay conexión con el almacenamiento.`);
-  }
-
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => null);
-    const detail = errorBody?.message || errorBody?.error || `error HTTP ${response.status}`;
-    throw new Error(`No se pudo adjuntar “${file.name}”: ${detail}.`);
-  }
-
-  return `${supabaseUrl}/storage/v1/object/public/soporte_tecnico/${encodeURIComponent(fileName)}`;
+  const uploaded = await storageService.uploadFile('support-evidence', file, { folder: `evidencia-${index + 1}` });
+  return uploaded.uri;
 }
+
+const hydrate = <T>(value: T) => resolveStorageReferences(value);
 
 export const soporteTecnicoService = {
   // Tenant: mis tickets
-  getMyTickets: () => api.get<any[]>('/support-tickets/my'),
+  getMyTickets: async () => hydrate(await api.get<any[]>('/support-tickets/my')),
 
   // Tenant: crear ticket (con evidencia como archivos)
   create: async (data: {
@@ -100,13 +64,13 @@ export const soporteTecnicoService = {
   },
 
   // SuperAdmin: todos los tickets
-  getAll: () => api.get<any[]>('/support-tickets'),
+  getAll: async () => hydrate(await api.get<any[]>('/support-tickets')),
 
   // SuperAdmin: stats
   getStats: () => api.get<any>('/support-tickets/stats'),
 
   // Ver uno
-  getOne: (id: string) => api.get<any>(`/support-tickets/${id}`),
+  getOne: async (id: string) => hydrate(await api.get<any>(`/support-tickets/${id}`)),
 
   // SuperAdmin: responder
   respond: (id: string, data: { status?: string; adminResponse?: string; priority?: string }) =>
