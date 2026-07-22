@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface ControlStockViewProps {
   adjustments: any[];
@@ -35,15 +36,18 @@ const REASON_OPTIONS = [
 
 export function ControlStockView({ adjustments, warehouses, products, series = [], onRefresh }: ControlStockViewProps) {
   const { canPerform } = useAuth();
+  const { baseCurrency } = useCurrency();
   const [isCreating, setIsCreating] = useState(false);
   const [isReceptionOpen, setIsReceptionOpen] = useState(false);
   const [isSerialAdjustOpen, setIsSerialAdjustOpen] = useState(false);
-  const [newAdjustment, setNewAdjustment] = useState({ warehouseId: '', reason: 'DISCREPANCY', productId: '', currentStock: 0, actualStock: 0 });
+  const [newAdjustment, setNewAdjustment] = useState({ warehouseId: '', reason: 'DISCREPANCY', productId: '', currentStock: 0, actualStock: 0, unitCost: 0, currency: baseCurrency });
   const [newReception, setNewReception] = useState({
     productId: '',
     totalQuantity: 0,
     notes: '',
     imeiText: '',
+    unitCost: 0,
+    currency: baseCurrency,
   });
   const [allocations, setAllocations] = useState<ReceptionAllocation[]>([
     { id: `alloc-${Date.now()}`, warehouseId: '', quantity: 0 },
@@ -105,11 +109,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
           productId: newAdjustment.productId,
           currentStock: newAdjustment.currentStock,
           actualStock: newAdjustment.actualStock,
+          unitCost: newAdjustment.unitCost,
+          currency: newAdjustment.currency,
         }],
       });
-      toast.success('Ajuste creado');
+      toast.success('Ajuste creado exitosamente');
       setIsCreating(false);
-      setNewAdjustment({ warehouseId: '', reason: 'DISCREPANCY', productId: '', currentStock: 0, actualStock: 0 });
+      setNewAdjustment({ warehouseId: '', reason: 'DISCREPANCY', productId: '', currentStock: 0, actualStock: 0, unitCost: 0, currency: baseCurrency });
       onRefresh();
     } catch (e: any) {
       toast.error(e.message || 'Error al crear ajuste');
@@ -144,7 +150,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
   };
 
   const resetReception = () => {
-    setNewReception({ productId: '', totalQuantity: 0, notes: '', imeiText: '' });
+    setNewReception({ productId: '', totalQuantity: 0, notes: '', imeiText: '', unitCost: 0, currency: baseCurrency });
     setAllocations([{ id: `alloc-${Date.now()}`, warehouseId: '', quantity: 0 }]);
   };
 
@@ -200,6 +206,8 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
             warehouseId: item.warehouseId,
             type: 'IN',
             quantity: Number(item.quantity || 0),
+            unitCost: newReception.unitCost,
+            currency: newReception.currency,
             reference: `${reference}${newReception.notes ? ` - ${newReception.notes}` : ''}`,
           }),
         ),
@@ -344,9 +352,9 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Número</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Almacén</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Razón</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-20">Items</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Fecha</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Estado</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-24">Cant. Ajuste</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Costo Ref.</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-24">Estado</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -378,15 +386,35 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                     </SelectContent>
                   </Select>
                 </TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
+                <TableCell className="text-center">
+                  <div className="flex items-center justify-center gap-1">
                     <Input 
                       type="number" 
-                      placeholder="Actual"
+                      min={0}
                       value={newAdjustment.actualStock} 
-                      onChange={(e) => setNewAdjustment({ ...newAdjustment, actualStock: parseInt(e.target.value, 10) || 0 })}
+                      onChange={(e) => setNewAdjustment({ ...newAdjustment, actualStock: Math.max(0, parseInt(e.target.value, 10) || 0) })}
                       className="h-8 text-xs w-16"
                     />
+                  </div>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={newAdjustment.unitCost}
+                      onChange={(e) => setNewAdjustment({ ...newAdjustment, unitCost: parseFloat(e.target.value) || 0 })}
+                      className="h-8 text-xs w-20"
+                      placeholder="0.00"
+                    />
+                    <Select value={newAdjustment.currency} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, currency: v })}>
+                      <SelectTrigger className="h-8 text-xs w-16 px-2"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NIO">NIO</SelectItem>
+                        <SelectItem value="USD">USD</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </TableCell>
                 <TableCell className="text-xs">Borrador</TableCell>
@@ -405,7 +433,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
             
             {adjustments.length === 0 && !isCreating ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                   <Scale className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">No hay ajustes</p>
                 </TableCell>
@@ -419,7 +447,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                     <TableCell className="text-sm">{adj.warehouse?.name || '-'}</TableCell>
                     <TableCell className="text-xs">{REASON_OPTIONS.find((r) => r.value === adj.reason)?.label || adj.reason}</TableCell>
                     <TableCell className="text-center font-medium">{adj.items?.length || 0}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{new Date(adj.date).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right text-xs">
+                      {adj.items && adj.items[0] && (
+                        <div className="flex flex-col">
+                          <span>{adj.items[0].currency} {adj.items[0].unitCost || 0}</span>
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge className={`text-[10px] ${getStatusBadge(adj.status)}`}>
                         {adj.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}
@@ -554,6 +588,31 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                   className="h-9 text-xs"
                   placeholder="Ej. 40"
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-1">Costo Unitario Referencia</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={newReception.unitCost || ''}
+                    onChange={(e) => setNewReception({ ...newReception, unitCost: parseFloat(e.target.value) || 0 })}
+                    className="h-9 text-xs flex-1"
+                    placeholder="0.00"
+                  />
+                  <Select value={newReception.currency} onValueChange={(v) => setNewReception({ ...newReception, currency: v })}>
+                    <SelectTrigger className="h-9 text-xs w-24"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NIO">NIO</SelectItem>
+                      <SelectItem value="USD">USD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">Si se deja en 0, se usarǭ el costo actual del producto.</p>
               </div>
             </div>
 

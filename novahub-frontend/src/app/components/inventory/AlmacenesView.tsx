@@ -13,6 +13,9 @@ import { cajaService, type CashRegister } from '../../services/caja.service';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
+import { SucursalesView } from './SucursalesView';
+import { Store } from 'lucide-react';
+import { api } from '../../services/api';
 
 interface AlmacenesViewProps {
   warehouses: any[];
@@ -40,6 +43,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [isManageSucursalesDialogOpen, setIsManageSucursalesDialogOpen] = useState(false);
 
   // Estados de Cajas
   const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
@@ -47,6 +51,16 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [cajasLoading, setCajasLoading] = useState(false);
   const [isCajaFormOpen, setIsCajaFormOpen] = useState(false);
   const [cajaForm, setCajaForm] = useState<Partial<CashRegister>>({});
+  const [sucursalesList, setSucursalesList] = useState<any[]>([]);
+
+  const fetchSucursales = async () => {
+    try {
+      const res: any = await api.get('/sucursales');
+      setSucursalesList(Array.isArray(res) ? res : (res?.data || []));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
   const [accessCaja, setAccessCaja] = useState<CashRegister | null>(null);
@@ -96,6 +110,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
 
   React.useEffect(() => {
     fetchCajas();
+    fetchSucursales();
   }, []);
 
   const handleAddNewRow = () => {
@@ -309,10 +324,21 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             className="h-10 gap-2 font-black text-xs uppercase tracking-widest text-primary hover:bg-primary hover:text-primary-foreground border-primary/20 rounded-xl"
             onClick={() => {
               fetchCajas();
+              fetchSucursales();
               setIsManageDialogOpen(true);
             }}
           >
             <Settings2 className="size-4" /> Administrar Cajas
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-10 gap-2 font-black text-xs uppercase tracking-widest text-primary hover:bg-primary hover:text-primary-foreground border-primary/20 rounded-xl"
+            onClick={() => {
+              setIsManageSucursalesDialogOpen(true);
+            }}
+          >
+            <Store className="size-4" /> Administrar Sucursales
           </Button>
           <Button 
             size="sm" 
@@ -333,7 +359,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Ubicación</TableHead>
                <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Tipo</TableHead>
                <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Ubicación Padre</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest">Cajas</TableHead>
+               <TableHead className="font-black text-[10px] uppercase tracking-widest">Sucursales</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
@@ -359,7 +385,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                 }
                 
                 const stockCount = getStockCount(wh);
-                const assignedCajas = cajasList.filter(c => c.warehouseId === wh.id);
+                const assignedSucursales = sucursalesList.filter(s => s.warehouseId === wh.id);
                 return (
                   <TableRow 
                     key={wh.id} 
@@ -387,10 +413,10 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                       {wh.parent?.name || '-'}
                     </TableCell>
                     <TableCell>
-                      {assignedCajas.length > 0 ? (
+                      {assignedSucursales.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
-                          {assignedCajas.map(c => (
-                            <Badge key={c.id} variant="secondary" className="text-[9px] bg-muted/50" title={c.name}>{c.code}</Badge>
+                          {assignedSucursales.map(s => (
+                            <Badge key={s.id} variant="secondary" className="text-[9px] bg-muted/50" title={s.name}>{s.code}</Badge>
                           ))}
                         </div>
                       ) : (
@@ -468,12 +494,12 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                 </thead>
                 <tbody className="divide-y divide-border/50">
                   {cajasList.map((caja) => {
-                    const wh = warehouses.find(w => w.id === caja.warehouseId);
+                    const sucursal = sucursalesList.find(s => s.id === caja.branchId);
                     return (
                     <tr key={caja.id} className="hover:bg-muted/10">
                       <td className="px-4 py-3 font-medium">{caja.code}</td>
                       <td className="px-4 py-3">{caja.name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{wh ? wh.name : 'No Asignada'}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{sucursal ? sucursal.name : 'No Asignada'}</td>
                       <td className="px-4 py-3 text-muted-foreground">{caja.location || '-'}</td>
                       <td className="px-4 py-3">
                         <Badge variant={caja.isActive ? 'default' : 'secondary'} className={caja.isActive ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : ''}>
@@ -547,11 +573,11 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <Input value={cajaForm.name || ''} onChange={e => setCajaForm({...cajaForm, name: e.target.value})} placeholder="Caja Principal" />
           </div>
           <div className="space-y-2">
-            <Label>Sucursal (Bodega)</Label>
-            <Select value={cajaForm.warehouseId || ''} onValueChange={v => setCajaForm({...cajaForm, warehouseId: v})}>
+            <Label>Sucursal</Label>
+            <Select value={cajaForm.branchId || ''} onValueChange={v => setCajaForm({...cajaForm, branchId: v})}>
               <SelectTrigger><SelectValue placeholder="Seleccione una Sucursal" /></SelectTrigger>
               <SelectContent>
-                {warehouses.map(w => (
+                {sucursalesList.map(w => (
                   <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -634,6 +660,21 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           <Button variant="outline" onClick={() => setIsAccessModalOpen(false)}>Cancelar</Button>
           <Button onClick={handleSaveAccess} disabled={accessLoading}>Guardar Accesos</Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={isManageSucursalesDialogOpen} onOpenChange={(open) => {
+      setIsManageSucursalesDialogOpen(open);
+      if (!open) fetchSucursales();
+    }}>
+      <DialogContent className="sm:max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-lg font-black"><Store className="size-5 text-primary" /> Administrar Sucursales</DialogTitle>
+          <DialogDescription>Gestiona las sucursales asociadas a los almacenes.</DialogDescription>
+        </DialogHeader>
+        <div className="overflow-y-auto py-2">
+          <SucursalesView warehouses={warehouses} onRefresh={onRefresh} isModal={true} />
+        </div>
       </DialogContent>
     </Dialog>
   </>

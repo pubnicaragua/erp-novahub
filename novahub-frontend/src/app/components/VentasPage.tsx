@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Users, FileSpreadsheet, ClipboardList, FileText,
   RotateCcw, CreditCard, FileOutput, FileMinus,
-  ShoppingCart, BarChart3
+  ShoppingCart, BarChart3, Vault
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -38,7 +38,7 @@ import { PagosRecibidosView } from './ventas/PagosRecibidosView';
 import { DevolucionesView } from './ventas/DevolucionesView';
 import { NotasCreditoView } from './ventas/NotasCreditoView';
 import { FacturacionCajaView } from './ventas/FacturacionCajaView';
-import { DashboardCajaView } from './ventas/DashboardCajaView';
+import { ControlDashboardCajaView } from './ventas/ControlDashboardCajaView';
 
 const SALES_SECTIONS = [
   { id: 'clientes', label: 'Clientes', icon: Users, description: 'Directorio y saldos', requiredModules: ['SALES_CLIENTS'] },
@@ -49,8 +49,8 @@ const SALES_SECTIONS = [
   { id: 'pagos-recibidos', label: 'Pagos Recibidos', icon: CreditCard, description: 'Historial de ingresos', requiredModules: ['SALES_PAYMENTS'] },
   { id: 'devoluciones-venta', label: 'Devoluciones', icon: FileOutput, description: 'Retornos de mercancía', requiredModules: ['SALES_RETURNS'] },
   { id: 'notas-credito', label: 'Notas de Crédito', icon: FileMinus, description: 'Ajustes y créditos emitidos', requiredModules: ['SALES_CREDIT_NOTES'] },
-  { id: 'dashboard-caja', label: 'Dashboard Caja', icon: BarChart3, description: 'KPIs y rendimiento POS', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
   { id: 'facturacion-caja', label: 'Facturación por Caja', icon: ShoppingCart, description: 'POS y facturación directa', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
+  { id: 'control-caja', label: 'Control de Caja', icon: Vault, description: 'Apertura, arqueo y dashboard', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
 ];
 
 interface VentasPageProps {
@@ -259,8 +259,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
               {activeSection === 'facturacion-caja' && (
                 <FacturacionCajaView />
               )}
-              {activeSection === 'dashboard-caja' && (
-                <DashboardCajaView onNavigateToFacturacion={() => setActiveSection('facturacion-caja')} />
+              {activeSection === 'control-caja' && (
+                <ControlDashboardCajaView />
               )}
             </motion.div>
           </AnimatePresence>

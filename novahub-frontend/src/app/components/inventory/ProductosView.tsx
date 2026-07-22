@@ -18,6 +18,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ProductImagePicker, ProductThumbnail } from '../ui/ProductImage';
 import { storageService } from '../../services/storage.service';
+import { AddProductsModal } from './AddProductsModal';
 
 interface ProductosViewProps {
   products: any[];
@@ -52,7 +53,7 @@ interface EditingProduct {
 }
 
 export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh }: ProductosViewProps) {
-  const { formatAmount } = useCurrency();
+  const { formatAmount, baseCurrency } = useCurrency();
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
@@ -77,6 +78,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const newRowRef = useRef<HTMLInputElement>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [isAddProductsModalOpen, setIsAddProductsModalOpen] = useState(false);
 
   // Reset page to 1 when filters change
   useEffect(() => {
@@ -124,24 +126,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     return { label: 'OK', color: 'bg-green-500/10 text-green-500' };
   };
 
-  const handleAddNewRow = () => {
-    const tempId = `new-${Date.now()}`;
-    const newProduct: EditingProduct = {
-      id: tempId,
-      code: '',
-      name: '',
-      categoryId: categories[0]?.id || '',
-      salePrice: 0,
-      costPrice: 0,
-      trackSerialNumbers: false,
-      itemType: 'PRODUCT',
-      imageUrl: undefined,
-      initialStock: 0,
-      initialAllocations: [{ id: `alloc-${Date.now()}`, warehouseId: '', quantity: 0 }],
-      isNew: true,
-    };
-    setEditingRows(new Map(editingRows.set(tempId, newProduct)));
-    setTimeout(() => newRowRef.current?.focus(), 100);
+  const handleOpenAddProductsModal = () => {
+    setIsAddProductsModalOpen(true);
   };
 
   const handleEditRow = (product: any) => {
@@ -602,7 +588,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         </TableCell>
         <TableCell className="text-right">
           <Badge className={(Number(product.salePrice || 0) - Number(product.costPrice || 0)) >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}>
-            {formatAmount(Number(product.salePrice || 0) - Number(product.costPrice || 0), 'NIO')}
+            {formatAmount(Number(product.salePrice || 0) - Number(product.costPrice || 0), baseCurrency)}
           </Badge>
         </TableCell>
         <TableCell className="text-right">
@@ -848,7 +834,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <Button 
               size="sm" 
               className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
-              onClick={handleAddNewRow}
+              onClick={handleOpenAddProductsModal}
             >
               <Plus className="size-4" />
               Agregar
@@ -866,6 +852,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Producto</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Categoría</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-24">Tipo</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Almacenes</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Venta</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Costo</TableHead>
@@ -975,16 +962,38 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                         <Badge className="bg-sky-500/10 text-sky-500 text-[9px] font-black uppercase px-1.5 py-0">Producto</Badge>
                       )}
                     </TableCell>
+                    <TableCell>
+                      {(product.itemType || 'PRODUCT').toUpperCase() === 'SERVICE' ? (
+                        <span className="text-[10px] text-muted-foreground">-</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {product.stockLevels && product.stockLevels.length > 0 ? (
+                            Array.from(new Set(
+                              product.stockLevels
+                                .filter((sl: any) => Number(sl.quantity) > 0)
+                                .map((sl: any) => sl.warehouse?.name)
+                                .filter(Boolean)
+                            )).map((whName: any, idx) => (
+                              <Badge key={idx} variant="secondary" className="text-[9px] bg-muted/50 font-medium">
+                                {whName}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">-</span>
+                          )}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
                       {(product.itemType || 'PRODUCT').toUpperCase() === 'SERVICE' ? (
                         <span className="text-xs text-muted-foreground/50 italic">N/A</span>
                       ) : (product.stock || 0)}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{formatAmount(product.salePrice || 0, 'NIO')}</TableCell>
-                     <TableCell className="text-right text-muted-foreground tabular-nums">{formatAmount(product.costPrice || 0, 'NIO')}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{formatAmount(product.salePrice || 0, baseCurrency)}</TableCell>
+                     <TableCell className="text-right text-muted-foreground tabular-nums">{formatAmount(product.costPrice || 0, baseCurrency)}</TableCell>
                      <TableCell className="text-right font-black tabular-nums">
                        <span className={(Number(product.salePrice || 0) - Number(product.costPrice || 0)) >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
-                         {formatAmount(Number(product.salePrice || 0) - Number(product.costPrice || 0), 'NIO')}
+                         {formatAmount(Number(product.salePrice || 0) - Number(product.costPrice || 0), baseCurrency)}
                        </span>
                      </TableCell>
                      <TableCell className="text-right">
@@ -1258,7 +1267,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                             {row.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}
                           </TableCell>
                           <TableCell className="text-xs max-w-[120px] truncate">{row.category || '-'}</TableCell>
-                          <TableCell className="text-xs text-right tabular-nums">{formatAmount(row.salePrice, 'NIO')}</TableCell>
+                          <TableCell className="text-xs text-right tabular-nums">{formatAmount(row.salePrice, baseCurrency)}</TableCell>
                           <TableCell className="text-xs text-right tabular-nums">
                             {row.itemType === 'SERVICE' ? 'N/A' : row.initialStock}
                           </TableCell>
@@ -1290,7 +1299,15 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             )}
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-    </Card>
-  );
+        </Dialog>
+
+        <AddProductsModal 
+          open={isAddProductsModalOpen} 
+          onOpenChange={setIsAddProductsModalOpen}
+          categories={categories}
+          warehouses={warehouses}
+          onRefresh={onRefresh}
+        />
+      </Card>
+    );
 }

@@ -7,8 +7,46 @@ export interface CashRegister {
   code: string;
   location?: string;
   isActive: boolean;
-  warehouseId?: string;
+  branchId?: string;
   warehouse?: any;
+}
+
+export interface SessionDenomination {
+  id?: string;
+  currency: 'NIO' | 'USD';
+  phase: 'OPEN' | 'CLOSE';
+  value: number;
+  quantity: number;
+  subtotal: number;
+}
+
+export interface SessionLog {
+  id: string;
+  type: 'OPEN' | 'SALE' | 'REFUND' | 'COUNT' | 'CLOSE';
+  description: string;
+  amountNIO?: number;
+  amountUSD?: number;
+  reference?: string;
+  createdAt: string;
+}
+
+export interface CashRegisterSession {
+  id: string;
+  cashRegisterId: string;
+  status: 'OPEN' | 'COUNTING' | 'CLOSED';
+  openedAt: string;
+  closedAt?: string;
+  exchangeRateUSD: number;
+  initialAmountNIO: number;
+  initialAmountUSD: number;
+  finalAmountNIO?: number;
+  finalAmountUSD?: number;
+  differenceNIO?: number;
+  differenceUSD?: number;
+  notes?: string;
+  openedBy?: { name: string };
+  closedBy?: { name: string };
+  denominations?: SessionDenomination[];
 }
 
 export interface PosProduct {
@@ -120,10 +158,10 @@ export const cajaService = {
   getRegisters: (all: boolean = false) =>
     api.get<CashRegister[]>('/caja/registers', { params: all ? { all: 'true' } : undefined }),
 
-  createRegister: (data: { name: string; code: string; location?: string; warehouseId?: string }) =>
+  createRegister: (data: { name: string; code: string; location?: string; branchId?: string }) =>
     api.post<CashRegister>('/caja/registers', data),
 
-  updateRegister: (id: string, data: { name?: string; code?: string; location?: string; isActive?: boolean; warehouseId?: string }) =>
+  updateRegister: (id: string, data: { name?: string; code?: string; location?: string; isActive?: boolean; branchId?: string }) =>
     api.put<CashRegister>(`/caja/registers/${id}`, data),
 
   deleteRegister: (id: string) =>
@@ -150,11 +188,49 @@ export const cajaService = {
     date: string;
     discountPercent?: number;
     items: PosInvoiceItem[];
+    includeTax?: boolean;
   }) =>
     api.post<PosInvoice>('/caja/invoices', dto),
 
-  getRecentInvoices: (registerId?: string) =>
-    api.get<PosInvoice[]>('/caja/invoices/recent', { params: registerId ? { registerId } : undefined }),
+  getRecentInvoices: async (registerId?: string) => {
+    const params = registerId ? { registerId } : {};
+    const res = await api.get<any>('/caja/invoices/recent', { params });
+    return res.data !== undefined ? res.data : res;
+  },
+
+  // --- Módulo de Control de Cajas (Sesiones) ---
+
+  openSession: async (dto: any) => {
+    const res = await api.post<any>('/caja/sessions/open', dto);
+    return res.data !== undefined ? res.data : res;
+  },
+
+  getActiveSession: async (registerId: string) => {
+    const res = await api.get<any>(`/caja/sessions/active/${registerId}`);
+    return res.data !== undefined ? res.data : res;
+  },
+
+  getSessionHistory: async (registerId?: string, page: number = 1) => {
+    const params: any = { page };
+    if (registerId) params.registerId = registerId;
+    const res = await api.get<any>('/caja/sessions/history', { params });
+    return res.data !== undefined ? res.data : res; // { items, total, pages }
+  },
+
+  countSession: async (id: string, dto: any) => {
+    const res = await api.post<any>(`/caja/sessions/${id}/count`, dto);
+    return res.data !== undefined ? res.data : res;
+  },
+
+  closeSession: async (id: string, dto: any) => {
+    const res = await api.post<any>(`/caja/sessions/${id}/close`, dto);
+    return res.data !== undefined ? res.data : res;
+  },
+
+  getSessionLog: async (id: string) => {
+    const res = await api.get<any>(`/caja/sessions/${id}/log`);
+    return res.data !== undefined ? res.data : res;
+  },
 
   getDashboard: (period?: string) =>
     api.get<DashboardData>('/caja/dashboard', { params: period ? { period } : undefined }),

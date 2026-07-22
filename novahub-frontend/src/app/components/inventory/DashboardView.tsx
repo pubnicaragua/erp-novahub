@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useCurrency } from '../../contexts/CurrencyContext';
 
 export function DashboardView({ products, warehouses, movements = [], transfers = [], adjustments = [] }: any) {
-  const { formatAmount } = useCurrency();
+  const { formatAmount, currency } = useCurrency();
   const totalValue = products.reduce((acc: number, p: any) => acc + ((p.stock || 0) * (p.costPrice || 0)), 0);
   const totalStockUnits = products.reduce((acc: number, p: any) => acc + Number(p.stock || 0), 0);
   const averageTicketValue = products.length > 0 ? totalValue / products.length : 0;
@@ -52,7 +52,7 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
                 <div>
                   <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">{stat.label}</p>
                   <h3 className="text-2xl font-black mt-1 tracking-tighter italic">
-                    {stat.isCurrency ? formatAmount(stat.value as number, 'NIO') : stat.value}
+                    {stat.isCurrency ? formatAmount(stat.value as number, currency) : stat.value}
                   </h3>
                 </div>
                 <div className={`p-2 rounded-lg ${stat.bg}`}>

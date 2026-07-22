@@ -15,7 +15,8 @@ import {
   Wallet,
   Building2,
   Euro,
-  CircleDollarSign
+  CircleDollarSign,
+  ShoppingCart
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -81,6 +82,7 @@ function getSavedDarkMode() {
 
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
   const { user, logout } = useAuth();
+  const hasPosAccess = user?.enabledModules?.some(m => m === 'RETAIL_POS' || m === 'SALES_POS') ?? false;
   const { unreadCount, markAllAsRead, notifications } = useNotifications();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -266,6 +268,25 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       </div>
 
       <div className="flex items-center gap-1 sm:gap-4 ml-auto shrink-0">
+        {hasPosAccess && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              onNavigate('ventas');
+              window.dispatchEvent(new CustomEvent('navigate-module', {
+                detail: { module: 'ventas', subModule: 'facturacion-caja' }
+              }));
+            }}
+            className="h-9 gap-2 px-3 border-border bg-card hover:bg-primary/10"
+            title="Ir a Facturación por Caja"
+            id="topbar-quick-caja"
+          >
+            <ShoppingCart className="size-4 text-primary" />
+            <span className="text-xs font-bold hidden sm:inline">Caja</span>
+          </Button>
+        )}
+
         {/* Currency Switcher */}
         <Button 
           variant="outline" 

@@ -94,6 +94,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'devoluciones-venta': ['SALES_RETURNS'],
   'notas-credito': ['SALES_CREDIT_NOTES'],
   'facturacion-caja': ['RETAIL_POS', 'SALES_POS'],
+  'control-caja': ['RETAIL_POS', 'SALES_POS'],
   // Compras
   proveedores: ['PURCHASES_PROVIDERS'],
   gastos: ['PURCHASES_EXPENSES'],
@@ -180,6 +181,7 @@ const menuItems: MenuItem[] = [
       { id: 'devoluciones-venta', label: 'Devoluciones de venta', icon: <FileOutput className="size-4" /> },
       { id: 'notas-credito', label: 'Notas de credito', icon: <FileMinus className="size-4" /> },
       { id: 'facturacion-caja', label: 'Facturación por Caja', icon: <ShoppingCart className="size-4" /> },
+      { id: 'control-caja', label: 'Control de Caja', icon: <ShoppingCart className="size-4" /> },
     ]
   },
   {

@@ -187,7 +187,7 @@ export function ProductDetailDrawer({
   movements = [],
   series = [],
 }: ProductDetailDrawerProps) {
-  const { formatAmount } = useCurrency();
+  const { formatAmount, currency, baseCurrency } = useCurrency();
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [detail, setDetail] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
@@ -512,21 +512,21 @@ export function ProductDetailDrawer({
                     />
                     <MetricCard
                       label="Valor stock"
-                      value={isService ? '—' : formatAmount(stockValue, 'NIO')}
+                      value={isService ? '—' : formatAmount(stockValue, currency)}
                       icon={DollarSign}
                       accent="text-emerald-500"
                       loading={loading && !productSnapshot}
                     />
                     <MetricCard
                       label="Precio venta"
-                      value={formatAmount(salePrice, 'NIO')}
+                      value={formatAmount(salePrice, currency)}
                       icon={TrendingUp}
                       accent="text-emerald-500"
                       loading={loading && !productSnapshot}
                     />
                     <MetricCard
                       label="Precio costo"
-                      value={formatAmount(costPrice, 'NIO')}
+                      value={formatAmount(costPrice, currency)}
                       icon={TrendingDown}
                       accent="text-rose-500"
                       loading={loading && !productSnapshot}
@@ -710,6 +710,7 @@ export function ProductDetailDrawer({
                             <TableHead className="text-[10px] uppercase tracking-widest">Fecha</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest">Tipo</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest text-right">Cantidad</TableHead>
+                            <TableHead className="text-[10px] uppercase tracking-widest text-right">Costo Unit.</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest">Referencia</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest">Almacén</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest">Usuario</TableHead>
@@ -746,6 +747,18 @@ export function ProductDetailDrawer({
                                     {String(move.type).toUpperCase() === 'OUT' ? '-' : '+'}
                                     {Number(move.quantity || 0)}
                                   </span>
+                                </TableCell>
+                                <TableCell className="text-right text-xs">
+                                  {move.unitCost !== undefined && move.unitCost !== null ? (
+                                    <div className="flex flex-col">
+                                      <span>{move.currency || 'NIO'} {move.unitCost || 0}</span>
+                                      {move.baseCost && move.currency !== baseCurrency && (
+                                        <span className="text-[10px] text-muted-foreground">{baseCurrency} {move.baseCost}</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground">-</span>
+                                  )}
                                 </TableCell>
                                 <TableCell className="text-xs font-mono text-muted-foreground">
                                   {move.reference || '—'}

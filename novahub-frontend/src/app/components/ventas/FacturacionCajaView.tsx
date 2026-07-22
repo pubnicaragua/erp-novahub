@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
   CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
+  UserPlus, PackagePlus, AlertCircle
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -10,8 +11,10 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
+import { Switch } from '../ui/switch';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ProductThumbnail } from '../ui/ProductImage';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import {
   cajaService,
   type CashRegister,
@@ -20,6 +23,8 @@ import {
   type PosInvoice,
   type PosInvoiceItem,
 } from '../../services/caja.service';
+import { AddProductsModal } from '../inventory/AddProductsModal';
+import { QuickAddCustomerModal } from './QuickAddCustomerModal';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -114,10 +119,6 @@ function getTodayInputDate() {
   return new Date().toISOString().split('T')[0];
 }
 
-function formatCurrency(value: number | string) {
-  return `C$ ${Number(value).toFixed(2)}`;
-}
-
 function formatInvoiceDate(date: string) {
   return new Date(date).toLocaleDateString('es-NI');
 }
@@ -145,12 +146,12 @@ function calculateInvoiceSummary(
   cart: CartItem[],
   productsById: Map<string, PosProduct>,
   discountPercent: number,
+  includeTax: boolean
 ): InvoiceSummary {
   const subtotal = cart.reduce((sum, item) => sum + item.lineTotal, 0);
-  const tax = cart.reduce((sum, item) => {
-    const product = productsById.get(item.productId);
-    return sum + (product ? item.lineTotal * (product.taxRate / 100) : 0);
-  }, 0);
+  const tax = includeTax ? cart.reduce((sum, item) => {
+    return sum + (item.lineTotal * 0.15);
+  }, 0) : 0;
   const discount = subtotal * (discountPercent / 100);
 
   return {
@@ -175,12 +176,15 @@ function getInvoiceCustomerName(invoice: PosInvoice) {
 }
 
 export function FacturacionCajaView() {
+  const { formatConvertedAmount: formatCurrency } = useCurrency();
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [customers, setCustomers] = useState<PosCustomer[]>([]);
   const [recentInvoices, setRecentInvoices] = useState<PosInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [hasActiveSession, setHasActiveSession] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(false);
 
   const [selectedRegisterId, setSelectedRegisterId] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(undefined);
@@ -190,7 +194,11 @@ export function FacturacionCajaView() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [includeTax, setIncludeTax] = useState(true);
   const [catalogView, setCatalogView] = useState<CatalogViewMode>(getInitialCatalogView);
+
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
 
   const loadInitialData = useCallback(async () => {
     setLoading(true);
@@ -222,6 +230,14 @@ export function FacturacionCajaView() {
     }
   }, []);
 
+  const handleProductCreated = useCallback(() => {
+    void loadInitialData();
+  }, [loadInitialData]);
+
+  const handleCustomerCreated = useCallback(() => {
+    cajaService.getCustomers().then(setCustomers);
+  }, []);
+
   useEffect(() => {
     void loadInitialData();
   }, [loadInitialData]);
@@ -237,10 +253,20 @@ export function FacturacionCajaView() {
   useEffect(() => {
     if (!selectedRegisterId) {
       setRecentInvoices([]);
+      setHasActiveSession(false);
       return;
     }
 
     void loadRecentInvoices(selectedRegisterId);
+    
+    setCheckingSession(true);
+    cajaService.getActiveSession(selectedRegisterId).then(session => {
+      setHasActiveSession(!!session);
+      setCheckingSession(false);
+    }).catch(() => {
+      setHasActiveSession(false);
+      setCheckingSession(false);
+    });
   }, [loadRecentInvoices, selectedRegisterId]);
 
   const productsById = useMemo(
@@ -309,8 +335,8 @@ export function FacturacionCajaView() {
   };
 
   const summary = useMemo(
-    () => calculateInvoiceSummary(cart, productsById, discountPercent),
-    [cart, discountPercent, productsById],
+    () => calculateInvoiceSummary(cart, productsById, discountPercent, includeTax),
+    [cart, discountPercent, productsById, includeTax],
   );
 
   const selectedRegister = registers.find((r) => r.id === selectedRegisterId);
@@ -341,6 +367,7 @@ export function FacturacionCajaView() {
         date: emitDate,
         discountPercent: discountPercent || undefined,
         items: buildInvoiceItems(cart),
+        includeTax,
       });
       toast.success('Factura emitida exitosamente');
       setCart([]);
@@ -396,10 +423,38 @@ export function FacturacionCajaView() {
             <p className="text-xs text-muted-foreground">Venta rápida, cobro y registro contable en un mismo flujo.</p>
           </div>
         </div>
-        <Button type="button" variant="outline" onClick={() => setShowTutorial(true)} className="h-10 rounded-xl border-primary/30 bg-background/80 text-xs font-black text-primary shadow-sm hover:bg-primary/10">
-          <CircleHelp className="mr-2 size-4" /> Cómo facturar
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAddCustomer(true)}
+            className="h-10 gap-2 px-3 text-xs font-black rounded-xl border-primary/30 hover:bg-primary/10 shadow-sm bg-background/80"
+          >
+            <UserPlus className="size-4 text-primary" /> Agregar Cliente
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAddProduct(true)}
+            className="h-10 gap-2 px-3 text-xs font-black rounded-xl border-primary/30 hover:bg-primary/10 shadow-sm bg-background/80"
+          >
+            <PackagePlus className="size-4 text-primary" /> Agregar Producto
+          </Button>
+          <Button type="button" variant="outline" onClick={() => setShowTutorial(true)} className="h-10 rounded-xl border-primary/30 bg-background/80 text-xs font-black text-primary shadow-sm hover:bg-primary/10">
+            <CircleHelp className="mr-2 size-4" /> Cómo facturar
+          </Button>
+        </div>
       </div>
+      
+      {!checkingSession && !hasActiveSession && selectedRegisterId && (
+        <div className="bg-destructive/10 text-destructive border border-destructive/20 p-4 rounded-xl flex items-center gap-3">
+          <AlertCircle className="size-5 shrink-0" />
+          <div>
+            <p className="font-bold text-sm">Caja Cerrada</p>
+            <p className="text-xs">Debe aperturar esta caja en la pestaña "Control de Caja" antes de poder emitir facturas.</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
       <div className="space-y-5">
@@ -643,6 +698,10 @@ export function FacturacionCajaView() {
                 max={100}
               />
             </div>
+            <div className="flex items-center justify-between pt-2">
+              <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Incluir IVA</Label>
+              <Switch checked={includeTax} onCheckedChange={setIncludeTax} />
+            </div>
             <div className="space-y-2 pt-2 border-t border-border/30">
               <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">Subtotal Bruto:</span>
@@ -667,7 +726,7 @@ export function FacturacionCajaView() {
               size="lg"
               data-tour="pos-pay"
               onClick={handlePay}
-              disabled={submitting || cart.length === 0}
+              disabled={submitting || cart.length === 0 || !hasActiveSession || checkingSession}
               className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest gap-2 shadow-lg shadow-primary/20"
             >
               {submitting ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
@@ -711,6 +770,16 @@ export function FacturacionCajaView() {
       </div>
       </div>
       {showTutorial && <GuidedTour steps={POS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Facturación por Caja" />}
+      <AddProductsModal
+        open={showAddProduct}
+        onOpenChange={setShowAddProduct}
+        onRefresh={handleProductCreated}
+      />
+      <QuickAddCustomerModal
+        open={showAddCustomer}
+        onOpenChange={setShowAddCustomer}
+        onSuccess={handleCustomerCreated}
+      />
     </div>
   );
 }
