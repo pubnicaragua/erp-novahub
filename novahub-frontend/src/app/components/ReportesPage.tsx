@@ -130,7 +130,10 @@ export function ReportesPage({ activeSubModule, onSubModuleChange }: ReportesPag
             { id: 'reportes-rrhh', label: 'Recursos Humanos', module: 'REPORTS_HR' },
             { id: 'reportes-suscripciones', label: 'Suscripciones', module: 'REPORTS_SUBSCRIPTIONS' }
           ].map((tab) => {
-            const hasAccess = !user?.enabledModules || user.enabledModules.includes(tab.module);
+            const hasRequired = user?.enabledModules?.includes(tab.module);
+            const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('REPORTS_'));
+            const hasFallback = user?.enabledModules?.includes('REPORTS') && !hasSpecificSubmodules;
+            const hasAccess = !user?.enabledModules || hasRequired || hasFallback;
             if (!hasAccess) return null;
             return (
               <TabsTrigger 

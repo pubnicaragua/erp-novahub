@@ -7,7 +7,7 @@ import { z } from 'zod';
 import {
   Package, Mail, Lock, User, Building2, CheckCircle2, ArrowRight, ArrowLeft,
   Sparkles, Loader2, Store, Laptop, Wrench, Factory, HardHat, UtensilsCrossed,
-  Stethoscope, GraduationCap, Briefcase, Building,
+  Stethoscope, GraduationCap, Briefcase, Building, Upload,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -53,8 +53,9 @@ type Step1Data = z.infer<typeof step1Schema>;
 
 const STEP_MESSAGES = [
   'Contanos sobre tu empresa para empezar',
-  'Seleccioná tu industria para recomendarte los mejores módulos',
+  'Seleccioná tu industria y tamaño de empresa',
   'Personalizá tu NovaHub con los módulos que necesitás',
+  'Configurá roles y usuarios (Opcional)',
 ];
 
 const LEFT_BRANDING = [
@@ -97,6 +98,97 @@ const PARENT_SUBMODULES: Record<string, string[]> = {
   TOOLS: [],
   FINANCING: [],
 };
+
+const SUBMODULE_NAMES_ES: Record<string, string> = {
+  SALES_CLIENTS: 'Clientes',
+  SALES_QUOTES: 'Cotizaciones',
+  SALES_ORDERS: 'Pedidos',
+  SALES_INVOICES: 'Facturación',
+  SALES_RECURRING: 'Ventas Recurrentes',
+  SALES_PAYMENTS: 'Pagos Recibidos',
+  SALES_RETURNS: 'Devoluciones',
+  SALES_CREDIT_NOTES: 'Notas de Crédito',
+  SALES_COMMISSIONS: 'Comisiones',
+  PURCHASES_PROVIDERS: 'Proveedores',
+  PURCHASES_EXPENSES: 'Gastos',
+  PURCHASES_EXPENSES_REC: 'Gastos Recurrentes',
+  PURCHASES_REQUESTS: 'Solicitudes',
+  PURCHASES_QUOTES: 'Cotizaciones',
+  PURCHASES_ORDERS: 'Órdenes de Compra',
+  PURCHASES_RECEIPTS: 'Recibos',
+  PURCHASES_INVOICES: 'Facturas',
+  PURCHASES_INVOICES_REC: 'Facturas Recurrentes',
+  PURCHASES_RETURNS: 'Devoluciones',
+  PURCHASES_PAYMENTS: 'Pagos Emitidos',
+  INVENTORY_PRODUCTS: 'Productos',
+  INVENTORY_WAREHOUSES: 'Almacenes',
+  INVENTORY_TRANSFERS: 'Transferencias',
+  INVENTORY_ADJUSTMENTS: 'Ajustes',
+  INVENTORY_MOVEMENTS: 'Movimientos',
+  INVENTORY_COUNT: 'Conteo Físico',
+  INVENTORY_SERIALS: 'Números de Serie',
+  INVENTORY_LOTS: 'Lotes',
+  INVENTORY_DASHBOARD: 'Dashboard',
+  FINANCIAL_ACCOUNTS: 'Cuentas',
+  FINANCIAL_JOURNAL: 'Diario',
+  FINANCIAL_LEDGER: 'Libro Mayor',
+  FINANCIAL_BANK: 'Bancos',
+  FINANCIAL_BUDGET: 'Presupuestos',
+  FINANCIAL_REPORTS: 'Reportes',
+  FINANCIAL_INCOMES: 'Ingresos',
+  FINANCIAL_EXPENSES: 'Gastos',
+  FINANCIAL_EXPENSES_REC: 'Gastos Recurrentes',
+  FINANCIAL_BALANCE: 'Balance',
+  FINANCIAL_DASHBOARD: 'Dashboard',
+  FINANCIAL_INCOMES_REC: 'Ingresos Recurrentes',
+  HR_EMPLOYEES: 'Empleados',
+  HR_PAYROLL: 'Nómina',
+  HR_ATTENDANCE: 'Asistencia',
+  HR_LEAVES: 'Permisos',
+  HR_PERFORMANCE: 'Desempeño',
+  HR_TRAINING: 'Capacitación',
+  HR_BENEFITS: 'Beneficios',
+  HR_DASHBOARD: 'Dashboard',
+  HR_PAYROLL_CONFIG: 'Config. Nómina',
+  PROJECTS_LIST: 'Proyectos',
+  PROJECTS_TASKS: 'Tareas',
+  PROJECTS_MILESTONES: 'Hitos',
+  REPORTS_SALES: 'Ventas',
+  REPORTS_FINANCIAL: 'Finanzas',
+  REPORTS_INVENTORY: 'Inventario',
+  REPORTS_PURCHASES: 'Compras',
+  REPORTS_CLIENTS: 'Clientes',
+  REPORTS_PROVIDERS: 'Proveedores',
+  REPORTS_HR: 'Recursos Humanos',
+  REPORTS_SUBSCRIPTIONS: 'Suscripciones',
+  DOCUMENTS_FILES: 'Archivos',
+  DOCUMENTS_FOLDERS: 'Carpetas',
+  DOCUMENTS_CONTRACTS: 'Contratos',
+  DOCUMENTS_INVOICES: 'Facturas',
+  DOCUMENTS_REPORTS: 'Reportes',
+  ACTIVITIES_TASKS: 'Tareas',
+  ACTIVITIES_EVENTS: 'Eventos',
+  ACTIVITIES_REMINDERS: 'Recordatorios',
+  ACTIVITIES_BITACORA: 'Bitácora',
+  ACTIVITIES_LOGS: 'Registros',
+  ACTIVITIES_CALENDAR: 'Calendario',
+  ACTIVITIES_MEETINGS: 'Reuniones',
+  CONFIG_COMPANY: 'Empresa',
+  CONFIG_BRANDING: 'Branding',
+  CONFIG_ROLES: 'Roles',
+  CONFIG_SECURITY: 'Seguridad',
+  CONFIG_CURRENCY: 'Monedas',
+  CONFIG_USERS: 'Usuarios',
+  CONFIG_SUBSCRIPTION: 'Suscripción',
+  CONFIG_TENANCY: 'Tenancy',
+  CONFIG_PLATFORM: 'Plataforma',
+  CONFIG_DOMAINS: 'Dominios',
+  NOTIFICATIONS_ALERTS: 'Alertas',
+  NOTIFICATIONS_MESSAGES: 'Mensajes',
+  NOTIFICATIONS_PUSH: 'Notificaciones Push',
+  ACCOUNTING_CHART: 'Plan de Cuentas',
+  ACCOUNTING_JOURNAL: 'Libro Diario',
+};
 const PARENT_KEYS = new Set(Object.keys(PARENT_SUBMODULES));
 
 export function RegisterTenantPage() {
@@ -117,8 +209,15 @@ export function RegisterTenantPage() {
   const [loadingModules, setLoadingModules] = useState(false);
   const [msgIndex, setMsgIndex] = useState(0);
   const [expandedParent, setExpandedParent] = useState<string | null>(null);
+  const [logo, setLogo] = useState<string | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [users, setUsers] = useState<{name: string, email: string, password?: string, roleName?: string}[]>([]);
+  const [roles, setRoles] = useState<{name: string, allowedModules: string[], permissions: any[]}[]>([]);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [newRoleModules, setNewRoleModules] = useState<string[]>([]);
+  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', roleName: '' });
 
-  const { register, handleSubmit, formState: { errors }, watch } = useForm<Step1Data>({
+  const { register, handleSubmit, formState: { errors }, watch, setError: setFormError } = useForm<Step1Data>({
     resolver: zodResolver(step1Schema),
     defaultValues: { companyName: '', userName: '', email: '', password: '', acceptTerms: false },
   });
@@ -151,13 +250,24 @@ export function RegisterTenantPage() {
     return () => clearInterval(interval);
   }, [showWelcome]);
 
-  const onStep1Submit = (data: Step1Data) => {
-    setStep1Data(data);
-    setStep(1);
+  const onStep1Submit = async (data: Step1Data) => {
+    try {
+      const res: any = await authService.checkEmail(data.email);
+      const exists = res?.data?.exists ?? res?.exists;
+      if (exists) {
+        setFormError('email', { type: 'manual', message: 'Email ya registrado en el sistema' });
+        return;
+      }
+      setStep1Data(data);
+      setStep(1);
+    } catch (e) {
+      setFormError('email', { type: 'manual', message: 'Error al verificar el correo' });
+    }
   };
 
   const canGoStep2 = industry !== null && companySize !== null;
   const totalPrice = selectedModules.reduce((sum, mod) => {
+    if (!PARENT_KEYS.has(mod)) return sum;
     const found = [
       ...(recommendations?.recommended || []),
       ...(recommendations?.optional || []),
@@ -180,6 +290,9 @@ export function RegisterTenantPage() {
         companySize: companySize || undefined,
         companyDescription: companyDescription || undefined,
         selectedModules,
+        logo: logo || undefined,
+        roles: roles.length > 0 ? roles : undefined,
+        users: users.length > 0 ? users : undefined,
       });
       const token = response?.access_token || response?.data?.access_token;
       const user = response?.user || response?.data?.user;
@@ -205,7 +318,7 @@ export function RegisterTenantPage() {
   };
 
   const renderProgress = () => {
-    const totalSteps = 3;
+    const totalSteps = 4;
     const percent = Math.round(((step + 1) / totalSteps) * 100);
     return (
       <div className="space-y-3 mb-6">
@@ -235,7 +348,7 @@ export function RegisterTenantPage() {
           />
         </div>
         <div className="flex justify-between">
-          {['Cuenta', 'Negocio', 'Módulos'].map((label, i) => (
+          {['Cuenta', 'Negocio', 'Módulos', 'Equipo'].map((label, i) => (
             <div key={label} className="flex flex-col items-center gap-1">
               <motion.div
                 initial={false}
@@ -269,7 +382,7 @@ export function RegisterTenantPage() {
   };
 
   const renderLeftPanel = () => {
-    if (step === 2) return null;
+    
     const content = LEFT_BRANDING[step] || LEFT_BRANDING[0];
     return (
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-900 text-white p-12 flex-col justify-between relative overflow-hidden">
@@ -335,6 +448,17 @@ export function RegisterTenantPage() {
         <div className="relative">
           <Mail className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input id="email" {...register('email')} type="email" placeholder="tu@empresa.com" autoComplete="email"
+            onBlur={async (e) => {
+              register('email').onBlur(e);
+              if (e.target.value && e.target.value.includes('@')) {
+                try {
+                  const res: any = await authService.checkEmail(e.target.value);
+                  if (res?.data?.exists ?? res?.exists) {
+                    setFormError('email', { type: 'manual', message: 'Email ya registrado en el sistema' });
+                  }
+                } catch (err) {}
+              }
+            }}
             className={cn('h-11 pl-11 rounded-xl bg-white/5 border-white/10', errors.email && 'border-destructive')} />
         </div>
         {errors.email && <p className="text-xs text-destructive ml-1">{errors.email.message}</p>}
@@ -359,7 +483,7 @@ export function RegisterTenantPage() {
         </label>
         {errors.acceptTerms && <p className="text-xs text-destructive ml-1">{errors.acceptTerms.message}</p>}
       </div>
-      <Button type="submit" disabled={!acceptTerms}
+      <Button type="submit" disabled={!acceptTerms || Object.keys(errors).length > 0}
         className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 mt-2">
         Siguiente <ArrowRight className="size-4" />
       </Button>
@@ -368,6 +492,29 @@ export function RegisterTenantPage() {
 
   const renderStep2 = () => (
     <div className="space-y-5">
+      <div className="space-y-1.5 mb-2">
+        <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Logo de la empresa (Opcional)</Label>
+        <div className="flex items-center gap-4">
+          <div className="size-16 rounded-xl bg-muted/50 border border-border/50 flex items-center justify-center overflow-hidden">
+            {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-cover" /> : <Building className="size-6 text-muted-foreground" />}
+          </div>
+          <div className="flex-1">
+            <input type="file" id="logo-upload" accept="image/png, image/jpeg" onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                setLogoPreview(URL.createObjectURL(file));
+                const reader = new FileReader();
+                reader.onloadend = () => setLogo(reader.result as string);
+                reader.readAsDataURL(file);
+              }
+            }} className="hidden" />
+            <label htmlFor="logo-upload" className="flex items-center justify-center w-full h-11 px-4 border border-dashed border-border/60 rounded-xl bg-white/5 hover:bg-white/10 hover:border-primary/50 cursor-pointer transition-all text-xs font-semibold gap-2 text-muted-foreground hover:text-foreground">
+              <Upload className="size-4" />
+              {logoPreview ? 'Cambiar logo' : 'Seleccionar imagen'}
+            </label>
+          </div>
+        </div>
+      </div>
       <div>
         <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1 block mb-3">Industria</Label>
         <motion.div className="grid grid-cols-2 gap-2.5" initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.04 } } }}>
@@ -516,7 +663,7 @@ export function RegisterTenantPage() {
                   backgroundColor: active ? (recommended ? '#f0fdf4' : 'hsl(var(--primary) / 0.03)') : undefined,
                   boxShadow: active ? (recommended ? '0 1px 3px rgba(16,185,129,0.1)' : '0 1px 3px rgba(0,0,0,0.05)') : undefined,
                 }}>
-                <button type="button" onClick={() => { if (hasSubs) { expandParent(mod.module); } else { toggleModule(mod.module); } }}
+                <button type="button" onClick={() => toggleParentAndSubs(mod.module)}
                   className="w-full p-4 text-left cursor-pointer flex flex-col gap-3 hover:bg-muted/20 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className={cn('size-7 rounded-lg flex items-center justify-center',
@@ -540,7 +687,12 @@ export function RegisterTenantPage() {
                       </div>
                     </div>
                     {hasSubs && (
-                      <span className="text-[10px] text-muted-foreground">{isExpanded ? '▲' : '▼'}</span>
+                      <div 
+                        className="p-1 hover:bg-muted/30 rounded-md cursor-pointer"
+                        onClick={(e) => { e.stopPropagation(); expandParent(mod.module); }}
+                      >
+                        <span className="text-[10px] text-muted-foreground">{isExpanded ? '▲' : '▼'}</span>
+                      </div>
                     )}
                   </div>
                 </button>
@@ -555,7 +707,7 @@ export function RegisterTenantPage() {
                             subActive ? 'text-foreground font-bold' : 'text-muted-foreground')}>
                           <span className="flex items-center gap-2">
                             <span className={cn('size-1.5 rounded-full', subActive ? 'bg-emerald-500' : 'bg-muted-foreground/30')} />
-                            {subInfo?.name || subKey.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                            {SUBMODULE_NAMES_ES[subKey] || subInfo?.name || subKey.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase())}
                           </span>
                           <span className="text-[10px]">{subActive ? '✓ Activo' : `+$${subInfo?.price || 0}`}</span>
                         </button>
@@ -590,20 +742,170 @@ export function RegisterTenantPage() {
         </div>
         <div className="flex gap-3 pt-2">
           <Button type="button" variant="outline" onClick={() => setStep(1)}
-            className="h-12 rounded-xl font-bold uppercase tracking-widest gap-2 flex-1">
-            <ArrowLeft className="size-4" /> Atrás
-          </Button>
-          <Button type="button" disabled={selectedModules.length === 0 || submitting} onClick={handleFinalSubmit}
-            className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 flex-1">
-            {submitting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-            Comenzar prueba gratis
-          </Button>
+          className="h-12 rounded-xl font-bold uppercase tracking-widest gap-2 flex-1">
+          <ArrowLeft className="size-4" /> Atrás
+        </Button>
+          <Button type="button" disabled={selectedModules.length === 0} onClick={() => setStep(3)}
+          className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 flex-1">
+          Siguiente <ArrowRight className="size-4" />
+        </Button>
         </div>
         {error && <p className="text-xs text-destructive text-center">{error}</p>}
       </div>
     );
   };
 
+  
+  const renderStep4 = () => (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-border/50 p-4 bg-white/5">
+        <h4 className="text-xs font-bold mb-3">Roles (Opcional)</h4>
+        <div className="flex flex-col gap-2 mb-3">
+          <div className="flex gap-2">
+            <Input value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} placeholder="Nombre del Rol (Ej: Vendedor)" className="flex-1 h-9 bg-white/5 text-xs" />
+            <Button type="button" onClick={() => {
+              if (newRoleName && newRoleModules.length > 0) {
+                // Generamos los permisos base para los módulos seleccionados
+                const newPerms = newRoleModules.map(m => ({ module: m, read: true, write: true, delete: true }));
+                setRoles([...roles, { name: newRoleName, allowedModules: newRoleModules, permissions: newPerms }]);
+                setNewRoleName('');
+                setNewRoleModules([]);
+              } else if (!newRoleName) {
+                toast.error('Ingresa un nombre para el rol');
+              } else {
+                toast.error('Selecciona al menos un módulo para el rol');
+              }
+            }} className="h-9 bg-emerald-600 hover:bg-emerald-500 text-white text-xs">Añadir Rol</Button>
+          </div>
+          <div className="bg-black/20 p-3 rounded-lg border border-border/30">
+            <div className="text-[10px] font-bold text-muted-foreground mb-2">Selecciona los módulos a los que tendrá acceso:</div>
+            <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
+              
+              {(() => {
+                const available = Array.from(PARENT_KEYS).filter(mod => {
+                  const subs = PARENT_SUBMODULES[mod] || [];
+                  if (subs.length === 0) return selectedModules.includes(mod);
+                  return selectedModules.includes(mod) || subs.some(s => selectedModules.includes(s));
+                });
+                if (available.length === 0) return <div className="col-span-2 text-xs text-muted-foreground mt-2">No hay módulos seleccionados en el paso anterior.</div>;
+                return available.map(mod => (
+                <label key={mod} className="flex items-start gap-2 cursor-pointer hover:bg-white/5 p-1 rounded-md transition-colors">
+                  <input type="checkbox" checked={newRoleModules.includes(mod)} onChange={(e) => {
+                    if (e.target.checked) setNewRoleModules([...newRoleModules, mod]);
+                    else setNewRoleModules(newRoleModules.filter(m => m !== mod));
+                  }} className="size-3.5 mt-0.5 rounded border-white/20 bg-white/5 text-emerald-500 focus:ring-emerald-500/30" />
+                  <span className="text-[10px] text-foreground font-medium leading-tight">
+                      {
+                        mod === 'SALES' ? 'Ventas' :
+                        mod === 'PURCHASES' ? 'Compras' :
+                        mod === 'INVENTORY' ? 'Inventario' :
+                        mod === 'FINANCIAL' ? 'Finanzas' :
+                        mod === 'ACCOUNTING' ? 'Contabilidad' :
+                        mod === 'HR' ? 'Recursos Humanos' :
+                        mod === 'PROJECTS' ? 'Proyectos' :
+                        mod === 'NOTIFICATIONS' ? 'Notificaciones' :
+                        mod === 'ACTIVITIES' ? 'Actividades' :
+                        mod === 'DOCUMENTS' ? 'Documentos' :
+                        mod === 'REPORTS' ? 'Reportes' :
+                        mod === 'SUPPORT_TECH' ? 'Soporte Técnico' :
+                        mod === 'TOOLS' ? 'Herramientas' :
+                        mod.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+                      }
+                    </span>
+                </label>
+              ));
+              })()}
+            </div>
+          </div>
+        </div>
+        {roles.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {roles.map((r, i) => (
+              <span key={i} className="px-2 py-1 text-[10px] font-bold bg-primary/20 text-primary rounded-md flex items-center gap-1">
+                {r.name} ({r.allowedModules.length} mods)
+                <button type="button" onClick={() => setRoles(roles.filter(x => x.name !== r.name))} className="hover:text-red-500">×</button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-border/50 p-4 bg-white/5">
+        <h4 className="text-xs font-bold mb-3">Usuarios (Opcional)</h4>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Nombre" className="h-9 bg-white/5 text-xs border-border/50" />
+          <Input 
+            value={newUser.email} 
+            onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} 
+            onBlur={async (e) => {
+              if (e.target.value && e.target.value.includes('@')) {
+                try {
+                  const res: any = await authService.checkEmail(e.target.value);
+                  if (res?.data?.exists ?? res?.exists) {
+                    toast.error('Este email ya está en uso');
+                  }
+                } catch (err) {}
+              }
+            }}
+            placeholder="Email" 
+            type="email" 
+            className="h-9 bg-white/5 text-xs border-border/50" 
+          />
+          <Input value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="Contraseña" type="password" className="h-9 bg-white/5 text-xs border-border/50" />
+          <select value={newUser.roleName} onChange={(e) => setNewUser({ ...newUser, roleName: e.target.value })} className="h-9 bg-white/5 text-xs rounded-md border border-border/50 px-2 outline-none text-muted-foreground">
+            <option value="">Rol Base (Sin módulos extras)</option>
+            {roles.map((r, i) => <option key={i} value={r.name}>{r.name}</option>)}
+          </select>
+        </div>
+        <Button type="button" variant="outline" className="w-full h-8 text-xs mb-3 border-border/50" onClick={async () => {
+          if (newUser.name && newUser.email && newUser.password) {
+            try {
+              const res: any = await authService.checkEmail(newUser.email);
+              const exists = res?.data?.exists ?? res?.exists;
+              if (exists) {
+                toast.error('El email del usuario ya está registrado en el sistema');
+                return;
+              }
+              setUsers([...users, { ...newUser }]);
+              setNewUser({ name: '', email: '', password: '', roleName: '' });
+            } catch (e) {
+              toast.error('Error al verificar el correo');
+            }
+          } else {
+            toast.error('Nombre, Email y Contraseña son obligatorios para crear un usuario');
+          }
+        }}>Añadir Usuario</Button>
+        {users.length > 0 && (
+          <div className="space-y-2">
+            {users.map((u, i) => (
+              <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-black/10 border border-border/30">
+                <div>
+                  <div className="text-xs font-bold">{u.name}</div>
+                  <div className="text-[10px] text-muted-foreground">{u.email}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full">{u.roleName || 'Usuario base'}</div>
+                  <button type="button" onClick={() => setUsers(users.filter((_, idx) => idx !== i))} className="text-red-500/70 hover:text-red-500">×</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-3 pt-2">
+        <Button type="button" variant="outline" onClick={() => setStep(2)}
+          className="h-12 rounded-xl font-bold uppercase tracking-widest gap-2 flex-1">
+          <ArrowLeft className="size-4" /> Atrás
+        </Button>
+        <Button type="button" disabled={submitting} onClick={handleFinalSubmit}
+          className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 flex-1">
+          {submitting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+          Comenzar prueba gratis
+        </Button>
+      </div>
+    </div>
+  );
   const SETUP_MESSAGES = [
     'Creando tu workspace...',
     'Configurando módulos seleccionados...',
@@ -627,13 +929,20 @@ export function RegisterTenantPage() {
           initial={{ scale: 0, rotate: -45 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 12, delay: 0.1 }}
-          className="size-20 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-xl shadow-emerald-500/30"
+          className="size-24 rounded-full flex items-center justify-center shadow-xl shadow-emerald-500/30 overflow-hidden bg-white border border-emerald-100"
         >
           <motion.div
             animate={{ y: [0, -4, 0] }}
             transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+            className="flex items-center justify-center w-full h-full"
           >
-            <Sparkles className="size-10 text-white" />
+            {logoPreview ? (
+              <img src={logoPreview} alt="Logo de la empresa" className="w-full h-full object-contain p-2" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+                <Sparkles className="size-10 text-white" />
+              </div>
+            )}
           </motion.div>
         </motion.div>
 
@@ -712,9 +1021,9 @@ export function RegisterTenantPage() {
       {renderLeftPanel()}
       <div className={cn(
         "flex-1 flex items-center justify-center p-6 md:p-10 bg-background",
-        step === 2 && "lg:w-full"
+        ""
       )}>
-        <div className={cn("w-full space-y-6", step === 2 ? "max-w-3xl" : "max-w-md")}>
+        <div className={cn("w-full space-y-6", step === 2 ? "max-w-2xl" : "max-w-md")}>
           <div className="lg:hidden flex items-center gap-3 mb-4">
             <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <Package className="size-6 text-primary" />
@@ -735,11 +1044,13 @@ export function RegisterTenantPage() {
                   <h2 className="text-2xl font-black tracking-tighter uppercase italic mb-6">
                     {step === 0 && <>Crear <span className="text-primary">cuenta</span></>}
                     {step === 1 && <>Tu <span className="text-primary">negocio</span></>}
+                    {step === 3 && <>Tu <span className="text-primary">equipo</span></>}
                     {step === 2 && <>Tus <span className="text-primary">módulos</span></>}
                   </h2>
                   {step === 0 && renderStep1()}
                   {step === 1 && renderStep2()}
                   {step === 2 && renderStep3()}
+                  {step === 3 && renderStep4()}
                 </motion.div>
               </AnimatePresence>
               <p className="text-center text-sm text-muted-foreground pt-4">

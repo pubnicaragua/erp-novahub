@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ControlStockViewProps {
   adjustments: any[];
@@ -33,6 +34,7 @@ const REASON_OPTIONS = [
 ];
 
 export function ControlStockView({ adjustments, warehouses, products, series = [], onRefresh }: ControlStockViewProps) {
+  const { canPerform } = useAuth();
   const [isCreating, setIsCreating] = useState(false);
   const [isReceptionOpen, setIsReceptionOpen] = useState(false);
   const [isSerialAdjustOpen, setIsSerialAdjustOpen] = useState(false);
@@ -302,32 +304,36 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
           <p className="text-sm text-muted-foreground">{adjustments.length} ajustes registrados</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
-            onClick={() => setIsSerialAdjustOpen(true)}
-          >
-            IMEI / Series
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
-            onClick={() => setIsReceptionOpen(true)}
-          >
-            <Receipt className="size-4 mr-2" />
-            Registrar Recepción
-          </Button>
-          <Button 
-            size="sm" 
-            className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
-            onClick={() => setIsCreating(true)}
-            disabled={isCreating}
-          >
-            <Plus className="size-4" />
-            Nuevo Ajuste
-          </Button>
+          {canPerform('INVENTORY_ADJUSTMENTS', 'create') && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
+                onClick={() => setIsSerialAdjustOpen(true)}
+              >
+                IMEI / Series
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
+                onClick={() => setIsReceptionOpen(true)}
+              >
+                <Receipt className="size-4 mr-2" />
+                Registrar Recepción
+              </Button>
+              <Button 
+                size="sm" 
+                className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
+                onClick={() => setIsCreating(true)}
+                disabled={isCreating}
+              >
+                <Plus className="size-4" />
+                Nuevo Ajuste
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -420,7 +426,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {adj.status === 'DRAFT' && (
+                      {adj.status === 'DRAFT' && canPerform('INVENTORY_ADJUSTMENTS', 'edit') && (
                         <Button 
                           size="sm" 
                           variant="ghost" 

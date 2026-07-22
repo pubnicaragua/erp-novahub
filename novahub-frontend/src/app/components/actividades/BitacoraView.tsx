@@ -13,6 +13,7 @@ import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Tipos para el nuevo log
 type LogFormData = {
@@ -36,6 +37,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
   const [isUploading, setIsUploading] = useState(false);
   const [availableTasks, setAvailableTasks] = useState<any[]>([]);
   const [availableEvents, setAvailableEvents] = useState<any[]>([]);
+  const { canPerform } = useAuth();
   
   const [formData, setFormData] = useState<Omit<LogFormData, 'action' | 'entity'>>({
     details: '',
@@ -70,7 +72,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
       key: 'entity', header: 'Vínculo (Registro)', width: '25%', editable: false,
       render: (val: any) => <Badge variant="outline" className="text-xs">{val || 'Registro Libre'}</Badge> 
     },
-    { key: 'details', header: 'Comentarios', width: '40%', editable: true },
+    { key: 'details', header: 'Comentarios', width: '40%', editable: canPerform('ACTIVITIES_LOGS', 'edit') },
     { key: 'createdAt', header: 'Fecha', width: '150px', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
     { 
       key: 'fileUrl', header: 'Adjuntos', width: '10%', editable: false,
@@ -228,22 +230,24 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
           <div><h2 className="text-xl font-black uppercase tracking-tight">Bitácora de Auditoría</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Registro de actividades del sistema</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar evento..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button
-              onClick={() => setIsAddOpen(true)}
-              variant="default"
-              className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
-            >
-              <Plus className="size-4" />
-              Nuevo Registro
-            </Button>
+            {canPerform('ACTIVITIES_LOGS', 'create') && (
+              <Button
+                onClick={() => setIsAddOpen(true)}
+                variant="default"
+                className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
+              >
+                <Plus className="size-4" />
+                Nuevo Registro
+              </Button>
+            )}
           </div>
         </div>
         <EditableDataTable
           data={filtered}
           columns={columns}
-          onRowUpdate={handleUpdate}
+          onRowUpdate={canPerform('ACTIVITIES_LOGS', 'edit') ? handleUpdate : undefined}
           isLoading={loading}
-          onRowDelete={async (id) => {
+          onRowDelete={canPerform('ACTIVITIES_LOGS', 'delete') ? async (id) => {
             try {
               await activityLogsService.delete(String(id));
               toast.success('Registro eliminado');
@@ -251,7 +255,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
             } catch {
               toast.error('Error al eliminar registro');
             }
-          }}
+          } : undefined}
         />
       </Card>
 

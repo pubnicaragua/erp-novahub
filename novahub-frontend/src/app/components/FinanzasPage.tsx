@@ -23,7 +23,12 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
   const { user, canPerform } = useAuth();
   const { displayCurrency, exchangeRate: globalRate, convertAmount } = useCurrency();
 
-  const hasAccess = (moduleId: string) => !user?.enabledModules || user.enabledModules.includes(moduleId);
+  const hasAccess = (moduleId: string) => {
+    if (!user?.enabledModules) return true;
+    if (user.enabledModules.includes(moduleId)) return true;
+    const hasSpecificSubmodules = user.enabledModules.some(m => m.startsWith('FINANCIAL_'));
+    return user.enabledModules.includes('FINANCIAL') && !hasSpecificSubmodules;
+  };
 
   // Map sidebar submodule IDs to tab values
   const subModuleToTab: Record<string, string> = { 

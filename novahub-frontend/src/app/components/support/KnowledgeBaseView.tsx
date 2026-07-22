@@ -7,6 +7,7 @@ import { BookOpen, FileText, Plus, Search, FolderOpen, FileCheck } from 'lucide-
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { knowledgeBaseService } from '../../services/support.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface KnowledgeArticle {
   id: string;
@@ -24,6 +25,7 @@ interface KnowledgeBaseViewProps {
 }
 
 export const KnowledgeBaseView: React.FC<KnowledgeBaseViewProps> = ({ data, loading, onRefresh }) => {
+  const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
 
   const mimeTypeOptions = [
@@ -35,13 +37,13 @@ export const KnowledgeBaseView: React.FC<KnowledgeBaseViewProps> = ({ data, load
   ];
 
   const columns: ColumnDef<KnowledgeArticle>[] = [
-    { key: 'name', header: 'Artículo', width: '28%', editable: true },
-    { key: 'folder', header: 'Categoría', width: '16%', editable: true },
+    { key: 'name', header: 'Artículo', width: '28%', editable: canPerform('TICKETS', 'edit') },
+    { key: 'folder', header: 'Categoría', width: '16%', editable: canPerform('TICKETS', 'edit') },
     {
       key: 'mimeType',
       header: 'Formato',
       width: '14%',
-      editable: true,
+      editable: canPerform('TICKETS', 'edit'),
       type: 'select',
       options: mimeTypeOptions,
       render: (val: any) => {
@@ -57,7 +59,7 @@ export const KnowledgeBaseView: React.FC<KnowledgeBaseViewProps> = ({ data, load
       key: 'size',
       header: 'Tamaño',
       width: '110px',
-      editable: true,
+      editable: canPerform('TICKETS', 'edit'),
       type: 'number',
       render: (val: any) => `${(Number(val || 0) / 1024).toFixed(1)} KB`,
     },
@@ -65,7 +67,7 @@ export const KnowledgeBaseView: React.FC<KnowledgeBaseViewProps> = ({ data, load
       key: 'url',
       header: 'URL',
       width: '42%',
-      editable: true,
+      editable: canPerform('TICKETS', 'edit'),
       render: (val: any) =>
         val ? (
           <a
@@ -187,13 +189,15 @@ export const KnowledgeBaseView: React.FC<KnowledgeBaseViewProps> = ({ data, load
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button
-              onClick={handleAdd}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
-            >
-              <Plus className="size-4" />
-              Nuevo Artículo
-            </Button>
+            {canPerform('TICKETS', 'create') && (
+              <Button
+                onClick={handleAdd}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
+              >
+                <Plus className="size-4" />
+                Nuevo Artículo
+              </Button>
+            )}
           </div>
         </div>
 
@@ -202,7 +206,7 @@ export const KnowledgeBaseView: React.FC<KnowledgeBaseViewProps> = ({ data, load
           columns={columns}
           onRowUpdate={handleUpdate}
           isLoading={loading}
-          onRowDelete={async (id) => {
+          onRowDelete={canPerform('TICKETS', 'delete') ? async (id) => {
             try {
               await knowledgeBaseService.delete(String(id));
               toast.success('Artículo eliminado');
@@ -210,7 +214,7 @@ export const KnowledgeBaseView: React.FC<KnowledgeBaseViewProps> = ({ data, load
             } catch (error: any) {
               toast.error(error?.message || 'Error al eliminar artículo');
             }
-          }}
+          } : undefined}
         />
       </Card>
     </div>

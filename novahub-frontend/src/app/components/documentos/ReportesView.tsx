@@ -9,6 +9,7 @@ import { reportsService } from '../../services/documentos.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ReportesViewProps {
   data: Report[];
@@ -18,11 +19,12 @@ interface ReportesViewProps {
 
 export const ReportesView: React.FC<ReportesViewProps> = ({ data, loading, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const { canPerform } = useAuth();
 
   const columns: ColumnDef<Report>[] = [
-    { key: 'title', header: 'Título', width: '40%', editable: true },
-    { key: 'type', header: 'Tipo', width: '20%', editable: true },
-    { key: 'format', header: 'Formato', width: '100px', editable: true, type: 'select', options: [{label: 'PDF', value: 'PDF'}, {label: 'EXCEL', value: 'EXCEL'}, {label: 'CSV', value: 'CSV'}] },
+    { key: 'title', header: 'Título', width: '40%', editable: canPerform('DOCUMENTS_REPORTS', 'edit') },
+    { key: 'type', header: 'Tipo', width: '20%', editable: canPerform('DOCUMENTS_REPORTS', 'edit') },
+    { key: 'format', header: 'Formato', width: '100px', editable: canPerform('DOCUMENTS_REPORTS', 'edit'), type: 'select', options: [{label: 'PDF', value: 'PDF'}, {label: 'EXCEL', value: 'EXCEL'}, {label: 'CSV', value: 'CSV'}] },
     { key: 'generatedDate', header: 'Generado', width: '150px', type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, yyyy') : '-' },
   ];
 
@@ -65,10 +67,18 @@ export const ReportesView: React.FC<ReportesViewProps> = ({ data, loading, onRef
           <div><h2 className="text-xl font-black uppercase tracking-tight">Reportes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Análisis y exportación</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={handleAdd} className="bg-purple-600 hover:bg-purple-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Reporte</Button>
+            {canPerform('DOCUMENTS_REPORTS', 'create') && (
+              <Button onClick={handleAdd} className="bg-purple-600 hover:bg-purple-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Reporte</Button>
+            )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} onRowDelete={async (id) => { try { await reportsService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } }} />
+        <EditableDataTable 
+          data={filtered} 
+          columns={columns} 
+          onRowUpdate={canPerform('DOCUMENTS_REPORTS', 'edit') ? handleUpdate : undefined} 
+          isLoading={loading} 
+          onRowDelete={canPerform('DOCUMENTS_REPORTS', 'delete') ? async (id) => { try { await reportsService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+        />
       </Card>
     </div>
   );

@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface FacturasLegalesViewProps {
   data: LegalInvoice[];
@@ -21,6 +22,7 @@ interface FacturasLegalesViewProps {
 export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, loading, onRefresh }) => {
   const { formatConvertedAmount, displayCurrency, baseCurrency, exchangeRate, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const { canPerform } = useAuth();
 
   const statusOpts = [
     { value: 'PENDING', label: 'Pendiente', color: 'bg-amber-500/10 text-amber-500' },
@@ -30,11 +32,11 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
   ];
 
   const columns: ColumnDef<LegalInvoice>[] = [
-    { key: 'number', header: 'Factura', width: '120px', editable: true },
-    { key: 'type', header: 'Tipo', width: '20%', editable: true },
-    { key: 'amount', header: 'Monto', width: '120px', editable: true, type: 'number', render: (val: any, row: LegalInvoice) => val ? formatConvertedAmount(Number(val), row.currency || baseCurrency, row.exchangeRate) : '-' },
-    { key: 'issueDate', header: 'Emisión', width: '140px', editable: true, type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, yyyy') : '-' },
-    { key: 'status', header: 'Estado', width: '120px', editable: true, type: 'select', options: statusOpts,
+    { key: 'number', header: 'Factura', width: '120px', editable: canPerform('DOCUMENTS_INVOICES', 'edit') },
+    { key: 'type', header: 'Tipo', width: '20%', editable: canPerform('DOCUMENTS_INVOICES', 'edit') },
+    { key: 'amount', header: 'Monto', width: '120px', editable: canPerform('DOCUMENTS_INVOICES', 'edit'), type: 'number', render: (val: any, row: LegalInvoice) => val ? formatConvertedAmount(Number(val), row.currency || baseCurrency, row.exchangeRate) : '-' },
+    { key: 'issueDate', header: 'Emisión', width: '140px', editable: canPerform('DOCUMENTS_INVOICES', 'edit'), type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, yyyy') : '-' },
+    { key: 'status', header: 'Estado', width: '120px', editable: canPerform('DOCUMENTS_INVOICES', 'edit'), type: 'select', options: statusOpts,
       render: (val: any) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -81,10 +83,18 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
           <div><h2 className="text-xl font-black uppercase tracking-tight">Facturas Legales</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">DTEs y documentos fiscales</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={handleAdd} className="bg-amber-500 hover:bg-amber-600 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Factura</Button>
+            {canPerform('DOCUMENTS_INVOICES', 'create') && (
+              <Button onClick={handleAdd} className="bg-amber-500 hover:bg-amber-600 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Factura</Button>
+            )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} onRowDelete={async (id) => { try { await legalInvoicesService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch { toast.error('Error al eliminar'); } }} />
+        <EditableDataTable 
+          data={filtered} 
+          columns={columns} 
+          onRowUpdate={canPerform('DOCUMENTS_INVOICES', 'edit') ? handleUpdate : undefined} 
+          isLoading={loading} 
+          onRowDelete={canPerform('DOCUMENTS_INVOICES', 'delete') ? async (id) => { try { await legalInvoicesService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+        />
       </Card>
     </div>
   );

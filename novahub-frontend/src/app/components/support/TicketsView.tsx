@@ -21,6 +21,7 @@ import {
 import { supportService } from '../../services/support.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
+import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
@@ -60,6 +61,7 @@ const SlaStatusBadge: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
 };
 
 export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefresh }) => {
+  const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [comments, setComments] = useState<TicketComment[]>([]);
@@ -115,13 +117,13 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
 
   const columns: ColumnDef<Ticket>[] = [
     { key: 'number', header: 'Ticket', width: '110px' },
-    { key: 'subject', header: 'Asunto', width: '20%', editable: true },
-    { key: 'description', header: 'Descripción', width: '28%', editable: true },
+    { key: 'subject', header: 'Asunto', width: '20%', editable: canPerform('TICKETS', 'edit') },
+    { key: 'description', header: 'Descripción', width: '28%', editable: canPerform('TICKETS', 'edit') },
     {
       key: 'priority',
       header: 'Prioridad',
       width: '110px',
-      editable: true,
+      editable: canPerform('TICKETS', 'edit'),
       type: 'select',
       options: priorityOpts,
       render: (val: any) => {
@@ -137,7 +139,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
       key: 'status',
       header: 'Estado',
       width: '120px',
-      editable: true,
+      editable: canPerform('TICKETS', 'edit'),
       type: 'select',
       options: statusOpts,
       render: (val: any) => {
@@ -316,13 +318,15 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              <Button
-                onClick={handleAdd}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
-              >
-                <Plus className="size-4" />
-                Nuevo Ticket
-              </Button>
+              {canPerform('TICKETS', 'create') && (
+                <Button
+                  onClick={handleAdd}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
+                >
+                  <Plus className="size-4" />
+                  Nuevo Ticket
+                </Button>
+              )}
             </div>
           </div>
 
@@ -341,14 +345,16 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
                 >
                   <Eye className="size-4" />
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg"
-                  onClick={() => setPendingDeleteTicket(row)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
+                {canPerform('TICKETS', 'delete') && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg"
+                    onClick={() => setPendingDeleteTicket(row)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                )}
               </div>
             )}
           />
@@ -396,10 +402,11 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     className="min-h-20"
+                    disabled={!canPerform('TICKETS', 'edit')}
                   />
                   <Button
                     onClick={sendComment}
-                    disabled={commentLoading || !newComment.trim()}
+                    disabled={commentLoading || !newComment.trim() || !canPerform('TICKETS', 'edit')}
                     className="w-full h-9 text-[10px] font-black uppercase tracking-widest"
                   >
                     {commentLoading ? 'Guardando...' : 'Comentar'}

@@ -12,8 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { customersService } from '../services/ventas.service';
 import type { Customer } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { useAuth } from '../contexts/AuthContext';
 
 export function ClientesPage() {
+  const { canPerform } = useAuth();
   const { formatConvertedAmount } = useCurrency();
   const [clientesData, setClientesData] = useState<Customer[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -99,11 +101,13 @@ export function ClientesPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar</Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => handleOpenDialog()}>
-                <Plus className="size-4" /> Nuevo Cliente
-              </Button>
-            </DialogTrigger>
+            {canPerform('CLIENTS', 'create') && (
+              <DialogTrigger asChild>
+                <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => handleOpenDialog()}>
+                  <Plus className="size-4" /> Nuevo Cliente
+                </Button>
+              </DialogTrigger>
+            )}
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
                 <DialogTitle>{editingCliente ? 'Editar Cliente' : 'Nuevo Cliente'}</DialogTitle>
@@ -223,7 +227,9 @@ export function ClientesPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="size-8" onClick={() => handleOpenDialog(c)}><Edit className="size-4" /></Button>
+                          {canPerform('CLIENTS', 'edit') && (
+                            <Button variant="ghost" size="icon" className="size-8" onClick={() => handleOpenDialog(c)}><Edit className="size-4" /></Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

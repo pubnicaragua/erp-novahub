@@ -9,6 +9,7 @@ import { filesService } from '../../services/documentos.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ArchivosViewProps {
   data: FileModel[];
@@ -18,12 +19,13 @@ interface ArchivosViewProps {
 
 export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const { canPerform } = useAuth();
 
   const columns: ColumnDef<FileModel>[] = [
-    { key: 'name', header: 'Nombre', width: '40%', editable: true },
+    { key: 'name', header: 'Nombre', width: '40%', editable: canPerform('DOCUMENTS_FILES', 'edit') },
     { key: 'type', header: 'Tipo', width: '15%' },
     { key: 'size', header: 'Tamaño', width: '100px', render: (val: any) => val ? `${(Number(val)/1024).toFixed(1)} KB` : '-' },
-    { key: 'category', header: 'Categoría', width: '150px', editable: true },
+    { key: 'category', header: 'Categoría', width: '150px', editable: canPerform('DOCUMENTS_FILES', 'edit') },
     { key: 'uploadDate', header: 'Subido', width: '150px', type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, yyyy') : '-' },
   ];
 
@@ -66,10 +68,18 @@ export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, onRef
           <div><h2 className="text-xl font-black uppercase tracking-tight">Archivos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Almacenamiento en la nube</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Subir Archivo</Button>
+            {canPerform('DOCUMENTS_FILES', 'create') && (
+              <Button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Subir Archivo</Button>
+            )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} onRowDelete={async (id) => { try { await filesService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } }} />
+        <EditableDataTable 
+          data={filtered} 
+          columns={columns} 
+          onRowUpdate={canPerform('DOCUMENTS_FILES', 'edit') ? handleUpdate : undefined} 
+          isLoading={loading} 
+          onRowDelete={canPerform('DOCUMENTS_FILES', 'delete') ? async (id) => { try { await filesService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+        />
       </Card>
     </div>
   );

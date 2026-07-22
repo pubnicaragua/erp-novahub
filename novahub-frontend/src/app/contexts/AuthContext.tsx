@@ -311,9 +311,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasAccess = useCallback((module: string): boolean => {
     if (!user) return false;
 
-    // Frontend-only previews until dedicated backend permissions exist.
-    if (['financiamiento-pyme', 'asesoria-legal'].includes(module)) return true;
-
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
       const platformModules = [
@@ -331,7 +328,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Algunos módulos de sistema siempre están activos
     const coreModules = [
       'configuracion', 'dashboard', 'suscripciones',
-      'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal',
     ];
     const moduleEnumMap: Record<string, string> = {
       'ventas': 'SALES',
@@ -348,13 +344,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'documentos': 'DOCUMENTS',
       'notificaciones': 'NOTIFICATIONS',
       'reportes': 'REPORTS',
-      'contabilidad': 'ACCOUNTING'
+      'contabilidad': 'ACCOUNTING',
+      'financiamiento-pyme': 'FINANCING',
+      'asesoria-legal': 'LEGAL',
+      'centro-capacitacion': 'TRAINING',
+      'soporte-tecnico': 'SUPPORT'
     };
     const moduleGroupMap: Record<string, string[]> = {
       ventas: [
         'SALES', 'CLIENTS',
         'SALES_CLIENTS', 'SALES_QUOTES', 'SALES_ORDERS', 'SALES_INVOICES',
-        'SALES_RECURRING', 'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_PAYMENTS',
+        'SALES_RECURRING', 'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_PAYMENTS', 'SALES_POS',
       ],
       compras: [
         'PURCHASES', 'PROVIDERS',
@@ -399,6 +399,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'ACCOUNTING_PROFIT_LOSS', 'ACCOUNTING_BALANCE_SHEET', 'ACCOUNTING_CASH_FLOW',
         'ACCOUNTING_RECONCILIATION', 'ACCOUNTING_PERIODS', 'ACCOUNTING_FISCAL',
       ],
+      'financiamiento-pyme': ['FINANCING'],
+      'asesoria-legal': ['LEGAL'],
+      'centro-capacitacion': ['TRAINING'],
+      'soporte-tecnico': ['SUPPORT'],
     };
 
     const backendModuleName = moduleEnumMap[module] || module.toUpperCase();

@@ -174,7 +174,10 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: Recu
             { id: 'beneficios', label: 'Beneficios', icon: HandHeart, module: 'HR_BENEFITS' },
             { id: 'config-nomina', label: 'Config', icon: Settings2, module: 'HR_PAYROLL_CONFIG' }
           ].map((tab) => {
-            const hasAccess = !user?.enabledModules || user.enabledModules.includes(tab.module);
+            const hasRequired = user?.enabledModules?.includes(tab.module);
+            const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('HR_'));
+            const hasFallback = user?.enabledModules?.includes('HR') && !hasSpecificSubmodules;
+            const hasAccess = !user?.enabledModules || hasRequired || hasFallback;
             if (!hasAccess) return null;
             return (
               <TabsTrigger 

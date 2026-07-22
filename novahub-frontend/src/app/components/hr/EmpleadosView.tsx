@@ -9,9 +9,11 @@ import { Label } from '../ui/label';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh }: any) {
   const { formatConvertedAmount } = useCurrency();
+  const { canPerform } = useAuth();
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('all');
@@ -293,10 +295,12 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
           <Button variant="outline" size="sm" onClick={() => setViewMode(viewMode === 'table' ? 'cards' : 'table')}>
             {viewMode === 'table' ? <Grid className="size-4" /> : <List className="size-4" />}
           </Button>
-          <Button size="sm" onClick={handleAddRow} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
-            <Plus className="size-4 mr-2" />
-            Agregar Empleado
-          </Button>
+          {canPerform('HR_EMPLOYEES', 'create') && (
+            <Button size="sm" onClick={handleAddRow} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
+              <Plus className="size-4 mr-2" />
+              Agregar Empleado
+            </Button>
+          )}
         </div>
       </div>
 
@@ -526,12 +530,16 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                           </>
                         ) : (
                           <>
-                            <Button size="sm" variant="ghost" onClick={() => handleEdit(emp)} className="h-7 px-2">
-                              <Edit2 className="size-3" />
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setPendingDeleteId(emp.id)} className="h-7 px-2 text-red-600">
-                              <Trash2 className="size-3" />
-                            </Button>
+                            {canPerform('HR_EMPLOYEES', 'edit') && (
+                              <Button size="sm" variant="ghost" onClick={() => handleEdit(emp)} className="h-7 px-2">
+                                <Edit2 className="size-3" />
+                              </Button>
+                            )}
+                            {canPerform('HR_EMPLOYEES', 'delete') && (
+                              <Button size="sm" variant="ghost" onClick={() => setPendingDeleteId(emp.id)} className="h-7 px-2 text-red-600">
+                                <Trash2 className="size-3" />
+                              </Button>
+                            )}
                           </>
                         )}
                       </div>
@@ -594,13 +602,17 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border/40 relative z-10">
-                <Button size="sm" variant="outline" onClick={() => handleCardEdit(emp)} className="flex-1 rounded-xl transition-all hover:bg-primary/10 hover:text-primary hover:border-primary/30">
-                  <Edit2 className="size-3 mr-1" />
-                  Editar
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(emp.id)} className="text-red-600 rounded-xl hover:bg-red-500/10 hover:border-red-500/30 transition-all">
-                  <Trash2 className="size-3" />
-                </Button>
+                {canPerform('HR_EMPLOYEES', 'edit') && (
+                  <Button size="sm" variant="outline" onClick={() => handleCardEdit(emp)} className="flex-1 rounded-xl transition-all hover:bg-primary/10 hover:text-primary hover:border-primary/30">
+                    <Edit2 className="size-3 mr-1" />
+                    Editar
+                  </Button>
+                )}
+                {canPerform('HR_EMPLOYEES', 'delete') && (
+                  <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(emp.id)} className="text-red-600 rounded-xl hover:bg-red-500/10 hover:border-red-500/30 transition-all">
+                    <Trash2 className="size-3" />
+                  </Button>
+                )}
               </div>
             </div>
           ))}

@@ -50,7 +50,7 @@ const SALES_SECTIONS = [
   { id: 'pagos-recibidos', label: 'Pagos Recibidos', icon: CreditCard, description: 'Historial de ingresos', requiredModules: ['SALES_PAYMENTS'] },
   { id: 'devoluciones-venta', label: 'Devoluciones', icon: FileOutput, description: 'Retornos de mercancía', requiredModules: ['SALES_RETURNS'] },
   { id: 'notas-credito', label: 'Notas de Crédito', icon: FileMinus, description: 'Ajustes y créditos emitidos', requiredModules: ['SALES_CREDIT_NOTES'] },
-  { id: 'facturacion-caja', label: 'Facturación por Caja', icon: ShoppingCart, description: 'POS y facturación directa', requiredModules: ['SALES_INVOICES'] },
+  { id: 'facturacion-caja', label: 'Facturación por Caja', icon: ShoppingCart, description: 'POS y facturación directa', requiredModules: ['SALES_POS'] },
 ];
 
 interface VentasPageProps {
@@ -197,9 +197,10 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
             <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
               {SALES_SECTIONS.map((section) => {
-                const hasAccess = !section.requiredModules || !user?.enabledModules
-                  || user.enabledModules.includes('SALES')
-                  || section.requiredModules.some(mod => user.enabledModules.includes(mod));
+                const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
+                const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('SALES_'));
+                const hasFallback = user?.enabledModules?.includes('SALES') && !hasSpecificSubmodules;
+                const hasAccess = !user?.enabledModules || !section.requiredModules || hasRequired || hasFallback;
                 if (!hasAccess) return null;
                 return (
                 <TabsTrigger 

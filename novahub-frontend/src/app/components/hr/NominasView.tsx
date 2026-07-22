@@ -10,9 +10,11 @@ import 'jspdf-autotable';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
   const { convertAmount, formatConvertedAmount, displayCurrency } = useCurrency();
+  const { canPerform } = useAuth();
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [includeCommissions, setIncludeCommissions] = useState(true);
@@ -233,7 +235,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             <Download className="size-4 mr-2" />
             Descargar PDF
           </Button>
-          {pendingCount > 0 && (
+          {pendingCount > 0 && canPerform('HR_PAYROLLS', 'edit') && (
             <Button size="sm" onClick={handleMarkAllAsPaid} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
               <CheckCircle className="size-4 mr-2" />
               Pagar Todas ({pendingCount})
@@ -251,10 +253,12 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               Incluir Comisiones
             </label>
           </div>
-          <Button size="sm" onClick={handleProcessPayroll} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
-            <Calculator className="size-4 mr-2" />
-            Procesar Nómina
-          </Button>
+          {canPerform('HR_PAYROLLS', 'create') && (
+            <Button size="sm" onClick={handleProcessPayroll} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
+              <Calculator className="size-4 mr-2" />
+              Procesar Nómina
+            </Button>
+          )}
         </div>
       </div>
 
@@ -320,24 +324,28 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                       <div className="flex items-center justify-end gap-1">
                         {payroll.status === 'PENDING' && (
                           <>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(payroll.id); }}
-                              className="h-7 px-3 text-xs text-primary hover:text-primary hover:bg-primary/10 font-semibold"
-                            >
-                              <CheckCircle className="size-3.5 mr-1" />
-                              Pagar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={(e) => { e.stopPropagation(); setPendingDeleteId(payroll.id); }}
-                              className="h-7 px-3 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 font-semibold"
-                            >
-                              <Trash2 className="size-3.5 mr-1" />
-                              Eliminar
-                            </Button>
+                            {canPerform('HR_PAYROLLS', 'edit') && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(payroll.id); }}
+                                className="h-7 px-3 text-xs text-primary hover:text-primary hover:bg-primary/10 font-semibold"
+                              >
+                                <CheckCircle className="size-3.5 mr-1" />
+                                Pagar
+                              </Button>
+                            )}
+                            {canPerform('HR_PAYROLLS', 'delete') && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => { e.stopPropagation(); setPendingDeleteId(payroll.id); }}
+                                className="h-7 px-3 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 font-semibold"
+                              >
+                                <Trash2 className="size-3.5 mr-1" />
+                                Eliminar
+                              </Button>
+                            )}
                           </>
                         )}
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={(e) => { e.stopPropagation(); setExpandedRow(expandedRow === payroll.id ? null : payroll.id); }}>
@@ -446,12 +454,16 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                   </Button>
                   {payroll.status === 'PENDING' && (
                     <>
-                      <Button size="sm" onClick={() => handleMarkAsPaid(payroll.id)} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-[11px] h-8">
-                        <CheckCircle className="size-3 mr-1" /> Pagar
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(payroll.id)} className="px-3 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 rounded-xl h-8">
-                        <Trash2 className="size-3.5" />
-                      </Button>
+                      {canPerform('HR_PAYROLLS', 'edit') && (
+                        <Button size="sm" onClick={() => handleMarkAsPaid(payroll.id)} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-[11px] h-8">
+                          <CheckCircle className="size-3 mr-1" /> Pagar
+                        </Button>
+                      )}
+                      {canPerform('HR_PAYROLLS', 'delete') && (
+                        <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(payroll.id)} className="px-3 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 rounded-xl h-8">
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>

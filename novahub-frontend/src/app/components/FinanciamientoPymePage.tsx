@@ -40,7 +40,7 @@ const GUARANTEES = [
 const TERMS = [6, 12, 18, 24, 36, 48, 60];
 
 export function FinanciamientoPymePage() {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const [applications, setApplications] = useState<FinancingApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
@@ -80,7 +80,7 @@ export function FinanciamientoPymePage() {
             </div>
           </div>
         </div>
-        {!selectedApp && (
+        {!selectedApp && canPerform('FINANCING', 'create') && (
           <Button onClick={() => setShowWizard(true)} className="rounded-xl gap-2 font-bold">
             <Plus className="size-4" /> Nueva Solicitud
           </Button>
@@ -122,9 +122,11 @@ export function FinanciamientoPymePage() {
                     <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
                       <Landmark className="size-12 text-muted-foreground/30" />
                       <p className="text-muted-foreground text-center">No tenés solicitudes de financiamiento todavía.</p>
-                      <Button onClick={() => setShowWizard(true)} className="rounded-xl gap-2 font-bold">
-                        <Plus className="size-4" /> Crear Primera Solicitud
-                      </Button>
+                      {canPerform('FINANCING', 'create') && (
+                        <Button onClick={() => setShowWizard(true)} className="rounded-xl gap-2 font-bold">
+                          <Plus className="size-4" /> Crear Primera Solicitud
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 ) : (
@@ -561,6 +563,7 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
 }
 
 function ApplicationDetail({ app, onBack, onRefresh }: { app: FinancingApplication; onBack: () => void; onRefresh: () => void }) {
+  const { canPerform } = useAuth();
   const [note, setNote] = useState('');
   const [addingNote, setAddingNote] = useState(false);
 
@@ -614,16 +617,18 @@ function ApplicationDetail({ app, onBack, onRefresh }: { app: FinancingApplicati
           </div>
         )}
 
-        <div className="space-y-2">
-          <Label className="text-[10px] uppercase font-black tracking-widest">Agregar nota</Label>
-          <div className="flex gap-2">
-            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Escribí una nota..." className="flex-1 h-11 rounded-xl" />
-            <Button onClick={handleAddNote} disabled={addingNote || !note.trim()} className="h-11 rounded-xl gap-2">
-              {addingNote ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-              Enviar
-            </Button>
+        {canPerform('FINANCING', 'edit') && (
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-black tracking-widest">Agregar nota</Label>
+            <div className="flex gap-2">
+              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Escribí una nota..." className="flex-1 h-11 rounded-xl" />
+              <Button onClick={handleAddNote} disabled={addingNote || !note.trim()} className="h-11 rounded-xl gap-2">
+                {addingNote ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                Enviar
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   );

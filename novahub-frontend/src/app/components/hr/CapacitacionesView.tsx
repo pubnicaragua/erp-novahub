@@ -6,8 +6,10 @@ import { Textarea } from '../ui/textarea';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
+  const { canPerform } = useAuth();
   const { displayCurrency, formatConvertedAmount } = useCurrency();
   const [showNewForm, setShowNewForm] = useState(false);
   const [newTraining, setNewTraining] = useState({
@@ -90,13 +92,15 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
 
       {/* New Training Button */}
       <div className="flex justify-end">
-        <Button onClick={() => {
-          if (!showNewForm) setNewTraining((current) => ({ ...current, currency: displayCurrency }));
-          setShowNewForm(!showNewForm);
-        }} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
-          <Plus className="size-4 mr-2" />
-          Nueva Capacitación
-        </Button>
+        {canPerform('HR_TRAINING', 'create') && (
+          <Button onClick={() => {
+            if (!showNewForm) setNewTraining((current) => ({ ...current, currency: displayCurrency }));
+            setShowNewForm(!showNewForm);
+          }} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
+            <Plus className="size-4 mr-2" />
+            Nueva Capacitación
+          </Button>
+        )}
       </div>
 
       {/* New Training Form */}

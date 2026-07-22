@@ -39,4 +39,7 @@ export const authService = {
 
   getModuleRecommendations: (industry: string) =>
     api.get<ModuleRecommendationsResponse>(`/auth/module-recommendations/${industry}`),
+
+  checkEmail: (email: string) =>
+    api.get<{ exists: boolean }>(`/auth/check-email?email=${encodeURIComponent(email)}`),
 };

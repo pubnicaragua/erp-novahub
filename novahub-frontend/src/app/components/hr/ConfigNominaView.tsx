@@ -14,6 +14,7 @@ import {
   Calculator, Info, CheckCircle2, Percent, Scale
 } from 'lucide-react';
 import { hrService } from '../../services/hr.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface PayrollConfigData {
   id?: string;
@@ -51,6 +52,7 @@ const DEFAULT_CONFIG: PayrollConfigData = {
 };
 
 export function ConfigNominaView() {
+  const { canPerform } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<PayrollConfigData>(DEFAULT_CONFIG);
@@ -196,10 +198,12 @@ export function ConfigNominaView() {
           )}>
             {hasExisting ? '✓ Configuración Activa' : 'Sin configuración'}
           </Badge>
-          <Button onClick={handleSave} disabled={saving} className="gap-2 rounded-xl font-bold">
-            {saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
-            {saving ? 'Guardando...' : 'Guardar Configuración'}
-          </Button>
+          {canPerform('HR_PAYROLLS', 'edit') && (
+            <Button onClick={handleSave} disabled={saving} className="gap-2 rounded-xl font-bold">
+              {saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
+              {saving ? 'Guardando...' : 'Guardar Configuración'}
+            </Button>
+          )}
         </div>
       </div>
 

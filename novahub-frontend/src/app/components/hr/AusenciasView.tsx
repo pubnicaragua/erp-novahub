@@ -6,8 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
+  const { canPerform } = useAuth();
   const [showNewForm, setShowNewForm] = useState(false);
   const [newRequest, setNewRequest] = useState({
     employeeId: '',
@@ -133,10 +135,12 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
 
       {/* New Request Button */}
       <div className="flex justify-end">
-        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
-          <Plus className="size-4 mr-2" />
-          Nueva Solicitud
-        </Button>
+        {canPerform('HR_LEAVE', 'create') && (
+          <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
+            <Plus className="size-4 mr-2" />
+            Nueva Solicitud
+          </Button>
+        )}
       </div>
 
       {/* New Request Form */}
@@ -290,7 +294,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {request.status === 'PENDING' && (
+                    {request.status === 'PENDING' && canPerform('HR_LEAVE', 'edit') && (
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           size="sm"
@@ -367,12 +371,12 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                 )}
               </div>
 
-              {request.status === 'PENDING' && (
+              {request.status === 'PENDING' && canPerform('HR_LEAVE', 'edit') && (
                 <div className="flex items-center gap-2 pt-4 mt-2 border-t border-border/50">
-                  <Button size="sm" onClick={() => handleApproveRequest(request.id)} className="flex-1 bg-green-500 hover:bg-green-600 text-white rounded-xl text-[11px] h-8">
+                  <Button size="sm" onClick={() => handleApprove(request.id)} className="flex-1 bg-green-500 hover:bg-green-600 text-white rounded-xl text-[11px] h-8">
                     <Check className="size-3 mr-1" /> Aprobar
                   </Button>
-                  <Button size="sm" onClick={() => handleRejectRequest(request.id)} className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl text-[11px] h-8">
+                  <Button size="sm" onClick={() => handleReject(request.id)} className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl text-[11px] h-8">
                     <X className="size-3 mr-1" /> Rechazar
                   </Button>
                 </div>

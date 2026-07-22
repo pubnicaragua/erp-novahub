@@ -64,4 +64,9 @@ export const tenantsService = {
     password?: string;
   }) => api.patch(`/tenants/${tenantId}/users/${userId}`, data),
   deleteUser: (tenantId: string, userId: string) => api.delete(`/tenants/${tenantId}/users/${userId}`),
+
+  getUserAccess: (tenantId: string, userId: string) =>
+    api.get<{ warehouseIds: string[]; cashRegisterIds: string[] }>(`/tenants/${tenantId}/users/${userId}/access`),
+  updateUserAccess: (tenantId: string, userId: string, data: { warehouseIds: string[]; cashRegisterIds: string[] }) =>
+    api.put<{ success: boolean }>(`/tenants/${tenantId}/users/${userId}/access`, data),
 };

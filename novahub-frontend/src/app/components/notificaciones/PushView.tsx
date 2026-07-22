@@ -6,9 +6,9 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Plus, Search, Send, Smartphone, Wifi, CheckCircle2 } from 'lucide-react';
-import { pushNotificationsService } from '../../services/notificaciones.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
+import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
 
 interface PushViewProps {
@@ -18,12 +18,13 @@ interface PushViewProps {
 }
 
 export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) => {
+  const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
 
   const columns: ColumnDef<PushNotification>[] = [
-    { key: 'title', header: 'Título', width: '30%', editable: true },
-    { key: 'content', header: 'Contenido', width: '40%', editable: true },
-    { key: 'type', header: 'Tipo', width: '120px', editable: true, type: 'select', options: [{label: 'Marketing', value: 'MARKETING'}, {label: 'Sistema', value: 'SYSTEM'}, {label: 'Actualización', value: 'UPDATE'}] },
+    { key: 'title', header: 'Título', width: '30%', editable: canPerform('NOTIFICATIONS_PUSH', 'edit') },
+    { key: 'content', header: 'Contenido', width: '40%', editable: canPerform('NOTIFICATIONS_PUSH', 'edit') },
+    { key: 'type', header: 'Tipo', width: '120px', editable: canPerform('NOTIFICATIONS_PUSH', 'edit'), type: 'select', options: [{label: 'Marketing', value: 'MARKETING'}, {label: 'Sistema', value: 'SYSTEM'}, {label: 'Actualización', value: 'UPDATE'}] },
     { key: 'sent', header: 'Estado', width: '100px', render: (val: any) => <Badge variant="outline" className={cn('text-[9px] uppercase border-none', val ? 'bg-primary/10 text-primary' : 'bg-amber-500/10 text-amber-500')}>{val ? 'Enviada' : 'Pendiente'}</Badge> },
     { key: 'createdAt', header: 'Fecha', width: '150px', type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, HH:mm') : '-' },
   ];
@@ -67,10 +68,12 @@ export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) 
           <div><h2 className="text-xl font-black uppercase tracking-tight">Push Notifications</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Comunicación a dispositivos</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Enviar Push</Button>
+            {canPerform('NOTIFICATIONS_PUSH', 'create') && (
+              <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Enviar Push</Button>
+            )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} onRowDelete={async (id) => { try { await pushNotificationsService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch { toast.error('Error'); } }} />
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={canPerform('NOTIFICATIONS_PUSH', 'edit') ? handleUpdate : undefined} isLoading={loading} onRowDelete={canPerform('NOTIFICATIONS_PUSH', 'delete') ? async (id) => { try { await pushNotificationsService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch { toast.error('Error'); } } : undefined} />
       </Card>
     </div>
   );

@@ -10,6 +10,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface TransferenciasViewProps {
   transfers: any[];
@@ -27,6 +28,7 @@ const STATUS_OPTIONS = [
 ];
 
 export function TransferenciasView({ transfers, warehouses, products, series = [], onRefresh }: TransferenciasViewProps) {
+  const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [serialPickerOpen, setSerialPickerOpen] = useState(false);
@@ -163,15 +165,17 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
             />
           </div>
         </div>
-        <Button 
-          size="sm" 
-          className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
-          onClick={() => setIsCreating(true)}
-          disabled={isCreating}
-        >
-          <Plus className="size-4" />
-          Nueva Transferencia
-        </Button>
+        {canPerform('INVENTORY_TRANSFERS', 'create') && (
+          <Button 
+            size="sm" 
+            className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
+            onClick={() => setIsCreating(true)}
+            disabled={isCreating}
+          >
+            <Plus className="size-4" />
+            Nueva Transferencia
+          </Button>
+        )}
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -280,7 +284,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
                       <Select 
                         value={trf.status} 
                         onValueChange={(v) => handleUpdateStatus(trf.id, v)}
-                        disabled={isUpdating || trf.status === 'COMPLETED' || trf.status === 'CANCELLED'}
+                        disabled={!canPerform('INVENTORY_TRANSFERS', 'edit') || isUpdating || trf.status === 'COMPLETED' || trf.status === 'CANCELLED'}
                       >
                         <SelectTrigger className={`h-7 text-[10px] font-medium ${statusInfo.color}`}>
                           <SelectValue />

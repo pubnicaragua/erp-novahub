@@ -10,6 +10,7 @@ import { Plus, Search, RefreshCw, DollarSign, Package } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface FixedAsset {
   id: string;
@@ -36,6 +37,7 @@ function emptyForm(): NewAssetForm {
 }
 
 export function ActivosFijosView() {
+  const { canPerform } = useAuth();
   const [assets, setAssets] = useState<FixedAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -105,13 +107,14 @@ export function ActivosFijosView() {
             Registro y control de activos fijos de la empresa
           </p>
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="size-4" />
-              Nuevo Activo Fijo
-            </Button>
-          </DialogTrigger>
+        {canPerform('ACCOUNTING_ASSETS', 'create') && (
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="size-4" />
+                Nuevo Activo Fijo
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Registrar Activo Fijo</DialogTitle>
@@ -170,6 +173,7 @@ export function ActivosFijosView() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

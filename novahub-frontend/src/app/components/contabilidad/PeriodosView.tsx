@@ -19,6 +19,7 @@ import {
 } from '../ui/table';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext';
 
 const statusStyles: Record<string, string> = {
   OPEN: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
@@ -42,6 +43,7 @@ const months = [
 ];
 
 export function PeriodosView() {
+  const { canPerform } = useAuth();
   const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -134,12 +136,14 @@ export function PeriodosView() {
             {periods.length} período(s) registrado(s)
           </p>
         </div>
-        <Button
-          onClick={() => setShowCreate(true)}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
-        >
-          <Plus className="size-4" /> Nuevo Período
-        </Button>
+        {canPerform('ACCOUNTING_PERIODS', 'create') && (
+          <Button
+            onClick={() => setShowCreate(true)}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
+          >
+            <Plus className="size-4" /> Nuevo Período
+          </Button>
+        )}
       </div>
 
       <Card className="rounded-2xl border-border/50">
@@ -184,7 +188,7 @@ export function PeriodosView() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {p.status === 'OPEN' && (
+                      {p.status === 'OPEN' && canPerform('ACCOUNTING_PERIODS', 'edit') && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -195,7 +199,7 @@ export function PeriodosView() {
                           <Lock className="size-4" />
                         </Button>
                       )}
-                      {p.status === 'CLOSED' && (
+                      {p.status === 'CLOSED' && canPerform('ACCOUNTING_PERIODS', 'edit') && (
                         <Button
                           variant="ghost"
                           size="icon"

@@ -93,7 +93,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'pagos-recibidos': ['SALES_PAYMENTS'],
   'devoluciones-venta': ['SALES_RETURNS'],
   'notas-credito': ['SALES_CREDIT_NOTES'],
-  'facturacion-caja': ['SALES_INVOICES'],
+  'facturacion-caja': ['SALES_POS'],
   // Compras
   proveedores: ['PURCHASES_PROVIDERS'],
   gastos: ['PURCHASES_EXPENSES'],
@@ -122,7 +122,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'ingresos-recurrentes': ['FINANCIAL_INCOMES_REC'],
   balance: ['FINANCIAL_BALANCE'],
   // Inventario
-  dashboard: [],
+  dashboard: ['INVENTORY_DASHBOARD'],
   productos: ['INVENTORY_PRODUCTS'],
   almacenes: ['INVENTORY_WAREHOUSES'],
   transferencias: ['INVENTORY_TRANSFERS'],
@@ -386,29 +386,49 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     compras: 'PURCHASES',
     inventario: 'INVENTORY',
     finanzas: 'FINANCIAL',
+    rh: 'HR',
     'rrhh': 'HR',
     proyectos: 'PROJECTS',
     reportes: 'REPORTS',
     documentos: 'DOCUMENTS',
     actividades: 'ACTIVITIES',
+    tickets: 'TOOLS',
     notificaciones: 'NOTIFICATIONS',
     contabilidad: 'ACCOUNTING',
+    'financiamiento-pyme': 'FINANCING',
+    'asesoria-legal': 'LEGAL',
+    'centro-capacitacion': 'TRAINING',
+    'soporte-tecnico': 'SUPPORT'
   };
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
+    const parentMod = PARENT_MODULE_MAP[parentId] || (parentId === 'inventario' ? 'INVENTORY' : null);
+    
+    // Check if parent or any of its submodules is active
+    let isParentOrSubmoduleActive = false;
+    if (parentMod) {
+      if (user.enabledModules.includes(parentMod)) {
+        isParentOrSubmoduleActive = true;
+      } else {
+        isParentOrSubmoduleActive = user.enabledModules.some(m => m.startsWith(`${parentMod}_`));
+      }
+    }
+    
+    if (parentMod && !isParentOrSubmoduleActive) return false;
+
     const requiredModules = SUBMENU_MODULE_REQUIREMENTS[subId];
     if (!requiredModules || requiredModules.length === 0) return true;
-    const parentMod = PARENT_MODULE_MAP[parentId];
-    if (parentMod && user.enabledModules.includes(parentMod)) return true;
-    if (parentId === 'inventario' && user.enabledModules.includes('INVENTORY')) return true;
 
-    if (user.isTenantAdmin && subId in SUBMENU_MODULE_REQUIREMENTS) {
-      // Admin también respeta módulos habilitados del tenant.
-      return requiredModules.some(mod => user.enabledModules.includes(mod));
+    const hasRequired = requiredModules.some(mod => user.enabledModules.includes(mod));
+    if (hasRequired) return true;
+
+    if (parentMod && user.enabledModules.includes(parentMod)) {
+      const hasSpecificSubmodules = user.enabledModules.some(m => m.startsWith(`${parentMod}_`));
+      if (!hasSpecificSubmodules) return true;
     }
 
-    return requiredModules.some(mod => user.enabledModules.includes(mod));
+    return false;
   };
 
   let lastSection = '';

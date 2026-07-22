@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 const BENEFIT_TYPE_COLORS: Record<string, string> = {
   HEALTH: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
@@ -31,6 +32,7 @@ const BENEFIT_TYPE_LABELS: Record<string, string> = {
 const EMPTY_FORM = { name: '', description: '', type: 'OTHER', cost: '', isActive: true, employeeIds: [] as string[] };
 
 export function BeneficiosView({ benefits, employees, onRefresh }: any) {
+  const { canPerform } = useAuth();
   const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
   const [addingNew, setAddingNew] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -88,7 +90,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
             <span>Costo total: <strong className="text-foreground">{formatConvertedAmount(totalCost, displayCurrency)}/mes</strong></span>
           </div>
         </div>
-        {!addingNew && (
+        {!addingNew && canPerform('HR_BENEFITS', 'create') && (
           <Button onClick={() => { setAddingNew(true); setForm({ ...EMPTY_FORM, currency: displayCurrency }); }} className="rounded-xl gap-2 font-bold bg-primary hover:bg-primary/90 !text-primary-foreground">
             <Plus className="size-4" /> Nuevo Beneficio
           </Button>
@@ -246,12 +248,16 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <button onClick={() => startEdit(benefit)} className="size-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
-                            <Edit2 className="size-3.5" />
-                          </button>
-                          <button onClick={() => handleDelete(benefit.id)} className="size-7 rounded-lg hover:bg-rose-500/10 flex items-center justify-center text-muted-foreground hover:text-rose-500 transition-colors">
-                            <Trash2 className="size-3.5" />
-                          </button>
+                          {canPerform('HR_BENEFITS', 'edit') && (
+                            <button onClick={() => startEdit(benefit)} className="size-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                              <Edit2 className="size-3.5" />
+                            </button>
+                          )}
+                          {canPerform('HR_BENEFITS', 'delete') && (
+                            <button onClick={() => handleDelete(benefit.id)} className="size-7 rounded-lg hover:bg-rose-500/10 flex items-center justify-center text-muted-foreground hover:text-rose-500 transition-colors">
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </CardContent>

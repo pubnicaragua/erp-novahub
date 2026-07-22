@@ -17,8 +17,10 @@ import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import { legalService, type LegalCase, type LegalReminder } from '../../services/legal.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function AsesoriaLegalView() {
+  const { canPerform } = useAuth();
   const [cases, setCases] = useState<LegalCase[]>([]);
   const [reminders, setReminders] = useState<LegalReminder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,9 +137,11 @@ export function AsesoriaLegalView() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button onClick={() => setShowNewCase(true)} className="rounded-xl gap-2 font-bold">
-                    <Plus className="size-4" /> Nuevo Caso
-                  </Button>
+                  {canPerform('LEGAL', 'create') && (
+                    <Button onClick={() => setShowNewCase(true)} className="rounded-xl gap-2 font-bold">
+                      <Plus className="size-4" /> Nuevo Caso
+                    </Button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
@@ -199,7 +203,7 @@ export function AsesoriaLegalView() {
               </TabsContent>
 
               <TabsContent value="reminders" className="mt-0">
-                <RemindersTab reminders={reminders} onRefresh={fetchData} onNew={() => setShowNewReminder(true)} />
+                <RemindersTab reminders={reminders} onRefresh={fetchData} onNew={() => setShowNewReminder(true)} canPerform={canPerform} />
               </TabsContent>
             </Tabs>
           </motion.div>
@@ -308,6 +312,7 @@ function NewCaseForm({ onComplete, onCancel }: { onComplete: (c: LegalCase) => v
 }
 
 function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBack: () => void; onRefresh: () => void }) {
+  const { canPerform } = useAuth();
   const [note, setNote] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
@@ -356,9 +361,11 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
             <p className="text-sm text-muted-foreground mt-1">{legalService.getCaseTypeLabel(c.type)}</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowStatusDialog(true)} className="gap-2 rounded-xl text-xs font-bold">
-              <AlertTriangle className="size-3" /> Cambiar Estado
-            </Button>
+            {canPerform('LEGAL', 'edit') && (
+              <Button variant="outline" onClick={() => setShowStatusDialog(true)} className="gap-2 rounded-xl text-xs font-bold">
+                <AlertTriangle className="size-3" /> Cambiar Estado
+              </Button>
+            )}
             <Button variant="outline" onClick={onBack} className="gap-2 rounded-xl"><ArrowLeft className="size-4" /> Volver</Button>
           </div>
         </div>
@@ -411,7 +418,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
                   className="size-3.5 rounded border-border bg-background text-primary" />
                 <span className="text-xs text-muted-foreground">Nota interna</span>
               </label>
-              <Button onClick={handleAddNote} disabled={addingNote || !note.trim()} className="h-9 rounded-xl gap-2 text-xs font-bold">
+              <Button onClick={handleAddNote} disabled={addingNote || !note.trim() || !canPerform('LEGAL', 'edit')} className="h-9 rounded-xl gap-2 text-xs font-bold">
                 {addingNote ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />} Agregar
               </Button>
             </div>
@@ -437,7 +444,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
   );
 }
 
-function RemindersTab({ reminders, onRefresh, onNew }: { reminders: LegalReminder[]; onRefresh: () => void; onNew: () => void }) {
+function RemindersTab({ reminders, onRefresh, onNew, canPerform }: { reminders: LegalReminder[]; onRefresh: () => void; onNew: () => void; canPerform: any }) {
   const [cutoff] = useState(new Date());
   const upcoming = reminders.filter((r) => new Date(r.dueDate) >= cutoff).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   const past = reminders.filter((r) => new Date(r.dueDate) < cutoff).sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
@@ -454,9 +461,11 @@ function RemindersTab({ reminders, onRefresh, onNew }: { reminders: LegalReminde
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button onClick={onNew} className="rounded-xl gap-2 font-bold"><Plus className="size-4" /> Nuevo Recordatorio</Button>
-      </div>
+      {canPerform('LEGAL', 'create') && (
+        <div className="flex justify-end">
+          <Button onClick={onNew} className="rounded-xl gap-2 font-bold"><Plus className="size-4" /> Nuevo Recordatorio</Button>
+        </div>
+      )}
       {upcoming.length === 0 && past.length === 0 ? (
         <Card className="border-dashed border-2 border-border/40">
           <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
@@ -482,9 +491,11 @@ function RemindersTab({ reminders, onRefresh, onNew }: { reminders: LegalReminde
                         {r.caseId && <Badge variant="outline" className="text-[10px]">Vinculado</Badge>}
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(r.id)} className="text-muted-foreground hover:text-destructive">
-                      <Trash2 className="size-4" />
-                    </Button>
+                    {canPerform('LEGAL', 'delete') && (
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(r.id)} className="text-muted-foreground hover:text-destructive">
+                        <Trash2 className="size-4" />
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -502,9 +513,11 @@ function RemindersTab({ reminders, onRefresh, onNew }: { reminders: LegalReminde
                         <Clock className="size-3" />Venció {new Date(r.dueDate).toLocaleDateString('es-NI')}
                       </span>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(r.id)} className="text-muted-foreground hover:text-destructive">
-                      <Trash2 className="size-4" />
-                    </Button>
+                    {canPerform('LEGAL', 'delete') && (
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(r.id)} className="text-muted-foreground hover:text-destructive">
+                        <Trash2 className="size-4" />
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               ))}

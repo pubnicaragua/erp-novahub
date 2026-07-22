@@ -116,7 +116,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
   };
 
   const columns = [
-    { key: 'title', header: 'Título', width: '25%', editable: true },
+    { key: 'title', header: 'Título', width: '25%', editable: canPerform('ACTIVITIES_TASKS', 'edit') },
     { 
       key: 'assignments', header: 'Asignados', width: '20%', editable: false,
       render: (_val: any, row: any) => {
@@ -134,25 +134,25 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
       }
     },
     {
-      key: 'priority', header: 'Prioridad', width: '100px', editable: true, type: 'select' as const, options: priorityOpts,
+      key: 'priority', header: 'Prioridad', width: '100px', editable: canPerform('ACTIVITIES_TASKS', 'edit'), type: 'select' as const, options: priorityOpts,
       render: (val: any) => { const o = priorityOpts.find(x => x.value === (val || '').toUpperCase()); return <span className={cn('text-[10px] font-bold uppercase', o?.color || 'text-muted-foreground')}>{o?.label || val}</span>; }
     },
-    { key: 'dueDate', header: 'Vencimiento', width: '100px', editable: true, type: 'datetime-local' as const, render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
+    { key: 'dueDate', header: 'Vencimiento', width: '100px', editable: canPerform('ACTIVITIES_TASKS', 'edit'), type: 'datetime-local' as const, render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
     {
-      key: 'status', header: 'Estado', width: '120px', editable: true, type: 'select' as const, options: statusOpts,
+      key: 'status', header: 'Estado', width: '120px', editable: canPerform('ACTIVITIES_TASKS', 'edit'), type: 'select' as const, options: statusOpts,
       render: (val: any) => { const o = statusOpts.find(x => x.value === (val || '').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color || 'bg-muted/20 text-muted-foreground')}>{o?.label || val}</Badge>; }
     },
     {
       key: 'actions', header: 'Acciones', width: '100px', editable: false,
       render: (val: any, row: any) => {
         if (row.status !== 'COMPLETED') {
-          return (
+          return canPerform('ACTIVITIES_TASKS', 'edit') ? (
             <Button size="sm" variant="default" className="h-7 text-xs"
               onClick={() => { setSelectedTask(row); setIsCompleteOpen(true); }}
             >
               <CheckCircle2 className="size-3 mr-1" /> Marcar como Completada
             </Button>
-          );
+          ) : null;
         } else {
           const evidence = row.evidences?.[0];
           return evidence ? (
@@ -192,10 +192,18 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           <div><h2 className="text-xl font-black uppercase tracking-tight">Tareas</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Gestión de tareas pendientes</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button variant="default" onClick={() => setIsAddOpen(true)} className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Tarea</Button>
+            {canPerform('ACTIVITIES_TASKS', 'create') && (
+              <Button variant="default" onClick={() => setIsAddOpen(true)} className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Tarea</Button>
+            )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} onRowDelete={async (id) => { try { await tasksService.delete(id as string); toast.success('Tarea eliminada'); onRefresh(); } catch { toast.error('Error al eliminar'); } }} />
+        <EditableDataTable 
+          data={filtered} 
+          columns={columns} 
+          onRowUpdate={canPerform('ACTIVITIES_TASKS', 'edit') ? handleUpdate : undefined} 
+          isLoading={loading} 
+          onRowDelete={canPerform('ACTIVITIES_TASKS', 'delete') ? async (id) => { try { await tasksService.delete(id as string); toast.success('Tarea eliminada'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+        />
       </Card>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>

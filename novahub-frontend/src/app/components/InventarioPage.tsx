@@ -187,9 +187,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
       >
         <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40">
           {INVENTORY_SECTIONS.map((section) => {
-            const hasAccess = section.requiredModules.length === 0 || !user?.enabledModules
-              || user.enabledModules.includes('INVENTORY')
-              || section.requiredModules.some(mod => user.enabledModules.includes(mod));
+            const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
+            const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('INVENTORY_'));
+            const hasFallback = user?.enabledModules?.includes('INVENTORY') && !hasSpecificSubmodules;
+            const hasAccess = !user?.enabledModules || section.requiredModules.length === 0 || hasRequired || hasFallback;
             if (!hasAccess) return null;
             return (
               <TabsTrigger 

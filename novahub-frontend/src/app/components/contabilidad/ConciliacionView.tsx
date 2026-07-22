@@ -20,6 +20,7 @@ import {
 } from '../ui/table';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext';
 
 const statusStyles: Record<string, string> = {
   PENDING: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -34,6 +35,7 @@ const statusLabels: Record<string, string> = {
 };
 
 export function ConciliacionView() {
+  const { canPerform } = useAuth();
   const [reconciliations, setReconciliations] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -173,7 +175,7 @@ export function ConciliacionView() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {detail.status !== 'COMPLETED' && (
+            {detail.status !== 'COMPLETED' && canPerform('ACCOUNTING_RECONCILIATIONS', 'edit') && (
               <>
                 <Button
                   variant="outline"
@@ -255,6 +257,7 @@ export function ConciliacionView() {
                       <TableCell className="text-center">
                         <Checkbox
                           checked={!!item.matched}
+                          disabled={!canPerform('ACCOUNTING_RECONCILIATIONS', 'edit')}
                           onCheckedChange={(c) => toggleMatched(item.id, !!c)}
                         />
                       </TableCell>
@@ -289,12 +292,14 @@ export function ConciliacionView() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Button
-            onClick={() => setShowCreate(true)}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
-          >
-            <Plus className="size-4" /> Nueva Conciliación
-          </Button>
+          {canPerform('ACCOUNTING_RECONCILIATIONS', 'create') && (
+            <Button
+              onClick={() => setShowCreate(true)}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
+            >
+              <Plus className="size-4" /> Nueva Conciliación
+            </Button>
+          )}
         </div>
       </div>
 

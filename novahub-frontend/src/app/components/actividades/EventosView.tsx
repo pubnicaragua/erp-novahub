@@ -11,6 +11,7 @@ import { useCurrency, type Currency } from '../../contexts/CurrencyContext';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface EventosViewProps {
   data: Event[];
@@ -22,6 +23,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   const [searchTerm, setSearchTerm] = useState('');
   const [defaultAccountId, setDefaultAccountId] = useState<string>('');
   const { formatAmount, currency, convertAmount, displayCurrency } = useCurrency();
+  const { canPerform } = useAuth();
 
   React.useEffect(() => {
     accountsService.getAll().then((res: any) => {
@@ -31,12 +33,12 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   }, []);
 
   const columns: ColumnDef<Event>[] = [
-    { key: 'title', header: 'Título', width: '25%', editable: true },
-    { key: 'location', header: 'Ubicación', width: '20%', editable: true },
-    { key: 'startDate', header: 'Fecha Inicio', width: '130px', editable: true, type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
-    { key: 'endDate', header: 'Fecha Fin', width: '130px', editable: true, type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
-    { key: 'cost', header: 'Costo', width: '100px', editable: true, type: 'number', render: (val: any, row: Event) => <span className="text-rose-500 font-bold">{formatAmount(Number(val || 0), row.currency || 'USD')}</span> },
-    { key: 'income', header: 'Ingreso', width: '100px', editable: true, type: 'number', render: (val: any, row: Event) => <span className="text-emerald-500 font-bold">{formatAmount(Number(val || 0), row.currency || 'USD')}</span> },
+    { key: 'title', header: 'Título', width: '25%', editable: canPerform('ACTIVITIES_EVENTS', 'edit') },
+    { key: 'location', header: 'Ubicación', width: '20%', editable: canPerform('ACTIVITIES_EVENTS', 'edit') },
+    { key: 'startDate', header: 'Fecha Inicio', width: '130px', editable: canPerform('ACTIVITIES_EVENTS', 'edit'), type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
+    { key: 'endDate', header: 'Fecha Fin', width: '130px', editable: canPerform('ACTIVITIES_EVENTS', 'edit'), type: 'datetime-local', render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
+    { key: 'cost', header: 'Costo', width: '100px', editable: canPerform('ACTIVITIES_EVENTS', 'edit'), type: 'number', render: (val: any, row: Event) => <span className="text-rose-500 font-bold">{formatAmount(Number(val || 0), row.currency || 'USD')}</span> },
+    { key: 'income', header: 'Ingreso', width: '100px', editable: canPerform('ACTIVITIES_EVENTS', 'edit'), type: 'number', render: (val: any, row: Event) => <span className="text-emerald-500 font-bold">{formatAmount(Number(val || 0), row.currency || 'USD')}</span> },
     { key: 'balance', header: 'Balance', width: '100px', render: (_: any, row: Event) => {
         const balance = (Number(row.income) || 0) - (Number(row.cost) || 0);
         return <span className={cn("font-black text-[11px] px-2 py-0.5 rounded-md", balance >= 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500")}>{formatAmount(balance, row.currency || 'USD')}</span>;
@@ -148,10 +150,18 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
           <div><h2 className="text-xl font-black uppercase tracking-tight">Eventos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Calendario y reuniones</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Evento</Button>
+            {canPerform('ACTIVITIES_EVENTS', 'create') && (
+              <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Evento</Button>
+            )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} onRowDelete={async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } }} />
+        <EditableDataTable 
+          data={filtered} 
+          columns={columns} 
+          onRowUpdate={canPerform('ACTIVITIES_EVENTS', 'edit') ? handleUpdate : undefined} 
+          isLoading={loading} 
+          onRowDelete={canPerform('ACTIVITIES_EVENTS', 'delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+        />
       </Card>
     </div>
   );

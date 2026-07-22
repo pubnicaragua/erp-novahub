@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
-  CreditCard, Clock,
+  CreditCard, Clock, Settings2, Banknote, Edit2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext';
+import { inventoryService } from '../../services/inventario.service';
 import {
   cajaService,
   type CashRegister,
@@ -115,6 +119,9 @@ export function FacturacionCajaView() {
   const [discountPercent, setDiscountPercent] = useState(0);
   const [productSearch, setProductSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  const { user } = useAuth();
 
   const loadInitialData = useCallback(async () => {
     setLoading(true);
@@ -164,14 +171,24 @@ export function FacturacionCajaView() {
     [products],
   );
 
-  const filteredProducts = useMemo(() => {
-    const q = productSearch.trim().toLowerCase();
-    if (!q) return products;
+  // Búsqueda dinámica en el backend
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const availableProducts = await cajaService.getProducts(productSearch.trim() || undefined);
+        setProducts(availableProducts);
+      } catch (error) {
+        console.error('Error fetching products:', error);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
 
-    return products.filter(
-      (p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q),
-    );
-  }, [products, productSearch]);
+    return () => clearTimeout(timer);
+  }, [productSearch]);
+
+  const filteredProducts = products; // Ya están filtrados por el backend
 
   const addItem = (product: PosProduct) => {
     setCart((prev) => {
@@ -273,14 +290,36 @@ export function FacturacionCajaView() {
     );
   }
 
+
+
+  if (registers.length === 0) {
+    return (
+      <>
+        <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+          <div className="size-20 rounded-full bg-rose-500/10 flex items-center justify-center mb-6">
+            <CreditCard className="size-10 text-rose-500" />
+          </div>
+          <h2 className="text-2xl font-black tracking-tight text-foreground mb-2 uppercase">Acceso Restringido a POS</h2>
+          <p className="text-muted-foreground max-w-md mb-6">
+            No tienes cajas autorizadas asignadas a tu usuario o no hay cajas activas en el sistema. 
+            Contacta al administrador para que te asigne acceso a una sucursal/caja desde la configuración del equipo.
+          </p>
+        </div>
+      </>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
-      <div className="space-y-5">
-        <Card className="border-border/50 shadow-sm">
-          <CardContent className="p-5">
-            <h3 className="text-sm font-black uppercase tracking-tight mb-4 flex items-center gap-2">
-              <Receipt className="size-4 text-primary" /> Configuración de Emisión
-            </h3>
+    <>
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
+        <div className="space-y-5">
+          <Card className="border-border/50 shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
+                <Receipt className="size-4 text-primary" /> Configuración de Emisión
+              </h3>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Caja Operativa</Label>
@@ -321,12 +360,16 @@ export function FacturacionCajaView() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-black uppercase tracking-tight">Catálogo de Productos</h3>
               <div className="relative max-w-xs">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                {isSearching ? (
+                  <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin" />
+                ) : (
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                )}
                 <Input
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
                   placeholder="Buscar producto..."
-                  className="pl-9 h-9 rounded-lg text-xs"
+                  className="pl-9 h-9 rounded-lg text-xs focus-visible:ring-primary focus-visible:border-primary"
                 />
               </div>
             </div>
@@ -464,9 +507,10 @@ export function FacturacionCajaView() {
               </div>
             </div>
             <Button
+              size="lg"
               onClick={handlePay}
               disabled={submitting || cart.length === 0}
-              className="w-full h-12 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-orange-500/20"
+              className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest gap-2 shadow-lg shadow-primary/20"
             >
               {submitting ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
               Pagar y Emitir Factura
@@ -508,5 +552,6 @@ export function FacturacionCajaView() {
         </Card>
       </div>
     </div>
-  );
+  </>
+);
 }

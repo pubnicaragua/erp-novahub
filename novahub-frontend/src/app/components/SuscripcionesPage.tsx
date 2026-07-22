@@ -44,7 +44,11 @@ import {
   BellRing,
   X,
   KeyRound,
-  BookOpen
+  BookOpen,
+  Landmark,
+  Scale,
+  GraduationCap,
+  LifeBuoy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './ui/utils';
@@ -82,6 +86,10 @@ const AVAILABLE_MODULES = [
   { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis', submodules: REPORTS_SUBMODULES },
   { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Plan de Cuentas, Asientos y Reportes Fiscales', submodules: ACCOUNTING_SUBMODULES },
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
+  { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
+  { id: 'LEGAL', label: 'Asesoría Legal', icon: Scale, description: 'Asesoría y Casos Legales' },
+  { id: 'TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
+  { id: 'SUPPORT', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
 ];
 
 const SYSTEM_ROLE_OPTIONS = [
@@ -388,7 +396,7 @@ export function SuscripcionesPage() {
     }
   };
 
-  const handleToggleAllSubmodules = async (tenantId: string, submodules: any[], currentlyAllActive: boolean) => {
+  const handleToggleAllSubmodules = async (tenantId: string, parentId: string, submodules: any[], currentlyAllActive: boolean) => {
     if (!user?.isPlatformAdmin) {
       toast.info('Solo administradores de NovaHub pueden realizar cambios masivos directos.');
       return;
@@ -396,6 +404,19 @@ export function SuscripcionesPage() {
     
     try {
       toast.loading(currentlyAllActive ? 'Desactivando catálogo...' : 'Activando catálogo...', { id: 'batch-toggle' });
+      
+      // 1. Toggle parent module first
+      if (currentlyAllActive) {
+        await subscriptionsService.toggleModuleStatus({ clientTenantId: tenantId, module: parentId, isActive: false, notes: 'Desactivación masiva padre' });
+      } else {
+        const isParentActive = tenants.find((t: any) => t.id === tenantId)?.subscriptions?.some((s: any) => s.module === parentId && s.isActive);
+        if (!isParentActive) {
+           const res = await subscriptionsService.createRequest({ clientTenantId: tenantId, requestedModule: parentId, customPrice: 0, notes: 'Activación masiva padre' });
+           await subscriptionsService.updateRequestStatus(res.id, { status: 'APPROVED' });
+        }
+      }
+
+      // 2. Toggle submodules
       for (const sub of submodules) {
         if (currentlyAllActive) {
           await subscriptionsService.toggleModuleStatus({ clientTenantId: tenantId, module: sub.id, isActive: false, notes: 'Desactivación masiva' });
@@ -873,7 +894,7 @@ export function SuscripcionesPage() {
                                           {hasSubmodules && (
                                             <div className="flex items-center gap-1.5" onClick={(e) => {
                                               e.stopPropagation();
-                                              handleToggleAllSubmodules(tenant.id, mod.submodules!, allSubmodulesActive);
+                                              handleToggleAllSubmodules(tenant.id, mod.id, mod.submodules!, allSubmodulesActive);
                                             }}>
                                               <div className={cn(
                                                 "flex items-center justify-center p-1 rounded-md transition-all",

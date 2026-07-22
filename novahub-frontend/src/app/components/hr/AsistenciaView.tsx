@@ -4,8 +4,10 @@ import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function AsistenciaView({ attendance, employees, onRefresh }: any) {
+  const { canPerform } = useAuth();
   const [selectedEmployee, setSelectedEmployee] = useState('');
 
   const handleClockIn = async () => {
@@ -108,14 +110,18 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
             />
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
-            <Button onClick={handleClockIn} className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-primary-foreground">
-              <LogIn className="size-4 mr-2" />
-              Entrada
-            </Button>
-            <Button onClick={handleClockOut} variant="outline" className="flex-1 sm:flex-none border-primary/50 text-foreground hover:bg-primary/10 hover:text-primary">
-              <LogOut className="size-4 mr-2 text-red-500" />
-              Salida
-            </Button>
+            {canPerform('HR_ATTENDANCE', 'create') && (
+              <>
+                <Button onClick={handleClockIn} className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-primary-foreground">
+                  <LogIn className="size-4 mr-2" />
+                  Entrada
+                </Button>
+                <Button onClick={handleClockOut} variant="outline" className="flex-1 sm:flex-none border-primary/50 text-foreground hover:bg-primary/10 hover:text-primary">
+                  <LogOut className="size-4 mr-2 text-red-500" />
+                  Salida
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>

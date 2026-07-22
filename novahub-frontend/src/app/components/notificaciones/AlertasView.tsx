@@ -6,9 +6,9 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Plus, Search, AlertTriangle, Info, AlertCircle, Eye } from 'lucide-react';
-import { alertsService } from '../../services/notificaciones.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
+import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
 
 interface AlertasViewProps {
@@ -18,6 +18,7 @@ interface AlertasViewProps {
 }
 
 export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefresh }) => {
+  const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
 
   const severityOpts = [
@@ -28,9 +29,9 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
   ];
 
   const columns: ColumnDef<Alert>[] = [
-    { key: 'title', header: 'Título', width: '30%', editable: true },
-    { key: 'content', header: 'Mensaje', width: '40%', editable: true },
-    { key: 'severity', header: 'Severidad', width: '120px', editable: true, type: 'select', options: severityOpts,
+    { key: 'title', header: 'Título', width: '30%', editable: canPerform('NOTIFICATIONS_ALERTS', 'edit') },
+    { key: 'content', header: 'Mensaje', width: '40%', editable: canPerform('NOTIFICATIONS_ALERTS', 'edit') },
+    { key: 'severity', header: 'Severidad', width: '120px', editable: canPerform('NOTIFICATIONS_ALERTS', 'edit'), type: 'select', options: severityOpts,
       render: (val: any) => { const o = severityOpts.find(x => x.value === (val||'').toUpperCase()); return <span className={cn('text-[10px] font-bold uppercase', o?.color||'text-muted-foreground')}>{o?.label||val}</span>; } },
     { key: 'isRead', header: 'Leída', width: '100px', render: (val: any) => <Badge variant="outline" className={cn('text-[9px] uppercase border-none', val ? 'bg-primary/10 text-primary' : 'bg-rose-500/10 text-rose-500')}>{val ? 'Sí' : 'No'}</Badge> },
     { key: 'createdAt', header: 'Fecha', width: '150px', type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, HH:mm') : '-' },
@@ -75,10 +76,12 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
           <div><h2 className="text-xl font-black uppercase tracking-tight">Alertas del Sistema</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Avisos y eventos críticos</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Crear Alerta</Button>
+            {canPerform('NOTIFICATIONS_ALERTS', 'create') && (
+              <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Crear Alerta</Button>
+            )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} onRowDelete={async (id) => { try { await alertsService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch { toast.error('Error'); } }} />
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={canPerform('NOTIFICATIONS_ALERTS', 'edit') ? handleUpdate : undefined} isLoading={loading} onRowDelete={canPerform('NOTIFICATIONS_ALERTS', 'delete') ? async (id) => { try { await alertsService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch { toast.error('Error'); } } : undefined} />
       </Card>
     </div>
   );

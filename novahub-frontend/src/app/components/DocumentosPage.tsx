@@ -84,7 +84,10 @@ export const DocumentosPage = ({ activeSubModule }: DocumentosPageProps) => {
           <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
             <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
               {tabs.map((tab) => {
-                const hasAccess = !user?.enabledModules || user.enabledModules.includes(tab.module);
+                const hasRequired = user?.enabledModules?.includes(tab.module);
+                const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('DOCUMENTS_'));
+                const hasFallback = user?.enabledModules?.includes('DOCUMENTS') && !hasSpecificSubmodules;
+                const hasAccess = !user?.enabledModules || hasRequired || hasFallback;
                 if (!hasAccess) return null;
                 return (
                 <TabsTrigger 

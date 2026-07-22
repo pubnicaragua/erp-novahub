@@ -8,7 +8,7 @@ import {
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings,
-  BookOpen, Search
+  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, Banknote
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -57,6 +57,11 @@ const AVAILABLE_MODULES = [
   { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
   { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
+  { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Contabilidad General' },
+  { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
+  { id: 'LEGAL', label: 'Asesoría Legal', icon: Scale, description: 'Asesoría y Casos Legales' },
+  { id: 'TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
+  { id: 'SUPPORT', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
 ];
 
 // Submódulos para permisos ultra-granulares
@@ -70,6 +75,7 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'SALES_PAYMENTS', label: 'Pagos Recibidos', parent: 'SALES' },
   { id: 'SALES_RETURNS', label: 'Devoluciones de Venta', parent: 'SALES' },
   { id: 'SALES_CREDIT_NOTES', label: 'Notas de Crédito', parent: 'SALES' },
+  { id: 'SALES_POS', label: 'Facturación por Caja', parent: 'SALES' },
 
   // Compras
   { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', parent: 'PURCHASES' },
@@ -142,6 +148,17 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'CONFIG_ROLES', label: 'Roles y Permisos', parent: 'CONFIGURATION' },
   { id: 'CONFIG_SECURITY', label: 'Seguridad', parent: 'CONFIGURATION' },
   { id: 'CONFIG_CURRENCY', label: 'Moneda', parent: 'CONFIGURATION' },
+
+  // Contabilidad
+  { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_JOURNAL', label: 'Libro Diario', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_TRIAL_BALANCE', label: 'Balance de Comprobación', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_PROFIT_LOSS', label: 'Estado de Resultados', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_BALANCE_SHEET', label: 'Balance General', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_CASH_FLOW', label: 'Flujo de Efectivo', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_RECONCILIATION', label: 'Conciliación Bancaria', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_PERIODS', label: 'Períodos Contables', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_FISCAL', label: 'Reportes Fiscales', parent: 'ACCOUNTING' },
 ];
 
 // Fusionar para la lista de permisos anidando los submódulos justo debajo de sus padres
@@ -360,6 +377,30 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const canCreateRoles = canPerform('roles', 'create');
   const canEditRoles = canPerform('roles', 'edit');
   const canDeleteRoles = canPerform('roles', 'delete');
+
+  const tenantPermModules = React.useMemo(() => {
+    if (!user) return [];
+    
+
+    return ALL_PERM_MODULES.filter(m => {
+      // 1. Direct check
+      if (user.enabledModules.includes(m.id)) return true;
+
+      // 2. Fallback check for submodules
+      const parentMod = 'parent' in m ? (m as any).parent : null;
+      if (parentMod && user.enabledModules.includes(parentMod)) {
+        const hasSpecificSubmodules = user.enabledModules.some(mod => mod.startsWith(`${parentMod}_`));
+        if (!hasSpecificSubmodules) return true;
+      }
+
+      // 3. Fallback check for main modules
+      if (!parentMod && user.enabledModules.some(mod => mod.startsWith(`${m.id}_`))) {
+        return true;
+      }
+
+      return false;
+    });
+  }, [user]);
 
   // Hex state for the color pickers
   const [primaryHex, setPrimaryHex] = useState(() => oklchToApproxHex(themeConfig.colors.primary));
@@ -691,7 +732,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setEditingRole({
       name: '',
       description: '',
-      permissions: ALL_PERM_MODULES.map(m => ({
+      permissions: tenantPermModules.map(m => ({
         module: m.id,
         read: true,
         create: false,
@@ -714,7 +755,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     }
     // Asegurar que el rol tenga todos los módulos actuales
     const currentPerms = normalizePermissions(role.permissions);
-    const fullPerms = ALL_PERM_MODULES.map(m => {
+    const fullPerms = tenantPermModules.map(m => {
       // Buscar permiso existente (ignorando mayúsculas/minúsculas y buscando por ID o Label)
       const existing = currentPerms.find(p => 
         p.module?.toUpperCase() === m.id.toUpperCase() ||
@@ -1259,7 +1300,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                           {/* Permissions Matrix */}
                           <div className="space-y-1.5 mb-5">
                             {(Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : [])).filter((p: any) => p.read || p.create || p.edit || p.delete || p.write).slice(0, 4).map((p: any) => {
-                              const mod = ALL_PERM_MODULES.find(m => m.id === p.module);
+                              const mod = tenantPermModules.find(m => m.id === p.module);
+                              if (!mod) return null;
                               return (
                                 <div key={p.module} className="flex items-center justify-between text-[11px] px-2 py-1 rounded-lg hover:bg-muted/20">
                                   <span className="font-bold text-muted-foreground truncate mr-2">{mod?.label || p.module}</span>
@@ -1315,15 +1357,15 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
           {/* Role Edit Dialog */}
           <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
-            <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-hidden p-0 rounded-3xl border-none flex flex-col">
+            <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[90vh] overflow-hidden p-0 rounded-3xl border-none flex flex-col">
               <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border/30 bg-muted/10 flex-shrink-0">
                 <div>
                   <DialogTitle className="text-lg font-black">{editingRole?.id ? 'Editar Rol' : 'Nuevo Rol'}</DialogTitle>
                   <DialogDescription className="text-sm text-muted-foreground">Define nombre y matriz de permisos</DialogDescription>
                 </div>
               </div>
-              <div className="overflow-y-auto flex-1 p-3 sm:p-6 space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex-1 flex flex-col overflow-hidden p-3 sm:p-6 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-shrink-0">
                   <div className="space-y-2">
                     <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre del Rol *</Label>
                     <Input placeholder="Ej: Gerente de Ventas" className="rounded-xl h-11"
@@ -1336,30 +1378,32 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Matriz de Permisos por Módulo</Label>
-                    <div className="flex flex-wrap gap-3 text-[10px] font-black uppercase tracking-widest">
-                      <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-blue-500 inline-block" />Leer</span>
-                      <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-500 inline-block" />Crear</span>
-                      <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-amber-500 inline-block" />Editar</span>
-                      <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" />Borrar</span>
-                    </div>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 flex-shrink-0 mt-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Matriz de Permisos por Módulo</Label>
+                  <div className="flex flex-wrap gap-3 text-[10px] font-black uppercase tracking-widest">
+                    <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-blue-500 inline-block" />Leer</span>
+                    <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-500 inline-block" />Crear</span>
+                    <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-amber-500 inline-block" />Editar</span>
+                    <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" />Borrar</span>
                   </div>
-                  <div className="rounded-2xl border border-border/40 overflow-hidden">
-                    <table className="w-full text-sm table-fixed">
-                      <thead className="bg-muted/30">
+                </div>
+                
+                <div className="flex-1 rounded-2xl border border-border/40 overflow-hidden flex flex-col min-h-0 relative">
+                  <div className="overflow-y-auto overflow-x-hidden flex-1" style={{ contain: 'paint' }}>
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/95 backdrop-blur-md sticky top-0 z-[50] shadow-sm border-b border-border/50">
                         <tr>
-                          <th className="text-left px-2 sm:px-3 py-2 text-[10px] sm:text-xs font-black uppercase tracking-wider text-muted-foreground">Módulo</th>
-                          <th className="px-0 py-2 text-center text-[10px] sm:text-xs font-black text-blue-500 w-[52px] sm:w-[72px]">Leer</th>
-                          <th className="px-0 py-2 text-center text-[10px] sm:text-xs font-black text-emerald-500 w-[52px] sm:w-[72px]">Crear</th>
-                          <th className="px-0 py-2 text-center text-[10px] sm:text-xs font-black text-amber-500 w-[52px] sm:w-[72px]">Editar</th>
-                          <th className="px-0 py-2 text-center text-[10px] sm:text-xs font-black text-rose-500 w-[52px] sm:w-[72px]">Borrar</th>
+                          <th className="text-left px-4 py-3 text-[10px] sm:text-xs font-black uppercase tracking-wider text-muted-foreground">Módulo</th>
+                          <th className="px-0 py-3 text-center text-[10px] sm:text-xs font-black text-blue-500 w-[60px] sm:w-[90px]">Leer</th>
+                          <th className="px-0 py-3 text-center text-[10px] sm:text-xs font-black text-emerald-500 w-[60px] sm:w-[90px]">Crear</th>
+                          <th className="px-0 py-3 text-center text-[10px] sm:text-xs font-black text-amber-500 w-[60px] sm:w-[90px]">Editar</th>
+                          <th className="px-0 py-3 text-center text-[10px] sm:text-xs font-black text-rose-500 w-[60px] sm:w-[90px]">Borrar</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/30">
                         {normalizePermissions(editingRole?.permissions).map((p) => {
-                          const mod = ALL_PERM_MODULES.find(m => m.id === p.module);
+                          const mod = tenantPermModules.find(m => m.id === p.module);
+                          if (!mod) return null; // No renderizar si no tiene permisos
                           const isSubmodule = mod && 'parent' in mod;
                           const Icon = mod?.icon;
                           

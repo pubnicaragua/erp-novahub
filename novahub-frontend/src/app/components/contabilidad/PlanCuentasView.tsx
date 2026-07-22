@@ -21,6 +21,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import type { Currency } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE';
 
@@ -111,6 +112,7 @@ function flattenTree(nodes: AccountNode[]): AccountNode[] {
 }
 
 export function PlanCuentasView() {
+  const { canPerform } = useAuth();
   const { formatConvertedAmount } = useCurrency();
 
   const [accounts, setAccounts] = useState<AccountNode[]>([]);
@@ -412,17 +414,21 @@ export function PlanCuentasView() {
           </Badge>
 
           <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => openEditDialog(account)} title="Editar">
-              <Pencil className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              variant="ghost" size="icon" className="w-7 h-7 text-destructive hover:text-destructive"
-              onClick={() => setDeleteConfirmId(account.id)}
-              title="Eliminar"
-              disabled={hasChildren || (account._count?.transactions ?? 0) > 0}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </Button>
+            {canPerform('ACCOUNTING_CHARTS', 'edit') && (
+              <>
+                <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => openEditDialog(account)} title="Editar">
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost" size="icon" className="w-7 h-7 text-destructive hover:text-destructive"
+                  onClick={() => setDeleteConfirmId(account.id)}
+                  title="Eliminar"
+                  disabled={hasChildren || (account._count?.transactions ?? 0) > 0}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </>
+            )}
           </div>
         </div>
         {hasChildren && isExpanded && account.children.map(child => renderTreeRow(child))}
@@ -444,16 +450,22 @@ export function PlanCuentasView() {
           <Button variant="outline" size="sm" onClick={handleExport}>
             <FileDown className="w-4 h-4 mr-1" /> Exportar
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-            <Upload className="w-4 h-4 mr-1" /> Importar
-          </Button>
-          <Button variant="outline" size="sm" onClick={loadDefaults} disabled={loadingDefaults || !industry}>
-            {loadingDefaults ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Building2 className="w-4 h-4 mr-1" />}
-            Cargar Defaults
-          </Button>
-          <Button size="sm" onClick={() => openAddDialog()}>
-            <Plus className="w-4 h-4 mr-1" /> Nueva Cuenta
-          </Button>
+          {canPerform('ACCOUNTING_CHARTS', 'create') && (
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+              <Upload className="w-4 h-4 mr-1" /> Importar
+            </Button>
+          )}
+          {canPerform('ACCOUNTING_CHARTS', 'create') && (
+            <Button variant="outline" size="sm" onClick={loadDefaults} disabled={loadingDefaults || !industry}>
+              {loadingDefaults ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Building2 className="w-4 h-4 mr-1" />}
+              Cargar Defaults
+            </Button>
+          )}
+          {canPerform('ACCOUNTING_CHARTS', 'create') && (
+            <Button size="sm" onClick={() => openAddDialog()}>
+              <Plus className="w-4 h-4 mr-1" /> Nueva Cuenta
+            </Button>
+          )}
         </div>
       </div>
 
@@ -595,16 +607,20 @@ export function PlanCuentasView() {
                   </div>
                 </div>
                 <div className="flex gap-2 pt-2">
-                  <Button variant="outline" size="sm" className="flex-1" onClick={() => openEditDialog(selectedAccount)}>
-                    <Pencil className="w-3.5 h-3.5 mr-1" /> Editar
-                  </Button>
-                  <Button
-                    variant="outline" size="sm" className="flex-1 text-destructive"
-                    onClick={() => setDeleteConfirmId(selectedAccount.id)}
-                    disabled={selectedAccount.children.length > 0 || (selectedAccount._count?.transactions ?? 0) > 0}
-                  >
-                    <Trash2 className="w-3.5 h-3.5 mr-1" /> Eliminar
-                  </Button>
+                  {canPerform('ACCOUNTING_CHARTS', 'edit') && (
+                    <>
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => openEditDialog(selectedAccount)}>
+                        <Pencil className="w-3.5 h-3.5 mr-1" /> Editar
+                      </Button>
+                      <Button
+                        variant="outline" size="sm" className="flex-1 text-destructive"
+                        onClick={() => setDeleteConfirmId(selectedAccount.id)}
+                        disabled={selectedAccount.children.length > 0 || (selectedAccount._count?.transactions ?? 0) > 0}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-1" /> Eliminar
+                      </Button>
+                    </>
+                  )}
                 </div>
               </CardContent>
             ) : (

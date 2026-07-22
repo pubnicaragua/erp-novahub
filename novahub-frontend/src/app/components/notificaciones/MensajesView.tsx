@@ -28,6 +28,7 @@ import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface MensajesViewProps {
   data: Message[];
@@ -72,6 +73,7 @@ const ParticipantAvatar = ({ participant, system = false }: { participant?: Mess
 );
 
 export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRefresh }) => {
+  const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<MessageFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -250,10 +252,12 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
                   {data.length} conversaciones · {unreadTotal} sin leer
                 </p>
               </div>
-              <Button onClick={openComposer} size="sm" className="h-9 gap-2 rounded-lg px-3" data-testid="new-message-button">
-                <MailPlus className="size-4" />
-                <span>Nuevo</span>
-              </Button>
+              {canPerform('NOTIFICATIONS_MESSAGES', 'create') && (
+                <Button onClick={openComposer} size="sm" className="h-9 gap-2 rounded-lg px-3" data-testid="new-message-button">
+                  <MailPlus className="size-4" />
+                  <span>Nuevo</span>
+                </Button>
+              )}
             </div>
 
             <div className="relative">
@@ -353,9 +357,11 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
               </div>
               <h3 className="text-lg font-semibold">Elegí una conversación</h3>
               <p className="mt-1 max-w-sm text-sm text-muted-foreground">Leé mensajes de tu equipo o iniciá una conversación nueva.</p>
-              <Button onClick={openComposer} variant="outline" className="mt-5 gap-2">
-                <MailPlus className="size-4" /> Nuevo mensaje
-              </Button>
+              {canPerform('NOTIFICATIONS_MESSAGES', 'create') && (
+                <Button onClick={openComposer} variant="outline" className="mt-5 gap-2">
+                  <MailPlus className="size-4" /> Nuevo mensaje
+                </Button>
+              )}
             </div>
           ) : (
             <>
@@ -437,14 +443,14 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
                         }}
                         placeholder="Escribí una respuesta…"
                         className="max-h-36 min-h-10 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
-                        disabled={replying}
+                        disabled={replying || !canPerform('NOTIFICATIONS_MESSAGES', 'create')}
                         data-testid="message-reply-input"
                       />
                       <Button
                         type="submit"
                         size="icon"
                         className="size-10 shrink-0 rounded-lg"
-                        disabled={replying || !reply.trim()}
+                        disabled={replying || !reply.trim() || !canPerform('NOTIFICATIONS_MESSAGES', 'create')}
                         aria-label="Enviar respuesta"
                         data-testid="send-reply-button"
                       >

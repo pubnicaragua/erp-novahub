@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface SupportAgent {
   id: string;
@@ -35,6 +36,7 @@ interface AgentsViewProps {
 const roleOptions = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER', 'PARTNER'];
 
 export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, onRefresh }) => {
+  const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
 
@@ -154,7 +156,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
                       <Select
                         value={String(agent.role || 'EMPLOYEE').toUpperCase()}
                         onValueChange={(value) => updateAgent(agent.id, { role: value as any })}
-                        disabled={isRowSaving}
+                        disabled={isRowSaving || !canPerform('TICKETS', 'edit')}
                       >
                         <SelectTrigger className="h-9 w-[150px]">
                           <SelectValue />
@@ -187,7 +189,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
                       <Button
                         variant={isActive ? 'outline' : 'default'}
                         size="sm"
-                        disabled={isRowSaving}
+                        disabled={isRowSaving || !canPerform('TICKETS', 'edit')}
                         onClick={() => updateAgent(agent.id, { isActive: !isActive })}
                         className="h-8 text-[10px] font-black uppercase tracking-widest"
                       >

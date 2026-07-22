@@ -12,8 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { suppliersService } from '../services/compras.service';
 import type { Supplier, EntityStatus } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { useAuth } from '../contexts/AuthContext';
 
 export function ProveedoresPage() {
+  const { canPerform } = useAuth();
   const { formatConvertedAmount } = useCurrency();
   const [proveedoresData, setProveedoresData] = useState<Supplier[]>([]);
   const [, setLoading] = useState(true);
@@ -96,11 +98,13 @@ export function ProveedoresPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar</Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleOpenDialog()}>
-                <Plus className="size-4" /> Nuevo Proveedor
-              </Button>
-            </DialogTrigger>
+            {canPerform('PROVIDERS', 'create') && (
+              <DialogTrigger asChild>
+                <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleOpenDialog()}>
+                  <Plus className="size-4" /> Nuevo Proveedor
+                </Button>
+              </DialogTrigger>
+            )}
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
                 <DialogTitle>{editingProveedor ? 'Editar Proveedor' : 'Nuevo Proveedor'}</DialogTitle>
@@ -223,7 +227,9 @@ export function ProveedoresPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="size-8 hover:text-primary hover:bg-primary/10 transition-colors" onClick={() => handleOpenDialog(p)}><Edit className="size-4" /></Button>
+                          {canPerform('PROVIDERS', 'edit') && (
+                            <Button variant="ghost" size="icon" className="size-8 hover:text-primary hover:bg-primary/10 transition-colors" onClick={() => handleOpenDialog(p)}><Edit className="size-4" /></Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

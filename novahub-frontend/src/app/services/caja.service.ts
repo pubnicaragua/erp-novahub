@@ -6,6 +6,8 @@ export interface CashRegister {
   code: string;
   location?: string;
   isActive: boolean;
+  warehouseId?: string;
+  warehouse?: any;
 }
 
 export interface PosProduct {
@@ -50,11 +52,23 @@ export interface PosInvoice {
 }
 
 export const cajaService = {
-  getRegisters: () =>
-    api.get<CashRegister[]>('/caja/registers'),
+  getRegisters: (all: boolean = false) =>
+    api.get<CashRegister[]>('/caja/registers', { params: all ? { all: 'true' } : undefined }),
 
-  createRegister: (data: { name: string; code: string; location?: string }) =>
+  createRegister: (data: { name: string; code: string; location?: string; warehouseId?: string }) =>
     api.post<CashRegister>('/caja/registers', data),
+
+  updateRegister: (id: string, data: { name?: string; code?: string; location?: string; isActive?: boolean; warehouseId?: string }) =>
+    api.put<CashRegister>(`/caja/registers/${id}`, data),
+
+  deleteRegister: (id: string) =>
+    api.delete<void>(`/caja/registers/${id}`),
+
+  getRegisterAccess: (id: string) =>
+    api.get<{ allUsers: any[]; assignedUserIds: string[] }>(`/caja/registers/${id}/access`),
+
+  updateRegisterAccess: (id: string, userIds: string[]) =>
+    api.put<{ success: boolean }>(`/caja/registers/${id}/access`, { userIds }),
 
   getProducts: (search?: string) =>
     api.get<PosProduct[]>('/caja/products', { params: search ? { search } : undefined }),

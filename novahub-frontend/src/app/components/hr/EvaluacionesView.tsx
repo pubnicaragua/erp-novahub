@@ -6,8 +6,10 @@ import { Textarea } from '../ui/textarea';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
+  const { canPerform } = useAuth();
   const [showNewForm, setShowNewForm] = useState(false);
   const [newReview, setNewReview] = useState({
     employeeId: '',
@@ -98,10 +100,12 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
 
       {/* New Review Button */}
       <div className="flex justify-end">
-        <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
-          <Plus className="size-4 mr-2" />
-          Nueva Evaluación
-        </Button>
+        {canPerform('HR_PERFORMANCE', 'create') && (
+          <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
+            <Plus className="size-4 mr-2" />
+            Nueva Evaluación
+          </Button>
+        )}
       </div>
 
       {/* New Review Form */}

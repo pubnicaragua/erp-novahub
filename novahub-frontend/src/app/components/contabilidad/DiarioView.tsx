@@ -35,6 +35,7 @@ import {
 import { Combobox } from '../ui/Combobox';
 import { cn } from '../ui/utils';
 import type { JournalEntry, Account } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -74,6 +75,7 @@ function emptyLine(): JournalLineInput {
 }
 
 export function DiarioView() {
+  const { canPerform } = useAuth();
   const [journals, setJournals] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -231,13 +233,14 @@ export function DiarioView() {
             Registro cronológico de todos los asientos contables
           </p>
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="size-4" />
-              Nuevo Asiento
-            </Button>
-          </DialogTrigger>
+        {canPerform('ACCOUNTING_JOURNAL', 'create') && (
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="size-4" />
+                Nuevo Asiento
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Nuevo Asiento Contable</DialogTitle>
@@ -403,6 +406,7 @@ export function DiarioView() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       {/* Filters */}
@@ -561,7 +565,7 @@ export function DiarioView() {
                           >
                             <Eye className="size-3.5" />
                           </Button>
-                          {statusKey === 'draft' && (
+                          {statusKey === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -572,7 +576,7 @@ export function DiarioView() {
                               <Send className="size-3.5" />
                             </Button>
                           )}
-                          {statusKey === 'posted' && (
+                          {statusKey === 'posted' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
                             <Button
                               variant="ghost"
                               size="icon"

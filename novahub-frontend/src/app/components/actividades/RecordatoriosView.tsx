@@ -58,15 +58,15 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
   ];
 
   const columns = [
-    { key: 'title', header: 'Recordatorio', width: '30%', editable: true },
-    { key: 'description', header: 'Mensaje', width: '35%', editable: true },
-    { key: 'reminderDate', header: 'Fecha Aviso', width: '150px', editable: true, type: 'datetime-local' as const, render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
+    { key: 'title', header: 'Recordatorio', width: '30%', editable: canPerform('ACTIVITIES_REMINDERS', 'edit') },
+    { key: 'description', header: 'Mensaje', width: '35%', editable: canPerform('ACTIVITIES_REMINDERS', 'edit') },
+    { key: 'reminderDate', header: 'Fecha Aviso', width: '150px', editable: canPerform('ACTIVITIES_REMINDERS', 'edit'), type: 'datetime-local' as const, render: (val: any) => val ? format(new Date(val), 'dd/MM/yyyy HH:mm') : '-' },
     {
-      key: 'status', header: 'Estado', width: '120px', editable: true, type: 'select' as const, options: statusOpts,
+      key: 'status', header: 'Estado', width: '120px', editable: canPerform('ACTIVITIES_REMINDERS', 'edit'), type: 'select' as const, options: statusOpts,
       render: (val: any) => { const o = statusOpts.find(x => x.value === (val || '').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color || 'bg-muted/20 text-muted-foreground')}>{o?.label || val}</Badge>; }
     },
     {
-      key: 'scope', header: 'Alcance', width: '120px', editable: true, type: 'select' as const, options: [
+      key: 'scope', header: 'Alcance', width: '120px', editable: canPerform('ACTIVITIES_REMINDERS', 'edit'), type: 'select' as const, options: [
         { value: 'GLOBAL', label: 'Global' },
         { value: 'DEPARTMENT', label: 'Departamental' },
         { value: 'PERSONAL', label: 'Personal' }
@@ -140,10 +140,18 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
           <div><h2 className="text-xl font-black uppercase tracking-tight">Recordatorios</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Alertas programadas</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-            <Button variant="default" onClick={() => setIsAddOpen(true)} className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Aviso</Button>
+            {canPerform('ACTIVITIES_REMINDERS', 'create') && (
+              <Button variant="default" onClick={() => setIsAddOpen(true)} className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Aviso</Button>
+            )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} onRowDelete={async (id) => { try { await remindersService.delete(id as string); toast.success('Recordatorio eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } }} />
+        <EditableDataTable 
+          data={filtered} 
+          columns={columns} 
+          onRowUpdate={canPerform('ACTIVITIES_REMINDERS', 'edit') ? handleUpdate : undefined} 
+          isLoading={loading} 
+          onRowDelete={canPerform('ACTIVITIES_REMINDERS', 'delete') ? async (id) => { try { await remindersService.delete(id as string); toast.success('Recordatorio eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+        />
       </Card>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
