@@ -15,7 +15,8 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 interface ProductThumbnailProps {
   src?: string | null;
   alt: string;
-  size?: "sm" | "md" | "lg" | "hero";
+  size?: "sm" | "md" | "lg" | "hero" | "catalog";
+  fit?: "cover" | "contain";
   className?: string;
 }
 
@@ -24,12 +25,14 @@ const sizes = {
   md: "size-12 rounded-xl",
   lg: "size-16 rounded-2xl",
   hero: "size-20 rounded-2xl sm:size-24",
+  catalog: "h-36 w-full rounded-2xl",
 };
 
 export function ProductThumbnail({
   src,
   alt,
   size = "md",
+  fit = "cover",
   className,
 }: ProductThumbnailProps) {
   const [failed, setFailed] = useState(false);
@@ -48,7 +51,7 @@ export function ProductThumbnail({
         <img
           src={src}
           alt={alt}
-          className="h-full w-full object-cover"
+          className={cn("h-full w-full", fit === "contain" ? "object-contain" : "object-cover")}
           loading="lazy"
           onError={() => setFailed(true)}
         />
@@ -56,7 +59,7 @@ export function ProductThumbnail({
         <Package
           className={cn(
             "text-primary/45",
-            size === "sm" ? "size-4" : size === "hero" ? "size-9" : "size-5",
+            size === "sm" ? "size-4" : size === "hero" || size === "catalog" ? "size-9" : "size-5",
           )}
         />
       )}

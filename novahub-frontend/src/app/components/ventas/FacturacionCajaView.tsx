@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
-  CreditCard, Clock, CircleHelp, ShoppingCart,
+  CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -31,6 +31,18 @@ interface InvoiceSummary {
   tax: number;
   discount: number;
   total: number;
+}
+
+type CatalogViewMode = 'list' | 'catalog';
+
+const CATALOG_VIEW_STORAGE_KEY = 'novahub-pos-catalog-view';
+
+function getInitialCatalogView(): CatalogViewMode {
+  try {
+    return localStorage.getItem(CATALOG_VIEW_STORAGE_KEY) === 'catalog' ? 'catalog' : 'list';
+  } catch {
+    return 'list';
+  }
 }
 
 const GENERAL_CUSTOMER_SELECT_VALUE = '__general_customer__';
@@ -178,6 +190,7 @@ export function FacturacionCajaView() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [catalogView, setCatalogView] = useState<CatalogViewMode>(getInitialCatalogView);
 
   const loadInitialData = useCallback(async () => {
     setLoading(true);
@@ -212,6 +225,14 @@ export function FacturacionCajaView() {
   useEffect(() => {
     void loadInitialData();
   }, [loadInitialData]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CATALOG_VIEW_STORAGE_KEY, catalogView);
+    } catch {
+      // La preferencia es opcional; la vista sigue funcionando sin almacenamiento local.
+    }
+  }, [catalogView]);
 
   useEffect(() => {
     if (!selectedRegisterId) {
@@ -424,64 +445,123 @@ export function FacturacionCajaView() {
 
         <Card className="border-border/50 shadow-sm" data-tour="pos-catalog">
           <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-black uppercase tracking-tight">Catálogo de Productos</h3>
-              <div className="relative max-w-xs">
-                {isSearching ? (
-                  <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin" />
-                ) : (
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                )}
-                <Input
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                  placeholder="Buscar producto..."
-                  className="pl-9 h-9 rounded-lg text-xs focus-visible:ring-primary focus-visible:border-primary"
-                />
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-tight">Catálogo de Productos</h3>
+                <p className="mt-1 text-[11px] text-muted-foreground">{filteredProducts.length} productos disponibles</p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="inline-flex h-9 items-center rounded-xl border border-border/60 bg-muted/30 p-1" role="group" aria-label="Vista del catálogo">
+                  <button
+                    type="button"
+                    aria-pressed={catalogView === 'list'}
+                    onClick={() => setCatalogView('list')}
+                    className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition-all ${
+                      catalogView === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <List className="size-3.5" /> Lista
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={catalogView === 'catalog'}
+                    onClick={() => setCatalogView('catalog')}
+                    className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition-all ${
+                      catalogView === 'catalog' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <LayoutGrid className="size-3.5" /> Catálogo
+                  </button>
+                </div>
+                <div className="relative w-full sm:w-64">
+                  {isSearching ? (
+                    <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin" />
+                  ) : (
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  )}
+                  <Input
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    placeholder="Buscar producto..."
+                    className="pl-9 h-9 rounded-lg text-xs focus-visible:ring-primary focus-visible:border-primary"
+                  />
+                </div>
               </div>
             </div>
-            <div className="border border-border/50 rounded-xl overflow-hidden">
-              <div className="overflow-y-auto max-h-56">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-muted/30 border-b border-border/30">
-                      <th className="px-3 py-2.5 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Código</th>
-                      <th className="px-3 py-2.5 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Descripción del Producto</th>
-                      <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Precio Unit. (C$)</th>
-                      <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/20">
-                    {filteredProducts.map((prod) => (
-                      <tr key={prod.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-3 py-2 font-mono text-primary font-bold">{prod.code}</td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-2.5">
-                            <ProductThumbnail src={prod.imageUrl} alt={prod.name} size="sm" />
-                            <div className="min-w-0">
-                              <p className="truncate font-bold">{prod.name}</p>
-                              {prod.description && (
-                                <p className="max-w-[280px] truncate text-[10px] text-muted-foreground">{prod.description}</p>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono">{formatCurrency(prod.salePrice)}</td>
-                        <td className="px-3 py-2 text-center">
-                          <Button size="sm" variant="ghost" onClick={() => addItem(prod)}
-                            className="h-7 px-2 text-[10px] font-bold text-primary hover:bg-primary/10 rounded-lg">
-                            <Plus className="size-3 mr-1" /> Agregar
-                          </Button>
-                        </td>
+            {catalogView === 'list' ? (
+              <div className="overflow-hidden rounded-xl border border-border/50">
+                <div className="max-h-64 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border/30 bg-muted/30">
+                        <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción del Producto</th>
+                        <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest text-muted-foreground">Precio Unit. (C$)</th>
+                        <th className="px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">Acción</th>
                       </tr>
-                    ))}
-                    {filteredProducts.length === 0 && (
-                      <tr><td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">No hay productos disponibles</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-border/20">
+                      {filteredProducts.map((prod) => (
+                        <tr key={prod.id} className="transition-colors hover:bg-muted/20">
+                          <td className="px-3 py-2.5 font-mono font-bold text-primary">{prod.code}</td>
+                          <td className="px-3 py-2.5">
+                            <p className="truncate font-bold">{prod.name}</p>
+                            {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono">{formatCurrency(prod.salePrice)}</td>
+                          <td className="px-3 py-2.5 text-center">
+                            <Button size="sm" variant="ghost" onClick={() => addItem(prod)}
+                              className="h-7 rounded-lg px-2 text-[10px] font-bold text-primary hover:bg-primary/10">
+                              <Plus className="mr-1 size-3" /> Agregar
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredProducts.length === 0 && (
+                        <tr><td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">No hay productos disponibles</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="max-h-[34rem] overflow-y-auto pr-1">
+                {filteredProducts.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                    {filteredProducts.map((prod) => (
+                      <article key={prod.id} className="group overflow-hidden rounded-2xl border border-border/60 bg-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
+                        <ProductThumbnail
+                          src={prod.imageUrl}
+                          alt={prod.name}
+                          size="catalog"
+                          fit="contain"
+                          className="rounded-none border-x-0 border-t-0 bg-muted/25 p-3 shadow-none"
+                        />
+                        <div className="space-y-3 p-4">
+                          <div>
+                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                              <Badge variant="outline" className="font-mono text-[9px] text-primary">{prod.code}</Badge>
+                              <span className="font-mono text-sm font-black text-primary">{formatCurrency(prod.salePrice)}</span>
+                            </div>
+                            <h4 className="truncate text-sm font-black">{prod.name}</h4>
+                            <p className="mt-1 line-clamp-2 min-h-8 text-[11px] leading-4 text-muted-foreground">
+                              {prod.description || 'Producto disponible para facturación inmediata.'}
+                            </p>
+                          </div>
+                          <Button onClick={() => addItem(prod)} className="h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider">
+                            <ShoppingCart className="mr-2 size-3.5" /> Agregar a factura
+                          </Button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border/60 px-4 py-10 text-center text-sm text-muted-foreground">
+                    No hay productos disponibles
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
