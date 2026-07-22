@@ -28,6 +28,7 @@ import { SuscripcionesPage } from './components/SuscripcionesPage';
 import { PrismaSchemaPage } from './components/PrismaSchemaPage';
 import { FinanciamientoPymePage } from './components/FinanciamientoPymePage';
 import { AsesoriaLegalPage } from './components/AsesoriaLegalPage';
+import { NovaChatView } from './components/novachat/NovaChatView';
 import { TrainingHubView } from './components/help/TrainingHubView';
 import { SoporteTecnicoView } from './components/help/SoporteTecnicoView';
 import { SoporteTecnicoAdminView } from './components/help/SoporteTecnicoAdminView';
@@ -135,7 +136,7 @@ function DashboardLayout() {
       const preferredOrder: Module[] = [
         'inventario', 'ventas', 'compras', 'finanzas', 'contabilidad', 'rh',
         'clientes', 'proveedores', 'actividades', 'tickets',
-        'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal',
+        'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
         'documentos', 'notificaciones', 'transferencias', 
         'reportes', 'roles', 'configuracion', 'suscripciones', 'schema'
       ];
@@ -205,6 +206,7 @@ function DashboardLayout() {
       case 'soporte-tecnico': return user?.isPlatformAdmin ? <SoporteTecnicoAdminView /> : <SoporteTecnicoView />;
       case 'contabilidad': return <ContabilidadPage />;
       case 'asesoria-legal': return <AsesoriaLegalPage />;
+      case 'novachat': return <NovaChatView />;
       default: return <OverviewDashboard onNavigate={handleNavigate} />;
     }
   };

@@ -1,32 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, Variants } from 'motion/react';
 import {
-  TrendingDown, Package, DollarSign, ShoppingCart, Users,
-  ArrowUpRight, Loader2, Target, Download, Briefcase, HandCoins,
-  UserCheck, AlertCircle
+  DollarSign, TrendingDown, ShoppingCart, Target,
+  ArrowUpRight, Loader2, AlertTriangle,
+  TrendingUp, Coins, Clock, BarChart3, Package, Store, Receipt,
+  FileDown,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { type Module, useAuth } from '../contexts/AuthContext';
+import { Badge } from './ui/badge';
+import { type Module } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from './ui/table';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer
-} from 'recharts';
-import { salesOrdersService, customersService, invoicesService } from '../services/ventas.service';
-import { incomeService, expensesService as finExpensesService } from '../services/finanzas.service';
-import { inventoryService } from '../services/inventario.service';
-import { suppliersService, purchaseOrdersService } from '../services/compras.service';
-import { hrService } from '../services/hr.service';
-import { subscriptionsService } from '../services/subscriptions.service';
+import { cajaService } from '../services/caja.service';
 import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './ui/dialog';
-import { Input } from './ui/input';
-import { cn } from './ui/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 interface TenantOverviewProps {
   onNavigate?: (module: Module) => void;
@@ -34,530 +24,560 @@ interface TenantOverviewProps {
 
 const containerVariants: Variants = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  show: { opacity: 1, transition: { staggerChildren: 0.06 } },
 };
 
 const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } },
 };
 
-const statusColors: Record<string, string> = {
-  'PAID': 'bg-emerald-500/10 text-emerald-500',
-  'PENDING': 'bg-amber-500/10 text-amber-500',
-  'PARTIAL': 'bg-blue-500/10 text-blue-500',
-  'OVERDUE': 'bg-rose-500/10 text-rose-500',
-  'DRAFT': 'bg-muted/10 text-muted-foreground',
-  'CONFIRMED': 'bg-emerald-500/20 text-emerald-400',
-  'IN_PROGRESS': 'bg-blue-500/20 text-blue-400',
-  'DELIVERED': 'bg-emerald-600/20 text-emerald-400',
-  'CANCELLED': 'bg-rose-600/20 text-rose-400',
+const PERIODS = [
+  { value: 'month', label: 'Este Mes' },
+  { value: 'quarter', label: 'Este Trimestre' },
+  { value: 'year', label: 'Este Año' },
+];
+
+const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+const statusStyles: Record<string, string> = {
+  SIN_STOCK: 'bg-rose-500/15 text-rose-500 border-rose-500/20',
+  STOCK_BAJO: 'bg-amber-500/15 text-amber-500 border-amber-500/20',
+  REORDEN: 'bg-orange-500/15 text-orange-500 border-orange-500/20',
 };
 
 const statusLabel: Record<string, string> = {
-  'PAID': 'Pagada', 'PENDING': 'Pendiente', 'PARTIAL': 'Parcial',
-  'OVERDUE': 'Vencida', 'DRAFT': 'Borrador', 'CONFIRMED': 'Confirmada',
-  'IN_PROGRESS': 'En proceso', 'DELIVERED': 'Entregada', 'CANCELLED': 'Cancelada',
+  SIN_STOCK: 'Sin Stock',
+  STOCK_BAJO: 'Stock Bajo',
+  REORDEN: 'Reordenar',
 };
 
-// ── Module-to-KPI mapping ──
-interface KpiDef {
-  id: string;
-  requiredModule: string; // matches ModuleType from backend
-  permModule: string;     // matches canPerform module key
-  title: string;
-  icon: React.ElementType;
-  color: string;
-  bgColor: string;
-  navModule: Module;
-  fetchKey: string;
-}
-
-const ALL_KPIS: KpiDef[] = [
-  { id: 'ingresos', requiredModule: 'FINANCIAL', permModule: 'finanzas', title: 'Ingresos Totales', icon: DollarSign, color: 'text-emerald-500', bgColor: 'bg-emerald-500/10', navModule: 'finanzas', fetchKey: 'income' },
-  { id: 'gastos', requiredModule: 'FINANCIAL', permModule: 'finanzas', title: 'Gastos Totales', icon: TrendingDown, color: 'text-rose-500', bgColor: 'bg-rose-500/10', navModule: 'finanzas', fetchKey: 'expenses' },
-  { id: 'ordenes', requiredModule: 'SALES', permModule: 'ventas', title: 'Órdenes Activas', icon: ShoppingCart, color: 'text-orange-500', bgColor: 'bg-orange-500/10', navModule: 'ventas', fetchKey: 'orders' },
-  { id: 'clientes', requiredModule: 'SALES', permModule: 'ventas', title: 'Clientes Activos', icon: Users, color: 'text-purple-500', bgColor: 'bg-purple-500/10', navModule: 'ventas', fetchKey: 'customers' },
-  { id: 'productos', requiredModule: 'INVENTORY', permModule: 'inventario', title: 'Productos en Stock', icon: Package, color: 'text-blue-500', bgColor: 'bg-blue-500/10', navModule: 'inventario', fetchKey: 'products' },
-  { id: 'proveedores', requiredModule: 'PURCHASES', permModule: 'compras', title: 'Proveedores Activos', icon: HandCoins, color: 'text-teal-500', bgColor: 'bg-teal-500/10', navModule: 'compras', fetchKey: 'suppliers' },
-  { id: 'oc', requiredModule: 'PURCHASES', permModule: 'compras', title: 'Órdenes de Compra', icon: Briefcase, color: 'text-indigo-500', bgColor: 'bg-indigo-500/10', navModule: 'compras', fetchKey: 'purchaseOrders' },
-  { id: 'empleados', requiredModule: 'HR', permModule: 'rh', title: 'Empleados Activos', icon: UserCheck, color: 'text-cyan-500', bgColor: 'bg-cyan-500/10', navModule: 'rh', fetchKey: 'employees' },
-];
-
 export function TenantOverview({ onNavigate }: TenantOverviewProps) {
-  const { user, canPerform } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [enabledModules, setEnabledModules] = useState<string[]>([]);
-  const [modulesLoaded, setModulesLoaded] = useState(false);
-
-  // Dynamic data store
-  const [dataStore, setDataStore] = useState<Record<string, number>>({});
-  const [incomes, setIncomes] = useState<any[]>([]);
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [recentInvoices, setRecentInvoices] = useState<any[]>([]);
-  const [recentOrders, setRecentOrders] = useState<any[]>([]);
-  const [metaOpen, setMetaOpen] = useState(false);
-  const [salesGoal, setSalesGoal] = useState(50000);
+  const [period, setPeriod] = useState('month');
+  const [cajaData, setCajaData] = useState<any>(null);
+  const [prevData, setPrevData] = useState<any>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
+  const { formatConvertedAmount } = useCurrency();
 
-  // ── Check which modules are available ──
-  const isModuleAvailable = (requiredModule: string, permModule: string): boolean => {
-    // If modules haven't loaded yet, assume nothing
-    if (!modulesLoaded) return false;
-    
-    // Check if module is enabled at tenant level
-    const moduleEnabled = enabledModules.length === 0 || 
-      enabledModules.some(m => m.startsWith(requiredModule));
-    
-    if (!moduleEnabled) return false;
-
-    // Check user permissions
-    try {
-      return canPerform(permModule as any, 'view');
-    } catch {
-      return true; // If canPerform doesn't recognize the module, allow it
-    }
-  };
-
-  // ── Compute visible KPIs ──
-  const visibleKpis = modulesLoaded 
-    ? ALL_KPIS.filter(k => isModuleAvailable(k.requiredModule, k.permModule)).slice(0, 4)
-    : [];
-  
-  // Make the first KPI "primary" (highlighted card)
-  const kpisWithPrimary = visibleKpis.map((k, i) => ({ ...k, primary: i === 0 }));
+  const fmt = (amount: number) => formatConvertedAmount(amount);
 
   useEffect(() => {
-    const loadModules = async () => {
-      if (!user?.tenantId) {
-        setModulesLoaded(true);
-        return;
-      }
-      try {
-        const modules = await subscriptionsService.getEnabledModules(user.tenantId);
-        setEnabledModules(modules || []);
-      } catch (error) {
-        console.error('Error fetching enabled modules:', error);
-        setEnabledModules([]); // Show all if can't fetch
-      } finally {
-        setModulesLoaded(true);
-      }
-    };
-    loadModules();
-  }, [user?.tenantId]);
-
-  useEffect(() => {
-    if (!modulesLoaded) return;
     loadData();
-  }, [modulesLoaded, enabledModules]);
+  }, [period]);
 
   const loadData = async () => {
     setLoading(true);
-    const newData: Record<string, number> = {};
-    const promises: Promise<void>[] = [];
-
-    // Only fetch data for modules that are available
-    if (isModuleAvailable('FINANCIAL', 'finanzas')) {
-      promises.push(
-        (async () => {
-          try {
-            const res = await incomeService.getAll();
-            const list = Array.isArray(res) ? res : (res as any)?.data || [];
-            setIncomes(list);
-            newData.income = list.reduce((sum: number, i: any) => sum + Number(i.amount || 0), 0);
-          } catch {
-            setIncomes([]);
-            newData.income = 0;
-          }
-        })(),
-        (async () => {
-          try {
-            const res = await finExpensesService.getAll();
-            const list = Array.isArray(res) ? res : (res as any)?.data || [];
-            setExpenses(list);
-            newData.expenses = list.reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
-          } catch {
-            setExpenses([]);
-            newData.expenses = 0;
-          }
-        })()
-      );
+    try {
+      const [current, prev] = await Promise.all([
+        cajaService.getDashboard(period).catch(() => null),
+        cajaService.getDashboard('last-month' as any).catch(() => null),
+      ]);
+      setCajaData(current);
+      setPrevData(prev);
+    } catch {
+      setCajaData(null);
+      setPrevData(null);
+    } finally {
+      setLoading(false);
     }
-
-    if (isModuleAvailable('SALES', 'ventas')) {
-      promises.push(
-        (async () => {
-          try {
-            const res = await salesOrdersService.getAll();
-            const list = (res as any)?.data || res || [];
-            newData.orders = list.filter((o: any) =>
-              ['PENDING', 'CONFIRMED', 'IN_PROGRESS'].includes(o.status)).length;
-            setRecentOrders(list.slice(0, 3));
-          } catch { newData.orders = 0; }
-        })(),
-        (async () => {
-          try {
-            const res = await customersService.getAll();
-            const list = (res as any)?.data || res || [];
-            newData.customers = list.length;
-          } catch { newData.customers = 0; }
-        })(),
-        (async () => {
-          try {
-            const inv = await invoicesService.getAll();
-            setRecentInvoices(((inv as any).data || []).slice(0, 5));
-          } catch {}
-        })()
-      );
-    }
-
-    if (isModuleAvailable('INVENTORY', 'inventario')) {
-      promises.push(
-        (async () => {
-          try {
-            const res = await inventoryService.getProducts();
-            const list = (res as any)?.data || res || [];
-            newData.products = list.length;
-          } catch { newData.products = 0; }
-        })()
-      );
-    }
-
-    if (isModuleAvailable('PURCHASES', 'compras')) {
-      promises.push(
-        (async () => {
-          try {
-            const res = await suppliersService.getAll();
-            const list = (res as any)?.data || res || [];
-            newData.suppliers = list.length;
-          } catch { newData.suppliers = 0; }
-        })(),
-        (async () => {
-          try {
-            const res = await purchaseOrdersService.getAll();
-            const list = (res as any)?.data || res || [];
-            newData.purchaseOrders = list.filter((o: any) =>
-              ['PENDING', 'APPROVED', 'DRAFT'].includes(o.status)).length;
-          } catch { newData.purchaseOrders = 0; }
-        })()
-      );
-    }
-
-    if (isModuleAvailable('HR', 'rh')) {
-      promises.push(
-        (async () => {
-          try {
-            const res = await hrService.getEmployees();
-            const list = (res as any)?.data || res || [];
-            newData.employees = list.length;
-          } catch { newData.employees = 0; }
-        })()
-      );
-    }
-
-    await Promise.allSettled(promises);
-    setDataStore(newData);
-    setLoading(false);
-  };
-
-  const totalIncome = incomes.reduce(
-    (sum: number, i: any) => sum + convertAmount(Number(i.amount || 0), i.currency, i.exchangeRate), 0
-  );
-  const totalExpenses = expenses.reduce(
-    (sum: number, e: any) => sum + convertAmount(Number(e.amount || 0), e.currency, e.exchangeRate), 0
-  );
-
-  const formatCurrency = (n: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
-    formatConvertedAmount(n, sourceCurrency, sourceExchangeRate);
-
-  const getKpiValue = (fetchKey: string): string => {
-    if (loading) return '...';
-    if (fetchKey === 'income') return formatCurrency(totalIncome, displayCurrency);
-    if (fetchKey === 'expenses') return formatCurrency(totalExpenses, displayCurrency);
-    const val = dataStore[fetchKey] ?? 0;
-    return val.toString();
   };
 
   const handleExport = async () => {
+    if (!cajaData) { toast.error('No hay datos para exportar'); return; }
     setIsExporting(true);
-    toast.info('Generando reporte consolidado...');
-    
     try {
-      const headers = ['Concepto', 'Total'];
-      const data = kpisWithPrimary.map(k => [k.title, getKpiValue(k.fetchKey)]);
-      
-      const csvContent = "data:text/csv;charset=utf-8," 
-        + headers.join(",") + "\n"
-        + data.map(e => e.join(",")).join("\n");
-      
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `reporte_ejecutivo_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      toast.success('Reporte exportado exitosamente');
-    } catch (e) {
-      toast.error('Error al exportar reporte');
+      const k = cajaData.kpis;
+      const { default: jsPDF } = await import('jspdf');
+      const doc = new jsPDF();
+      const pageW = doc.internal.pageSize.getWidth();
+      let y = 20;
+
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Reporte del Dashboard', pageW / 2, y, { align: 'center' });
+      y += 8;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(120);
+      doc.text(`Periodo: ${period === 'month' ? 'Este Mes' : period === 'quarter' ? 'Este Trimestre' : 'Este Año'}  |  Generado: ${new Date().toLocaleDateString('es-NI')}`, pageW / 2, y, { align: 'center' });
+      y += 12;
+
+      doc.setDrawColor(200);
+      doc.line(20, y, pageW - 20, y);
+      y += 10;
+
+      doc.setTextColor(0);
+      doc.setFontSize(13);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Resumen de KPIs', 20, y);
+      y += 8;
+
+      const kpiRows: [string, string][] = [
+        ['Ingresos Totales', fmt(k.totalRevenue || 0)],
+        ['Gastos Totales', fmt(k.totalExpenses || 0)],
+        ['Ordenes de Venta', String(k.ordersCount || 0)],
+        ['Margen de Utilidad', `${(k.netMargin || 0).toFixed(1)}%`],
+      ];
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      for (const [label, value] of kpiRows) {
+        doc.setFont('helvetica', 'bold');
+        doc.text(label, 24, y);
+        doc.setFont('helvetica', 'normal');
+        doc.text(String(value), 110, y);
+        y += 6;
+      }
+      y += 6;
+
+      const perf = cajaData?.productPerformance;
+      if (perf) {
+        doc.setFontSize(13);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Rendimiento de Productos', 20, y);
+        y += 8;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Mas Vendidos:', 24, y); y += 5;
+        doc.setFont('helvetica', 'normal');
+        for (const p of (perf.topSelling || []).slice(0, 5)) {
+          doc.text(`- ${p.name}  (${p.totalQty || 0} uds, ${fmt(p.totalRevenue || 0)})`, 28, y);
+          y += 5;
+        }
+        y += 3;
+        doc.setFont('helvetica', 'bold');
+        doc.text('Mayor Utilidad:', 24, y); y += 5;
+        doc.setFont('helvetica', 'normal');
+        for (const p of (perf.topMargin || []).slice(0, 5)) {
+          doc.text(`- ${p.name}  (Margen: ${(p.margin || 0).toFixed(0)}%, Ganancia: ${fmt(p.profit || 0)})`, 28, y);
+          y += 5;
+        }
+        y += 3;
+        doc.setFont('helvetica', 'bold');
+        doc.text('Sin Movimiento:', 24, y); y += 5;
+        doc.setFont('helvetica', 'normal');
+        for (const p of (perf.noSaleProducts || []).slice(0, 5)) {
+          doc.text(`- ${p.name}  (Stock: ${p.currentStock || 0}, ${p.daysWithoutSale || 0} dias sin salida)`, 28, y);
+          y += 5;
+        }
+        y += 6;
+      }
+
+      const transactions = cajaData?.recentTransactions || [];
+      if (transactions.length > 0) {
+        if (y > 240) { doc.addPage(); y = 20; }
+        doc.setFontSize(13);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Transacciones Recientes', 20, y);
+        y += 8;
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Factura', 24, y);
+        doc.text('Caja', 60, y);
+        doc.text('Cliente', 95, y);
+        doc.text('Monto', 140, y);
+        doc.text('IVA', 170, y);
+        y += 5;
+        doc.setFont('helvetica', 'normal');
+        for (const tx of transactions.slice(0, 10)) {
+          doc.text(tx.number || 'FAC-???', 24, y);
+          doc.text(tx.register?.name || '-', 60, y);
+          doc.text((tx.customer || 'Cliente General').substring(0, 20), 95, y);
+          doc.text(fmt(tx.total || 0), 140, y);
+          doc.text(tx.hasIVA ? '15%' : 'Exento', 170, y);
+          y += 5;
+        }
+      }
+
+      doc.save(`reporte_dashboard_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('Reporte PDF exportado');
+    } catch (err) {
+      console.error('Error exportando PDF:', err);
+      toast.error('Error al exportar');
     } finally {
       setIsExporting(false);
     }
   };
 
-  // ── Determine what to show in bottom section ──
-  const hasSales = isModuleAvailable('SALES', 'ventas');
+  const kpis = cajaData?.kpis;
+  const prevKpis = prevData?.previousPeriod;
+  const perf = cajaData?.productPerformance;
+  const registers = cajaData?.salesByRegister || [];
+  const alerts = cajaData?.inventoryAlerts || [];
+  const transactions = cajaData?.recentTransactions || [];
+
+  const pctChange = (current: number, previous: number) => {
+    if (!previous) return null;
+    return ((current - previous) / previous) * 100;
+  };
+
+  const now = new Date();
+  const periodLabel = period === 'month'
+    ? `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`
+    : period === 'quarter'
+      ? `Q${Math.floor(now.getMonth() / 3) + 1} ${now.getFullYear()}`
+      : String(now.getFullYear());
+
+  const kpiData = kpis ? [
+    {
+      label: 'Ingresos Totales',
+      value: fmt(kpis.totalRevenue || 0),
+      extra: null,
+      icon: DollarSign,
+      accent: 'text-emerald-400',
+      glow: 'shadow-emerald-500/10',
+      iconBg: 'bg-emerald-500/10',
+    },
+    {
+      label: 'Gastos Totales',
+      value: fmt(kpis.totalExpenses || 0),
+      extra: prevKpis && pctChange(kpis.totalExpenses, prevKpis.expenses) !== null
+        ? { text: `${pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 ? '↑' : '↓'} ${Math.abs(pctChange(kpis.totalExpenses, prevKpis.expenses)!).toFixed(1)}% vs anterior`, up: pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 }
+        : null,
+      icon: TrendingDown,
+      accent: 'text-rose-400',
+      glow: 'shadow-rose-500/10',
+      iconBg: 'bg-rose-500/10',
+    },
+    {
+      label: 'Órdenes de Venta',
+      value: String(kpis.ordersCount || 0),
+      extra: { text: `${kpis.pendingOrders || 0} pendientes por despacho`, color: 'text-muted-foreground' },
+      icon: ShoppingCart,
+      accent: 'text-amber-400',
+      glow: 'shadow-amber-500/10',
+      iconBg: 'bg-amber-500/10',
+    },
+    {
+      label: 'Margen Utilidad Net.',
+      value: `${(kpis.netMargin || 0).toFixed(1)}%`,
+      extra: { text: (kpis.netMargin || 0) >= 50 ? 'Rentabilidad Óptima' : (kpis.netMargin || 0) >= 25 ? 'Rentabilidad Moderada' : 'Rentabilidad Baja', color: 'text-muted-foreground' },
+      icon: Target,
+      accent: 'text-cyan-400',
+      glow: 'shadow-cyan-500/10',
+      iconBg: 'bg-cyan-500/10',
+    },
+  ] : [];
 
   return (
-    <div className="space-y-8 p-4 md:p-6 pb-16">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 relative">
-        <div className="absolute -left-10 -top-10 size-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="space-y-6 p-4 md:p-6 pb-16">
+      {/* Hero */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2 relative">
+        <div className="absolute -left-10 -top-10 size-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10">
-          <h1 className="text-4xl md:text-5xl tracking-tight text-foreground mb-3 font-bold">
+          <h1 className="text-3xl md:text-4xl tracking-tight text-foreground mb-2 font-bold">
             Centraliza, optimiza y{' '}
-            <span className="bg-primary text-primary-foreground px-4 py-1.5 rounded-md inline-block transform -rotate-2 shadow-lg font-semibold mx-1 border border-primary/50">
-              escala
-            </span>,
+            <span className="bg-primary text-primary-foreground px-3 py-1 rounded-md inline-block transform -rotate-2 shadow-lg font-semibold mx-1 border border-primary/50">escala</span>,
             <br />
-            <span className="text-2xl md:text-3xl mt-4 block text-muted-foreground/90 tracking-normal font-medium">
+            <span className="text-xl md:text-2xl mt-3 block text-muted-foreground/90 tracking-normal font-medium">
               la solución integral que tu crecimiento{' '}
               <span className="text-foreground border-b-[3px] border-primary pb-0.5 inline-block transform rotate-1">necesita.</span>
             </span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-4 max-w-xl">
+          <p className="text-sm text-muted-foreground mt-3 max-w-xl">
             Supervisa el rendimiento en tiempo real, descubre nuevas oportunidades y toma decisiones estratégicas con nuestra visión analítica de 360°.
           </p>
         </div>
-        <div className="flex items-center gap-3 z-10">
-          <Button variant="outline" onClick={() => setMetaOpen(true)} className="border-primary/20 hover:bg-primary/5 transition-all rounded-xl font-bold uppercase text-[10px] tracking-widest">
-            <Target className="mr-2 size-4 text-primary" />Configurar Meta
-          </Button>
-          <Button 
-            disabled={isExporting}
+        <div className="flex items-center gap-2 z-10 shrink-0">
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-44 rounded-xl border-border/50 bg-card text-xs font-bold uppercase tracking-widest">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="rounded-2xl border-border/50">
+              {PERIODS.map(p => (
+                <SelectItem key={p.value} value={p.value} className="text-xs font-bold">{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            disabled={isExporting || loading}
             onClick={handleExport}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all active:scale-95 rounded-xl font-bold uppercase text-[10px] tracking-widest"
+            size="sm"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md rounded-xl font-black uppercase text-[10px] tracking-widest"
           >
-            {isExporting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}
-            Exportar Reporte
+            {isExporting ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <FileDown className="size-3.5 mr-1.5" />}
+            Exportar
           </Button>
         </div>
       </div>
 
-      <Dialog open={metaOpen} onOpenChange={setMetaOpen}>
-        <DialogContent className="rounded-3xl border-border/50 bg-popover">
-          <DialogHeader>
-            <DialogTitle>Establecer Meta de Ventas</DialogTitle>
-            <DialogDescription>Define el objetivo mensual para el tenant actual.</DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <label className="text-sm font-medium mb-2 block">Monto Objetivo (USD)</label>
-            <Input 
-              type="number" 
-              value={salesGoal} 
-              onChange={(e) => setSalesGoal(Number(e.target.value))}
-              className="text-lg font-bold bg-muted/20 border-border/50 rounded-xl"
-            />
-          </div>
-          <DialogFooter>
-            <Button className="rounded-xl font-bold" onClick={() => {
-              setMetaOpen(false);
-              toast.success('Meta actualizada correctamente');
-            }}>Guardar Meta</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* KPIs — dynamic based on enabled modules */}
-      {!modulesLoaded ? (
-        <div className="flex items-center justify-center py-20">
+      {loading ? (
+        <div className="flex items-center justify-center py-24">
           <Loader2 className="size-8 animate-spin text-primary/30" />
         </div>
-      ) : kpisWithPrimary.length === 0 ? (
+      ) : !kpis ? (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="border-border/50 rounded-3xl bg-card shadow-sm">
             <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
-              <AlertCircle className="size-12 text-muted-foreground/30" />
-              <p className="text-sm text-muted-foreground font-bold">No hay módulos habilitados para mostrar métricas.</p>
-              <p className="text-xs text-muted-foreground/60">Contacta al administrador para habilitar módulos en tu suscripción.</p>
+              <AlertTriangle className="size-12 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground font-bold">No hay datos de caja disponibles</p>
+              <p className="text-xs text-muted-foreground/60">Verificá que hayas realizado facturaciones en este período.</p>
             </CardContent>
           </Card>
         </motion.div>
       ) : (
-        <motion.div variants={containerVariants} initial="hidden" animate="show" className={`grid gap-5 md:grid-cols-2 lg:grid-cols-${Math.min(kpisWithPrimary.length, 4)}`}>
-          {kpisWithPrimary.map((kpi) => {
-            const Icon = kpi.icon;
-            return (
-              <motion.div key={kpi.id} variants={itemVariants}>
-                <Card
-                  className={`relative overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer group border-border/50 rounded-3xl ${kpi.primary ? 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-transparent shadow-lg' : 'bg-card shadow-sm'}`}
-                  onClick={() => onNavigate?.(kpi.navModule)}
-                >
-                  <div className={`absolute -right-6 -top-6 size-24 rounded-full blur-2xl opacity-50 transition-transform group-hover:scale-150 duration-500 ${kpi.primary ? 'bg-white/20' : kpi.bgColor}`} />
-                  <CardContent className="p-6 relative z-10">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className={`flex size-12 items-center justify-center rounded-2xl transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shadow-inner ${kpi.primary ? 'bg-white/20 backdrop-blur-md' : `${kpi.bgColor} border border-border/50`}`}>
-                        <Icon className={`size-6 ${kpi.primary ? 'text-white' : kpi.color}`} />
+        <>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 text-center md:text-left">
+            Filtrar Caja / Período: <span className="text-foreground/60">{periodLabel}</span>
+          </p>
+
+          {/* KPIs - dark diffused tech */}
+          <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {kpiData.map((kpi, i) => {
+              const Icon = kpi.icon;
+              return (
+                <motion.div key={kpi.label} variants={itemVariants}>
+                  <Card
+                    className={`relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer group border-border/30 bg-card/80 backdrop-blur-sm shadow-md rounded-2xl`}
+                    onClick={() => onNavigate?.(i < 2 ? 'finanzas' : 'ventas')}
+                  >
+                    {/* ambient glow */}
+                    <div className={`absolute -top-8 -right-8 size-24 rounded-full blur-2xl opacity-40 pointer-events-none ${kpi.iconBg}`} />
+                    <CardContent className="p-4 relative z-10">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.label}</span>
+                        <div className={`size-8 items-center justify-center rounded-lg ${kpi.iconBg} flex`}>
+                          <Icon className={`size-4 ${kpi.accent}`} />
+                        </div>
                       </div>
+                      <p className="text-2xl font-black tracking-tighter tabular-nums text-foreground">{kpi.value}</p>
+                      {kpi.extra && (
+                        <p className={`text-[11px] font-bold mt-1 ${kpi.extra.color || 'text-muted-foreground'}`}>
+                          {kpi.extra.text}
+                        </p>
+                      )}
+                      {!kpi.extra && <div className="h-[18px]" />}
+                      <div className="mt-2 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
+                        <span>Ver detalle</span>
+                        <ArrowUpRight className="size-3" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+
+          {/* Rendimiento de Productos */}
+          {perf && (
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <BarChart3 className="size-4 text-primary" />
+                <h2 className="text-base font-black uppercase tracking-tight">Rendimiento de Productos en Caja</h2>
+              </div>
+              <p className="text-[10px] text-muted-foreground/40 font-medium mb-3 ml-6">Monitoreo por volumen de ventas, margen de utilidad ganada e inventario sin salida.</p>
+              <div className="mb-3 flex items-center gap-2">
+                <div className="h-px flex-1 bg-gradient-to-r from-border/0 via-border/60 to-border/0" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30">Análisis en Tiempo Real</span>
+                <div className="h-px flex-1 bg-gradient-to-r from-border/0 via-border/60 to-border/0" />
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                {/* Más Vendidos */}
+                <Card className="rounded-2xl border-border/40 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden">
+                  <div className="px-4 py-2.5 flex items-center justify-between border-b border-border/30 bg-emerald-500/5">
+                    <div className="flex items-center gap-2">
+                      <div className="size-6 rounded-md bg-emerald-500/10 flex items-center justify-center">
+                        <TrendingUp className="size-3 text-emerald-400" />
+                      </div>
+                      <span className="text-xs font-black uppercase tracking-wider text-foreground">Más Vendidos</span>
                     </div>
-                    <div className="space-y-1.5">
-                      <p className={`text-[10px] font-black uppercase tracking-widest ${kpi.primary ? 'text-white/80' : 'text-muted-foreground'}`}>{kpi.title}</p>
-                      <p className={`text-3xl font-black tracking-tighter tabular-nums ${kpi.primary ? 'text-white drop-shadow-sm' : 'text-foreground'}`}>
-                        {loading ? <Loader2 className="size-6 animate-spin opacity-50" /> : getKpiValue(kpi.fetchKey)}
-                      </p>
-                    </div>
-                    <div className={`mt-5 flex items-center justify-between text-[10px] font-black uppercase tracking-widest opacity-0 transform translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 ${kpi.primary ? 'text-white/90' : 'text-primary'}`}>
-                      <span>Detalles del módulo</span>
-                      <ArrowUpRight className="size-4" />
-                    </div>
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase">Unid.</span>
+                  </div>
+                  <CardContent className="p-0">
+                    {(perf.topSelling || []).length === 0 ? (
+                      <p className="text-xs text-muted-foreground/40 italic py-6 text-center font-medium">Sin ventas</p>
+                    ) : (perf.topSelling || []).slice(0, 5).map((p: any, i: number) => (
+                      <div key={p.productId || i} className="px-4 py-2.5 border-b border-border/20 last:border-0 hover:bg-muted/30 transition-colors flex items-center justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold truncate">{p.name}</p>
+                          <p className="text-[10px] text-muted-foreground/50">Total: {fmt(p.totalRevenue || 0)}</p>
+                        </div>
+                        <span className="text-[10px] font-black tabular-nums text-emerald-500 ml-3 shrink-0">{p.totalQty || 0} uds</span>
+                      </div>
+                    ))}
                   </CardContent>
                 </Card>
-              </motion.div>
-            );
-          })}
-        </motion.div>
-      )}
 
-      {/* Charts row — adapts to available modules */}
-      {modulesLoaded && kpisWithPrimary.length > 0 && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
-            <Card className="rounded-3xl border-border/50 bg-card shadow-sm">
-              <CardHeader><CardTitle className="text-lg font-bold uppercase tracking-tight">
-                {hasSales ? 'Actividad Reciente — Órdenes' : 'Resumen de Actividad'}
-              </CardTitle></CardHeader>
-              <CardContent>
-                {hasSales && recentOrders.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={recentOrders.map(o => ({
-                      name: o.number || o.id?.slice(0,8),
-                      total: convertAmount(Number(o.total || 0), o.currency, o.exchangeRate),
-                    }))}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 11 }} stroke="currentColor" className="text-muted-foreground" />
-                      <YAxis tick={{ fill: 'currentColor', fontSize: 11 }} stroke="currentColor" className="text-muted-foreground" />
-                      <Tooltip
-                        cursor={{ fill: 'var(--muted)', opacity: 0.3 }}
-                        contentStyle={{
-                          backgroundColor: 'var(--popover)',
-                          color: 'var(--popover-foreground)',
-                          border: '1px solid var(--border)',
-                          borderRadius: '12px',
-                          fontSize: '12px',
-                        }}
-                        labelStyle={{ color: 'var(--popover-foreground)', fontWeight: 700 }}
-                        itemStyle={{ color: 'var(--popover-foreground)' }}
-                        formatter={(value: any) => [formatCurrency(Number(value), displayCurrency), 'Total']}
-                      />
-                      <Bar dataKey="total" fill="var(--primary)" radius={[8,8,0,0]} name="Total" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-[280px] flex items-center justify-center text-muted-foreground text-sm italic">
-                    {loading ? <Loader2 className="animate-spin size-6" /> : 'No hay datos disponibles para graficar'}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }}>
-            <Card className="rounded-3xl bg-card shadow-sm border-border/50">
-              <CardHeader><CardTitle className="text-lg font-bold uppercase tracking-tight">Resumen Ejecutivo</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-4 pt-2">
-                  {kpisWithPrimary.map(kpi => (
-                    <div key={kpi.id} className="flex items-center justify-between p-4 rounded-2xl bg-muted/20 border border-border/30 hover:bg-muted/30 transition-colors group">
-                      <div className="flex items-center gap-3">
-                        <div className={`size-3 rounded-full ${kpi.bgColor.replace('/10', '')} shadow-sm group-hover:scale-125 transition-transform`} 
-                          style={{ backgroundColor: `var(--${kpi.color.replace('text-', '')}, currentColor)` }} />
-                        <span className="text-sm font-bold text-muted-foreground/80">{kpi.title}</span>
+                {/* Mayor Utilidad */}
+                <Card className="rounded-2xl border-border/40 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden">
+                  <div className="px-4 py-2.5 flex items-center justify-between border-b border-border/30 bg-blue-500/5">
+                    <div className="flex items-center gap-2">
+                      <div className="size-6 rounded-md bg-blue-500/10 flex items-center justify-center">
+                        <Coins className="size-3 text-blue-400" />
                       </div>
-                      <span className="font-black text-sm tabular-nums text-foreground">
-                        {loading ? '...' : getKpiValue(kpi.fetchKey)}
-                      </span>
+                      <span className="text-xs font-black uppercase tracking-wider text-foreground">Mayor Utilidad</span>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
-      )}
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase">Ganancia</span>
+                  </div>
+                  <CardContent className="p-0">
+                    {(perf.topMargin || []).length === 0 ? (
+                      <p className="text-xs text-muted-foreground/40 italic py-6 text-center font-medium">Sin datos</p>
+                    ) : (perf.topMargin || []).slice(0, 5).map((p: any, i: number) => (
+                      <div key={p.productId || i} className="px-4 py-2.5 border-b border-border/20 last:border-0 hover:bg-muted/30 transition-colors flex items-center justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold truncate">{p.name}</p>
+                          <p className="text-[10px] font-black text-blue-500">+{fmt(p.profit || 0)}</p>
+                        </div>
+                        <span className="text-[10px] font-black tabular-nums text-blue-500 ml-3 shrink-0">{(p.margin || 0).toFixed(0)}%</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
 
-      {/* Recent Transactions — only if sales module is available */}
-      {hasSales && (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
-          <Card className="rounded-3xl bg-card border-border/50 shadow-sm overflow-hidden">
-            <CardHeader className="pb-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="text-xl font-black uppercase tracking-tight">Facturas Recientes</CardTitle>
-                  <p className="text-xs text-muted-foreground/60 font-medium">Últimas transacciones procesadas.</p>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => onNavigate?.('ventas')} className="hover:bg-primary/5 border-border/50 rounded-xl font-bold uppercase text-[10px] tracking-widest">
-                  Ver Historial <ArrowUpRight className="ml-2 size-4" />
-                </Button>
+                {/* Sin Venta */}
+                <Card className="rounded-2xl border-border/40 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden">
+                  <div className="px-4 py-2.5 flex items-center justify-between border-b border-border/30 bg-rose-500/5">
+                    <div className="flex items-center gap-2">
+                      <div className="size-6 rounded-md bg-rose-500/10 flex items-center justify-center">
+                        <Clock className="size-3 text-rose-400" />
+                      </div>
+                      <span className="text-xs font-black uppercase tracking-wider text-foreground">Sin Venta</span>
+                    </div>
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase">Stock Parado</span>
+                  </div>
+                  <CardContent className="p-0">
+                    {(perf.noSaleProducts || []).length === 0 ? (
+                      <p className="text-xs text-muted-foreground/40 italic py-6 text-center font-medium">Todos venden</p>
+                    ) : (perf.noSaleProducts || []).slice(0, 5).map((p: any, i: number) => (
+                      <div key={p.id || i} className="px-4 py-2.5 border-b border-border/20 last:border-0 hover:bg-muted/30 transition-colors flex items-center justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold truncate">{p.name}</p>
+                          <p className="text-[10px] text-muted-foreground/50">{p.daysWithoutSale ? `${p.daysWithoutSale} días sin salida` : 'Sin salidas'}</p>
+                        </div>
+                        <span className="text-[10px] font-black tabular-nums text-rose-400 ml-3 shrink-0">{p.currentStock || 0} stck</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
               </div>
-            </CardHeader>
-            <CardContent className="p-2 sm:p-6 sm:pt-0">
-              <div className="overflow-x-auto rounded-2xl border border-border/20">
-                <Table>
-                  <TableHeader className="bg-muted/30">
-                    <TableRow className="border-border/40 hover:bg-transparent">
-                      <TableHead className="font-black py-4 pl-4 uppercase text-[10px] tracking-widest">Factura</TableHead>
-                      <TableHead className="font-black py-4 uppercase text-[10px] tracking-widest">Cliente</TableHead>
-                      <TableHead className="font-black py-4 text-right uppercase text-[10px] tracking-widest">Monto</TableHead>
-                      <TableHead className="font-black py-4 text-center uppercase text-[10px] tracking-widest">Estado</TableHead>
-                      <TableHead className="font-black py-4 text-right pr-4 uppercase text-[10px] tracking-widest">Fecha</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-20">
-                          <Loader2 className="size-8 animate-spin mx-auto text-primary/20" />
-                        </TableCell>
+            </div>
+          )}
+
+          {/* Transacciones Recientes */}
+          {transactions.length > 0 && (
+            <Card className="rounded-2xl bg-card/80 backdrop-blur-sm border-border/40 shadow-sm overflow-hidden">
+              <CardHeader className="pb-2 px-5 pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Receipt className="size-4 text-primary" />
+                    <div>
+                      <CardTitle className="text-sm font-black uppercase tracking-tight">Transacciones Recientes</CardTitle>
+                      <p className="text-[10px] text-muted-foreground/50 font-medium">Últimas facturas procesadas.</p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => onNavigate?.('ventas')}
+                    className="hover:bg-primary/5 border-border/50 rounded-lg font-black uppercase text-[10px] tracking-widest">
+                    Ver Historial <ArrowUpRight className="ml-1 size-3" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-muted/30">
+                      <TableRow className="border-border/40 hover:bg-transparent">
+                        <TableHead className="font-black py-2.5 pl-5 uppercase text-[10px] tracking-widest">Factura</TableHead>
+                        <TableHead className="font-black py-2.5 uppercase text-[10px] tracking-widest">Caja</TableHead>
+                        <TableHead className="font-black py-2.5 uppercase text-[10px] tracking-widest">Cliente</TableHead>
+                        <TableHead className="font-black py-2.5 text-right uppercase text-[10px] tracking-widest">Monto</TableHead>
+                        <TableHead className="font-black py-2.5 text-center pr-5 uppercase text-[10px] tracking-widest">IVA</TableHead>
                       </TableRow>
-                    ) : recentInvoices.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-20 text-muted-foreground text-xs font-bold uppercase tracking-widest italic opacity-40">
-                          Sin facturas registradas
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      recentInvoices.map((inv: any) => (
-                        <TableRow key={inv.id} className="border-border/30 hover:bg-muted/30 transition-colors group">
-                          <TableCell className="font-black pl-4 text-sm text-foreground/80">{inv.number}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <div className="size-8 rounded-full flex items-center justify-center text-[10px] font-black bg-primary/10 text-primary border border-primary/20">
-                                {(inv.customer?.name || inv.customerId || 'N').substring(0, 1).toUpperCase()}
-                              </div>
-                              <span className="font-bold text-sm text-foreground/70">{inv.customer?.name || '—'}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-black text-right text-sm tabular-nums">
-                            {formatCurrency(Number(inv.total || 0), inv.currency, inv.exchangeRate)}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant="outline" className={cn("px-3 py-1 font-black uppercase text-[9px] tracking-widest border-none", statusColors[inv.paymentStatus] || 'bg-muted/10 text-muted-foreground')}>
-                              {statusLabel[inv.paymentStatus] || inv.paymentStatus}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground/60 text-[10px] font-black text-right pr-4 uppercase tracking-tighter">
-                            {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('es-NI') : '—'}
+                    </TableHeader>
+                    <TableBody>
+                      {transactions.slice(0, 10).map((tx: any, i: number) => (
+                        <TableRow key={tx.id || i} className="border-border/30 hover:bg-muted/30 transition-colors cursor-pointer group" onClick={() => onNavigate?.('ventas')}>
+                          <TableCell className="font-black pl-5 text-xs group-hover:text-primary transition-colors">{tx.number || `FAC-${String(i + 1).padStart(3, '0')}`}</TableCell>
+                          <TableCell className="text-xs font-bold flex items-center gap-1.5 py-2.5"><Store className="size-3 text-muted-foreground/40" />{tx.register?.name || '—'}</TableCell>
+                          <TableCell className="text-xs font-bold text-foreground/70">{tx.customer || 'Cliente General'}</TableCell>
+                          <TableCell className="font-black text-right text-xs tabular-nums">{fmt(tx.total || 0)}</TableCell>
+                          <TableCell className="text-center pr-5">
+                            {tx.hasIVA ? (
+                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-black px-2 py-0.5">15%</Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-muted/20 text-muted-foreground border-border/30 text-[9px] font-black px-2 py-0.5">EXENTO</Badge>
+                            )}
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Ventas por Cajas + Alertas */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {registers.length > 0 && (
+              <Card className="rounded-2xl border-border/40 bg-card/80 backdrop-blur-sm shadow-sm">
+                <CardHeader className="pb-2 px-5 pt-4">
+                  <CardTitle className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
+                    <BarChart3 className="size-4 text-primary" /> Ventas por Cajas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-4 space-y-3">
+                  {(() => {
+                    const maxTotal = Math.max(...registers.map((r: any) => r.total || 0));
+                    return registers.map((r: any, i: number) => {
+                      const pct = maxTotal > 0 ? ((r.total || 0) / maxTotal) * 100 : 0;
+                      return (
+                        <div key={r.registerId || i} className="cursor-pointer group" onClick={() => onNavigate?.('ventas')}>
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Store className="size-3 text-muted-foreground/40 shrink-0 group-hover:text-primary transition-colors" />
+                              <span className="text-xs font-bold truncate group-hover:text-primary transition-colors">{r.registerName || `Caja ${r.registerCode}`}</span>
+                            </div>
+                            <span className="text-xs font-black tabular-nums">{fmt(r.total || 0)}</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${pct}%` }}
+                              transition={{ duration: 0.8, delay: i * 0.1, ease: 'easeOut' }}
+                              className={`h-full rounded-full ${
+                                pct >= 70 ? 'bg-gradient-to-r from-primary to-primary/70' :
+                                pct >= 40 ? 'bg-gradient-to-r from-cyan-500 to-blue-500' :
+                                'bg-gradient-to-r from-amber-500 to-orange-500'
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </CardContent>
+              </Card>
+            )}
+
+            {alerts.length > 0 && (
+              <Card className="rounded-2xl border-border/40 bg-card/80 backdrop-blur-sm shadow-sm">
+                <CardHeader className="pb-2 px-5 pt-4">
+                  <CardTitle className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
+                    <Package className="size-4 text-amber-500" /> Alertas de Inventario POS
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-4 space-y-1.5">
+                  {alerts.slice(0, 6).map((a: any, i: number) => (
+                    <div key={a.productId || i} className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer group" onClick={() => onNavigate?.('inventario')}>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className={`size-2 shrink-0 rounded-full ${a.status === 'SIN_STOCK' ? 'bg-rose-500' : a.status === 'STOCK_BAJO' ? 'bg-amber-500' : 'bg-orange-500'}`} />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold truncate group-hover:text-primary transition-colors">{a.name}</p>
+                          <p className="text-[10px] text-muted-foreground/50 font-medium">{a.status === 'SIN_STOCK' ? 'Agotado' : a.status === 'STOCK_BAJO' ? `Stock Bajo (${a.currentStock})` : `Reordenar (${a.currentStock})`}</p>
+                        </div>
+                      </div>
+                      <Badge className={`text-[9px] font-black uppercase tracking-widest border-none px-2 py-0.5 ${statusStyles[a.status] || 'bg-muted/10 text-muted-foreground'}`}>
+                        {statusLabel[a.status] || a.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

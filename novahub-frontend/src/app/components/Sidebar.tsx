@@ -51,6 +51,7 @@ import {
   GraduationCap,
   LifeBuoy,
   BookOpen,
+  Cloud,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -93,7 +94,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'pagos-recibidos': ['SALES_PAYMENTS'],
   'devoluciones-venta': ['SALES_RETURNS'],
   'notas-credito': ['SALES_CREDIT_NOTES'],
-  'facturacion-caja': ['SALES_POS'],
+  'facturacion-caja': ['RETAIL_POS', 'SALES_POS'],
   // Compras
   proveedores: ['PURCHASES_PROVIDERS'],
   gastos: ['PURCHASES_EXPENSES'],
@@ -268,15 +269,17 @@ const menuItems: MenuItem[] = [
   },
   { id: 'soporte-tecnico', label: 'Soporte Técnico', icon: <LifeBuoy className="size-5" /> },
   { id: 'asesoria-legal', label: 'Asesoría Legal', icon: <Scale className="size-5" /> },
+  { id: 'novachat', label: 'Nova Suite', icon: <MessageSquare className="size-5" /> },
   {
     id: 'documentos',
-    label: 'Documentos',
+    label: 'Nova Cloud',
     icon: <FolderOpen className="size-4" />,
     submenu: [
       { id: 'archivos', label: 'Archivos', icon: <HardDrive className="size-4" /> },
       { id: 'contratos', label: 'Contratos', icon: <Scale className="size-4" /> },
       { id: 'doc-facturas', label: 'Facturas Legales', icon: <FileText className="size-4" /> },
-      { id: 'doc-reportes', label: 'Reportes', icon: <BarChart3 className="size-4" /> }
+      { id: 'doc-reportes', label: 'Reportes', icon: <BarChart3 className="size-4" /> },
+      { id: 'nova-cloud-planes', label: 'Planes de Almacenamiento', icon: <Cloud className="size-4" /> }
     ]
   },
   {
@@ -397,8 +400,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     contabilidad: 'ACCOUNTING',
     'financiamiento-pyme': 'FINANCING',
     'asesoria-legal': 'LEGAL',
-    'centro-capacitacion': 'TRAINING',
-    'soporte-tecnico': 'SUPPORT'
+    'centro-capacitacion': 'HR_TRAINING',
+    'soporte-tecnico': 'SUPPORT_TECH'
   };
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {

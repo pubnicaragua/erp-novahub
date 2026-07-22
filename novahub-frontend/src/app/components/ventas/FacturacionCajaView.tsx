@@ -1,19 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
-  CreditCard, Clock, Settings2, Banknote, Edit2
+  CreditCard, Clock,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from 'sonner';
-import { useAuth } from '../../contexts/AuthContext';
-import { inventoryService } from '../../services/inventario.service';
 import {
   cajaService,
   type CashRegister,
@@ -120,8 +116,6 @@ export function FacturacionCajaView() {
   const [productSearch, setProductSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-
-  const { user } = useAuth();
 
   const loadInitialData = useCallback(async () => {
     setLoading(true);

@@ -51,6 +51,68 @@ export interface PosInvoice {
   items?: any[];
 }
 
+export interface DashboardKPIs {
+  totalRevenue: number;
+  totalExpenses: number;
+  ordersCount: number;
+  pendingOrders: number;
+  netMargin: number;
+}
+
+export interface ProductPerformanceItem {
+  productId: string;
+  name: string;
+  code: string;
+  totalQty: number;
+  totalRevenue: number;
+  costPrice?: number;
+  salePrice?: number;
+  margin?: number;
+  profit?: number;
+}
+
+export interface RegisterSales {
+  registerId: string;
+  registerCode: string;
+  registerName: string;
+  total: number;
+  count: number;
+}
+
+export interface InventoryAlert {
+  productId: string;
+  code: string;
+  name: string;
+  currentStock: number;
+  minStock: number;
+  status: 'SIN_STOCK' | 'STOCK_BAJO' | 'REORDEN';
+}
+
+export interface RecentTransaction {
+  id: string;
+  number: string;
+  date: string;
+  register: { code: string; name: string } | null;
+  customer: string;
+  total: number;
+  taxAmount: number;
+  status: string;
+  hasIVA: boolean;
+}
+
+export interface DashboardData {
+  kpis: DashboardKPIs;
+  productPerformance: {
+    topSelling: ProductPerformanceItem[];
+    topMargin: ProductPerformanceItem[];
+    noSaleProducts: { id: string; name: string; code: string; salePrice: number }[];
+  };
+  salesByRegister: RegisterSales[];
+  inventoryAlerts: InventoryAlert[];
+  recentTransactions: RecentTransaction[];
+  period: string;
+}
+
 export const cajaService = {
   getRegisters: (all: boolean = false) =>
     api.get<CashRegister[]>('/caja/registers', { params: all ? { all: 'true' } : undefined }),
@@ -88,4 +150,7 @@ export const cajaService = {
 
   getRecentInvoices: (registerId?: string) =>
     api.get<PosInvoice[]>('/caja/invoices/recent', { params: registerId ? { registerId } : undefined }),
+
+  getDashboard: (period?: string) =>
+    api.get<DashboardData>('/caja/dashboard', { params: period ? { period } : undefined }),
 };

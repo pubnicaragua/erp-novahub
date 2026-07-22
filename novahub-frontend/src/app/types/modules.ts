@@ -1,5 +1,3 @@
-import { LucideIcon } from 'lucide-react';
-
 export interface Submodule {
   id: string;
   label: string;
@@ -24,7 +22,7 @@ export const SALES_SUBMODULES: Submodule[] = [
   { id: 'SALES_PAYMENTS', label: 'Pagos Recibidos', description: 'Historial de ingresos' },
   { id: 'SALES_RETURNS', label: 'Devoluciones de Venta', description: 'Retornos de mercancía' },
   { id: 'SALES_CREDIT_NOTES', label: 'Notas de Crédito', description: 'Ajustes y créditos emitidos' },
-  { id: 'SALES_POS', label: 'Facturación por Caja', description: 'Punto de venta y caja' },
+  { id: 'RETAIL_POS', label: 'Facturación por Caja', description: 'Punto de venta y caja' },
 ];
 
 // Submódulos de Compras (alineados con sidebar)

@@ -97,6 +97,7 @@ const PARENT_SUBMODULES: Record<string, string[]> = {
   LEGAL: [],
   TOOLS: [],
   FINANCING: [],
+  NOVACHAT: [],
 };
 
 const SUBMODULE_NAMES_ES: Record<string, string> = {
@@ -809,6 +810,7 @@ export function RegisterTenantPage() {
                         mod === 'REPORTS' ? 'Reportes' :
                         mod === 'SUPPORT_TECH' ? 'Soporte Técnico' :
                         mod === 'TOOLS' ? 'Herramientas' :
+                        mod === 'NOVACHAT' ? 'Nova Suite' :
                         mod.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
                       }
                     </span>

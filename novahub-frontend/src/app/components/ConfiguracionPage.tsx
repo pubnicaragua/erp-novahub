@@ -8,7 +8,7 @@ import {
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings,
-  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, Banknote
+  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, MessageSquare
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -60,8 +60,9 @@ const AVAILABLE_MODULES = [
   { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Contabilidad General' },
   { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
   { id: 'LEGAL', label: 'Asesoría Legal', icon: Scale, description: 'Asesoría y Casos Legales' },
-  { id: 'TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
-  { id: 'SUPPORT', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
+  { id: 'HR_TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
+  { id: 'SUPPORT_TECH', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
+  { id: 'NOVACHAT', label: 'Nova Suite', icon: MessageSquare, description: 'Bandeja multicanal y comunicación unificada' },
 ];
 
 // Submódulos para permisos ultra-granulares
@@ -75,7 +76,7 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'SALES_PAYMENTS', label: 'Pagos Recibidos', parent: 'SALES' },
   { id: 'SALES_RETURNS', label: 'Devoluciones de Venta', parent: 'SALES' },
   { id: 'SALES_CREDIT_NOTES', label: 'Notas de Crédito', parent: 'SALES' },
-  { id: 'SALES_POS', label: 'Facturación por Caja', parent: 'SALES' },
+  { id: 'RETAIL_POS', label: 'Facturación por Caja', parent: 'SALES' },
 
   // Compras
   { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', parent: 'PURCHASES' },
@@ -430,7 +431,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [strictIsolation, setStrictIsolation] = useState(true);
   const [whiteLabel, setWhiteLabel] = useState(false);
   const [apiAccess, setApiAccess] = useState(false);
-  const [apiKey] = useState('nh_live_' + Math.random().toString(36).slice(2, 18).toUpperCase());
 
   // Currency & Exchange Rate state
   const [exchangeRateAuto, setExchangeRateAuto] = useState(true);
@@ -612,7 +612,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [roles, setRoles] = useState<RoleManagement[]>([]);
   // @ts-ignore
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
-  const [isLoadingModules, setIsLoadingModules] = useState(false);
+  const [, setIsLoadingModules] = useState(false);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
 
   useEffect(() => {

@@ -1,14 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Card } from './ui/card';
-import { Button } from './ui/button';
-import { Files, FileText, Scale, FileBarChart, HardDrive } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Files, FileText, Scale, FileBarChart, HardDrive, Cloud } from 'lucide-react';
 import { cn } from './ui/utils';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { motion, AnimatePresence } from 'motion/react';
 import { ContratosView } from './documentos/ContratosView';
 import { FacturasLegalesView } from './documentos/FacturasLegalesView';
 import { ReportesView } from './documentos/ReportesView';
 import { ArchivosView } from './documentos/ArchivosView';
+import { NovaCloudPlanesView } from './documentos/NovaCloudPlanesView';
 import { contractsService, legalInvoicesService, reportsService, filesService } from '../services/documentos.service';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -58,7 +57,8 @@ export const DocumentosPage = ({ activeSubModule }: DocumentosPageProps) => {
     { id: 'archivos', label: 'Archivos', icon: HardDrive, color: 'text-blue-500', module: 'DOCUMENTS_FILES' },
     { id: 'contratos', label: 'Contratos', icon: Scale, color: 'text-emerald-500', module: 'DOCUMENTS_CONTRACTS' },
     { id: 'facturas', label: 'Facturas Legales', icon: FileText, color: 'text-amber-500', module: 'DOCUMENTS_INVOICES' },
-    { id: 'reportes', label: 'Reportes', icon: FileBarChart, color: 'text-purple-500', module: 'DOCUMENTS_REPORTS' }
+    { id: 'reportes', label: 'Reportes', icon: FileBarChart, color: 'text-purple-500', module: 'DOCUMENTS_REPORTS' },
+    { id: 'planes', label: 'Nova Cloud', icon: Cloud, color: 'text-cyan-500', module: 'DOCUMENTS' }
   ];
 
   return (
@@ -72,10 +72,10 @@ export const DocumentosPage = ({ activeSubModule }: DocumentosPageProps) => {
               </div>
               <div>
                 <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-                  Documentos
+                  Nova Cloud
                 </h1>
                 <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/50 mt-2">
-                  Gestión documental centralizada
+                  Almacenamiento y gestión documental en la nube
                 </p>
               </div>
             </div>
@@ -116,6 +116,7 @@ export const DocumentosPage = ({ activeSubModule }: DocumentosPageProps) => {
                 {activeTab === 'contratos' && <ContratosView data={data.contratos} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'facturas' && <FacturasLegalesView data={data.facturas} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'reportes' && <ReportesView data={data.reportes} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'planes' && <NovaCloudPlanesView />}
               </motion.div>
             </AnimatePresence>
           </Tabs>

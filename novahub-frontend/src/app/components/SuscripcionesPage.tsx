@@ -90,6 +90,7 @@ const AVAILABLE_MODULES = [
   { id: 'LEGAL', label: 'Asesoría Legal', icon: Scale, description: 'Asesoría y Casos Legales' },
   { id: 'TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
   { id: 'SUPPORT', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
+  { id: 'NOVACHAT', label: 'Nova Suite', icon: MessageSquare, description: 'Bandeja multicanal y comunicación unificada' },
 ];
 
 const SYSTEM_ROLE_OPTIONS = [

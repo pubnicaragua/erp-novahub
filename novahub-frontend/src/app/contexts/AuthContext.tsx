@@ -32,6 +32,7 @@ export type Module =
   | 'centro-capacitacion'
   | 'soporte-tecnico'
   | 'asesoria-legal'
+  | 'novachat'
   | 'inventario_productos'
   | 'contabilidad';
 
@@ -87,7 +88,7 @@ const ALL_MODULES: Module[] = [
   'documentos', 'notificaciones', 'transferencias',
   'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
   'financiamiento-pyme', 'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal',
-  'contabilidad',
+  'contabilidad', 'novachat',
 ];
 
 const getPermissionsByRole = (role: Role): Permission[] => {
@@ -172,6 +173,7 @@ const createUserObject = (apiPayload: any): User => {
     'TOOLS': 'herramientas',
     'ACTIVITIES': 'actividades',
     'DOCUMENTS': 'documentos',
+    'NOVACHAT': 'novachat',
     'NOTIFICATIONS': 'notificaciones',
     'REPORTS': 'reportes',
     'TICKETS': 'tickets'
@@ -313,10 +315,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
-      const platformModules = [
+    const platformModules = [
         'dashboard', 'suscripciones', 'configuracion', 'notificaciones',
-        'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal',
-      ];
+        'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
+    ];
       return platformModules.includes(module);
     }
 
@@ -347,14 +349,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'contabilidad': 'ACCOUNTING',
       'financiamiento-pyme': 'FINANCING',
       'asesoria-legal': 'LEGAL',
-      'centro-capacitacion': 'TRAINING',
-      'soporte-tecnico': 'SUPPORT'
+      'centro-capacitacion': 'HR_TRAINING',
+      'soporte-tecnico': 'SUPPORT_TECH',
+      'novachat': 'NOVACHAT'
     };
     const moduleGroupMap: Record<string, string[]> = {
       ventas: [
         'SALES', 'CLIENTS',
         'SALES_CLIENTS', 'SALES_QUOTES', 'SALES_ORDERS', 'SALES_INVOICES',
-        'SALES_RECURRING', 'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_PAYMENTS', 'SALES_POS',
+        'SALES_RECURRING', 'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_PAYMENTS', 'RETAIL_POS', 'SALES_POS',
       ],
       compras: [
         'PURCHASES', 'PROVIDERS',
@@ -401,8 +404,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ],
       'financiamiento-pyme': ['FINANCING'],
       'asesoria-legal': ['LEGAL'],
-      'centro-capacitacion': ['TRAINING'],
-      'soporte-tecnico': ['SUPPORT'],
+      'centro-capacitacion': ['HR_TRAINING', 'TRAINING'],
+      'soporte-tecnico': ['SUPPORT_TECH', 'SUPPORT'],
+      'novachat': ['NOVACHAT'],
     };
 
     const backendModuleName = moduleEnumMap[module] || module.toUpperCase();
