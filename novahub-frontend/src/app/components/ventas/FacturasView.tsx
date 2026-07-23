@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, FileDown, History
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, FileDown, History, MessageCircle
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -64,6 +64,21 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
   const [isCreating, setIsCreating] = useState(false);
   const [auditInvoiceId, setAuditInvoiceId] = useState<string | null>(null);
+
+  const getCustomerPhone = (): string | null => {
+    if (!localDoc?.customerId) return null;
+    const customer = customers.find((c: any) => c.id === localDoc.customerId);
+    return customer?.phone || null;
+  };
+
+  const handleWhatsApp = () => {
+    const phone = getCustomerPhone();
+    if (!phone) { toast.error('El cliente no tiene número de teléfono registrado'); return; }
+    const digits = phone.replace(/\D/g, '');
+    const phoneWithCode = digits.length === 8 ? '505' + digits : (digits.startsWith('505') ? digits : '505' + digits);
+    const text = encodeURIComponent(`Hola ${localDoc?.customer?.name || ''}, te compartimos la factura ${localDoc?.number} por un total de ${localDoc?.currency === 'USD' ? '$' : 'C$'}${Number(localDoc?.total || 0).toLocaleString()}.`);
+    window.open(`https://wa.me/${phoneWithCode}?text=${text}`, '_blank');
+  };
 
   const isSerialTracked = (product: any) =>
     Boolean(
@@ -435,6 +450,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {!isCreating && localDoc?.customerId && (
+              <Button variant="outline" onClick={handleWhatsApp} className="rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 gap-2 font-black uppercase text-[10px] tracking-widest px-4">
+                <MessageCircle className="size-3.5" /> WhatsApp
+              </Button>
+            )}
             {((isCreating && canPerform('SALES_INVOICES', 'create')) || (!isCreating && canPerform('SALES_INVOICES', 'edit'))) && (
               <>
                 <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"

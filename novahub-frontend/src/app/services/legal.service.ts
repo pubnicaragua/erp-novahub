@@ -35,6 +35,19 @@ export interface LegalDocument {
   createdAt: string;
 }
 
+export interface LegalMessage {
+  id: string;
+  caseId: string;
+  content?: string;
+  sender: 'client' | 'lawyer';
+  senderName: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  fileType?: string;
+  createdAt: string;
+}
+
 export interface LegalReminder {
   id: string;
   clientTenantId: string;
@@ -104,6 +117,20 @@ export const legalService = {
 
   addDocument: (caseId: string, name: string, url: string, type?: string) =>
     api.post<LegalDocument>(`/legal/cases/${caseId}/documents`, { name, url, type }),
+
+  listMessages: (caseId: string) =>
+    api.get<LegalMessage[]>(`/legal/cases/${caseId}/messages`),
+
+  addMessage: (caseId: string, data: {
+    content?: string;
+    sender: string;
+    senderName: string;
+    fileUrl?: string;
+    fileName?: string;
+    fileSize?: number;
+    fileType?: string;
+  }) =>
+    api.post<LegalMessage>(`/legal/cases/${caseId}/messages`, data),
 
   listReminders: () =>
     api.get<LegalReminder[]>('/legal/reminders'),

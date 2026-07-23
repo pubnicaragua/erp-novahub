@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Scale, Plus, Loader2, ArrowLeft, Eye, X,
   FileText, Clock, Bell, AlertTriangle,
-  Calendar, User, Send, Trash2, Search,
+  Calendar, User, Send, Trash2, Search, MessageCircle,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -18,6 +18,7 @@ import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import { legalService, type LegalCase, type LegalReminder } from '../../services/legal.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { LegalChatPanel } from './LegalChatPanel';
 
 export function AsesoriaLegalView() {
   const { canPerform } = useAuth();
@@ -317,6 +318,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
   const [isInternal, setIsInternal] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [c, setCase] = useState<LegalCase>(caseData);
 
   const handleAddNote = async () => {
@@ -344,6 +346,10 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
     } catch { toast.error('Error al cambiar estado'); }
   };
 
+  if (showChat) {
+    return <LegalChatPanel caseId={c.id} caseNumber={c.number} onBack={() => setShowChat(false)} />;
+  }
+
   return (
     <Card className="border-border/50 shadow-sm">
       <CardContent className="p-6 space-y-6">
@@ -361,6 +367,9 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
             <p className="text-sm text-muted-foreground mt-1">{legalService.getCaseTypeLabel(c.type)}</p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowChat(true)} className="gap-2 rounded-xl text-xs font-bold">
+              <MessageCircle className="size-3" /> Chat
+            </Button>
             {canPerform('LEGAL', 'edit') && (
               <Button variant="outline" onClick={() => setShowStatusDialog(true)} className="gap-2 rounded-xl text-xs font-bold">
                 <AlertTriangle className="size-3" /> Cambiar Estado
