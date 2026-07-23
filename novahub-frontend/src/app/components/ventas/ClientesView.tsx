@@ -15,6 +15,7 @@ import { Badge } from '../ui/badge';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { CustomerDetailDrawer } from './CustomerDetailDrawer';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -26,6 +27,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
   const { formatConvertedAmount } = useCurrency();
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Customer | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -383,7 +385,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
-               <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => toast.info('Detalle de cliente en desarrollo')}><Eye className="size-4" /></Button>
+               <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomerDetail(row)}><Eye className="size-4" /></Button>
                {canPerform('SALES_CLIENTS', 'delete') && (
                  <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                )}
@@ -391,6 +393,12 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           )}
         />
       </div>
+
+      <CustomerDetailDrawer
+        customerId={selectedCustomerDetail?.id ?? null}
+        onOpenChange={(open) => !open && setSelectedCustomerDetail(null)}
+        customerSnapshot={selectedCustomerDetail}
+      />
 
       <ConfirmDialog
         open={pendingDeleteId !== null}

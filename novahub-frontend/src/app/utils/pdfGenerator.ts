@@ -7,9 +7,10 @@ interface PDFGeneratorParams {
   formatAmount: (amount: number, currency: string, rate: number) => string;
   tenantLogo?: string;
   documentType?: 'estimate' | 'order' | 'invoice' | 'recurring' | 'payment' | 'return' | 'credit-note';
+  save?: boolean;
 }
 
-export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, tenantLogo, documentType = 'estimate' }: PDFGeneratorParams) => {
+export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, tenantLogo, documentType = 'estimate', save = true }: PDFGeneratorParams): Promise<{ doc: jsPDF; blob: Blob }> => {
   const doc = new jsPDF();
   
   // 1. Configuraciones iniciales y estilos base
@@ -194,8 +195,11 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   doc.setFont('helvetica', 'italic');
   doc.text(`Documento de cotización originado por el módulo Ventas de ERP Nova Hub. Generado por ${tenantName}`, 14, pageHeight - 10);
 
-  // Descargar PDF
-  doc.save(`${estimate.number || 'Cotizacion'}.pdf`);
+  if (save) {
+    doc.save(`${estimate.number || 'Cotizacion'}.pdf`);
+  }
+
+  return { doc, blob: doc.output('blob') };
 };
 
 export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, formatAmount, tenantLogo }: any) => {

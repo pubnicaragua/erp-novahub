@@ -17,6 +17,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { storageService } from '../../services/storage.service';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -81,13 +82,59 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
     return customer?.phone || null;
   };
 
-  const handleWhatsApp = () => {
+  const handleWhatsApp = async () => {
     const phone = getCustomerPhone();
-    if (!phone) { toast.error('El cliente no tiene número de teléfono registrado'); return; }
+    if (!phone) {
+      toast.error('El cliente no tiene número de teléfono registrado');
+      return;
+    }
+
+    let publicPdfUrl: string | null = null;
+
+    if (localDoc) {
+      const currentCustomer = customers.find((c) => c.id === localDoc.customerId) || localDoc.customer;
+      try {
+        toast.info('Generando PDF y creando enlace público...');
+        const { blob } = await generateEstimatePDF({
+          estimate: { ...localDoc, customer: currentCustomer },
+          tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
+          tenantLogo: themeConfig?.logo,
+          formatAmount: formatConvertedAmount,
+          save: true, // Descarga la copia local en PDF
+        });
+
+        // Subir a la nube / Supabase Storage para obtener enlace público directo
+        const fileName = `${localDoc.number || 'Cotizacion'}_${Date.now()}.pdf`;
+        const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
+        const uploaded = await storageService.uploadFile('documents', pdfFile, { folder: 'cotizaciones' });
+        if (uploaded?.url) {
+          publicPdfUrl = uploaded.url;
+        }
+      } catch (err) {
+        console.warn('No se pudo generar enlace en la nube, usando modo estándar:', err);
+      }
+    }
+
     const digits = phone.replace(/\D/g, '');
     const phoneWithCode = digits.length === 8 ? '505' + digits : (digits.startsWith('505') ? digits : '505' + digits);
-    const text = encodeURIComponent(`Hola ${localDoc?.customer?.name || ''}, te compartimos la cotización ${localDoc?.number} por un total de ${localDoc?.currency === 'USD' ? '$' : 'C$'}${Number(localDoc?.total || 0).toLocaleString()}. Podés revisarla y confirmarnos tu aprobación.`);
+    const customerName = localDoc?.customer?.name || customers.find((c) => c.id === localDoc?.customerId)?.name || '';
+    const totalFormatted = formatConvertedAmount(Number(localDoc?.total || 0), localDoc?.currency || 'NIO');
+
+    let message = `Hola ${customerName}, te compartimos la cotización ${localDoc?.number || ''} por un total de ${totalFormatted}.`;
+    if (publicPdfUrl) {
+      message += `\n\nPodés ver o descargar el documento PDF directamente desde este enlace:\n${publicPdfUrl}`;
+    } else {
+      message += ` Adjunto encontrarás el documento PDF con todos los detalles.`;
+    }
+
+    const text = encodeURIComponent(message);
     window.open(`https://wa.me/${phoneWithCode}?text=${text}`, '_blank');
+
+    if (publicPdfUrl) {
+      toast.success('¡Enlace público del PDF generado e incluido en el mensaje de WhatsApp!');
+    } else {
+      toast.success('PDF descargado. ¡Se abrió WhatsApp para que lo adjuntes!', { duration: 5000 });
+    }
   };
 
   const handleAddEstimate = async () => {
