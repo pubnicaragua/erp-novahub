@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Scale, Plus, Check, X, CheckCircle, Receipt, Trash2 } from 'lucide-react';
+import { Scale, Plus, Check, X, CheckCircle, Receipt, Trash2, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
 interface ControlStockViewProps {
   adjustments: any[];
@@ -34,9 +35,46 @@ const REASON_OPTIONS = [
   { value: 'OTHER', label: 'Otro' },
 ];
 
+const STOCK_TOUR_STEPS: GuidedTourStep[] = [
+  {
+    target: '[data-tour="stock-title"]',
+    title: 'Control de Existencias',
+    description: 'Esta vista te permite registrar y gestionar ajustes de inventario, ya sea por diferencias físicas, mermas, roturas, vencimientos o cualquier otra razón.',
+    tip: 'Los ajustes de inventario afectan directamente el stock contable y se reflejan en la contabilidad.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="stock-imei-btn"]',
+    title: 'IMEI / Series',
+    description: 'Si manejas productos con IMEI o números de serie, este botón te permite registrar ajustes específicos para ese tipo de inventario.',
+    tip: 'Los productos con serie requieren un tratamiento especial para mantener la trazabilidad.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="stock-reception-btn"]',
+    title: 'Registrar Recepción',
+    description: 'Úsalo cuando recibas mercancía de un proveedor o transferencia, para registrar la entrada en el inventario.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="stock-new-btn"]',
+    title: 'Nuevo Ajuste',
+    description: 'Crea un nuevo ajuste seleccionando almacén, producto, cantidad y razón. El ajuste quedará como borrador hasta que lo apruebes.',
+    tip: 'Un ajuste en borrador no afecta el stock real. Debes aprobarlo para que se refleje.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="stock-table"]',
+    title: 'Tabla de Ajustes',
+    description: 'Aquí verás todos los ajustes registrados. Los borradores aparecen en la primera fila para edición rápida. Usa "Aprobar" para confirmar un ajuste.',
+    placement: 'top',
+  },
+];
+
 export function ControlStockView({ adjustments, warehouses, products, series = [], onRefresh }: ControlStockViewProps) {
   const { canPerform } = useAuth();
   const { baseCurrency } = useCurrency();
+  const [showTutorial, setShowTutorial] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isReceptionOpen, setIsReceptionOpen] = useState(false);
   const [isSerialAdjustOpen, setIsSerialAdjustOpen] = useState(false);
@@ -308,17 +346,21 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     <Card className="p-4 border bg-card rounded-xl">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="font-semibold">Ajustes de Inventario</h3>
+          <h3 className="font-semibold" data-tour="stock-title">Ajustes de Inventario</h3>
           <p className="text-sm text-muted-foreground">{adjustments.length} ajustes registrados</p>
         </div>
         <div className="flex items-center gap-2">
           {canPerform('INVENTORY_ADJUSTMENTS', 'create') && (
             <>
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="mr-2">
+                <CircleHelp className="size-3.5 mr-1" /> Tutorial
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
                 className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
                 onClick={() => setIsSerialAdjustOpen(true)}
+                data-tour="stock-imei-btn"
               >
                 IMEI / Series
               </Button>
@@ -327,6 +369,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 variant="outline"
                 className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
                 onClick={() => setIsReceptionOpen(true)}
+                data-tour="stock-reception-btn"
               >
                 <Receipt className="size-4 mr-2" />
                 Registrar Recepción
@@ -336,6 +379,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
                 onClick={() => setIsCreating(true)}
                 disabled={isCreating}
+                data-tour="stock-new-btn"
               >
                 <Plus className="size-4" />
                 Nuevo Ajuste
@@ -345,7 +389,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         </div>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      <div className="rounded-lg border overflow-hidden" data-tour="stock-table">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
@@ -694,6 +738,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {showTutorial && <GuidedTour steps={STOCK_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Control de Existencias" />}
     </Card>
   );
 }

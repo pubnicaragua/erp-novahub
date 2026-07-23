@@ -282,14 +282,8 @@ export function PlanCuentasView() {
     if (!industry) { toast.error('Selecciona una industria'); return; }
     setLoadingDefaults(true);
     try {
-      const raw = await contabilidadService.getDefaultAccountsByIndustry(industry);
-      const list = Array.isArray(raw) ? raw : (raw as any)?.data ?? [];
-      if (list.length === 0) { toast.info('No hay cuentas predeterminadas para esta industria'); return; }
-      const count = list.length;
-      for (const acc of list) {
-        try { await contabilidadService.createAccount(acc); } catch { }
-      }
-      toast.success(`${count} cuentas creadas para industria: ${industry}`);
+      const res = await contabilidadService.importDefaultsWithHierarchy(industry);
+      toast.success(res?.message || 'Catálogo importado exitosamente');
       fetchAccounts();
     } catch (e: any) {
       toast.error(e?.message || 'Error al cargar cuentas predeterminadas');

@@ -10,7 +10,7 @@ import { Trash2, Plus, Package, Check, AlertTriangle } from 'lucide-react';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { inventoryService } from '@/app/services/inventario.service';
 import { storageService } from '@/app/services/storage.service';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 
 interface AddProductsModalProps {
   open: boolean;

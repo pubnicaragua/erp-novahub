@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2, Banknote, Loader2, Settings2, Users } from 'lucide-react';
+import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2, Banknote, Loader2, Settings2, Users, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -16,6 +16,7 @@ import { Switch } from '../ui/switch';
 import { SucursalesView } from './SucursalesView';
 import { Store } from 'lucide-react';
 import { api } from '../../services/api';
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
 interface AlmacenesViewProps {
   warehouses: any[];
@@ -38,7 +39,42 @@ const WAREHOUSE_TYPES = [
   { value: 'VIRTUAL', label: 'Virtual' },
 ];
 
+const ALMACEN_TOUR_STEPS: GuidedTourStep[] = [
+  {
+    target: '[data-tour="almacenes-title"]',
+    title: 'Almacenes y Sucursales',
+    description: 'Gestiona todos tus almacenes y sucursales desde esta vista. Puedes crear, editar y desactivar almacenes, asignar tipos y configurar cajas registradoras.',
+    tip: 'Cada almacén puede tener su propio inventario y estar asociado a una sucursal.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="almacenes-cajas-btn"]',
+    title: 'Administrar Cajas',
+    description: 'Desde aquí puedes crear y gestionar las cajas registradoras del POS. Cada caja se asigna a un almacén y puedes controlar qué usuarios tienen acceso.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="almacenes-sucursales-btn"]',
+    title: 'Administrar Sucursales',
+    description: 'Gestiona las sucursales de tu empresa. Cada sucursal puede tener múltiples almacenes asociados.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="almacenes-add-btn"]',
+    title: 'Agregar Almacén',
+    description: 'Crea un nuevo almacén o sucursal. Completa el nombre, ubicación, tipo y selecciona la sucursal a la que pertenece.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="almacenes-table"]',
+    title: 'Listado de Almacenes',
+    description: 'Tabla completa con todos los almacenes. Puedes editar con doble clic o usando los botones de acción en cada fila.',
+    placement: 'top',
+  },
+];
+
 export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
+  const [showTutorial, setShowTutorial] = useState(false);
   const [editingRows, setEditingRows] = useState<Map<string, EditingWarehouse>>(new Map());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -312,12 +348,15 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       <Card className="p-4 border bg-card rounded-xl">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="font-black text-lg uppercase tracking-tight italic">Almacenes y Sucursales</h3>
+          <h3 className="font-black text-lg uppercase tracking-tight italic" data-tour="almacenes-title">Almacenes y Sucursales</h3>
           <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
             {warehouses.length} ubicaciones · {warehouses.filter((w: any) => String(w.type || '').toUpperCase() === 'STORE').length} sucursales
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="mr-1">
+            <CircleHelp className="size-3.5 mr-1" /> Tutorial
+          </Button>
           <Button 
             variant="outline" 
             size="sm" 
@@ -327,6 +366,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
               fetchSucursales();
               setIsManageDialogOpen(true);
             }}
+            data-tour="almacenes-cajas-btn"
           >
             <Settings2 className="size-4" /> Administrar Cajas
           </Button>
@@ -337,6 +377,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             onClick={() => {
               setIsManageSucursalesDialogOpen(true);
             }}
+            data-tour="almacenes-sucursales-btn"
           >
             <Store className="size-4" /> Administrar Sucursales
           </Button>
@@ -344,6 +385,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             size="sm" 
             className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6" 
             onClick={handleAddNewRow}
+            data-tour="almacenes-add-btn"
           >
             <Plus className="size-4" />
             Agregar Almacén/Sucursal
@@ -351,7 +393,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         </div>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      <div className="rounded-lg border overflow-hidden" data-tour="almacenes-table">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
@@ -459,6 +501,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         loading={deleteLoading}
         onConfirm={handleConfirmDeleteWarehouse}
       />
+      {showTutorial && <GuidedTour steps={ALMACEN_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Almacenes y Sucursales" />}
     </Card>
     {/* Modal de Gestión de Cajas */}
     <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>

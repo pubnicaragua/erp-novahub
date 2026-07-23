@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
-import { Headphones, TicketIcon, Users, BookOpen } from 'lucide-react';
+import { Headphones, TicketIcon, Users, BookOpen, CircleHelp } from 'lucide-react';
 import { cn } from './ui/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { motion, AnimatePresence } from 'motion/react';
@@ -9,6 +9,7 @@ import { Ticket } from '../types';
 import { supportService, knowledgeBaseService, supportAgentsService } from '../services/support.service';
 import { KnowledgeBaseView } from './support/KnowledgeBaseView';
 import { AgentsView } from './support/AgentsView';
+import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
 
 interface KnowledgeArticle {
   id: string;
@@ -28,6 +29,22 @@ interface SupportAgent {
   lastLoginAt?: string | null;
 }
 
+const TICKETS_TOUR_STEPS: GuidedTourStep[] = [
+  {
+    target: '[data-tour="tickets-title"]',
+    title: 'Soporte y Ayuda',
+    description: 'Gestiona todos los tickets de soporte, consulta la base de conocimiento y administra los agentes de soporte desde esta vista.',
+    tip: 'Los tickets pueden ser abiertos por clientes desde el portal o creados internamente.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="tickets-tabs"]',
+    title: 'Secciones de Soporte',
+    description: 'Tres secciones principales: Tickets (gestión de incidencias), Base de Conocimiento (artículos de ayuda) y Agentes (usuarios con permiso de soporte).',
+    placement: 'bottom',
+  },
+];
+
 export const TicketsPage = () => {
   const [activeTab, setActiveTab] = useState('tickets');
   const [data, setData] = useState<{
@@ -40,6 +57,7 @@ export const TicketsPage = () => {
     agents: [],
   });
   const [loading, setLoading] = useState(true);
+  const [showTutorial, setShowTutorial] = useState(false);
 
   const normalizeList = <T,>(response: any): T[] => {
     if (Array.isArray(response)) return response as T[];
@@ -87,7 +105,7 @@ export const TicketsPage = () => {
       <main className="flex-1 overflow-y-auto custom-scrollbar relative">
         <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3" data-tour="tickets-title">
               <div className="p-3 bg-primary/10 rounded-xl">
                 <Headphones className="size-9 text-primary" />
               </div>
@@ -100,10 +118,13 @@ export const TicketsPage = () => {
                 </p>
               </div>
             </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)}>
+              <CircleHelp className="size-3.5 mr-1" /> Tutorial
+            </Button>
           </div>
 
           <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
-            <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
+            <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6" data-tour="tickets-tabs">
               {tabs.map((tab) => (
                 <TabsTrigger 
                   key={tab.id} 
@@ -137,6 +158,7 @@ export const TicketsPage = () => {
             </AnimatePresence>
           </Tabs>
         </div>
+        {showTutorial && <GuidedTour steps={TICKETS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Soporte y Ayuda" />}
       </main>
     </div>
   );

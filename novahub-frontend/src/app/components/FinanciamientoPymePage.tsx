@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Landmark, FileText, Calculator, Plus, Loader2, ArrowRight, ArrowLeft,
-  CheckCircle2, Eye,
+  CheckCircle2, Eye, CircleHelp,
   DollarSign, Calendar, CreditCard, Shield, Send,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { financingService, type FinancingApplication, type PrefillData } from '../services/financing.service';
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
+import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
 
 const PURPOSES = [
   { value: 'capital_trabajo', label: 'Capital de trabajo' },
@@ -39,12 +40,35 @@ const GUARANTEES = [
 
 const TERMS = [6, 12, 18, 24, 36, 48, 60];
 
+const FINANCING_TOUR_STEPS: GuidedTourStep[] = [
+  {
+    target: '[data-tour="financing-title"]',
+    title: 'Financiamiento PyME',
+    description: 'Solicita préstamos y créditos para tu negocio. Puedes ver tus solicitudes existentes y usar la calculadora para simular pagos.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="financing-tabs"]',
+    title: 'Mis Solicitudes y Calculadora',
+    description: 'La pestaña "Mis Solicitudes" muestra todas tus solicitudes de financiamiento. La "Calculadora" te permite simular cuotas antes de solicitar.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="financing-new-btn"]',
+    title: 'Nueva Solicitud',
+    description: 'Inicia una nueva solicitud de financiamiento. El asistente te guiará paso a paso: datos de empresa, finanzas, crédito, historial y revisión final.',
+    tip: 'Ten a mano tus estados financieros antes de comenzar la solicitud.',
+    placement: 'bottom',
+  },
+];
+
 export function FinanciamientoPymePage() {
   const { user, canPerform } = useAuth();
   const [applications, setApplications] = useState<FinancingApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
   const [selectedApp, setSelectedApp] = useState<FinancingApplication | null>(null);
+  const [showTutorial, setShowTutorial] = useState(false);
 
   useEffect(() => {
     fetchApplications();
@@ -65,7 +89,7 @@ export function FinanciamientoPymePage() {
   return (
     <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3" data-tour="financing-title">
           <div className="p-3 bg-primary/10 rounded-xl">
             <Landmark className="size-9 text-primary" />
           </div>
@@ -80,11 +104,16 @@ export function FinanciamientoPymePage() {
             </div>
           </div>
         </div>
-        {!selectedApp && canPerform('FINANCING', 'create') && (
-          <Button onClick={() => setShowWizard(true)} className="rounded-xl gap-2 font-bold">
-            <Plus className="size-4" /> Nueva Solicitud
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)}>
+            <CircleHelp className="size-3.5 mr-1" /> Tutorial
           </Button>
-        )}
+          {!selectedApp && canPerform('FINANCING', 'create') && (
+            <Button onClick={() => setShowWizard(true)} className="rounded-xl gap-2 font-bold" data-tour="financing-new-btn">
+              <Plus className="size-4" /> Nueva Solicitud
+            </Button>
+          )}
+        </div>
       </div>
 
       <AnimatePresence mode="wait">
@@ -99,7 +128,7 @@ export function FinanciamientoPymePage() {
         ) : (
           <motion.div key="main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
             <Tabs defaultValue="solicitudes" className="w-full">
-              <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
+              <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6" data-tour="financing-tabs">
                 <TabsTrigger value="solicitudes"
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
@@ -181,6 +210,7 @@ export function FinanciamientoPymePage() {
           </div>
         </DialogContent>
       </Dialog>
+      {showTutorial && <GuidedTour steps={FINANCING_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Financiamiento PyME" />}
     </div>
   );
 }

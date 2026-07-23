@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Truck, ArrowRight, Search, Plus, Check, X, Package } from 'lucide-react';
+import { Truck, ArrowRight, Search, Plus, Check, X, Package, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
 interface TransferenciasViewProps {
   transfers: any[];
@@ -27,8 +28,44 @@ const STATUS_OPTIONS = [
   { value: 'CANCELLED', label: 'Cancelada', color: 'bg-red-500/10 text-red-600' },
 ];
 
+const TRANSFER_TOUR_STEPS: GuidedTourStep[] = [
+  {
+    target: '[data-tour="transfer-title"]',
+    title: 'Transferencias',
+    description: 'Registra transferencias de inventario entre almacenes o sucursales. Cada transferencia tiene un origen, un destino y puede estar en diferentes estados.',
+    tip: 'Las transferencias pendientes no afectan el stock hasta que se completan.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="transfer-search"]',
+    title: 'Buscar Transferencias',
+    description: 'Filtra por número de guía o nombre de almacén para encontrar rápidamente una transferencia específica.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="transfer-new-btn"]',
+    title: 'Nueva Transferencia',
+    description: 'Crea una nueva transferencia seleccionando el almacén origen, destino, producto y cantidad. También puedes asignar IMEI/Series si el producto lo requiere.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="transfer-table"]',
+    title: 'Listado de Transferencias',
+    description: 'Aquí ves todas las transferencias con su guía, origen, destino, cantidad de items y estado.',
+    placement: 'top',
+  },
+  {
+    target: '[data-tour="transfer-status"]',
+    title: 'Estado de Transferencia',
+    description: 'Puedes cambiar el estado de una transferencia. Los estados disponibles son: Pendiente, En Tránsito, Completada y Cancelada.',
+    tip: 'Completar una transferencia descuenta del origen y agrega al destino automáticamente.',
+    placement: 'left',
+  },
+];
+
 export function TransferenciasView({ transfers, warehouses, products, series = [], onRefresh }: TransferenciasViewProps) {
   const { canPerform } = useAuth();
+  const [showTutorial, setShowTutorial] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [serialPickerOpen, setSerialPickerOpen] = useState(false);
@@ -153,9 +190,9 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
 
   return (
     <Card className="p-4 border bg-card rounded-xl">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4" data-tour="transfer-title">
         <div className="flex items-center gap-2 flex-1">
-          <div className="relative flex-1 max-w-sm">
+          <div className="relative flex-1 max-w-sm" data-tour="transfer-search">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input 
               placeholder="Buscar por guía o almacén..." 
@@ -166,19 +203,25 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
           </div>
         </div>
         {canPerform('INVENTORY_TRANSFERS', 'create') && (
-          <Button 
-            size="sm" 
-            className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
-            onClick={() => setIsCreating(true)}
-            disabled={isCreating}
-          >
-            <Plus className="size-4" />
-            Nueva Transferencia
-          </Button>
+          <>
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="mr-1">
+              <CircleHelp className="size-3.5 mr-1" /> Tutorial
+            </Button>
+            <Button 
+              size="sm" 
+              className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
+              onClick={() => setIsCreating(true)}
+              disabled={isCreating}
+              data-tour="transfer-new-btn"
+            >
+              <Plus className="size-4" />
+              Nueva Transferencia
+            </Button>
+          </>
         )}
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      <div className="rounded-lg border overflow-hidden" data-tour="transfer-table">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
@@ -285,6 +328,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
                         value={trf.status} 
                         onValueChange={(v) => handleUpdateStatus(trf.id, v)}
                         disabled={!canPerform('INVENTORY_TRANSFERS', 'edit') || isUpdating || trf.status === 'COMPLETED' || trf.status === 'CANCELLED'}
+                        data-tour="transfer-status"
                       >
                         <SelectTrigger className={`h-7 text-[10px] font-medium ${statusInfo.color}`}>
                           <SelectValue />
@@ -364,6 +408,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {showTutorial && <GuidedTour steps={TRANSFER_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Transferencias" />}
     </Card>
   );
 }

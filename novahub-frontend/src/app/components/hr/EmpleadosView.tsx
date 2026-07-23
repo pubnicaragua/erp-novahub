@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh }: any) {
   const { formatConvertedAmount } = useCurrency();
@@ -27,6 +28,29 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
   const [newDeptName, setNewDeptName] = useState('');
   const [newPosTitle, setNewPosTitle] = useState('');
   const [newPosDeptId, setNewPosDeptId] = useState('');
+  const [showTutorial, setShowTutorial] = useState(false);
+
+const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
+  {
+    target: '[data-tour="empleados-search"]',
+    title: 'Buscar y Filtrar',
+    description: 'Usa la barra de búsqueda para encontrar empleados por nombre o apellido. Puedes filtrar por departamento y estado (activo/inactivo).',
+    tip: 'La búsqueda es en tiempo real, no necesitas presionar Enter.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="empleados-add"]',
+    title: 'Agregar Empleado',
+    description: 'Registra un nuevo empleado con todos sus datos personales, información laboral y documentos asociados.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="empleados-table"]',
+    title: 'Listado de Empleados',
+    description: 'Tabla completa con todos los empleados registrados. Puedes editar, ver detalles o eliminar usando los botones de acción en cada fila.',
+    placement: 'top',
+  },
+];
 
   const filteredEmployees = employees.filter((emp: any) => {
     const term = searchTerm.toLowerCase();
@@ -265,6 +289,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9"
+              data-tour="empleados-search"
             />
           </div>
           <Select value={filterDept} onValueChange={setFilterDept}>
@@ -296,16 +321,19 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
             {viewMode === 'table' ? <Grid className="size-4" /> : <List className="size-4" />}
           </Button>
           {canPerform('HR_EMPLOYEES', 'create') && (
-            <Button size="sm" onClick={handleAddRow} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
+            <Button size="sm" onClick={handleAddRow} className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="empleados-add">
               <Plus className="size-4 mr-2" />
               Agregar Empleado
             </Button>
           )}
+          <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} aria-label="Tutorial">
+            <CircleHelp className="size-3.5 mr-1" /> Tutorial
+          </Button>
         </div>
       </div>
 
       {/* Table View - Desktop Only */}
-      <div className={`border rounded-lg overflow-hidden ${viewMode === 'table' ? 'hidden md:block' : 'hidden'}`}>
+      <div data-tour="empleados-table" className={`border rounded-lg overflow-hidden ${viewMode === 'table' ? 'hidden md:block' : 'hidden'}`}>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1000px]">
               <thead className="bg-muted/50">
@@ -773,6 +801,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
         loading={deleteLoading} 
         onConfirm={() => pendingDeleteId ? handleDelete(pendingDeleteId) : Promise.resolve()} 
       />
+      {showTutorial && <GuidedTour steps={EMPLEADOS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Empleados" />}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import {
   BookOpen, FileText, Scale, TrendingUp, PieChart,
   DollarSign, Landmark, Calendar, FileBarChart,
   BookOpenCheck, Building2, FileSpreadsheet, HelpCircle,
-  Database, GitBranch, ChevronDown, X,
+  Database, GitBranch, ChevronDown, X, Settings2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Badge } from '../ui/badge';
@@ -21,6 +21,7 @@ import { ReportesFiscalesView } from './ReportesFiscalesView';
 import { LibroMayorView } from './LibroMayorView';
 import { ActivosFijosView } from './ActivosFijosView';
 import { CambiosPatrimonioView } from './CambiosPatrimonioView';
+import { ConfiguracionContableView } from './ConfiguracionContableView';
 
 const SECTIONS = [
   { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: BookOpen },
@@ -35,6 +36,7 @@ const SECTIONS = [
   { id: 'conciliacion', label: 'Conciliación Bancaria', icon: Landmark },
   { id: 'periodos', label: 'Períodos Contables', icon: Calendar },
   { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: FileBarChart },
+  { id: 'configuracion', label: 'Configuración', icon: Settings2 },
 ];
 
 const HELP_DATA: Record<string, {
@@ -194,6 +196,19 @@ const HELP_DATA: Record<string, {
       { q: '¿Qué es la retención de IR?', a: 'El agente de retención descuenta un porcentaje del pago al proveedor y lo entrega a la DGI. Se registra como crédito fiscal del proveedor.' },
     ],
   },
+  'configuracion': {
+    description: 'Configuración global del módulo contable. Define parámetros como moneda por defecto, tasa de IVA, mapeo de cuentas para asientos automáticos e importación de catálogos por industria.',
+    model: 'AccountingConfig (JSON) + Account (catálogo)',
+    relationships: [
+      { parent: 'AccountingConfig', child: 'Account', relation: 'clientTenantId → id (cuentas usadas en asientos automáticos)' },
+      { parent: 'AccountingConfig', child: 'JournalEntry', relation: 'autoGenEnabled controla la creación de asientos automáticos' },
+    ],
+    faq: [
+      { q: '¿Qué son los asientos automáticos?', a: 'Al activar esta opción, cada factura, cobro, gasto o nómina genera su asiento contable en tiempo real. Puedes configurar qué cuentas contables se usan para cada tipo de transacción.' },
+      { q: '¿Cómo importar un catálogo de cuentas?', a: 'Selecciona tu industria en la sección "Catálogo por Defecto" y haz clic en Importar. El sistema creará la jerarquía completa de cuentas padre-hijo automáticamente.' },
+      { q: '¿Puedo cambiar las cuentas de los asientos automáticos?', a: 'Sí. En la sección "Mapeo de Cuentas Contables" puedes editar los códigos de cuenta que el sistema usará para cada tipo de transacción.' },
+    ],
+  },
 };
 
 export function ContabilidadPage() {
@@ -281,6 +296,7 @@ export function ContabilidadPage() {
                   {activeSection === 'conciliacion' && <ConciliacionView />}
                   {activeSection === 'periodos' && <PeriodosView />}
                   {activeSection === 'reportes-fiscales' && <ReportesFiscalesView />}
+                  {activeSection === 'configuracion' && <ConfiguracionContableView />}
                 </motion.div>
               </AnimatePresence>
             </div>

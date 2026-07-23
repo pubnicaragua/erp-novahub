@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
   const { convertAmount, formatConvertedAmount, displayCurrency } = useCurrency();
@@ -18,6 +19,28 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [includeCommissions, setIncludeCommissions] = useState(true);
+  const [showTutorial, setShowTutorial] = useState(false);
+
+const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
+  {
+    target: '[data-tour="nominas-employee-filter"]',
+    title: 'Filtrar por Empleado',
+    description: 'Selecciona un empleado específico para ver solo sus nóminas, o mantén "Todos" para ver todas.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="nominas-process"]',
+    title: 'Procesar Nómina',
+    description: 'Calcula y genera las nóminas del período actual. Puedes incluir comisiones y procesar para un empleado específico o todos.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="nominas-table"]',
+    title: 'Listado de Nóminas',
+    description: 'Tabla con todas las nóminas generadas. Cada fila muestra el empleado, período, montos y estado. Expande una fila para ver el desglose detallado de deducciones, aportes y provisiones.',
+    placement: 'top',
+  },
+];
 
   const employeeOptions = [
     { label: 'Todos los empleados', value: 'all' },
@@ -218,6 +241,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               onChange={setFilterEmployee}
               placeholder="Buscar empleado..."
               emptyMessage="No se encontró el empleado"
+              data-tour="nominas-employee-filter"
             />
           </div>
           <select
@@ -254,16 +278,19 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             </label>
           </div>
           {canPerform('HR_PAYROLLS', 'create') && (
-            <Button size="sm" onClick={handleProcessPayroll} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
+            <Button size="sm" onClick={handleProcessPayroll} className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="nominas-process">
               <Calculator className="size-4 mr-2" />
               Procesar Nómina
             </Button>
           )}
+          <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} aria-label="Tutorial">
+            <CircleHelp className="size-3.5 mr-1" /> Tutorial
+          </Button>
         </div>
       </div>
 
       {/* Payroll Table */}
-      <div className="border rounded-lg overflow-hidden flex flex-col">
+      <div data-tour="nominas-table" className="border rounded-lg overflow-hidden flex flex-col">
         <div className="overflow-x-auto hidden md:block">
           <table className="w-full min-w-[1100px]">
             <thead className="bg-muted/50">
@@ -549,6 +576,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         loading={deleteLoading} 
         onConfirm={() => pendingDeleteId ? handleDeletePayroll(pendingDeleteId) : Promise.resolve()} 
       />
+      {showTutorial && <GuidedTour steps={NOMINAS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Nóminas" />}
     </div>
   );
 }

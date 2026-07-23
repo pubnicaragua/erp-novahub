@@ -79,4 +79,15 @@ export const contabilidadService = {
 
   // Bloquear período
   lockPeriod: (id: string) => api.post<any>(`/accounting/periods/${id}/lock`, {}),
+
+  // Configuración Contable
+  getConfig: () => api.get<any>('/accounting/config'),
+  updateConfig: (data: any) => api.put<any>('/accounting/config', data),
+  seedConfig: () => api.post<any>('/accounting/config/seed', {}),
+
+  // Importar catálogo completo por industria con jerarquía
+  importDefaultsWithHierarchy: (industry: string) => api.post<any>(`/accounting/import-defaults/${industry}`, {}),
+
+  // Test Connections
+  testConnections: () => api.get<any>('/accounting/test-connections'),
 };
