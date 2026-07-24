@@ -204,7 +204,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar cliente');
-      throw error;
+      throw e;
     }
   };
 
@@ -330,7 +330,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
 
       {/* Main Content */}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Directorio de Clientes</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión integral Excel-like sin interrupciones.</p>
@@ -375,7 +375,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
               }
               toast.success('Elementos eliminados');
               onRefresh();
-            } catch (e) {
+            } catch (e: any) {
               toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           }}

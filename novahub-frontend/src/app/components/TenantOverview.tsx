@@ -312,7 +312,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   return (
     <div className="space-y-6 p-4 md:p-6 pb-16">
       {/* Hero */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2 relative">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-2 relative">
         <div className="absolute -left-10 -top-10 size-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10">
           <h1 className="text-3xl md:text-4xl tracking-tight text-foreground mb-2 font-bold">

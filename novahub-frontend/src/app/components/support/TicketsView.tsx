@@ -303,7 +303,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         <Card className="xl:col-span-8 border-none bg-background/50 backdrop-blur-xl shadow-sm">
-          <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-black uppercase tracking-tight">Mesa de Ayuda</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Gestión de tickets y soporte</p>

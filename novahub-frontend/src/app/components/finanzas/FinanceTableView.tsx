@@ -442,22 +442,22 @@ export function FinanceTableView({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <h3 className="text-lg font-bold">{title}</h3>
-          <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-primary/30 text-primary">LIVE SYNC</Badge>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
+        <div className="flex items-center gap-3 shrink-0">
+          <h3 className="text-lg md:text-xl font-black uppercase tracking-tight text-foreground">{title}</h3>
+          <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-primary/30 text-primary hidden sm:inline-flex">LIVE SYNC</Badge>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-9 w-[200px] lg:w-[300px]" />
+        <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+          <div className="relative w-full sm:w-auto flex-1 sm:flex-none">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+            <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-10 w-full sm:w-56 md:w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" />
           </div>
-          <button onClick={() => setShowFilters(!showFilters)} className={cn("flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors", showFilters ? "bg-primary/10 border-primary/30 text-primary" : "border-border bg-background hover:bg-muted")}>
+          <button onClick={() => setShowFilters(!showFilters)} className={cn("flex items-center gap-2 rounded-xl border px-4 h-10 text-[10px] font-black uppercase tracking-widest transition-colors shrink-0", showFilters ? "bg-primary/10 border-primary/30 text-primary" : "border-border/50 bg-background/50 hover:bg-muted")}>
             <Filter className="size-4" /> Filtros
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted"><Download className="size-4" /> Exportar</button>
+              <button className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/50 px-4 h-10 text-[10px] font-black uppercase tracking-widest hover:bg-muted shrink-0"><Download className="size-4" /> Exportar</button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={exportExcel}><FileSpreadsheet className="size-4 mr-2 text-green-600" /> Excel (.xlsx)</DropdownMenuItem>
@@ -465,7 +465,7 @@ export function FinanceTableView({
             </DropdownMenuContent>
           </DropdownMenu>
           {canCreate && (
-            <button onClick={onAdd} className="flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"><Plus className="size-4" /> Nuevo Registro</button>
+            <button onClick={onAdd} className="flex items-center gap-2 rounded-xl bg-primary px-4 h-10 text-[10px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90 transition-colors shrink-0 shadow-xl shadow-primary/20 border border-primary/20"><Plus className="size-4" /> Nuevo Registro</button>
           )}
         </div>
       </div>

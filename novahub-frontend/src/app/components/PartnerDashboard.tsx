@@ -50,7 +50,7 @@ export function PartnerDashboard({ onNavigate }: PartnerDashboardProps) {
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
         <div>
           <h1 className="text-3xl font-black tracking-tighter text-foreground uppercase">Centro de <span className="text-primary italic">Partners</span></h1>
           <p className="text-muted-foreground/60 font-medium">Gestiona la expansión y escalabilidad de tus clientes.</p>

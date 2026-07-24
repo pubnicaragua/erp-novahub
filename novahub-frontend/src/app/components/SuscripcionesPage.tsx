@@ -549,7 +549,7 @@ export function SuscripcionesPage() {
       <motion.div 
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="flex flex-col md:flex-row md:items-center justify-between gap-4"
+        className="flex flex-col lg:flex-row lg:items-center justify-between gap-4"
       >
         <div>
           <h1 className="text-4xl font-black tracking-tighter text-foreground flex items-center gap-3 uppercase italic">

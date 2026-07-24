@@ -112,7 +112,7 @@ export function ControlDashboardCajaView({
   return (
     <div className="space-y-6">
       {/* Header Unificado Minimalista */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-border/40">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-4 border-b border-border/40">
         
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3">

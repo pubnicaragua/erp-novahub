@@ -470,7 +470,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         ))}
       </div>
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground">Facturación Recurrente</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de contratos, igualas y servicios por suscripción.</p></div>
           <div className="flex items-center gap-3">

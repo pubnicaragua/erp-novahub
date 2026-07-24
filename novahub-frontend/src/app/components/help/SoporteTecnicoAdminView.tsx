@@ -111,7 +111,7 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
   return (
     <div className="space-y-6 p-4 md:p-8 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-black tracking-tighter flex items-center gap-3 uppercase italic">
             <LifeBuoy className="size-9 text-primary" />
@@ -164,7 +164,7 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
             return (
               <motion.div key={ticket.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }}>
                 <Card className="group overflow-hidden rounded-2xl border-border/40 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 transition-all cursor-pointer" onClick={() => openTicketDetail(ticket)}>
-                  <CardContent className="p-5 flex flex-col md:flex-row md:items-center gap-4">
+                  <CardContent className="p-5 flex flex-col lg:flex-row lg:items-center gap-4">
                     <div className="flex items-center gap-4 flex-1 min-w-0">
                       <div className="p-2.5 rounded-xl bg-primary/10 shrink-0"><Building2 className="size-5 text-primary" /></div>
                       <div className="min-w-0 flex-1">

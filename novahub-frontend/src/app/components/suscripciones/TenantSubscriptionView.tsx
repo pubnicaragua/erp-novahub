@@ -192,7 +192,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       <motion.div 
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="flex flex-col md:flex-row md:items-center justify-between gap-4"
+        className="flex flex-col lg:flex-row lg:items-center justify-between gap-4"
       >
         <div>
           <h1 className="text-4xl font-black tracking-tighter text-foreground flex items-center gap-3 uppercase italic">
@@ -224,7 +224,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
           <Card className="bg-card border-border/50 overflow-hidden relative shadow-sm">
             <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
             <CardContent className="p-8">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
                 <div className="flex items-center gap-6">
                   <div className="size-20 rounded-2xl bg-muted/20 flex items-center justify-center border border-border">
                     <Building2 className="size-10 text-primary" />

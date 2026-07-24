@@ -90,7 +90,8 @@ function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: PosPaym
   const paymentRows = payments.map((payment) => `<div class="row"><span>${paymentLabel(payment.method)}</span><span>${money(Number(payment.amount || 0))}</span></div>`).join('');
   const itemRows = cart.map(item => `<div class="item"><div>${escapeTicketHtml(item.description)}</div><div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`).join('');
   const discount = Number(invoice.discountAmount || 0);
-  win.document.write(`<html><head><title>${escapeTicketHtml(invoice.number)}</title><style>@page{size:80mm auto;margin:0}body{width:72mm;margin:4mm auto;font:11px monospace;color:#000}h2{text-align:center;margin:0 0 5px;font-size:16px}h3{text-align:center;margin:0 0 8px;font-size:11px;font-weight:normal}.center{text-align:center}.row{display:flex;justify-content:space-between;gap:8px;margin:3px 0}.line{border-top:1px dashed #000;margin:8px 0}.item{margin:5px 0}.item .row{font-size:10px}.totals{margin-top:6px}.total{font-size:14px;font-weight:bold}.label{font-weight:bold;margin-top:7px}.muted{font-size:10px}.footer{text-align:center;margin-top:14px;font-size:10px}</style></head><body><h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3><div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Fecha: ${new Date(invoice.date).toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div><div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}<div class="row"><span>Total recibido</span><span>${money(paidDisplay)}</span></div><div class="row"><span>Cambio / vuelto</span><span>C$ ${changeLocal.toFixed(2)}</span></div></div><div class="footer">Gracias por su compra</div></body></html>`);
+  const totalRecibidoHtml = payments.length > 1 ? `<div class="row"><span>Total recibido</span><span>${money(paidDisplay)}</span></div>` : '';
+  win.document.write(`<html><head><title>${escapeTicketHtml(invoice.number)}</title><style>@page{size:80mm auto;margin:0}body{width:72mm;margin:4mm auto;font:11px monospace;color:#000}h2{text-align:center;margin:0 0 5px;font-size:16px}h3{text-align:center;margin:0 0 8px;font-size:11px;font-weight:normal}.center{text-align:center}.row{display:flex;justify-content:space-between;gap:8px;margin:3px 0}.line{border-top:1px dashed #000;margin:8px 0}.item{margin:5px 0}.item .row{font-size:10px}.totals{margin-top:6px}.total{font-size:14px;font-weight:bold}.label{font-weight:bold;margin-top:7px}.muted{font-size:10px}.footer{text-align:center;margin-top:14px;font-size:10px}</style></head><body><h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3><div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div><div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${changeLocal.toFixed(2)}</span></div></div><div class="footer">Gracias por su compra</div></body></html>`);
   win.document.close();
   // Esperar a que el documento se pinte evita que Chrome abra una vista previa en blanco.
   window.setTimeout(() => {
@@ -187,7 +188,6 @@ function normalizeDiscountPercent(value: string) {
 
 function calculateInvoiceSummary(
   cart: CartItem[],
-  productsById: Map<string, PosProduct>,
   discountPercent: number,
   includeTax: boolean
 ): InvoiceSummary {
@@ -295,7 +295,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     try {
       const cashRegisters = await cajaService.getRegisters();
       setRegisters(cashRegisters);
-      
+
       let initialRegisterId = '';
       if (cashRegisters.length > 0) {
         const openRegister = cashRegisters.find(r => r.hasActiveSession);
@@ -409,14 +409,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     setCart((prev) => {
       const existing = prev.find((i) => i.productId === product.id);
       const globalQty = getGlobalCartQuantity(product.id);
-      
+
       if (existing) {
         if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined) {
           if (existing.quantity + 1 + globalQty > product.currentStock) {
             toast.error(
-              globalQty > 0 
-              ? `Stock insuficiente. Tienes ${globalQty} unidades en otras cajas. Solo hay ${product.currentStock} en stock global.`
-              : `Stock insuficiente. Solo hay ${product.currentStock} unidades disponibles.`
+              globalQty > 0
+                ? `Stock insuficiente. Tienes ${globalQty} unidades en otras cajas. Solo hay ${product.currentStock} en stock global.`
+                : `Stock insuficiente. Solo hay ${product.currentStock} unidades disponibles.`
             );
             return prev;
           }
@@ -424,20 +424,20 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         return prev.map((i) =>
           i.productId === product.id
             ? {
-                ...i,
-                quantity: i.quantity + 1,
-                lineTotal: calculateLineTotal(i.quantity + 1, i.unitPrice),
-              }
+              ...i,
+              quantity: i.quantity + 1,
+              lineTotal: calculateLineTotal(i.quantity + 1, i.unitPrice),
+            }
             : i,
         );
       }
-      
+
       if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined) {
         if (1 + globalQty > product.currentStock) {
           toast.error(
-            globalQty > 0 
-            ? `Stock insuficiente. Tienes ${globalQty} unidades separadas en otras cajas y solo hay ${product.currentStock} en total.`
-            : `Stock insuficiente. El producto está agotado.`
+            globalQty > 0
+              ? `Stock insuficiente. Tienes ${globalQty} unidades separadas en otras cajas y solo hay ${product.currentStock} en total.`
+              : `Stock insuficiente. El producto está agotado.`
           );
           return prev;
         }
@@ -464,13 +464,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       if (quantity + globalQty > product.currentStock) {
         toast.error(
           globalQty > 0
-          ? `Stock insuficiente. Tienes ${globalQty} separadas en otras cajas y solo quedan ${Math.max(0, product.currentStock - globalQty)} disponibles acá.`
-          : `Stock insuficiente. Solo hay ${product.currentStock} unidades disponibles.`
+            ? `Stock insuficiente. Tienes ${globalQty} separadas en otras cajas y solo quedan ${Math.max(0, product.currentStock - globalQty)} disponibles acá.`
+            : `Stock insuficiente. Solo hay ${product.currentStock} unidades disponibles.`
         );
         finalQty = Math.max(1, product.currentStock - globalQty);
       }
     }
-    
+
     setCart((prev) =>
       prev.map((item) =>
         item.productId === productId
@@ -485,8 +485,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   };
 
   const summary = useMemo(
-    () => calculateInvoiceSummary(cart, productsById, discountPercent, includeTax),
-    [cart, discountPercent, productsById, includeTax],
+    () => calculateInvoiceSummary(cart, discountPercent, includeTax),
+    [cart, discountPercent, includeTax],
   );
 
   const selectedRegister = registers.find((r) => r.id === selectedRegisterId);
@@ -548,23 +548,23 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         payments,
       });
       const created = (createdResponse as any)?.data || createdResponse;
-      
+
       toast.success('Factura emitida exitosamente');
       setCreatedInvoice(created);
       setCreatedPaymentLines([...payments]);
       setCreatedExchangeRate(Number(activeSession.exchangeRateUSD));
       setShowPayment(false);
-      
+
       // Limpiar datos en memoria de esta caja
       setCart([]);
       setDiscountPercent(0);
       cartSessions.current.delete(selectedRegisterId);
-      
+
       await loadRecentInvoices(selectedRegisterId);
 
       // Verificamos si existen otras cajas en la "cola" con productos pendientes
-      const pendingSessionEntry = Array.from(cartSessions.current.entries()).find(([id, session]) => session.cart && session.cart.length > 0);
-      
+      const pendingSessionEntry = Array.from(cartSessions.current.entries()).find(([_id, session]) => session.cart && session.cart.length > 0);
+
       if (!pendingSessionEntry) {
         setSelectedCustomerId(undefined); // Solo borrar cliente global si no hay mas cajas
       } else {
@@ -601,7 +601,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
           </div>
           <h2 className="text-2xl font-black tracking-tight text-foreground mb-2 uppercase">Acceso Restringido a POS</h2>
           <p className="text-muted-foreground max-w-md mb-6">
-            No tienes cajas autorizadas asignadas a tu usuario o no hay cajas activas en el sistema. 
+            No tienes cajas autorizadas asignadas a tu usuario o no hay cajas activas en el sistema.
             Contacta al administrador para que te asigne acceso a una sucursal/caja desde la configuración del equipo.
           </p>
         </div>
@@ -643,7 +643,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
           </Button>
         </div>
       </div>
-      
+
       {isRegisterDisabled ? (
         <div className="flex flex-col items-center justify-center py-24 px-4 text-center border-2 border-dashed border-border/50 rounded-2xl bg-muted/10">
           <div className="size-24 rounded-full bg-destructive/10 flex items-center justify-center mb-6">
@@ -654,7 +654,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
             Esta caja no tiene una sesión activa o ya fue cerrada. El módulo de facturación (POS) está bloqueado por seguridad.
             Debe aperturar la caja para poder agregar productos y emitir facturas.
           </p>
-          
+
           <div className="flex flex-col items-center gap-6 w-full max-w-sm">
             <div className="space-y-1.5 w-full text-left" data-tour="pos-register">
               <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Cambiar Caja Operativa</Label>
@@ -671,9 +671,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                 </SelectContent>
               </Select>
             </div>
-            
-            <Button 
-              size="lg" 
+
+            <Button
+              size="lg"
               onClick={() => onNavigateToControlCaja?.(selectedRegisterId)}
               className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest"
             >
@@ -683,349 +683,348 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
           </div>
         </div>
       ) : (
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
-      <div className="space-y-5">
-        <Card className="border-border/50 shadow-sm">
-          <CardContent className="p-5">
-            <h3 className="text-sm font-black uppercase tracking-tight mb-4 flex items-center gap-2">
-              <Receipt className="size-4 text-primary" /> Configuración de Emisión
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5" data-tour="pos-register">
-                <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Caja Operativa</Label>
-                <Select value={selectedRegisterId} onValueChange={handleRegisterChange}>
-                  <SelectTrigger className="!h-11 rounded-xl"><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
-                  <SelectContent>
-                    {registers.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        <span className={!r.hasActiveSession ? 'text-muted-foreground' : ''}>
-                          {r.code} - {r.name}{!r.hasActiveSession && ' (sin sesión)'}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5" data-tour="pos-customer">
-                <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Cliente / Empresa</Label>
-                <Combobox
-                  options={[
-                    { label: GENERAL_CUSTOMER_NAME, value: GENERAL_CUSTOMER_SELECT_VALUE },
-                    ...customers.map(c => ({ label: c.name, value: c.id, description: c.documentNumber || undefined }))
-                  ]}
-                  value={selectedCustomerId ?? GENERAL_CUSTOMER_SELECT_VALUE}
-                  onChange={handleCustomerChange}
-                  disabled={isRegisterDisabled}
-                  placeholder={GENERAL_CUSTOMER_NAME}
-                  emptyMessage="No se encontraron clientes"
-                  className="!h-11 rounded-xl text-sm font-normal"
-                />
-              </div>
-              <div className="space-y-1.5" data-tour="pos-date">
-                <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Fecha de Emisión</Label>
-                <Input type="date" value={emitDate} onChange={(e) => setEmitDate(e.target.value)} disabled={isRegisterDisabled} className="!h-11 !py-0 rounded-xl w-full flex items-center justify-between" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
+          <div className="space-y-5">
+            <Card className="border-border/50 shadow-sm">
+              <CardContent className="p-5">
+                <h3 className="text-sm font-black uppercase tracking-tight mb-4 flex items-center gap-2">
+                  <Receipt className="size-4 text-primary" /> Configuración de Emisión
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1.5" data-tour="pos-register">
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Caja Operativa</Label>
+                    <Select value={selectedRegisterId} onValueChange={handleRegisterChange}>
+                      <SelectTrigger className="!h-11 rounded-xl"><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
+                      <SelectContent>
+                        {registers.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            <span className={!r.hasActiveSession ? 'text-muted-foreground' : ''}>
+                              {r.code} - {r.name}{!r.hasActiveSession && ' (sin sesión)'}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5" data-tour="pos-customer">
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Cliente / Empresa</Label>
+                    <Combobox
+                      options={[
+                        { label: GENERAL_CUSTOMER_NAME, value: GENERAL_CUSTOMER_SELECT_VALUE },
+                        ...customers.map(c => ({ label: c.name, value: c.id, description: undefined }))
+                      ]}
+                      value={selectedCustomerId ?? GENERAL_CUSTOMER_SELECT_VALUE}
+                      onChange={handleCustomerChange}
+                      disabled={isRegisterDisabled}
+                      placeholder={GENERAL_CUSTOMER_NAME}
+                      emptyMessage="No se encontraron clientes"
+                      className="!h-11 rounded-xl text-sm font-normal"
+                    />
+                  </div>
+                  <div className="space-y-1.5" data-tour="pos-date">
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Fecha de Emisión</Label>
+                    <Input type="date" value={emitDate} onChange={(e) => setEmitDate(e.target.value)} disabled={isRegisterDisabled} className="!h-11 !py-0 rounded-xl w-full flex items-center justify-between" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card className="border-border/50 shadow-sm" data-tour="pos-catalog">
-          <CardContent className="p-5">
-            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-tight">Catálogo de Productos</h3>
-                <p className="mt-1 text-[11px] text-muted-foreground">{filteredProducts.length} productos disponibles</p>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <div className="inline-flex h-9 items-center rounded-xl border border-border/60 bg-muted/30 p-1" role="group" aria-label="Vista del catálogo">
-                  <button
-                    type="button"
-                    aria-pressed={catalogView === 'list'}
-                    onClick={() => setCatalogView('list')}
-                    className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition-all ${
-                      catalogView === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <List className="size-3.5" /> Lista
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={catalogView === 'catalog'}
-                    onClick={() => setCatalogView('catalog')}
-                    className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition-all ${
-                      catalogView === 'catalog' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <LayoutGrid className="size-3.5" /> Catálogo
-                  </button>
-                </div>
-                <div className="relative w-full sm:w-64">
-                  {isSearching ? (
-                    <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin" />
-                  ) : (
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                  )}
-                  <Input
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    placeholder="Buscar producto..."
-                    disabled={isRegisterDisabled}
-                    className="pl-9 h-9 rounded-lg text-xs focus-visible:ring-primary focus-visible:border-primary"
-                  />
-                </div>
-              </div>
-            </div>
-            {catalogView === 'list' ? (
-              <div className="overflow-hidden rounded-xl border border-border/50">
-                <div className="max-h-64 overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-border/30 bg-muted/30">
-                        <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</th>
-                        <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción del Producto</th>
-                        <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest text-muted-foreground">Precio Unit. (C$)</th>
-                        <th className="px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/20">
-                      {filteredProducts.slice(0, 30).map((prod) => (
-                        <tr key={prod.id} className="transition-colors hover:bg-muted/20">
-                          <td className="px-3 py-2.5 font-mono font-bold text-primary">{prod.code}</td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <p className="truncate font-bold">{prod.name}</p>
-                              {prod.trackInventory && (
-                                <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
-                                  {prod.currentStock ?? 0} unid.
-                                </Badge>
-                              )}
-                            </div>
-                            {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-mono">{formatCurrency(prod.salePrice)}</td>
-                          <td className="px-3 py-2.5 text-center">
-                            <Button size="sm" variant="ghost" onClick={() => addItem(prod)}
-                              disabled={isRegisterDisabled || (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
-                              className="h-7 rounded-lg px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
-                              <Plus className="mr-1 size-3" /> {prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar'}
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                      {filteredProducts.length === 0 && (
-                        <tr><td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">No hay productos disponibles</td></tr>
+            <Card className="border-border/50 shadow-sm" data-tour="pos-catalog">
+              <CardContent className="p-5">
+                <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-tight">Catálogo de Productos</h3>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{filteredProducts.length} productos disponibles</p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="inline-flex h-9 items-center rounded-xl border border-border/60 bg-muted/30 p-1" role="group" aria-label="Vista del catálogo">
+                      <button
+                        type="button"
+                        aria-pressed={catalogView === 'list'}
+                        onClick={() => setCatalogView('list')}
+                        className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition-all ${catalogView === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                      >
+                        <List className="size-3.5" /> Lista
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={catalogView === 'catalog'}
+                        onClick={() => setCatalogView('catalog')}
+                        className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition-all ${catalogView === 'catalog' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                      >
+                        <LayoutGrid className="size-3.5" /> Catálogo
+                      </button>
+                    </div>
+                    <div className="relative w-full sm:w-64">
+                      {isSearching ? (
+                        <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin" />
+                      ) : (
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                       )}
-                    </tbody>
-                  </table>
+                      <Input
+                        value={productSearch}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        placeholder="Buscar producto..."
+                        disabled={isRegisterDisabled}
+                        className="pl-9 h-9 rounded-lg text-xs focus-visible:ring-primary focus-visible:border-primary"
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="max-h-[34rem] overflow-y-auto pr-1">
-                {filteredProducts.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-                    {filteredProducts.slice(0, 30).map((prod) => (
-                      <article key={prod.id} className="group overflow-hidden rounded-2xl border border-border/60 bg-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
-                        <ProductThumbnail
-                          src={prod.imageUrl}
-                          alt={prod.name}
-                          size="catalog"
-                          fit="contain"
-                          className="rounded-none border-x-0 border-t-0 bg-muted/25 p-3 shadow-none"
-                        />
-                        <div className="space-y-3 p-4">
-                          <div>
-                            <div className="mb-1.5 flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5">
-                                <Badge variant="outline" className="font-mono text-[9px] text-primary">{prod.code}</Badge>
-                                {prod.trackInventory && (
-                                  <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
-                                    {prod.currentStock ?? 0} unid.
-                                  </Badge>
-                                )}
-                              </div>
-                              <span className="font-mono text-sm font-black text-primary">{formatCurrency(prod.salePrice)}</span>
-                            </div>
-                            <h4 className="truncate text-sm font-black">{prod.name}</h4>
-                            <p className="mt-1 line-clamp-2 min-h-8 text-[11px] leading-4 text-muted-foreground">
-                              {prod.description || 'Producto disponible para facturación inmediata.'}
-                            </p>
-                          </div>
-                          <Button 
-                            onClick={() => addItem(prod)} 
-                            disabled={isRegisterDisabled || (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))} 
-                            className="h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider"
-                          >
-                            <ShoppingCart className="mr-2 size-3.5" /> 
-                            {prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar a factura'}
-                          </Button>
-                        </div>
-                      </article>
-                    ))}
+                {catalogView === 'list' ? (
+                  <div className="overflow-hidden rounded-xl border border-border/50">
+                    <div className="max-h-64 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-border/30 bg-muted/30">
+                            <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción del Producto</th>
+                            <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest text-muted-foreground">Precio Unit. (C$)</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">Acción</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/20">
+                          {filteredProducts.slice(0, 30).map((prod) => (
+                            <tr key={prod.id} className="transition-colors hover:bg-muted/20">
+                              <td className="px-3 py-2.5 font-mono font-bold text-primary">{prod.code}</td>
+                              <td className="px-3 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  <p className="truncate font-bold">{prod.name}</p>
+                                  {prod.trackInventory && (
+                                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
+                                      {prod.currentStock ?? 0} unid.
+                                    </Badge>
+                                  )}
+                                </div>
+                                {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
+                              </td>
+                              <td className="px-3 py-2.5 text-right font-mono">{formatCurrency(prod.salePrice)}</td>
+                              <td className="px-3 py-2.5 text-center">
+                                <Button size="sm" variant="ghost" onClick={() => addItem(prod)}
+                                  disabled={isRegisterDisabled || (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
+                                  className="h-7 rounded-lg px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
+                                  <Plus className="mr-1 size-3" /> {prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar'}
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                          {filteredProducts.length === 0 && (
+                            <tr><td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">No hay productos disponibles</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-dashed border-border/60 px-4 py-10 text-center text-sm text-muted-foreground">
-                    No hay productos disponibles
+                  <div className="max-h-[34rem] overflow-y-auto pr-1">
+                    {filteredProducts.length > 0 ? (
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                        {filteredProducts.slice(0, 30).map((prod) => (
+                          <article key={prod.id} className="group overflow-hidden rounded-2xl border border-border/60 bg-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
+                            <ProductThumbnail
+                              src={prod.imageUrl}
+                              alt={prod.name}
+                              size="catalog"
+                              fit="contain"
+                              className="rounded-none border-x-0 border-t-0 bg-muted/25 p-3 shadow-none"
+                            />
+                            <div className="space-y-3 p-4">
+                              <div>
+                                <div className="mb-1.5 flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge variant="outline" className="font-mono text-[9px] text-primary">{prod.code}</Badge>
+                                    {prod.trackInventory && (
+                                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
+                                        {prod.currentStock ?? 0} unid.
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <span className="font-mono text-sm font-black text-primary">{formatCurrency(prod.salePrice)}</span>
+                                </div>
+                                <h4 className="truncate text-sm font-black">{prod.name}</h4>
+                                <p className="mt-1 line-clamp-2 min-h-8 text-[11px] leading-4 text-muted-foreground">
+                                  {prod.description || 'Producto disponible para facturación inmediata.'}
+                                </p>
+                              </div>
+                              <Button
+                                onClick={() => addItem(prod)}
+                                disabled={isRegisterDisabled || (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
+                                className="h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider"
+                              >
+                                <ShoppingCart className="mr-2 size-3.5" />
+                                {prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar a factura'}
+                              </Button>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-border/60 px-4 py-10 text-center text-sm text-muted-foreground">
+                        No hay productos disponibles
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
-        <Card className="border-border/50 shadow-sm" data-tour="pos-cart">
-          <CardContent className="p-5">
-            <h3 className="text-sm font-black uppercase tracking-tight mb-4">
-              Detalle Factura{' '}
-              {selectedRegister && (
-                <span className="text-primary">({selectedRegister.code} - {selectedRegister.name})</span>
-              )}
-            </h3>
-            {cart.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-8">
-                No hay ítems agregados en esta caja{selectedRegister ? ` (${selectedRegister.code} - ${selectedRegister.name})` : ''}.
-              </p>
-            ) : (
-              <div className="border border-border/50 rounded-xl overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-muted/30 border-b border-border/30">
-                      <th className="px-3 py-2.5 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Descripción</th>
-                      <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Cant</th>
-                      <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Precio Unit.</th>
-                      <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Subtotal</th>
-                      <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/20">
-                    {cart.map((item) => (
-                      <tr key={item.productId} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-3 py-2 font-bold">{item.description}</td>
-                        <td className="px-3 py-2 text-center">
-                          <Input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) =>
-                              updateQty(
-                                item.productId,
-                                normalizeQuantity(e.target.value, item.quantity),
-                              )
-                            }
-                            disabled={isRegisterDisabled}
-                            className="h-7 w-16 rounded-lg text-center text-xs font-mono"
-                            min={1}
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono">{formatCurrency(item.unitPrice)}</td>
-                        <td className="px-3 py-2 text-right font-mono font-bold">{formatCurrency(item.lineTotal)}</td>
-                        <td className="px-3 py-2 text-center">
-                          <Button variant="ghost" onClick={() => removeItem(item.productId)}
-                            disabled={isRegisterDisabled}
-                            className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 rounded-lg">
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="space-y-5 sticky top-24">
-        <Card className="border-border/50 shadow-sm" data-tour="pos-summary">
-          <CardContent className="p-5 space-y-4">
-            <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
-              <Calculator className="size-4 text-primary" /> Resumen Financiero
-            </h3>
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Aplicar Descuento (%)</Label>
-              <Input
-                type="number"
-                value={discountPercent || ''}
-                onChange={(e) => setDiscountPercent(normalizeDiscountPercent(e.target.value))}
-                placeholder="0"
-                className="h-10 rounded-xl"
-                min={0}
-                max={100}
-                disabled={isRegisterDisabled}
-              />
-            </div>
-            <div className="flex items-center justify-between pt-2">
-              <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Incluir IVA</Label>
-              <Switch checked={includeTax} onCheckedChange={setIncludeTax} disabled={isRegisterDisabled} />
-            </div>
-            <div className="space-y-2 pt-2 border-t border-border/30">
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Subtotal Bruto:</span>
-                <span className="font-mono">{formatCurrency(summary.subtotal)}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Descuento aplicado:</span>
-                <span className="font-mono text-destructive">- {formatCurrency(summary.discount)}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">IVA calculado:</span>
-                <span className="font-mono">{formatCurrency(summary.tax)}</span>
-              </div>
-            </div>
-            <div className="pt-3 border-t border-border/30">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-black">Total a Pagar:</span>
-                <span className="text-xl font-black text-primary">{formatCurrency(summary.total)}</span>
-              </div>
-            </div>
-            <Button
-              size="lg"
-              data-tour="pos-pay"
-              onClick={handlePay}
-              disabled={submitting || cart.length === 0 || isRegisterDisabled}
-              className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest gap-2 shadow-lg shadow-primary/20"
-            >
-              {submitting ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
-              Pagar y Emitir Factura
-            </Button>
-            <Button variant="outline" onClick={clearCart} disabled={isRegisterDisabled} className="w-full h-10 rounded-xl font-bold text-xs gap-2">
-              Limpiar
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 shadow-sm" data-tour="pos-history">
-          <CardContent className="p-5">
-            <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2 mb-3">
-              <Clock className="size-4 text-primary" /> Historial Reciente por Caja
-            </h3>
-            {recentInvoices.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">
-                No hay facturas emitidas en esta sesión.
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {recentInvoices.map((inv) => {
-                  const statusLabel = inv.status === 'PAID' ? 'PAGADA' : inv.status === 'DRAFT' ? 'BORRADOR' : inv.status === 'CANCELLED' ? 'ANULADA' : inv.status;
-                  return (
-                  <div key={inv.id} className="rounded-xl border border-border/30 px-3 py-2 flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[10px] text-muted-foreground">{inv.number}</span>
-                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[9px]">{statusLabel}</Badge>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground truncate">
-                        {getInvoiceCustomerName(inv)} &middot; {formatInvoiceDate(inv.date)}
-                      </p>
-                    </div>
-                    <span className="text-xs font-black font-mono shrink-0">{formatCurrency(inv.total)}</span>
+            <Card className="border-border/50 shadow-sm" data-tour="pos-cart">
+              <CardContent className="p-5">
+                <h3 className="text-sm font-black uppercase tracking-tight mb-4">
+                  Detalle Factura{' '}
+                  {selectedRegister && (
+                    <span className="text-primary">({selectedRegister.code} - {selectedRegister.name})</span>
+                  )}
+                </h3>
+                {cart.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">
+                    No hay ítems agregados en esta caja{selectedRegister ? ` (${selectedRegister.code} - ${selectedRegister.name})` : ''}.
+                  </p>
+                ) : (
+                  <div className="border border-border/50 rounded-xl overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-muted/30 border-b border-border/30">
+                          <th className="px-3 py-2.5 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Descripción</th>
+                          <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Cant</th>
+                          <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Precio Unit.</th>
+                          <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Subtotal</th>
+                          <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/20">
+                        {cart.map((item) => (
+                          <tr key={item.productId} className="hover:bg-muted/20 transition-colors">
+                            <td className="px-3 py-2 font-bold">{item.description}</td>
+                            <td className="px-3 py-2 text-center">
+                              <Input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) =>
+                                  updateQty(
+                                    item.productId,
+                                    normalizeQuantity(e.target.value, item.quantity),
+                                  )
+                                }
+                                disabled={isRegisterDisabled}
+                                className="h-7 w-16 rounded-lg text-center text-xs font-mono"
+                                min={1}
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono">{formatCurrency(item.unitPrice)}</td>
+                            <td className="px-3 py-2 text-right font-mono font-bold">{formatCurrency(item.lineTotal)}</td>
+                            <td className="px-3 py-2 text-center">
+                              <Button variant="ghost" onClick={() => removeItem(item.productId)}
+                                disabled={isRegisterDisabled}
+                                className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 rounded-lg">
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                )})}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-      </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-5 sticky top-24">
+            <Card className="border-border/50 shadow-sm" data-tour="pos-summary">
+              <CardContent className="p-5 space-y-4">
+                <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
+                  <Calculator className="size-4 text-primary" /> Resumen Financiero
+                </h3>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Aplicar Descuento (%)</Label>
+                  <Input
+                    type="number"
+                    value={discountPercent || ''}
+                    onChange={(e) => setDiscountPercent(normalizeDiscountPercent(e.target.value))}
+                    placeholder="0"
+                    className="h-10 rounded-xl"
+                    min={0}
+                    max={100}
+                    disabled={isRegisterDisabled}
+                  />
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Incluir IVA</Label>
+                  <Switch checked={includeTax} onCheckedChange={setIncludeTax} disabled={isRegisterDisabled} />
+                </div>
+                <div className="space-y-2 pt-2 border-t border-border/30">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Subtotal Bruto:</span>
+                    <span className="font-mono">{formatCurrency(summary.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Descuento aplicado:</span>
+                    <span className="font-mono text-destructive">- {formatCurrency(summary.discount)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">IVA calculado:</span>
+                    <span className="font-mono">{formatCurrency(summary.tax)}</span>
+                  </div>
+                </div>
+                <div className="pt-3 border-t border-border/30">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-black">Total a Pagar:</span>
+                    <span className="text-xl font-black text-primary">{formatCurrency(summary.total)}</span>
+                  </div>
+                </div>
+                <Button
+                  size="lg"
+                  data-tour="pos-pay"
+                  onClick={handlePay}
+                  disabled={submitting || cart.length === 0 || isRegisterDisabled}
+                  className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest gap-2 shadow-lg shadow-primary/20"
+                >
+                  {submitting ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
+                  Pagar y Emitir Factura
+                </Button>
+                <Button variant="outline" onClick={clearCart} disabled={isRegisterDisabled} className="w-full h-10 rounded-xl font-bold text-xs gap-2">
+                  Limpiar
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/50 shadow-sm" data-tour="pos-history">
+              <CardContent className="p-5">
+                <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2 mb-3">
+                  <Clock className="size-4 text-primary" /> Historial Reciente por Caja
+                </h3>
+                {recentInvoices.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-4">
+                    No hay facturas emitidas en esta sesión.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {recentInvoices.map((inv) => {
+                      const statusLabel = inv.status === 'PAID' ? 'PAGADA' : inv.status === 'DRAFT' ? 'BORRADOR' : inv.status === 'CANCELLED' ? 'ANULADA' : inv.status;
+                      return (
+                        <div key={inv.id} className="rounded-xl border border-border/30 px-3 py-2 flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[10px] text-muted-foreground">{inv.number}</span>
+                              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[9px]">{statusLabel}</Badge>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground truncate">
+                              {getInvoiceCustomerName(inv)} &middot; {formatInvoiceDate(inv.date)}
+                            </p>
+                          </div>
+                          <span className="text-xs font-black font-mono shrink-0">{formatCurrency(inv.total)}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       )}
       {createdInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-labelledby="invoice-result-title">
@@ -1093,12 +1092,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
               </div>
               <Button variant="ghost" onClick={() => setShowPayment(false)}>✕</Button>
             </div>
-            
+
             {(() => {
               const totalToPay = paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total;
               const totalPaid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
               const changeLocal = Math.max(0, totalPaid * (paymentCurrency === 'USD' ? Number(activeSession.exchangeRateUSD) : 1) - summary.total);
-              
+
               return (
                 <>
                   <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1115,7 +1114,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                       <div className="text-xl font-black">C$ {changeLocal.toFixed(2)}</div>
                     </div>
                   </div>
-                  
+
                   <div className="mb-4 space-y-2">
                     <Label>Moneda de pago</Label>
                     <Select value={paymentCurrency} onValueChange={(value: PaymentCurrency) => setPaymentCurrency(value)}>
@@ -1126,7 +1125,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div className="space-y-3">
                     {payments.map((payment, index) => (
                       <div key={`${payment.method}-${index}`} className="rounded-xl border p-3">

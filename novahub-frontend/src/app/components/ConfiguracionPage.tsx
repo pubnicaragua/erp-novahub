@@ -914,7 +914,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
       {/* ── HEADER ── */}
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-        className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-2 md:gap-3 uppercase italic">
             <Settings2 className="size-6 md:size-9 text-primary" />
@@ -1388,7 +1388,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   </div>
                 </div>
 
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 flex-shrink-0 mt-2">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 flex-shrink-0 mt-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Matriz de Permisos por Módulo</Label>
                   <div className="flex flex-wrap gap-3 text-[10px] font-black uppercase tracking-widest">
                     <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-blue-500 inline-block" />Leer</span>

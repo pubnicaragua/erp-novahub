@@ -352,7 +352,7 @@ export function TransferenciasPage() {
                 const salidas = transfersArr.filter(t => (t as any).fromId === bodega).length;
                 const entradas = transfersArr.filter(t => (t as any).toId === bodega).length;
                 return (
-                  <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/40 hover:bg-muted/50 transition-colors">
+                  <div key={index} className="flex flex-col lg:flex-row lg:items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/40 hover:bg-muted/50 transition-colors">
                     <span className="font-semibold text-sm mb-2 sm:mb-0">{bodega}</span>
                     <div className="flex items-center gap-4 text-sm font-medium">
                       <div className="flex items-center gap-1.5 bg-red-500/10 text-red-500 px-2 py-1 rounded-md border border-red-500/20">

@@ -103,7 +103,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
       </div>
 
       <Card className="border-none bg-background/50 backdrop-blur-xl shadow-sm">
-        <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight">Agentes de Soporte</h2>
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">

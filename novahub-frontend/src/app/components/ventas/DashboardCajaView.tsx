@@ -73,7 +73,7 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center md:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black tracking-tight">
             Panel interactivo de <span className="text-primary">rendimiento financiero</span>, rotación de productos y operaciones de caja.
