@@ -100,7 +100,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
         toast.success('Nota de crédito actualizada');
       }
       setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
-    } catch { toast.error('Error al guardar'); }
+    } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar'); }
   };
 
   const handleIssue = async (id: string) => {
@@ -108,7 +108,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
       await creditNotesService.issue(id);
       toast.success('Nota de crédito emitida — Balance del cliente actualizado');
       setEditingId(null); onRefresh();
-    } catch { toast.error('Error al emitir nota de crédito'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al emitir nota de crédito'); }
   };
 
   const handleExportPDF = async (row: CreditNote) => {
@@ -121,7 +121,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
         documentType: 'credit-note',
       });
       toast.success('PDF generado exitosamente');
-    } catch { toast.error('Error al generar PDF'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF'); }
   };
 
   const getCustomerName = (cn: CreditNote) => cn.customer?.name || customers.find(c => c.id === cn.customerId)?.name || 'Cliente';
@@ -294,7 +294,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           </div>
         </div>
         <EditableDataTable data={filtered}
-          onBulkDelete={async (ids) => { try { for (const id of ids) { await creditNotesService.delete(id as string); } toast.success('Eliminadas'); onRefresh(); } catch { toast.error('Error'); } }}
+          onBulkDelete={async (ids) => { try { for (const id of ids) { await creditNotesService.delete(id as string); } toast.success('Eliminadas'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error'); } }}
           columns={columns} onRowUpdate={async () => {}} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">

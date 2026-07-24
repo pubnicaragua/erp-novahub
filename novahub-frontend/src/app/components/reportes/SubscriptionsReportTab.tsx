@@ -80,8 +80,8 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
       try {
         const res = await subscriptionsService.getAllRequests().catch(() => ({ data: [] }));
         setRequests(Array.isArray(res) ? res : (res as any)?.data || []);
-      } catch (e) {
-        toast.error("Error cargando suscripciones");
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || "Error cargando suscripciones");
       } finally {
         setLoading(false);
       }
@@ -165,8 +165,8 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
 
         doc.save(`Suscripciones_${new Date().getTime()}.pdf`);
         toast.success("PDF Exportado");
-      } catch (e) {
-        toast.error("Error exportando PDF");
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || "Error exportando PDF");
       }
     },
     exportExcel: async () => {
@@ -197,8 +197,8 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
         a.download = `Suscripciones_${new Date().getTime()}.xlsx`;
         a.click();
         toast.success("Excel Exportado");
-      } catch (e) {
-        toast.error("Error exportando Excel");
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || "Error exportando Excel");
       }
     }
   }));

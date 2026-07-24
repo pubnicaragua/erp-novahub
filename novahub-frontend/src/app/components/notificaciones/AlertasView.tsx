@@ -9,6 +9,7 @@ import { Plus, Search, AlertTriangle, Info, AlertCircle, Eye } from 'lucide-reac
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
+import { alertsService } from '../../services/notificaciones.service';
 import { format } from 'date-fns';
 
 interface AlertasViewProps {
@@ -20,6 +21,9 @@ interface AlertasViewProps {
 export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefresh }) => {
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const errMsg = (e: any, fallback: string) => e?.response?.data?.message || e?.message || fallback;
 
   const severityOpts = [
     { value: 'LOW', label: 'Baja', color: 'text-blue-500' },
@@ -39,14 +43,17 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
 
   const handleUpdate = async (id: string | number, updates: Partial<Alert>) => {
     try { await alertsService.update(id as string, updates); toast.success('Alerta actualizada'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); }
+    catch (e: any) { toast.error(errMsg(e, 'Error al actualizar')); }
   };
 
   const handleAdd = async () => {
+    if (creating) return;
+    setCreating(true);
     try {
-      await alertsService.create({ title: 'Nueva Alerta', content: 'Detalles de la alerta', isRead: false });
+      await alertsService.create({ title: 'Nueva Alerta', content: 'Detalles de la alerta', isRead: false, scope: 'PERSONAL' });
       toast.success('Alerta creada'); onRefresh();
-    } catch { toast.error('Error al crear'); }
+    } catch (e: any) { toast.error(errMsg(e, 'Error al crear')); }
+    finally { setCreating(false); }
   };
 
   const kpis = [
@@ -60,7 +67,7 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4" data-tour="notificaciones-alertas-kpis">
         {kpis.map((kpi, i) => (
           <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
             <CardContent className="p-5 flex items-center gap-4">
@@ -71,7 +78,7 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
         ))}
       </div>
 
-      <Card className="border-none bg-background/50 backdrop-blur-xl shadow-sm">
+      <Card className="border-none bg-background/50 backdrop-blur-xl shadow-sm" data-tour="notificaciones-alertas-table">
         <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight">Alertas del Sistema</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Avisos y eventos críticos</p></div>
           <div className="flex items-center gap-3">
@@ -81,7 +88,7 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={canPerform('NOTIFICATIONS_ALERTS', 'edit') ? handleUpdate : undefined} isLoading={loading} onRowDelete={canPerform('NOTIFICATIONS_ALERTS', 'delete') ? async (id) => { try { await alertsService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch { toast.error('Error'); } } : undefined} />
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={canPerform('NOTIFICATIONS_ALERTS', 'edit') ? handleUpdate : undefined} isLoading={loading} onRowDelete={canPerform('NOTIFICATIONS_ALERTS', 'delete') ? async (id) => { try { await alertsService.delete(id as string); toast.success('Alerta eliminada'); onRefresh(); } catch (e: any) { toast.error(errMsg(e, 'Error al eliminar')); } } : undefined} />
       </Card>
     </div>
   );

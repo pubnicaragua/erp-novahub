@@ -28,6 +28,7 @@ import { Input } from '../ui/input';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { trainingService } from '../../services/training.service';
 import { cn } from '../ui/utils';
@@ -55,6 +56,7 @@ export function TrainingHubView() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [editingVideo, setEditingVideo] = useState<any | null>(null);
   const [showVideoInfo, setShowVideoInfo] = useState(true);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   
   const [uploadData, setUploadData] = useState({
     title: '',
@@ -84,8 +86,8 @@ export function TrainingHubView() {
       setLoading(true);
       const res = await trainingService.getVideos();
       setVideos(Array.isArray(res) ? res : []);
-    } catch (error) {
-      toast.error('Error al cargar centro de capacitación');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar centro de capacitación');
     } finally {
       setLoading(false);
     }
@@ -110,8 +112,8 @@ export function TrainingHubView() {
       setShowUploadModal(false);
       setUploadData({ title: '', description: '', module: 'SALES', file: null });
       fetchVideos();
-    } catch (error) {
-      toast.error('Error al subir video', { id: 'upload-video' });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al subir video', { id: 'upload-video' });
     } finally {
       setSaving(false);
     }
@@ -129,22 +131,15 @@ export function TrainingHubView() {
       toast.success('Guía actualizada');
       setEditingVideo(null);
       fetchVideos();
-    } catch (error) {
-      toast.error('Error al actualizar');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar este video?')) return;
-    try {
-      await trainingService.deleteVideo(id);
-      toast.success('Video eliminado');
-      fetchVideos();
-    } catch (error) {
-      toast.error('Error al eliminar video');
-    }
+    setPendingDeleteId(id);
   };
 
   const generateSmartDescription = (title: string, module: string) => {
@@ -527,6 +522,24 @@ export function TrainingHubView() {
           </div>
         )}
       </AnimatePresence>
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="¿Eliminar video?"
+        description="¿Estás seguro de que deseas eliminar este video? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        onConfirm={async () => {
+          try {
+            await trainingService.deleteVideo(pendingDeleteId);
+            toast.success('Video eliminado');
+            fetchVideos();
+          } catch (e: any) {
+            toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar video');
+          }
+          finally { setPendingDeleteId(null); }
+        }}
+      />
     </div>
   );
 }

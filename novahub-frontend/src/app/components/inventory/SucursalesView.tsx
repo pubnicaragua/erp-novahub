@@ -30,8 +30,8 @@ export function SucursalesView({ warehouses, onRefresh, isModal = false }: { war
       const cajasRes: any = await api.get('/caja/registers?all=true');
       const cajasData = Array.isArray(cajasRes) ? cajasRes : (cajasRes?.data || []);
       setCajas(cajasData);
-    } catch (error) {
-      toast.error('Error al cargar sucursales');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar sucursales');
     } finally {
       setLoading(false);
     }
@@ -57,7 +57,7 @@ export function SucursalesView({ warehouses, onRefresh, isModal = false }: { war
       setIsFormOpen(false);
       fetchBranches();
     } catch (e) {
-      toast.error('Error al guardar sucursal');
+      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar sucursal');
     } finally {
       setSaving(false);
     }
@@ -69,8 +69,8 @@ export function SucursalesView({ warehouses, onRefresh, isModal = false }: { war
       await api.delete(`/sucursales/${deleteId}`);
       toast.success('Sucursal eliminada');
       fetchBranches();
-    } catch (e) {
-      toast.error('Error al eliminar sucursal');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar sucursal');
     } finally {
       setDeleteId(null);
     }

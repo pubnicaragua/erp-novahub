@@ -61,8 +61,8 @@ export function PeriodosView() {
       setLoading(true);
       const res = await contabilidadService.getPeriods();
       setPeriods(res || []);
-    } catch {
-      toast.error('Error al cargar períodos');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar períodos');
     } finally {
       setLoading(false);
     }

@@ -95,8 +95,8 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         setPayments(Array.isArray(payRes) ? payRes : payRes?.data || []);
         setOrders(Array.isArray(ordRes) ? ordRes : ordRes?.data || []);
         setSuppliers(Array.isArray(suppRes) ? suppRes : suppRes?.data || []);
-      } catch (e) {
-        toast.error("Error cargando proveedores");
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || "Error cargando proveedores");
       } finally {
         setLoading(false);
       }
@@ -328,9 +328,9 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         doc.save(`Reporte_Proveedores_${now.toISOString().split('T')[0]}.pdf`);
         toast.success('PDF generado exitosamente');
-      } catch (e) {
+      } catch (e: any) {
         console.error(e);
-        toast.error("Error exportando PDF");
+        toast.error(e?.response?.data?.message || e?.message || "Error exportando PDF");
       }
     },
     exportExcel: async () => {
@@ -516,9 +516,9 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         await downloadExcelWorkbook(wb, `Reporte_Proveedores_${new Date().toISOString().split('T')[0]}.xlsx`);
         toast.success('Excel exportado exitosamente');
-      } catch (e) {
+      } catch (e: any) {
         console.error(e);
-        toast.error("Error exportando Excel");
+        toast.error(e?.response?.data?.message || e?.message || "Error exportando Excel");
       }
     }
   }));

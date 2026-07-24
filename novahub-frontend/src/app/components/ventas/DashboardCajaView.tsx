@@ -39,8 +39,8 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
     try {
       const res = await cajaService.getDashboard(undefined, registerId, startDate, endDate);
       setData(res);
-    } catch {
-      toast.error('Error al cargar dashboard de caja');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar dashboard de caja');
     } finally {
       setLoading(false);
     }

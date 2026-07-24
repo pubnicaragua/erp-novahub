@@ -52,6 +52,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './ui/utils';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Label } from './ui/label';
 import { Input } from './ui/input';
@@ -132,6 +133,7 @@ export function SuscripcionesPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>('');
   const [uploading, setUploading] = useState(false);
+  const [pendingDeleteTenant, setPendingDeleteTenant] = useState<{ id: string; name: string } | null>(null);
 
   // Form state for module request
   const [requestForm, setRequestForm] = useState({
@@ -279,14 +281,7 @@ export function SuscripcionesPage() {
   };
 
   const handleDeleteTenant = async (id: string, name: string) => {
-    if (!confirm(`¿Eliminar permanentemente "${name}"? Esta acción NO se puede deshacer.`)) return;
-    try {
-      await tenantsService.delete(id);
-      toast.success('Empresa eliminada permanentemente');
-      fetchData();
-    } catch (error) {
-      toast.error('Error al eliminar empresa');
-    }
+    setPendingDeleteTenant({ id, name });
   };
 
   const handleViewDetails = async (tenant: any) => {
@@ -1146,6 +1141,26 @@ export function SuscripcionesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={pendingDeleteTenant !== null}
+        onOpenChange={(open) => !open && setPendingDeleteTenant(null)}
+        title={`¿Eliminar "${pendingDeleteTenant?.name}"?`}
+        description="Esta acción NO se puede deshacer. Se eliminarán todos los datos asociados a esta empresa."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        onConfirm={async () => {
+          try {
+            if (!pendingDeleteTenant) return;
+            await tenantsService.delete(pendingDeleteTenant.id);
+            toast.success('Empresa eliminada permanentemente');
+            fetchData();
+          } catch (error) {
+            toast.error('Error al eliminar empresa');
+          } finally {
+            setPendingDeleteTenant(null);
+          }
+        }}
+      />
     </div>
   );
 }

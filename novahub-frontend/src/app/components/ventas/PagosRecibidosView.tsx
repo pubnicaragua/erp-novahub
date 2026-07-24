@@ -52,9 +52,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       await paymentsService.update(id.toString(), updates);
       toast.success('Pago actualizado');
       onRefresh();
-    } catch (error) {
-      toast.error('Error al actualizar');
-      throw error;
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
+      throw e;
     }
   };
 
@@ -92,7 +92,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       } as any);
       toast.success('Pago registrado exitosamente');
       setIsCreating(false); setLocalDoc(null); onRefresh();
-    } catch { toast.error('Error al registrar pago'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al registrar pago'); }
   };
 
   const handleExportPDF = async (row: PaymentReceived) => {
@@ -105,7 +105,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         documentType: 'payment',
       });
       toast.success('PDF generado exitosamente');
-    } catch { toast.error('Error al generar PDF'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF'); }
   };
 
   // Invoices filtered by selected customer
@@ -270,7 +270,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           </div>
         </div>
         <EditableDataTable data={filtered}
-          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch { toast.error('Error al eliminar'); } }}
+          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">

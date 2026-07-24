@@ -1,12 +1,55 @@
-import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Bell, MessageSquare, Send } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, Bell, MessageSquare, Send, CircleHelp } from 'lucide-react';
 import { cn } from './ui/utils';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { Button } from './ui/button';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertasView } from './notificaciones/AlertasView';
 import { MensajesView } from './notificaciones/MensajesView';
 import { PushView } from './notificaciones/PushView';
 import { alertsService, messagesService, pushNotificationsService } from '../services/notificaciones.service';
+import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
+
+const NOTIFICACIONES_TOUR_STEPS: GuidedTourStep[] = [
+  {
+    target: '[data-tour="notificaciones-title"]',
+    title: 'Notificaciones',
+    description: 'Centro de comunicaciones del sistema. Gestioná alertas internas, mensajería entre usuarios y notificaciones push a dispositivos.',
+    tip: 'Cada pestaña tiene un propósito distinto. Explorá las tres para conocerlas.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="notificaciones-tabs"]',
+    title: 'Pestañas',
+    description: 'Alertas: avisos del sistema con severidad. Mensajes: conversaciones internas. Push: notificaciones a dispositivos móviles.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="notificaciones-alertas-kpis"]',
+    title: 'Métricas de Alertas',
+    description: 'Resumen rápido: total de alertas, críticas, leídas y no leídas. Datos en tiempo real al crear o modificar.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="notificaciones-alertas-table"]',
+    title: 'Tabla de Alertas',
+    description: 'Creá, editá y eliminá alertas directamente. Hacé clic en una celda para editar su valor. Usá el botón Crear Alerta para agregar una nueva.',
+    placement: 'top',
+  },
+  {
+    target: '[data-tour="notificaciones-tab-mensajes"]',
+    title: 'Mensajería Interna',
+    description: 'Conversaciones entre usuarios del sistema. Los mensajes directos permiten respuestas; los del sistema son informativos.',
+    tip: 'Usá Ctrl+Enter para enviar rápido una respuesta.',
+    placement: 'top',
+  },
+  {
+    target: '[data-tour="notificaciones-tab-push"]',
+    title: 'Notificaciones Push',
+    description: 'Comunicaciones enviadas a dispositivos móviles registrados. Tipos: Marketing, Sistema y Actualizaciones.',
+    placement: 'top',
+  },
+];
 
 interface NotificacionesPageProps {
   activeSubModule?: string;
@@ -22,6 +65,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
   ];
   const tabIds = tabs.map((tab) => tab.id);
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'alertas');
+  const [showTour, setShowTour] = useState(false);
   const [data, setData] = useState<{ alertas: any[]; mensajes: any[]; push: any[] }>({
     alertas: [],
     mensajes: [],
@@ -86,14 +130,17 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
   return (
     <div className="min-h-full bg-background">
       <div className="mx-auto min-h-full max-w-[1700px] p-4 sm:p-6 lg:p-8">
-        <header className="mb-5 flex items-center gap-3">
+        <header className="mb-5 flex items-center gap-3" data-tour="notificaciones-title">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <Bell className="size-6 text-primary" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Notificaciones</h1>
             <p className="mt-0.5 text-sm text-muted-foreground">Alertas, conversaciones y avisos del sistema</p>
           </div>
+          <Button variant="outline" size="icon" className="size-11 rounded-xl shrink-0" onClick={() => setShowTour(true)}>
+            <CircleHelp className="size-5" />
+          </Button>
         </header>
 
         <Tabs
@@ -104,11 +151,12 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
             onSubModuleChange?.(value);
           }}
         >
-          <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "mb-5 grid h-auto w-full grid-cols-3 gap-1 rounded-xl border border-border/50 bg-muted/30 p-1")}>
+          <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "mb-5 grid h-auto w-full grid-cols-3 gap-1 rounded-xl border border-border/50 bg-muted/30 p-1")} data-tour="notificaciones-tabs">
             {tabs.map((tab) => (
               <TabsTrigger
                 key={tab.id}
                 value={tab.id}
+                data-tour={`notificaciones-tab-${tab.id}`}
                 className="flex min-h-10 items-center justify-center gap-2 rounded-lg px-2 text-xs font-semibold transition-all data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm"
               >
                 <tab.icon className={cn('size-4', activeTab === tab.id ? 'text-primary' : 'text-muted-foreground')} />
@@ -132,6 +180,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
           </AnimatePresence>
         </Tabs>
       </div>
+      {showTour && <GuidedTour steps={NOTIFICACIONES_TOUR_STEPS} onClose={() => setShowTour(false)} title="Notificaciones" />}
     </div>
   );
 };

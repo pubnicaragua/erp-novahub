@@ -77,7 +77,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
 
   const handleUpdate = async (id: string | number, updates: Partial<Reminder>) => {
     try { await remindersService.update(id as string, updates); toast.success('Recordatorio actualizado'); onRefresh(); }
-    catch { toast.error('Error al actualizar recordatorio'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar recordatorio'); }
   };
 
   const handleAdd = async () => {
@@ -110,7 +110,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
       setIsAddOpen(false);
       setFormData({ title: '', description: '', reminderDate: '', scope: 'PERSONAL', selectedUsers: [], selectedDept: '' });
       onRefresh();
-    } catch { toast.error('Error al crear recordatorio'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear recordatorio'); }
   };
 
   const kpis = [
@@ -150,7 +150,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
           columns={columns} 
           onRowUpdate={canPerform('ACTIVITIES_REMINDERS', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('ACTIVITIES_REMINDERS', 'delete') ? async (id) => { try { await remindersService.delete(id as string); toast.success('Recordatorio eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+          onRowDelete={canPerform('ACTIVITIES_REMINDERS', 'delete') ? async (id) => { try { await remindersService.delete(id as string); toast.success('Recordatorio eliminado'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar recordatorio'); } } : undefined} 
         />
       </Card>
 

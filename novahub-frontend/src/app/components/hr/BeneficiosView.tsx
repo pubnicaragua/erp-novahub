@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { hrService } from '../../services/hr.service';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -38,6 +39,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<any>(EMPTY_FORM);
   const [editForm, setEditForm] = useState<any>({});
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const handleCreate = async () => {
     if (!form.name) { toast.error('El nombre es requerido'); return; }
@@ -47,7 +49,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
       setAddingNew(false);
       setForm(EMPTY_FORM);
       onRefresh();
-    } catch { toast.error('Error al crear beneficio'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear beneficio'); }
   };
 
   const handleUpdate = async (id: string) => {
@@ -56,16 +58,11 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
       toast.success('Beneficio actualizado');
       setEditingId(null);
       onRefresh();
-    } catch { toast.error('Error al actualizar beneficio'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar beneficio'); }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Eliminar este beneficio?')) return;
-    try {
-      await hrService.deleteBenefit(id);
-      toast.success('Beneficio eliminado');
-      onRefresh();
-    } catch { toast.error('Error al eliminar beneficio'); }
+    setPendingDeleteId(id);
   };
 
   const startEdit = (b: any) => {
@@ -276,6 +273,22 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="¿Eliminar beneficio?"
+        description="¿Estás seguro de que deseas eliminar este beneficio? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        onConfirm={async () => {
+          try {
+            await hrService.deleteBenefit(pendingDeleteId);
+            toast.success('Beneficio eliminado');
+            onRefresh();
+          } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar beneficio'); }
+          finally { setPendingDeleteId(null); }
+        }}
+      />
     </div>
   );
 }

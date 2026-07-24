@@ -8,6 +8,7 @@ import { Combobox } from '../ui/Combobox';
 import { paymentsService, suppliersService, billsService } from '../../services/compras.service';
 import type { PaymentMade, Supplier, SupplierInvoice } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -40,6 +41,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PaymentMade> | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const normalizeMethod = (method?: string): 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER' => {
     const normalized = String(method || 'TRANSFER').toUpperCase();
@@ -175,7 +177,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       toast.success('Pago actualizado');
       onRefresh();
     }
-    catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
   };
 
   const syncLinkedInvoiceStatus = async (paymentDraft: Partial<PaymentMade>, paymentIdToUpsert?: string) => {
@@ -258,7 +260,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       setEditingId(null);
       onRefresh();
     } catch (e: any) { 
-        toast.error('Error al registrar: ' + (e.response?.data?.message || 'Error')); 
+        toast.error(e?.response?.data?.message || e?.message || 'Error al registrar'); 
     }
   };
 
@@ -300,12 +302,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                 </Button>
               )}
              {!isNew && canPerform('PURCHASES_PAYMENTS', 'delete') && (
-                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => {
-                     if(confirm('¿Seguro que deseas eliminar este pago?')){
-                         try { await paymentsService.delete(editingId); toast.success('Eliminado'); setEditingId(null); onRefresh(); } catch { toast.error('Error al eliminar'); }
-                     }
-                  }}>
+                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                  onClick={() => setPendingDeleteId(editingId)}>
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
@@ -494,7 +492,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
               toast.success('Elementos eliminados');
               onRefresh();
             } catch (e) {
-              toast.error('Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           } : undefined}
            actions={(row) => (
@@ -514,13 +512,33 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                  <Download className="size-4" />
                </Button>
                <Button title={canPerform('PURCHASES_PAYMENTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_PAYMENTS', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={async () => { await paymentsService.delete(row.id); onRefresh(); }}><Trash2 className="size-4" /></Button>
+               {canPerform('PURCHASES_PAYMENTS', 'delete') && (
+                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
               )}
             </div>
           )}
         />
       </div>
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="¿Eliminar pago?"
+        description="¿Estás seguro de que deseas eliminar este pago? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        onConfirm={async () => {
+          try {
+            await paymentsService.delete(pendingDeleteId);
+            toast.success('Pago eliminado');
+            setEditingId(null);
+            onRefresh();
+          } catch (e) {
+            toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+          } finally {
+            setPendingDeleteId(null);
+          }
+        }}
+      />
     </div>
   );
 }

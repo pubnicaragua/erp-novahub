@@ -15,6 +15,9 @@ export interface RegisterTenantDto {
   companySize?: string;
   companyDescription?: string;
   selectedModules?: string[];
+  logo?: string;
+  roles?: { name: string; allowedModules: string[]; permissions: any[] }[];
+  users?: { name: string; email: string; password?: string; roleName?: string }[];
 }
 
 export interface ModuleRecommendation {

@@ -646,9 +646,9 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
 
       doc.save(`Balance_General_${now.toISOString().split('T')[0]}.pdf`);
       toast.success("PDF exportado exitosamente");
-    } catch(e) {
+    } catch (e: any) {
        console.error(e);
-       toast.error("Error al exportar PDF");
+       toast.error(e?.response?.data?.message || e?.message || "Error al exportar PDF");
     }
   };
 
@@ -954,9 +954,9 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
       a.download = `Balance_General_${now.toISOString().split('T')[0]}.xlsx`;
       a.click();
       toast.success("Excel exportado exitosamente");
-    } catch(e) {
+    } catch (e: any) {
        console.error(e);
-       toast.error("Error al exportar Excel");
+       toast.error(e?.response?.data?.message || e?.message || "Error al exportar Excel");
     }
   };
 

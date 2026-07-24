@@ -71,8 +71,8 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
       });
       setMessages((prev) => [...prev, res?.data || res]);
       setNewText('');
-    } catch {
-      toast.error('Error al enviar mensaje');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al enviar mensaje');
     } finally {
       setSending(false);
     }
@@ -101,8 +101,8 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
       });
       setMessages((prev) => [...prev, res?.data || res]);
       toast.success('Archivo subido');
-    } catch {
-      toast.error('Error al subir archivo');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al subir archivo');
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';

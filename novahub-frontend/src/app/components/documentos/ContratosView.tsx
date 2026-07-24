@@ -42,14 +42,14 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onR
 
   const handleUpdate = async (id: string | number, updates: Partial<Contract>) => {
     try { await contractsService.update(id as string, updates); toast.success('Contrato actualizado'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); }
   };
 
   const handleAdd = async () => {
     try {
       await contractsService.create({ number: `CTR-${Date.now().toString().slice(-5)}`, title: 'Nuevo Contrato', status: 'DRAFT' as any, value: 0, currency: baseCurrency, exchangeRate });
       toast.success('Contrato creado'); onRefresh();
-    } catch { toast.error('Error al crear'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear'); }
   };
 
   const totalValue = data.reduce(
@@ -94,7 +94,7 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onR
           columns={columns} 
           onRowUpdate={canPerform('DOCUMENTS_CONTRACTS', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('DOCUMENTS_CONTRACTS', 'delete') ? async (id) => { try { await contractsService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+          onRowDelete={canPerform('DOCUMENTS_CONTRACTS', 'delete') ? async (id) => { try { await contractsService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar contrato'); } } : undefined} 
         />
       </Card>
     </div>

@@ -74,8 +74,8 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       await tenantsService.updateUser(tenant.id, userId, { customRoleId: customRoleId === 'none' ? null : customRoleId } as any);
       toast.success('Rol personalizado actualizado');
       fetchUsers();
-    } catch (error) {
-      toast.error('Error al asignar rol');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al asignar rol');
     }
   };
 
@@ -150,8 +150,8 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       await tenantsService.updateUser(tenant.id, userId, { isActive: !currentStatus });
       toast.success(currentStatus ? 'Usuario desactivado' : 'Usuario activado');
       fetchUsers();
-    } catch (error) {
-      toast.error('Error al actualizar estado');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar estado');
     }
   };
 

@@ -86,8 +86,8 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         const [incRes, expRes] = await Promise.all([incomeService.getAll(), expensesService.getAll()]);
         setIncomes(Array.isArray(incRes) ? incRes : (incRes as any)?.data || []);
         setExpenses(Array.isArray(expRes) ? expRes : (expRes as any)?.data || []);
-      } catch (e) {
-        toast.error("Error cargando finanzas");
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || "Error cargando finanzas");
       } finally {
         setLoading(false);
       }
@@ -344,9 +344,9 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
 
         doc.save(`Reporte_Finanzas_${now.toISOString().split('T')[0]}.pdf`);
         toast.success("PDF generado exitosamente");
-      } catch (e) {
+      } catch (e: any) {
         console.error(e);
-        toast.error("Error al generar PDF");
+        toast.error(e?.response?.data?.message || e?.message || "Error al generar PDF");
       }
     },
     exportExcel: async () => {
@@ -585,9 +585,9 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         link.download = `Finanzas_${new Date().toISOString().split('T')[0]}.xlsx`;
         link.click();
         toast.success("Excel generado exitosamente");
-      } catch (e) {
+      } catch (e: any) {
         console.error(e);
-        toast.error("Error al generar Excel");
+        toast.error(e?.response?.data?.message || e?.message || "Error al generar Excel");
       }
     }
   }));

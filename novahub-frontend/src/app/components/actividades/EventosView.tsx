@@ -109,14 +109,14 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
       toast.success('Evento actualizado en Base de Datos'); 
       onRefresh(); 
     }
-    catch (e) { toast.error('Error de integración con Finanzas'); console.error(e); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error de integración con Finanzas'); console.error(e); }
   };
 
   const handleAdd = async () => {
     try {
       await eventsService.create({ title: 'Nuevo Evento', startDate: new Date().toISOString(), endDate: new Date(Date.now() + 3600000).toISOString(), cost: 0, income: 0, currency });
       toast.success('Evento creado'); onRefresh();
-    } catch { toast.error('Error al crear evento'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear evento'); }
   };
 
   const totalIncome = data.reduce((acc, row) => acc + convertAmount(Number(row.income) || 0, row.currency || 'USD'), 0);
@@ -160,7 +160,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
           columns={columns} 
           onRowUpdate={canPerform('ACTIVITIES_EVENTS', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('ACTIVITIES_EVENTS', 'delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+          onRowDelete={canPerform('ACTIVITIES_EVENTS', 'delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar evento'); } } : undefined} 
         />
       </Card>
     </div>

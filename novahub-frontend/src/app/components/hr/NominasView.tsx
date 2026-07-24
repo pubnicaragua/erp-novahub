@@ -100,8 +100,8 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
       await hrService.updatePayrollStatus(id, 'PAID');
       toast.success('Nómina marcada como pagada');
       onRefresh();
-    } catch (error) {
-      toast.error('Error al actualizar estado');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar estado');
     }
   };
 
@@ -131,8 +131,8 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
       );
       toast.success(`${pendingPayrolls.length} nóminas marcadas como pagadas`);
       onRefresh();
-    } catch (error) {
-      toast.error('Error al actualizar estados');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar estados');
     }
   };
 

@@ -95,8 +95,8 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
       ]);
       setComments(Array.isArray(commentsRes) ? commentsRes : []);
       setAudit(Array.isArray(auditRes) ? auditRes : []);
-    } catch (error) {
-      toast.error('Error al cargar detalle del ticket');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar detalle del ticket');
       setComments([]);
       setAudit([]);
     } finally {

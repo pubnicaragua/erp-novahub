@@ -91,7 +91,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       setNewDeptName('');
       setShowNewDeptModal(false);
       onRefresh();
-    } catch { toast.error('Error al crear departamento'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear departamento'); }
   };
 
   const handleCreatePosition = async () => {
@@ -105,7 +105,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       setNewPosDeptId('');
       setShowNewPosModal(false);
       onRefresh();
-    } catch { toast.error('Error al crear puesto'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear puesto'); }
   };
 
   const handleEdit = (emp: any) => {

@@ -104,7 +104,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         toast.success('Devolución actualizada');
       }
       setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
-    } catch { toast.error('Error al guardar'); }
+    } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar'); }
   };
 
   const handleExportPDF = async (row: SalesReturn) => {
@@ -117,7 +117,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         documentType: 'return',
       });
       toast.success('PDF generado exitosamente');
-    } catch { toast.error('Error al generar PDF'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF'); }
   };
 
   const handleApprove = async (id: string) => {
@@ -125,7 +125,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
       await salesReturnsService.approve(id);
       toast.success('Devolución aprobada');
       onRefresh();
-    } catch { toast.error('Error al aprobar'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al aprobar'); }
   };
 
   // Get invoices for selected customer
@@ -306,7 +306,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           </div>
         </div>
         <EditableDataTable data={filtered}
-          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch { toast.error('Error'); } }}
+          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error'); } }}
           columns={columns} onRowUpdate={async () => {}} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">

@@ -30,14 +30,14 @@ export const ReportesView: React.FC<ReportesViewProps> = ({ data, loading, onRef
 
   const handleUpdate = async (id: string | number, updates: Partial<Report>) => {
     try { await reportsService.update(id as string, updates); toast.success('Reporte actualizado'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); }
   };
 
   const handleAdd = async () => {
     try {
       await reportsService.create({ title: 'Nuevo Reporte de Ventas', type: 'Ventas', format: 'PDF', generatedDate: new Date().toISOString() });
       toast.success('Reporte generado'); onRefresh();
-    } catch { toast.error('Error al generar'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar'); }
   };
 
   const kpis = [
@@ -77,7 +77,7 @@ export const ReportesView: React.FC<ReportesViewProps> = ({ data, loading, onRef
           columns={columns} 
           onRowUpdate={canPerform('DOCUMENTS_REPORTS', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('DOCUMENTS_REPORTS', 'delete') ? async (id) => { try { await reportsService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+          onRowDelete={canPerform('DOCUMENTS_REPORTS', 'delete') ? async (id) => { try { await reportsService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar reporte'); } } : undefined} 
         />
       </Card>
     </div>

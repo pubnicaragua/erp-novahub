@@ -112,8 +112,8 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
     setMarkingReadId(visibleThread.id);
     void messagesService.markRead(visibleThread.id)
       .then(() => onRefresh())
-      .catch(() => {
-        if (active) toast.error('No pudimos marcar la conversación como leída');
+      .catch((e: any) => {
+        if (active) toast.error(e?.response?.data?.message || 'No pudimos marcar la conversación como leída');
       })
       .finally(() => {
         if (active) setMarkingReadId(null);
@@ -242,6 +242,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
         className="flex h-[calc(100dvh-13rem)] min-h-[520px] overflow-hidden rounded-2xl border border-border/60 bg-card/60 shadow-sm"
         aria-label="Mensajería interna"
         data-testid="messages-workspace"
+        data-tour="notificaciones-mensajes"
       >
         <aside className={cn('w-full flex-col border-r border-border/60 bg-background/45 lg:flex lg:w-[370px] lg:shrink-0', mobileThreadOpen ? 'hidden' : 'flex')}>
           <div className="border-b border-border/60 p-4">

@@ -42,14 +42,14 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
 
   const handleUpdate = async (id: string | number, updates: Partial<LegalInvoice>) => {
     try { await legalInvoicesService.update(id as string, updates); toast.success('Factura actualizada'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); }
   };
 
   const handleAdd = async () => {
     try {
       await legalInvoicesService.create({ number: `FAC-${Date.now().toString().slice(-5)}`, type: 'Servicios', amount: 0, currency: baseCurrency, exchangeRate, status: 'PENDING' as any, issueDate: new Date().toISOString() });
       toast.success('Factura creada'); onRefresh();
-    } catch { toast.error('Error al crear'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear'); }
   };
 
   const totalConverted = data.reduce(
@@ -93,7 +93,7 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
           columns={columns} 
           onRowUpdate={canPerform('DOCUMENTS_INVOICES', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('DOCUMENTS_INVOICES', 'delete') ? async (id) => { try { await legalInvoicesService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+          onRowDelete={canPerform('DOCUMENTS_INVOICES', 'delete') ? async (id) => { try { await legalInvoicesService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar factura'); } } : undefined} 
         />
       </Card>
     </div>

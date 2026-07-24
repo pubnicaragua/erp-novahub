@@ -209,8 +209,8 @@ export function ConfiguracionContableView() {
       setIndustry(cfg.industry || 'RETAIL')
       setAccountMappings(cfg.accountMappings || {})
       setCustomModules(cfg.customModules || [])
-    } catch {
-      toast.error('Error al cargar configuración')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar configuración')
     } finally {
       setLoading(false)
     }
@@ -251,8 +251,8 @@ export function ConfiguracionContableView() {
       const payload = { autoGenEnabled, defaultCurrency, taxRate, industry, accountMappings, customModules }
       await contabilidadService.updateConfig(payload)
       toast.success('Configuración guardada. El motor usará estas cuentas en adelante.')
-    } catch {
-      toast.error('Error al guardar')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar configuración contable')
     } finally {
       setSaving(false)
     }
@@ -264,8 +264,8 @@ export function ConfiguracionContableView() {
       await contabilidadService.seedConfig()
       toast.success('Configuración restablecida a valores por defecto')
       loadConfig()
-    } catch {
-      toast.error('Error al restablecer')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al restablecer')
     } finally {
       setSeeding(false)
     }
@@ -353,8 +353,8 @@ export function ConfiguracionContableView() {
       const res = await contabilidadService.getDefaultAccountsByIndustry(ind)
       setPreviewAccounts(Array.isArray(res) ? res : [])
       setShowPreviewCatalog(true)
-    } catch {
-      toast.error('Error al obtener catálogo')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al obtener catálogo')
     }
   }
 
@@ -366,7 +366,7 @@ export function ConfiguracionContableView() {
       loadAccounts()
       setShowPreviewCatalog(false)
     } catch (e: any) {
-      toast.error(e?.message || 'Error al importar')
+      toast.error(e?.response?.data?.message || e?.message || 'Error al importar')
     }
   }
 
@@ -382,8 +382,8 @@ export function ConfiguracionContableView() {
       link.download = 'plan_cuentas.csv'
       link.click()
       toast.success('Plan de cuentas exportado')
-    } catch {
-      toast.error('Error al exportar')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al exportar')
     }
   }
 

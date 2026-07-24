@@ -345,7 +345,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
 
   const handleUpdate = async (id: string | number, updates: Partial<Expense>) => {
     try { await expensesService.update(id as string, updates); toast.success('Gasto actualizado'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
   };
 
   const handleDeleteConfirm = async () => {
@@ -357,8 +357,8 @@ export function GastosView({ data, loading, onRefresh }: Props) {
       setPendingDeleteId(null);
       if (editingId === pendingDeleteId) setEditingId(null);
       onRefresh();
-    } catch {
-      toast.error('Error al eliminar');
+    } catch (e) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
     } finally {
       setDeleteLoading(false);
     }
@@ -412,7 +412,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
       setEvidenceFile(null);
       onRefresh();
     } catch (e: any) {
-      toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
+      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar el gasto');
     }
   };
 
@@ -791,7 +791,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
               toast.success('Elementos eliminados');
               onRefresh();
             } catch (e) {
-              toast.error('Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           } : undefined}
           actions={(row) => (

@@ -93,8 +93,8 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         setMovements(Array.isArray(movRes) ? movRes : (movRes as any)?.data || []);
         setAdjustments(Array.isArray(adjRes) ? adjRes : (adjRes as any)?.data || []);
         setLowStock(Array.isArray(lowRes) ? lowRes : (lowRes as any)?.data || []);
-      } catch (e) {
-        toast.error("Error cargando inventario");
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || "Error cargando inventario");
       } finally {
         setLoading(false);
       }
@@ -288,8 +288,8 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         doc.save(`Reporte_Inventario_${new Date().toISOString().split('T')[0]}.pdf`);
         toast.success("PDF generado exitosamente");
-      } catch (e) {
-        toast.error("Error exportando PDF");
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || "Error exportando PDF");
       }
     },
     exportExcel: async () => {
@@ -460,8 +460,8 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         await downloadExcelWorkbook(wb, `Reporte_Inventario_${new Date().toISOString().split('T')[0]}.xlsx`);
         toast.success("Excel exportado exitosamente");
-      } catch (e) {
-        toast.error("Error exportando Excel");
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || "Error exportando Excel");
       }
     }
   }));

@@ -68,8 +68,8 @@ export function MovimientosView({ movements, warehouses }: MovimientosViewProps)
       link.download = `movimientos_${new Date().toISOString().split('T')[0]}.csv`;
       link.click();
       toast.success('Movimientos exportados');
-    } catch (e) {
-      toast.error('Error al exportar');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al exportar');
     }
   };
 

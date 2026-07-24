@@ -96,7 +96,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
 
   const handleUpdate = async (id: string | number, updates: any) => {
     try { await recurringSupplierInvoicesService.update(id as string, updates); toast.success('Actualizado'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); throw new Error(); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error(); }
   };
 
   const handleSaveDoc = async () => {
@@ -115,7 +115,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
       setEditingId(null);
       onRefresh();
     } catch (e: any) { 
-        toast.error('Error al guardar: ' + (e.response?.data?.message || 'Revisa los campos requeridos')); 
+        toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la factura recurrente'); 
     }
   };
 
@@ -359,7 +359,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                setPendingDeleteId(null);
                setEditingId(null);
                onRefresh();
-            } catch { toast.error('Error al eliminar'); }
+             } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); }
             finally { setDeleteLoading(false); }
           }}
         />
@@ -418,7 +418,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
               toast.success('Elementos eliminados');
               onRefresh();
             } catch (e) {
-              toast.error('Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           } : undefined}
           actions={(row) => (

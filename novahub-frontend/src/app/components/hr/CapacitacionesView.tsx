@@ -48,8 +48,8 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
         employeeIds: [],
       });
       onRefresh();
-    } catch (error) {
-      toast.error('Error al crear capacitación');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al crear capacitación');
     }
   };
 
