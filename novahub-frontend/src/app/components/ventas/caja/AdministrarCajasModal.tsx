@@ -8,7 +8,7 @@ import { Switch } from '../../ui/switch';
 import { Badge } from '../../ui/badge';
 import { Banknote, Plus, Loader2, Edit2, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import { cajaService, type CashRegister } from '../../../services/caja.service';
+import { cajaService, type CashRegister, type CashClosureMode } from '../../../services/caja.service';
 import { api } from '../../../services/api';
 
 interface AdministrarCajasModalProps {
@@ -27,7 +27,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
   const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
   const [accessCaja, setAccessCaja] = useState<CashRegister | null>(null);
   const [allUsers, setAllUsers] = useState<any[]>([]);
-  const [assignedUsers, setAssignedUsers] = useState<Set<string>>(new Set());
+  const [assignedUsers, setAssignedUsers] = useState<Map<string, CashClosureMode>>(new Map());
   const [accessLoading, setAccessLoading] = useState(false);
 
   const fetchCajas = async () => {
@@ -66,7 +66,8 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
     try {
       const res = await cajaService.getRegisterAccess(caja.id!);
       setAllUsers(res.allUsers || []);
-      setAssignedUsers(new Set(res.assignedUserIds || []));
+      const assignments = res.assignments || (res.assignedUserIds || []).map(userId => ({ userId, closureMode: 'NORMAL' as CashClosureMode }));
+      setAssignedUsers(new Map(assignments.map(assignment => [assignment.userId, assignment.closureMode || 'NORMAL'])));
     } catch (e) {
       toast.error('Error al cargar accesos');
     } finally {
@@ -77,7 +78,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
   const handleSaveAccess = async () => {
     if (!accessCaja) return;
     try {
-      await cajaService.updateRegisterAccess(accessCaja.id!, Array.from(assignedUsers));
+      await cajaService.updateRegisterAccess(accessCaja.id!, Array.from(assignedUsers.entries()).map(([userId, closureMode]) => ({ userId, closureMode })));
       toast.success('Accesos actualizados');
       setIsAccessModalOpen(false);
       onOpenChange(true);
@@ -264,21 +265,42 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
               <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
                 {allUsers.map(user => {
                   const isAssigned = assignedUsers.has(user.id);
+                  const closureMode = assignedUsers.get(user.id) || 'NORMAL';
                   return (
-                    <div key={user.id} className="flex items-center justify-between border-b border-border pb-2 last:border-0 last:pb-0">
+                    <div key={user.id} className="flex items-center justify-between gap-3 border-b border-border pb-2 last:border-0 last:pb-0">
                       <div>
                         <p className="font-medium text-sm">{user.name}</p>
                         <p className="text-xs text-muted-foreground">{user.email}</p>
                       </div>
-                      <Switch
-                        checked={isAssigned}
-                        onCheckedChange={(checked) => {
-                          const newSet = new Set(assignedUsers);
-                          if (checked) newSet.add(user.id);
-                          else newSet.delete(user.id);
-                          setAssignedUsers(newSet);
-                        }}
-                      />
+                      <div className="flex items-center gap-2">
+                        {isAssigned && (
+                          <Select
+                            value={closureMode}
+                            onValueChange={(value: CashClosureMode) => {
+                              const next = new Map(assignedUsers);
+                              next.set(user.id, value);
+                              setAssignedUsers(next);
+                            }}
+                          >
+                            <SelectTrigger className="h-8 w-[150px] text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="NORMAL">Cierre normal</SelectItem>
+                              <SelectItem value="BLIND">Cierre a ciegas</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                        <Switch
+                          checked={isAssigned}
+                          onCheckedChange={(checked) => {
+                            const next = new Map(assignedUsers);
+                            if (checked) next.set(user.id, 'NORMAL');
+                            else next.delete(user.id);
+                            setAssignedUsers(next);
+                          }}
+                        />
+                      </div>
                     </div>
                   );
                 })}

@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { ScrollArea } from '../../ui/scroll-area';
 import { Badge } from '../../ui/badge';
 import { Calculator, ArrowDownToLine, ArrowUpFromLine, Plus, Printer, Lock, Vault, BarChart3 } from 'lucide-react';
-import { CashRegisterSession, SessionLog } from '../../../services/caja.service';
+import { CashRegisterSession, SessionLog, CashRegisterCount, CashClosureMode } from '../../../services/caja.service';
 import { MovimientoManualModal } from './MovimientoManualModal';
 import { DenominationCounter, NIO_BILLS, NIO_COINS, USD_BILLS, USD_COINS, DenominationState } from './DenominationCounter';
 import { toast } from 'sonner';
@@ -26,9 +26,12 @@ import {
 interface SesionActivaStepProps {
   session: CashRegisterSession;
   logs: SessionLog[];
+  closureMode: CashClosureMode;
+  countAttempts: CashRegisterCount[];
   expectedNIO: number;
   expectedUSD: number;
   onAddMovement: (dto: any) => Promise<void>;
+  onSubmitCount: (dto: any) => Promise<any>;
   onConfirmClose: (dto: any) => Promise<void>;
   onNavigateToFacturacion?: () => void;
 }
@@ -36,14 +39,18 @@ interface SesionActivaStepProps {
 export function SesionActivaStep({ 
   session, 
   logs, 
+  closureMode,
+  countAttempts,
   expectedNIO, 
   expectedUSD, 
   onAddMovement, 
+  onSubmitCount,
   onConfirmClose,
   onNavigateToFacturacion 
 }: SesionActivaStepProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [isCloseAlertOpen, setIsCloseAlertOpen] = useState(false);
+  const [isRecounting, setIsRecounting] = useState(false);
   const [nioDenominations, setNioDenominations] = useState<DenominationState[]>([
     ...NIO_BILLS.map(v => ({ value: v, quantity: 0, type: 'bill' as const })),
     ...NIO_COINS.map(v => ({ value: v, quantity: 0, type: 'coin' as const }))
@@ -83,6 +90,61 @@ export function SesionActivaStep({
     : (expectedNIO + (expectedUSD * sessionRate));
 
   const diferencia = totalContadoConverted - totalExpectedConverted;
+  const isBlind = closureMode === 'BLIND';
+  const hasSubmittedBlindCount = isBlind && countAttempts.length > 0;
+  const canRecount = isBlind && countAttempts.length === 1 && !isRecounting;
+  const latestCount = countAttempts[countAttempts.length - 1] || null;
+  const showSystemAmounts = !isBlind || hasSubmittedBlindCount;
+
+  useEffect(() => {
+    const latestDenominations = latestCount?.denominations || [];
+    if (latestDenominations.length === 0) return;
+
+    setNioDenominations(current => current.map(denomination => ({
+      ...denomination,
+      quantity: Number(latestDenominations.find(d => d.currency === 'NIO' && Number(d.value) === denomination.value)?.quantity || 0),
+    })));
+    setUsdDenominations(current => current.map(denomination => ({
+      ...denomination,
+      quantity: Number(latestDenominations.find(d => d.currency === 'USD' && Number(d.value) === denomination.value)?.quantity || 0),
+    })));
+  }, [latestCount?.attempt]);
+
+  const buildDenominations = () => [
+    ...nioDenominations.filter(d => d.quantity > 0).map(d => ({ currency: 'NIO', value: d.value, quantity: d.quantity, subtotal: d.value * d.quantity })),
+    ...usdDenominations.filter(d => d.quantity > 0).map(d => ({ currency: 'USD', value: d.value, quantity: d.quantity, subtotal: d.value * d.quantity }))
+  ];
+
+  const resetDenominations = () => {
+    setNioDenominations(NIO_BILLS.concat(NIO_COINS).map((value, index) => ({
+      value,
+      quantity: 0,
+      type: index < NIO_BILLS.length ? 'bill' as const : 'coin' as const,
+    })));
+    setUsdDenominations(USD_BILLS.concat(USD_COINS).map((value, index) => ({
+      value,
+      quantity: 0,
+      type: index < USD_BILLS.length ? 'bill' as const : 'coin' as const,
+    })));
+  };
+
+  const submitBlindCount = async () => {
+    try {
+      await onSubmitCount({
+        denominations: buildDenominations(),
+        notes: isRecounting ? 'Reconteo de caja' : 'Conteo ciego inicial',
+      });
+      setIsRecounting(false);
+      toast.success(isRecounting ? 'Reconteo guardado. Ya puede cerrar la caja.' : 'Arqueo enviado. La diferencia ya está disponible.');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Error al guardar el arqueo');
+    }
+  };
+
+  const startRecount = () => {
+    resetDenominations();
+    setIsRecounting(true);
+  };
 
   const handleClose = () => {
     setIsCloseAlertOpen(true);
@@ -90,16 +152,14 @@ export function SesionActivaStep({
 
   const confirmCloseAction = async () => {
     try {
-      const denoms = [
-        ...nioDenominations.filter(d => d.quantity > 0).map(d => ({ currency: 'NIO', value: d.value, quantity: d.quantity, subtotal: d.value * d.quantity })),
-        ...usdDenominations.filter(d => d.quantity > 0).map(d => ({ currency: 'USD', value: d.value, quantity: d.quantity, subtotal: d.value * d.quantity }))
-      ];
+      const denoms = buildDenominations();
 
       await onConfirmClose({
         finalAmountNIO: contadoNIO,
         finalAmountUSD: contadoUSD,
         denominations: denoms,
-        notes: diferencia !== 0 ? `Diferencia de ${symbol} ${diferencia.toFixed(2)}` : 'Cuadre exacto'
+        notes: diferencia !== 0 ? `Diferencia de ${symbol} ${diferencia.toFixed(2)}` : 'Cuadre exacto',
+        countAttempt: latestCount?.attempt,
       });
       setIsCloseAlertOpen(false);
     } catch (err: any) {
@@ -145,8 +205,10 @@ export function SesionActivaStep({
             gastos: gastosConverted,
             esperado: totalExpectedConverted,
             contado: totalContadoConverted,
-            diferencia: diferencia
-          }
+            diferencia: diferencia,
+            hideSystemAmounts: isBlind && !hasSubmittedBlindCount,
+          },
+          hideSystemAmounts: isBlind && !hasSubmittedBlindCount,
         }),
         {
           loading: 'Generando resumen...',
@@ -163,6 +225,7 @@ export function SesionActivaStep({
     <div className="flex flex-col gap-6">
       {/* KPI Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        {showSystemAmounts ? <>
         {/* Fondo Inicial */}
         <Card className="border-border/50 shadow-sm bg-card/50">
           <CardContent className="p-4 flex items-center gap-4">
@@ -216,6 +279,19 @@ export function SesionActivaStep({
             </div>
           </CardContent>
         </Card>
+        </> : (
+          <Card className="sm:col-span-2 md:col-span-4 border-amber-500/30 bg-amber-500/5">
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="p-3 bg-amber-500/10 rounded-xl">
+                <Lock className="size-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm font-black uppercase tracking-wider text-amber-700">Arqueo a ciegas</p>
+                <p className="text-xs text-amber-700/80 mt-1">Realice el conteo físico y envíelo. Los importes del sistema se mostrarán después del primer conteo.</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-12 gap-6 items-start">
@@ -253,12 +329,12 @@ export function SesionActivaStep({
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="grid grid-cols-12 px-6 py-3 border-b border-border/40 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            <div className="grid grid-cols-12 px-6 py-3 border-b border-border/40 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             <div className="col-span-2">Ref / Ticket</div>
             <div className="col-span-2">Tipo</div>
             <div className="col-span-5">Descripción</div>
             <div className="col-span-1 text-center">Hora</div>
-            <div className="col-span-2 text-right">Monto</div>
+            {showSystemAmounts && <div className="col-span-2 text-right">Monto</div>}
           </div>
           <ScrollArea className="h-[500px]">
             <div className="divide-y divide-border/40">
@@ -294,12 +370,14 @@ export function SesionActivaStep({
                   <div className="col-span-1 text-center text-xs text-muted-foreground">
                     {new Date(log.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                   </div>
-                  <div className={`col-span-2 text-right font-mono text-sm font-bold flex flex-col items-end justify-center ${log.type === 'EXIT' ? 'text-destructive' : log.type === 'OPEN' ? 'text-muted-foreground' : 'text-emerald-500'}`}>
-                    <span>{log.type === 'EXIT' ? '-' : '+'}{symbol} {logConverted.toFixed(2)}</span>
-                    <span className="text-[9px] opacity-70 font-normal mt-0.5 whitespace-nowrap">
-                      C$ {logNIO.toFixed(2)} | $ {logUSD.toFixed(2)}
-                    </span>
-                  </div>
+                  {showSystemAmounts && (
+                    <div className={`col-span-2 text-right font-mono text-sm font-bold flex flex-col items-end justify-center ${log.type === 'EXIT' ? 'text-destructive' : log.type === 'OPEN' ? 'text-muted-foreground' : 'text-emerald-500'}`}>
+                      <span>{log.type === 'EXIT' ? '-' : '+'}{symbol} {logConverted.toFixed(2)}</span>
+                      <span className="text-[9px] opacity-70 font-normal mt-0.5 whitespace-nowrap">
+                        C$ {logNIO.toFixed(2)} | $ {logUSD.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )})}
             </div>
@@ -335,16 +413,35 @@ export function SesionActivaStep({
             <div className="text-xs text-muted-foreground mt-1">C$ {contadoNIO.toFixed(2)} | $ {contadoUSD.toFixed(2)}</div>
           </div>
 
-          <div className={`p-4 border rounded-xl text-center space-y-1 transition-colors ${diferencia === 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-destructive/10 border-destructive/20'}`}>
-            <div className={`text-[10px] uppercase font-black tracking-widest ${diferencia === 0 ? 'text-emerald-600' : 'text-destructive'}`}>Diferencia VS Sistema</div>
-            <div className={`text-xl font-black font-mono ${diferencia === 0 ? 'text-emerald-600' : 'text-destructive'}`}>
-              {symbol} {diferencia > 0 ? '+' : ''}{diferencia.toFixed(2)}
+          {showSystemAmounts && (
+            <div className={`p-4 border rounded-xl text-center space-y-1 transition-colors ${diferencia === 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-destructive/10 border-destructive/20'}`}>
+              <div className={`text-[10px] uppercase font-black tracking-widest ${diferencia === 0 ? 'text-emerald-600' : 'text-destructive'}`}>Diferencia VS Sistema</div>
+              <div className={`text-xl font-black font-mono ${diferencia === 0 ? 'text-emerald-600' : 'text-destructive'}`}>
+                {symbol} {diferencia > 0 ? '+' : ''}{diferencia.toFixed(2)}
+              </div>
             </div>
-          </div>
+          )}
 
-          <Button onClick={handleClose} className="w-full h-12 mt-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all rounded-xl">
-            <Lock className="size-4 mr-2" /> INICIAR CIERRE DE CAJA
-          </Button>
+          {isBlind && !hasSubmittedBlindCount ? (
+            <Button onClick={submitBlindCount} className="w-full h-12 mt-4 font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition-all rounded-xl">
+              <Lock className="size-4 mr-2" /> ENVIAR ARQUEO A CIEGAS
+            </Button>
+          ) : isBlind && isRecounting ? (
+            <Button onClick={submitBlindCount} className="w-full h-12 mt-4 font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition-all rounded-xl">
+              <Lock className="size-4 mr-2" /> GUARDAR RECONTEO
+            </Button>
+          ) : (
+            <div className="space-y-2 mt-4">
+              {canRecount && (
+                <Button onClick={startRecount} variant="outline" className="w-full h-10 font-bold rounded-xl">
+                  <Calculator className="size-4 mr-2" /> RECONTAR CAJA (OPCIONAL)
+                </Button>
+              )}
+              <Button onClick={handleClose} className="w-full h-12 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all rounded-xl">
+                <Lock className="size-4 mr-2" /> {isBlind ? 'CERRAR CAJA CON ESTE CONTEO' : 'INICIAR CIERRE DE CAJA'}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
       </div>

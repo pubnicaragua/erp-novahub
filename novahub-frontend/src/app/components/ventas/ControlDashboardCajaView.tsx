@@ -45,6 +45,8 @@ export function ControlDashboardCajaView({
     loading,
     sessionStep,
     setSessionStep,
+    closureMode,
+    countAttempts,
     expectedNIO,
     expectedUSD,
     openSession,
@@ -188,13 +190,16 @@ export function ControlDashboardCajaView({
               />
             )}
 
-            {sessionStep === 'active' && session && (
+            {(sessionStep === 'active' || sessionStep === 'close_counting') && session && (
               <SesionActivaStep 
                 session={session} 
                 logs={logs} 
+                closureMode={closureMode}
+                countAttempts={countAttempts}
                 expectedNIO={expectedNIO} 
                 expectedUSD={expectedUSD} 
                 onAddMovement={addMovement} 
+                onSubmitCount={savePartialCount}
                 onConfirmClose={closeSession} 
                 onNavigateToFacturacion={onNavigateToFacturacion}
               />
@@ -216,6 +221,7 @@ export function ControlDashboardCajaView({
                     const initialNIO = Number(h.initialAmountNIO || 0);
                     const initialUSD = Number(h.initialAmountUSD || 0);
                     const rate = h.exchangeRateUSD || globalRate;
+                    const isBlindBeforeCount = h.closureMode === 'BLIND' && h.status === 'OPEN' && !(h.countAttempts?.length);
                     const initialConverted = isUSD ? (initialUSD + initialNIO / rate) : (initialNIO + initialUSD * rate);
 
                     const diffNIO = Number(h.differenceNIO || 0);
@@ -262,9 +268,13 @@ export function ControlDashboardCajaView({
                             <p className="text-xs text-muted-foreground">Por: {h.openedBy?.name}</p>
                           </div>
                           <div className="text-right flex flex-col items-end">
-                            <p className="text-xs text-muted-foreground">Inicial</p>
-                            <p className="font-mono font-bold">{symbol} {initialConverted.toFixed(2)}</p>
-                            <p className="text-[9px] text-muted-foreground mt-0.5 font-normal">C$ {initialNIO.toFixed(2)} | $ {initialUSD.toFixed(2)}</p>
+                            {isBlindBeforeCount ? (
+                              <p className="text-xs font-bold text-amber-600">Importes ocultos</p>
+                            ) : <>
+                              <p className="text-xs text-muted-foreground">Inicial</p>
+                              <p className="font-mono font-bold">{symbol} {initialConverted.toFixed(2)}</p>
+                              <p className="text-[9px] text-muted-foreground mt-0.5 font-normal">C$ {initialNIO.toFixed(2)} | $ {initialUSD.toFixed(2)}</p>
+                            </>}
                           </div>
                           {h.status === 'CLOSED' && (
                             <div className="text-right ml-4 flex flex-col items-end">
@@ -396,7 +406,36 @@ export function ControlDashboardCajaView({
                               </div>
                             )}
                           </div>
-                          
+                          {h.countAttempts?.length > 0 && (
+                            <div className="space-y-2 mt-6">
+                              <h4 className="text-xs font-black tracking-widest text-muted-foreground uppercase">Conteos realizados</h4>
+                              <div className="space-y-2">
+                                {h.countAttempts.map((attempt: any) => {
+                                  const countedNIO = Number(attempt.countedAmountNIO || 0);
+                                  const countedUSD = Number(attempt.countedAmountUSD || 0);
+                                  const attemptDiffNIO = Number(attempt.differenceNIO || 0);
+                                  const attemptDiffUSD = Number(attempt.differenceUSD || 0);
+                                  const countedConverted = isUSD ? (countedUSD + countedNIO / rate) : (countedNIO + countedUSD * rate);
+                                  const attemptDiffConverted = isUSD ? (attemptDiffUSD + attemptDiffNIO / rate) : (attemptDiffNIO + attemptDiffUSD * rate);
+                                  return (
+                                    <div key={attempt.id || attempt.attempt} className="rounded-lg border border-border/40 bg-muted/10 p-3 text-xs">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                          <p className="font-bold">{attempt.attempt === 1 ? 'Conteo inicial' : 'Reconteo'} · {attempt.mode === 'BLIND' ? 'Ciego' : 'Normal'}</p>
+                                          <p className="text-[10px] text-muted-foreground">{attempt.capturedBy?.name || 'Usuario'} · {attempt.createdAt ? new Date(attempt.createdAt).toLocaleString() : ''}</p>
+                                        </div>
+                                        <div className="text-right font-mono">
+                                          <p className="font-bold">{symbol} {countedConverted.toFixed(2)}</p>
+                                          <p className={attemptDiffConverted < 0 ? 'text-destructive' : 'text-emerald-500'}>Dif. {attemptDiffConverted > 0 ? '+' : ''}{attemptDiffConverted.toFixed(2)}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Movimientos */}
                           <div>
                             <h4 className="text-xs font-black tracking-widest text-muted-foreground uppercase mb-2">Movimientos del Turno</h4>
@@ -414,12 +453,14 @@ export function ControlDashboardCajaView({
                                       <p className="font-bold">{log.description}</p>
                                       <p className="text-[10px] text-muted-foreground">{new Date(log.createdAt).toLocaleTimeString()} • {typeLabel}</p>
                                     </div>
-                                    <div className={`font-mono font-bold text-right flex flex-col items-end justify-center ${log.type === 'EXIT' ? 'text-red-500' : 'text-green-500'}`}>
-                                      <span>{log.type === 'EXIT' ? '-' : '+'}{symbol} {logConverted.toFixed(2)}</span>
-                                      <span className={`text-[9px] font-normal mt-0.5 ${log.type === 'EXIT' ? 'text-red-400/70' : 'text-green-400/70'}`}>
-                                        C$ {logNIO.toFixed(2)} | $ {logUSD.toFixed(2)}
-                                      </span>
-                                    </div>
+                                    {!isBlindBeforeCount && (
+                                      <div className={`font-mono font-bold text-right flex flex-col items-end justify-center ${log.type === 'EXIT' ? 'text-red-500' : 'text-green-500'}`}>
+                                        <span>{log.type === 'EXIT' ? '-' : '+'}{symbol} {logConverted.toFixed(2)}</span>
+                                        <span className={`text-[9px] font-normal mt-0.5 ${log.type === 'EXIT' ? 'text-red-400/70' : 'text-green-400/70'}`}>
+                                          C$ {logNIO.toFixed(2)} | $ {logUSD.toFixed(2)}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 )})}
                               </div>

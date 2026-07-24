@@ -21,6 +21,7 @@ interface DenominationCounterProps {
   setNioDenominations: React.Dispatch<React.SetStateAction<DenominationState[]>>;
   usdDenominations: DenominationState[];
   setUsdDenominations: React.Dispatch<React.SetStateAction<DenominationState[]>>;
+  totalNIO: number;
   totalUSD: number;
   stackedLayout?: boolean;
 }

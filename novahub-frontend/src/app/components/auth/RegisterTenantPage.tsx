@@ -383,7 +383,7 @@ export function RegisterTenantPage() {
   };
 
   const renderLeftPanel = () => {
-    
+    if (step === 2 || showWelcome) return null;
     const content = LEFT_BRANDING[step] || LEFT_BRANDING[0];
     return (
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-900 text-white p-12 flex-col justify-between relative overflow-hidden">
@@ -658,21 +658,20 @@ export function RegisterTenantPage() {
             const isExpanded = expandedParent === mod.module;
             const hasSubs = (PARENT_SUBMODULES[mod.module]?.length || 0) > 0;
             return (
-              <div key={mod.module} className="rounded-2xl border overflow-hidden transition-all"
-                style={{
-                  borderColor: active ? (recommended ? '#10b981' : 'hsl(var(--primary))') : undefined,
-                  backgroundColor: active ? (recommended ? '#f0fdf4' : 'hsl(var(--primary) / 0.03)') : undefined,
-                  boxShadow: active ? (recommended ? '0 1px 3px rgba(16,185,129,0.1)' : '0 1px 3px rgba(0,0,0,0.05)') : undefined,
-                }}>
+              <div key={mod.module} className={cn(
+                "rounded-2xl border overflow-hidden transition-all",
+                active && recommended && "border-emerald-500 bg-emerald-500/10 shadow-[0_1px_3px_rgba(16,185,129,0.1)]",
+                active && !recommended && "border-primary bg-primary/5 shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
+              )}>
                 <button type="button" onClick={() => toggleParentAndSubs(mod.module)}
                   className="w-full p-4 text-left cursor-pointer flex flex-col gap-3 hover:bg-muted/20 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className={cn('size-7 rounded-lg flex items-center justify-center',
-                      active ? (recommended ? 'bg-emerald-500 text-white' : 'bg-primary text-white') : (recommended ? 'bg-emerald-100 text-emerald-600' : 'bg-primary/10 text-primary'))}>
+                      active ? (recommended ? 'bg-emerald-500 text-white' : 'bg-primary text-white') : (recommended ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-primary/10 text-primary'))}>
                       {active ? <CheckCircle2 className="size-4" /> : <Package className="size-4" />}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={cn('text-xs font-black', active ? (recommended ? 'text-emerald-600' : 'text-primary') : 'text-muted-foreground')}>
+                      <span className={cn('text-xs font-black', active ? (recommended ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary') : 'text-muted-foreground')}>
                         ${mod.price}/mes
                       </span>
                       {activeCount > 0 && activeCount < totalCount && (
@@ -683,7 +682,7 @@ export function RegisterTenantPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-sm font-bold">{mod.name}</div>
-                      <div className={cn('text-[10px] mt-0.5', recommended ? 'text-emerald-600/70' : 'text-muted-foreground')}>
+                      <div className={cn('text-[10px] mt-0.5', recommended ? 'text-emerald-600/70 dark:text-emerald-400/70' : 'text-muted-foreground')}>
                         {recommended ? 'Incluido en tu trial' : `$${mod.price}/mes`}
                       </div>
                     </div>
@@ -734,12 +733,12 @@ export function RegisterTenantPage() {
           <h4 className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Módulos adicionales</h4>
           {renderParentCards(optionalParents, false)}
         </div>
-        <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4 flex items-center justify-between">
+        <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-4 flex items-center justify-between">
           <div>
-            <span className="text-sm text-emerald-700">Total estimado si contratas:</span>
-            <p className="text-[10px] text-emerald-600/70">Durante los 3 días de prueba, todos los módulos seleccionados son GRATIS</p>
+            <span className="text-sm text-emerald-700 dark:text-emerald-400">Total estimado si contratas:</span>
+            <p className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70">Durante los 3 días de prueba, todos los módulos seleccionados son GRATIS</p>
           </div>
-          <span className="text-2xl font-black text-emerald-600">${totalPrice}/mes</span>
+          <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">${totalPrice}/mes</span>
         </div>
         <div className="flex gap-3 pt-2">
           <Button type="button" variant="outline" onClick={() => setStep(1)}
@@ -942,7 +941,7 @@ export function RegisterTenantPage() {
               <img src={logoPreview} alt="Logo de la empresa" className="w-full h-full object-contain p-2" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
-                <Sparkles className="size-10 text-white" />
+                <Package className="size-10 text-white" />
               </div>
             )}
           </motion.div>

@@ -665,7 +665,8 @@ export const generateSessionSummaryPDF = async ({
   displayCurrency,
   isUSD,
   sessionRate,
-  totals
+  totals,
+  hideSystemAmounts = false,
 }: {
   session: any;
   logs: any[];
@@ -681,7 +682,9 @@ export const generateSessionSummaryPDF = async ({
     esperado: number;
     contado: number;
     diferencia: number;
+    hideSystemAmounts?: boolean;
   }
+  hideSystemAmounts?: boolean;
 }) => {
   const doc = new jsPDF();
   const primaryColor = [16, 185, 129] as [number, number, number];
@@ -731,7 +734,9 @@ export const generateSessionSummaryPDF = async ({
   autoTable(doc, {
     startY: 60,
     head: [['Concepto', `Monto (${displayCurrency})`]],
-    body: [
+    body: hideSystemAmounts ? [
+      ['Efectivo Contado', `${symbol} ${totals.contado.toFixed(2)}`],
+    ] : [
       ['Fondo Inicial', `${symbol} ${totals.fondoInicial.toFixed(2)}`],
       ['Ventas Totales', `${symbol} ${totals.ventas.toFixed(2)}`],
       ['Gastos Registrados', `${symbol} ${totals.gastos.toFixed(2)}`],
@@ -759,18 +764,19 @@ export const generateSessionSummaryPDF = async ({
     const logConverted = isUSD ? (logUSD + (logNIO / sessionRate)) : (logNIO + (logUSD * sessionRate));
     const sign = log.type === 'EXIT' ? '-' : '+';
     
-    return [
+    const row = [
       log.reference || (log.type === 'SALE' ? 'TKT-' + log.id.slice(0,4).toUpperCase() : 'GST-' + log.id.slice(0,4).toUpperCase()),
       log.type === 'SALE' ? 'VENTA' : log.type === 'EXIT' ? 'GASTO' : log.type === 'ENTRY' ? 'ENTRADA' : log.type === 'OPEN' ? 'APERTURA' : log.type,
       log.description || 'N/A',
       new Date(log.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
       `${sign}${symbol} ${logConverted.toFixed(2)}`
     ];
+    return hideSystemAmounts ? row.slice(0, 4) : row;
   });
 
   autoTable(doc, {
     startY: (doc as any).lastAutoTable.finalY + 15,
-    head: [['Ref / Ticket', 'Tipo', 'Descripción', 'Hora', `Monto (${displayCurrency})`]],
+    head: [hideSystemAmounts ? ['Ref / Ticket', 'Tipo', 'Descripción', 'Hora'] : ['Ref / Ticket', 'Tipo', 'Descripción', 'Hora', `Monto (${displayCurrency})`]],
     body: tableData,
     theme: 'grid',
     headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 9, fontStyle: 'bold', halign: 'center' },

@@ -1,6 +1,8 @@
 import { api } from './api';
 import { resolveStorageReferences } from './storage.service';
 
+export type CashClosureMode = 'NORMAL' | 'BLIND';
+
 export interface CashRegister {
   id: string;
   name: string;
@@ -11,6 +13,7 @@ export interface CashRegister {
   warehouse?: any;
   hasActiveSession?: boolean;
   resolvedWarehouseId?: string | null;
+  closureMode?: CashClosureMode;
 }
 
 export interface SessionDenomination {
@@ -49,8 +52,27 @@ export interface CashRegisterSession {
   expectedAmountNIO?: number;
   expectedAmountUSD?: number;
   notes?: string;
+  closureMode?: CashClosureMode;
   openedBy?: { name: string };
   closedBy?: { name: string };
+  denominations?: SessionDenomination[];
+  countAttempts?: CashRegisterCount[];
+}
+
+export interface CashRegisterCount {
+  id?: string;
+  attempt: number;
+  mode: CashClosureMode;
+  capturedById?: string;
+  capturedBy?: { name: string };
+  countedAmountNIO: number;
+  countedAmountUSD: number;
+  expectedAmountNIO: number;
+  expectedAmountUSD: number;
+  differenceNIO: number;
+  differenceUSD: number;
+  notes?: string;
+  createdAt?: string;
   denominations?: SessionDenomination[];
 }
 
@@ -174,10 +196,10 @@ export const cajaService = {
     api.delete<void>(`/caja/registers/${id}`),
 
   getRegisterAccess: (id: string) =>
-    api.get<{ allUsers: any[]; assignedUserIds: string[] }>(`/caja/registers/${id}/access`),
+    api.get<{ allUsers: any[]; assignedUserIds: string[]; assignments: { userId: string; closureMode: CashClosureMode; canRead?: boolean; canWrite?: boolean }[] }>(`/caja/registers/${id}/access`),
 
-  updateRegisterAccess: (id: string, userIds: string[]) =>
-    api.put<{ success: boolean }>(`/caja/registers/${id}/access`, { userIds }),
+  updateRegisterAccess: (id: string, assignments: { userId: string; closureMode: CashClosureMode; canRead?: boolean; canWrite?: boolean }[]) =>
+    api.put<{ success: boolean }>(`/caja/registers/${id}/access`, { assignments }),
 
   getProducts: async (search?: string, warehouseId?: string) => {
     const params: any = {};
