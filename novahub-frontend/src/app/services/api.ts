@@ -12,6 +12,26 @@ interface RequestOptions {
   headers?: Record<string, string>;
 }
 
+interface ApiErrorBody {
+  message?: string | string[];
+  error?: string;
+  details?: string | string[];
+  code?: string;
+}
+
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status?: number,
+    public readonly path?: string,
+    public readonly code?: string,
+    public readonly details?: string[]
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
 function buildUrl(path: string, params?: Record<string, string | number | boolean | undefined>): string {
   const url = new URL(`${BASE_URL}${path}`);
   if (params) {
@@ -29,39 +49,96 @@ function getAuthHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-function normalizeErrorMessage(message?: string, status?: number): string {
+function asTextList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === 'string' && value.trim()) return [value.trim()];
+  return [];
+}
+
+function describeRequest(path: string, method: RequestOptions['method']) {
+  const action = method || 'GET';
+  const route = path.split('?')[0];
+
+  if (route === '/caja/sessions/open') return 'aperturar la caja';
+  if (route.startsWith('/caja/sessions/active/')) return 'consultar la sesion activa de caja';
+  if (route === '/caja/sessions/history') return 'cargar el historial de caja';
+  if (route.includes('/caja/sessions/') && route.endsWith('/close')) return 'cerrar la caja';
+  if (route.includes('/caja/sessions/') && route.endsWith('/count')) return 'guardar el arqueo de caja';
+  if (route.includes('/caja/sessions/') && route.endsWith('/movement')) return 'registrar el movimiento de caja';
+  if (route === '/sucursales' && action === 'POST') return 'crear la sucursal';
+  if (route.startsWith('/sucursales/') && action === 'PUT') return 'guardar la sucursal';
+  if (route.startsWith('/sucursales/') && action === 'DELETE') return 'eliminar la sucursal';
+  if (route === '/caja/registers' && action === 'POST') return 'crear la caja';
+  if (route.startsWith('/caja/registers/') && route.endsWith('/access')) return 'guardar los accesos de caja';
+  if (route.startsWith('/caja/registers/') && action === 'PUT') return 'guardar la caja';
+  if (route === '/auth/login') return 'iniciar sesion';
+  if (route === '/auth/switch-context') return 'restaurar el contexto de trabajo';
+  if (action === 'GET') return 'cargar la informacion';
+  if (action === 'POST') return 'guardar la informacion';
+  if (action === 'PUT' || action === 'PATCH') return 'actualizar la informacion';
+  if (action === 'DELETE') return 'eliminar el registro';
+  return 'procesar la solicitud';
+}
+
+function normalizeErrorMessage(message?: string, status?: number, context?: string): string {
   const raw = (message || '').trim();
   const lower = raw.toLowerCase();
+  const prefix = context ? `No se pudo ${context}. ` : '';
 
   if (!raw) {
-    if (status === 400) return 'Solicitud inválida.';
-    if (status === 401) return 'No autorizado. Inicia sesión nuevamente.';
-    if (status === 403) return 'No tienes permisos para realizar esta acción.';
-    if (status === 404) return 'No se encontró el recurso solicitado.';
-    if ((status || 0) >= 500) return 'Ocurrió un error interno del servidor.';
-    return 'Ocurrió un error inesperado.';
+    if (status === 400) return `${prefix}Revisa los datos enviados; hay informacion incompleta o invalida.`;
+    if (status === 401) return 'Tu sesion expiro o no esta autorizada. Inicia sesion nuevamente.';
+    if (status === 403) return `${prefix}Tu usuario no tiene permisos para realizar esta accion.`;
+    if (status === 404) return `${prefix}No se encontro el registro solicitado o ya no esta disponible.`;
+    if (status === 409) return `${prefix}Hay un conflicto con un registro existente.`;
+    if (status === 422) return `${prefix}La informacion enviada no cumple las reglas de validacion.`;
+    if ((status || 0) >= 500) {
+      return `${prefix}El servidor encontro un problema interno (HTTP ${status}). Si el modulo fue actualizado recientemente, verifica que las migraciones de base de datos esten aplicadas.`;
+    }
+    return `${prefix}Ocurrio un error inesperado.`;
   }
 
   if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network request failed')) {
-    return 'No se pudo conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.';
+    return 'No se pudo conectar con el servidor. Revisa tu conexion o confirma que el backend este encendido.';
   }
-  if (lower.includes('forbidden')) return 'No tienes permisos para realizar esta acción.';
-  if (lower.includes('unauthorized')) return 'No autorizado. Inicia sesión nuevamente.';
-  if (lower.includes('not found')) return 'No se encontró el recurso solicitado.';
-  if (lower.includes('internal server error')) return 'Ocurrió un error interno del servidor.';
-  if (lower.includes('bad request')) return 'Solicitud inválida. Verifica la información enviada.';
+  if (lower.includes('base de datos no esta sincronizada')) return `${prefix}${raw}`;
+  if (lower.includes('column') && lower.includes('does not exist')) {
+    return `${prefix}La base de datos no tiene una columna requerida por esta version del sistema. Aplica las migraciones pendientes.`;
+  }
+  if (lower.includes('forbidden')) return `${prefix}Tu usuario no tiene permisos para realizar esta accion.`;
+  if (lower.includes('unauthorized')) return 'Tu sesion expiro o no esta autorizada. Inicia sesion nuevamente.';
+  if (lower.includes('not found')) return `${prefix}No se encontro el registro solicitado o ya no esta disponible.`;
+  if (lower.includes('internal server error')) {
+    return `${prefix}El servidor encontro un problema interno (HTTP ${status || 500}). Revisa el log del backend para ver la causa exacta.`;
+  }
+  if (lower.includes('bad request')) return `${prefix}Revisa los datos enviados; hay informacion incompleta o invalida.`;
   if (lower.includes('unique constraint failed') || lower.includes('already exists')) {
-    return 'Ya existe un registro con esos datos.';
+    return `${prefix}Ya existe un registro con esos datos.`;
   }
   if (lower.startsWith('http error') && status) {
-    return normalizeErrorMessage('', status);
+    return normalizeErrorMessage('', status, context);
   }
 
-  return raw;
+  return prefix && !lower.startsWith('no se pudo') ? `${prefix}${raw}` : raw;
+}
+
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
+function extractServerMessages(errorBody: ApiErrorBody | null) {
+  if (!errorBody) return [];
+  return [
+    ...asTextList(errorBody.message),
+    ...asTextList(errorBody.details),
+    ...asTextList(errorBody.error),
+  ];
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, params, headers = {} } = options;
+  const context = describeRequest(path, method);
 
   let response: Response;
   try {
@@ -75,38 +152,39 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch (error: any) {
-    throw new Error(normalizeErrorMessage(error?.message));
+    throw new ApiRequestError(normalizeErrorMessage(error?.message, undefined, context), undefined, path);
   }
 
   if (!response.ok) {
-    let serverMessage = '';
-    let errorBody: any = null;
+    let errorBody: ApiErrorBody | null = null;
     try {
       errorBody = await response.json();
-      if (Array.isArray(errorBody?.message)) {
-        serverMessage = errorBody.message.join(', ');
-      } else {
-        serverMessage = errorBody?.message || errorBody?.error || '';
-      }
     } catch {
-      serverMessage = '';
+      errorBody = null;
     }
-    // Detectar 403 TRIAL_EXPIRED y emitir evento global para que la UI muestre el overlay
+
     if (errorBody?.code === 'TRIAL_EXPIRED') {
       window.dispatchEvent(new CustomEvent('trial-expired', { detail: errorBody }));
     }
-    throw new Error(normalizeErrorMessage(serverMessage, response.status));
+
+    const messages = extractServerMessages(errorBody);
+    throw new ApiRequestError(
+      normalizeErrorMessage(messages.join('. '), response.status, context),
+      response.status,
+      path,
+      errorBody?.code,
+      messages
+    );
   }
 
   const text = await response.text();
   try {
-    return text ? JSON.parse(text) : null;
-  } catch (err) {
-    return text as any;
+    return text ? JSON.parse(text) : (null as T);
+  } catch {
+    return text as T;
   }
 }
 
-// Convenience methods
 export const api = {
   get: <T>(path: string, options?: Record<string, any> | { params?: Record<string, any> }) => {
     const params = options?.params ?? options;

@@ -121,7 +121,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
       toast.success('Recepción actualizada');
       onRefresh();
     }
-    catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
   };
 
   const ensureInventoryEntriesForReceipt = async (receipt: Partial<PurchaseReceipt>) => {
@@ -211,7 +211,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
       setEditingId(null);
       onRefresh();
     } catch (e: any) {
-      toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
+      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la recepción');
     }
   };
 
@@ -453,7 +453,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh }: Props) {
               toast.success('Elementos eliminados');
               onRefresh();
             } catch (e) {
-              toast.error('Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           } : undefined}
           actions={(row) => (

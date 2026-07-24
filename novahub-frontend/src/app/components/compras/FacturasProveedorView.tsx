@@ -220,7 +220,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       toast.success('Factura actualizada');
       onRefresh();
     }
-    catch { toast.error('Error al actualizar'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); }
   };
 
   const handleDeleteConfirm = async () => {
@@ -235,8 +235,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         setLocalDoc(null);
       }
       onRefresh();
-    } catch {
-      toast.error('Error al eliminar factura');
+    } catch (e) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar factura');
     } finally {
       setDeleteLoading(false);
     }
@@ -309,7 +309,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       }
       onRefresh();
     } catch (e: any) {
-      toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
+      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la factura');
     }
   };
 
@@ -642,7 +642,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
               toast.success('Elementos eliminados');
               onRefresh();
             } catch (e) {
-              toast.error('Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           } : undefined}
           actions={(row) => (

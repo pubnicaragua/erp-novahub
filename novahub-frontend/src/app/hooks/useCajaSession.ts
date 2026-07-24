@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { cajaService, CashRegisterSession, SessionLog, CashRegisterCount, CashClosureMode } from '../services/caja.service';
 import { toast } from 'sonner';
+import { cajaService, CashRegisterSession, SessionLog, CashRegisterCount, CashClosureMode } from '../services/caja.service';
+import { getApiErrorMessage } from '../services/api';
 
 export type SessionStep = 'idle' | 'active' | 'close_counting';
 
@@ -14,12 +15,14 @@ export function useCajaSession(selectedRegister: string) {
 
   const loadSessionData = useCallback(async () => {
     if (!selectedRegister) return;
+
     setLoading(true);
     setSession(null);
     setLogs([]);
     setSessionStep('idle');
     setClosureMode('NORMAL');
     setCountAttempts([]);
+
     try {
       const active = await cajaService.getActiveSession(selectedRegister);
       setSession(active || null);
@@ -30,7 +33,7 @@ export function useCajaSession(selectedRegister: string) {
         setCountAttempts(attempts);
         const logData = await cajaService.getSessionLog(active.id);
         setLogs(logData || []);
-        
+
         if (active.status === 'COUNTING') {
           setSessionStep('close_counting');
         } else {
@@ -39,9 +42,9 @@ export function useCajaSession(selectedRegister: string) {
       } else {
         setSessionStep('idle');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      toast.error('Error al cargar la sesión: ' + (err.message || 'Error desconocido'));
+      toast.error(getApiErrorMessage(err, 'Error al cargar la sesion de caja'));
     } finally {
       setLoading(false);
     }
@@ -52,13 +55,13 @@ export function useCajaSession(selectedRegister: string) {
   }, [loadSessionData]);
 
   const expectedNIO = session
-    ? Number(session.initialAmountNIO || 0) + 
+    ? Number(session.initialAmountNIO || 0) +
       logs.filter(l => (l.type === 'SALE' || l.type === 'ENTRY') && (!l.paymentMethod || l.paymentMethod === 'CASH')).reduce((acc, l) => acc + Number(l.amountNIO || 0), 0) -
       logs.filter(l => l.type === 'EXIT' && (!l.paymentMethod || l.paymentMethod === 'CASH')).reduce((acc, l) => acc + Number(l.amountNIO || 0), 0)
     : 0;
 
   const expectedUSD = session
-    ? Number(session.initialAmountUSD || 0) + 
+    ? Number(session.initialAmountUSD || 0) +
       logs.filter(l => (l.type === 'SALE' || l.type === 'ENTRY') && (!l.paymentMethod || l.paymentMethod === 'CASH')).reduce((acc, l) => acc + Number(l.amountUSD || 0), 0) -
       logs.filter(l => l.type === 'EXIT' && (!l.paymentMethod || l.paymentMethod === 'CASH')).reduce((acc, l) => acc + Number(l.amountUSD || 0), 0)
     : 0;
@@ -109,6 +112,6 @@ export function useCajaSession(selectedRegister: string) {
     openSession,
     addMovement,
     savePartialCount,
-    closeSession
+    closeSession,
   };
 }

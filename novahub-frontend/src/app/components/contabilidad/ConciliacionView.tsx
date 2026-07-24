@@ -55,8 +55,8 @@ export function ConciliacionView() {
       setLoading(true);
       const res = await contabilidadService.getReconciliations();
       setReconciliations(res || []);
-    } catch {
-      toast.error('Error al cargar conciliaciones');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar conciliaciones');
     } finally {
       setLoading(false);
     }
@@ -77,8 +77,8 @@ export function ConciliacionView() {
       const res = await contabilidadService.getReconciliation(id);
       setDetail(res);
       setSelectedId(id);
-    } catch {
-      toast.error('Error al cargar detalle');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar detalle');
     } finally {
       setDetailLoading(false);
     }
@@ -117,7 +117,7 @@ export function ConciliacionView() {
       setForm({ accountId: '', period: '', startDate: '', endDate: '', startBalance: '', endBalance: '' });
       fetchReconciliations();
     } catch (e: any) {
-      toast.error(e?.message || 'Error al crear');
+      toast.error(e?.response?.data?.message || e?.message || 'Error al crear');
     }
   };
 
@@ -129,8 +129,8 @@ export function ConciliacionView() {
       setDetail(res);
       toast.success('Coincidencias automáticas aplicadas');
       fetchReconciliations();
-    } catch {
-      toast.error('Error al aplicar coincidencias');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al aplicar coincidencias');
     } finally {
       setAutoMatchLoading(false);
     }
@@ -144,8 +144,8 @@ export function ConciliacionView() {
       setDetail(res);
       toast.success('Conciliación completada');
       fetchReconciliations();
-    } catch {
-      toast.error('Error al completar');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al completar');
     } finally {
       setCompleteLoading(false);
     }

@@ -108,8 +108,8 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         setEmployees(Array.isArray(empRes) ? empRes : (empRes as any)?.data || []);
         setPayrolls(Array.isArray(payRes) ? payRes : (payRes as any)?.data || []);
         setTimeOffs(Array.isArray(toRes) ? toRes : (toRes as any)?.data || []);
-      } catch (e) {
-        toast.error("Error cargando RRHH");
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || "Error cargando RRHH");
       } finally {
         setLoading(false);
       }
@@ -326,8 +326,8 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
 
         doc.save(`Reporte_Capital_Humano_${new Date().toISOString().split('T')[0]}.pdf`);
         toast.success("PDF generado exitosamente");
-      } catch (e) {
-        toast.error("Error exportando PDF");
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || "Error exportando PDF");
       }
     },
     exportExcel: async () => {
@@ -473,8 +473,8 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
 
         await downloadExcelWorkbook(wb, `Reporte_Capital_Humano_${new Date().toISOString().split('T')[0]}.xlsx`);
         toast.success("Excel exportado exitosamente");
-      } catch (e) {
-        toast.error("Error exportando Excel");
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || "Error exportando Excel");
       }
     }
   }));

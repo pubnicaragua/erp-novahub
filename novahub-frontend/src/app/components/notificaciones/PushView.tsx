@@ -9,6 +9,7 @@ import { Plus, Search, Send, Smartphone, Wifi, CheckCircle2 } from 'lucide-react
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
+import { pushNotificationsService } from '../../services/notificaciones.service';
 import { format } from 'date-fns';
 
 interface PushViewProps {
@@ -20,6 +21,9 @@ interface PushViewProps {
 export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) => {
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const errMsg = (e: any, fallback: string) => e?.response?.data?.message || e?.message || fallback;
 
   const columns: ColumnDef<PushNotification>[] = [
     { key: 'title', header: 'Título', width: '30%', editable: canPerform('NOTIFICATIONS_PUSH', 'edit') },
@@ -31,14 +35,17 @@ export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) 
 
   const handleUpdate = async (id: string | number, updates: Partial<PushNotification>) => {
     try { await pushNotificationsService.update(id as string, updates); toast.success('Notificación actualizada'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); }
+    catch (e: any) { toast.error(errMsg(e, 'Error al actualizar')); }
   };
 
   const handleAdd = async () => {
+    if (creating) return;
+    setCreating(true);
     try {
-      await pushNotificationsService.create({ title: 'Nueva Notificación Push', content: 'Contenido...', type: 'SYSTEM', sent: false });
+      await pushNotificationsService.create({ title: 'Nueva Notificación Push', content: 'Contenido...', type: 'SYSTEM', sent: false, scope: 'PERSONAL' });
       toast.success('Notificación creada'); onRefresh();
-    } catch { toast.error('Error al crear'); }
+    } catch (e: any) { toast.error(errMsg(e, 'Error al crear')); }
+    finally { setCreating(false); }
   };
 
   const kpis = [
@@ -52,7 +59,7 @@ export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4" data-tour="notificaciones-push">
         {kpis.map((kpi, i) => (
           <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
             <CardContent className="p-5 flex items-center gap-4">
@@ -73,7 +80,7 @@ export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) 
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={canPerform('NOTIFICATIONS_PUSH', 'edit') ? handleUpdate : undefined} isLoading={loading} onRowDelete={canPerform('NOTIFICATIONS_PUSH', 'delete') ? async (id) => { try { await pushNotificationsService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch { toast.error('Error'); } } : undefined} />
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={canPerform('NOTIFICATIONS_PUSH', 'edit') ? handleUpdate : undefined} isLoading={loading} onRowDelete={canPerform('NOTIFICATIONS_PUSH', 'delete') ? async (id) => { try { await pushNotificationsService.delete(id as string); toast.success('Notificación eliminada'); onRefresh(); } catch (e: any) { toast.error(errMsg(e, 'Error al eliminar')); } } : undefined} />
       </Card>
     </div>
   );

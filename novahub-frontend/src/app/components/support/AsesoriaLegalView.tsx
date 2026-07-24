@@ -48,8 +48,8 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
       ]);
       setCases(casesRes?.data || casesRes || []);
       setReminders(remindersRes?.data || remindersRes || []);
-    } catch {
-      toast.error('Error al cargar datos legales');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar datos legales');
     } finally {
       setLoading(false);
     }
@@ -351,7 +351,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
       toast.success('Nota agregada');
       const res: any = await legalService.getCase(c.id);
       setCase(res?.data || res);
-    } catch { toast.error('Error al agregar nota'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al agregar nota'); }
     finally { setAddingNote(false); }
   };
 
@@ -363,7 +363,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
       setCase(res?.data || res);
       setShowStatusDialog(false);
       onRefresh();
-    } catch { toast.error('Error al cambiar estado'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al cambiar estado'); }
   };
 
   if (showChat) {
@@ -483,7 +483,7 @@ function RemindersTab({ reminders, onRefresh, onNew, canPerform }: { reminders: 
       await legalService.deleteReminder(id);
       toast.success('Recordatorio eliminado');
       onRefresh();
-    } catch { toast.error('Error al eliminar'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); }
   };
 
   const isOverdue = (d: string) => new Date(d) < new Date();

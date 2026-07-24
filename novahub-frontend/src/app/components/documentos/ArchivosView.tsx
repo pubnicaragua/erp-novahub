@@ -34,7 +34,7 @@ export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, onRef
 
   const handleUpdate = async (id: string | number, updates: Partial<FileModel>) => {
     try { await filesService.update(id as string, updates); toast.success('Archivo actualizado'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); }
   };
 
   const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,7 +94,7 @@ export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, onRef
           columns={columns} 
           onRowUpdate={canPerform('DOCUMENTS_FILES', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('DOCUMENTS_FILES', 'delete') ? async (id) => { try { await filesService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+          onRowDelete={canPerform('DOCUMENTS_FILES', 'delete') ? async (id) => { try { await filesService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar archivo'); } } : undefined} 
         />
       </Card>
     </div>

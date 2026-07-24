@@ -233,7 +233,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
     try {
       await suppliersService.create({ name: 'Nuevo Proveedor' });
       toast.success('Proveedor creado'); onRefresh();
-    } catch { toast.error('Error al crear proveedor'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear proveedor'); }
   };
 
   const kpis = [

@@ -85,8 +85,8 @@ export function NovaChatView() {
       }
       setChannels(chans);
       setConversations(convs);
-    } catch {
-      toast.error('Error al cargar datos de NovaChat');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar datos de NovaChat');
     } finally {
       setLoading(false);
     }
@@ -129,8 +129,8 @@ export function NovaChatView() {
       });
       setMessages((prev) => [...prev, msg]);
       setNewMessage('');
-    } catch {
-      toast.error('Error al enviar mensaje');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al enviar mensaje');
     } finally {
       setSending(false);
     }
@@ -146,8 +146,8 @@ export function NovaChatView() {
         setSelectedConversation((prev) => (prev ? { ...prev, status } : null));
       }
       toast.success('Estado actualizado');
-    } catch {
-      toast.error('Error al actualizar estado');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar estado');
     }
   };
 

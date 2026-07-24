@@ -99,7 +99,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
 
   const handleUpdate = async (id: string | number, updates: Partial<RecurringExpense>) => {
     try { await recurringExpensesService.update(id as string, updates); toast.success('Actualizado'); onRefresh(); } 
-    catch { toast.error('Error al actualizar'); throw new Error(); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error(); }
   };
 
   const handleDeleteConfirm = async () => {
@@ -111,8 +111,8 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
       setPendingDeleteId(null);
       if (editingId === pendingDeleteId) setEditingId(null);
       onRefresh();
-    } catch {
-      toast.error('Error al eliminar');
+    } catch (e) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
     } finally {
       setDeleteLoading(false);
     }
@@ -144,7 +144,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
       setEditingId(null);
       onRefresh();
     } catch (e: any) { 
-        toast.error('Error al guardar: ' + (e.response?.data?.message || 'Verifica los campos requeridos')); 
+        toast.error(e?.response?.data?.message || e?.message || 'Error al guardar el gasto recurrente'); 
     }
   };
 
@@ -365,7 +365,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
               toast.success('Elementos eliminados');
               onRefresh();
             } catch (e) {
-              toast.error('Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           } : undefined}
           actions={(row) => (

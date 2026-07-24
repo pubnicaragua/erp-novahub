@@ -197,8 +197,8 @@ export function DiarioView() {
       await contabilidadService.postJournal(journal.id);
       toast.success(`Asiento #${journal.number} contabilizado`);
       loadJournals();
-    } catch (err: any) {
-      toast.error(err.message || 'Error al contabilizar');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al contabilizar');
     }
   }
 
@@ -207,8 +207,8 @@ export function DiarioView() {
       await contabilidadService.voidJournal(journal.id);
       toast.success(`Asiento #${journal.number} anulado`);
       loadJournals();
-    } catch (err: any) {
-      toast.error(err.message || 'Error al anular');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
     }
   }
 

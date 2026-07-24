@@ -113,13 +113,13 @@ export function FinanceTableView({
       await onUpdate(id, { [key]: newValue });
       toast.success('Cambio guardado automáticamente');
       setLocalData(prev => prev.map(item => item.id === id ? { ...item, isDraft: false } : item));
-    } catch { toast.error('Error al guardar cambio'); }
+    } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar cambio'); }
     finally { setSavingIds(prev => { const n = new Set(prev); n.delete(id); return n; }); }
   };
 
   const handleDelete = async (id: string) => {
     try { setDeleteLoading(true); await onDelete(id); }
-    catch { toast.error('Error al eliminar registro'); }
+    catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar registro'); }
     finally { setDeleteLoading(false); setPendingDeleteId(null); }
   };
 
@@ -152,8 +152,8 @@ export function FinanceTableView({
       }
       setIsEditModalOpen(false);
       setItemBeingEdited(null);
-    } catch {
-      toast.error('Error al actualizar registro');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar registro');
     } finally {
       setEditLoading(false);
     }
@@ -321,9 +321,9 @@ export function FinanceTableView({
       a.download = `${title.replace(/\s+/g, '_')}_${now.toISOString().split('T')[0]}.xlsx`;
       a.click();
       toast.success("Excel exportado exitosamente");
-    } catch (e) { 
+    } catch (e: any) { 
       console.error(e);
-      toast.error("Error al exportar Excel"); 
+      toast.error(e?.response?.data?.message || e?.message || "Error al exportar Excel"); 
     }
   };
 
@@ -409,7 +409,7 @@ export function FinanceTableView({
 
       doc.save(`${title.replace(/\s+/g, '_')}_${now.toISOString().split('T')[0]}.pdf`);
       toast.success("PDF exportado exitosamente");
-    } catch (e) { toast.error("Error al exportar PDF"); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || "Error al exportar PDF"); }
   };
 
   const renderCellContent = (item: any, col: Column) => {

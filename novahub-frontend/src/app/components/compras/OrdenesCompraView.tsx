@@ -141,7 +141,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
 
   const handleUpdate = async (id: string | number, updates: Partial<PurchaseOrder>) => {
     try { await purchaseOrdersService.update(id as string, updates); toast.success('Orden actualizada'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
   };
 
   const handleDeleteConfirm = async () => {
@@ -153,8 +153,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       setPendingDeleteId(null);
       if (editingId === pendingDeleteId) setEditingId(null);
       onRefresh();
-    } catch {
-      toast.error('Error al eliminar');
+    } catch (e) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
     } finally {
       setDeleteLoading(false);
     }
@@ -222,7 +222,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       setEvidenceFile(null);
       onRefresh();
     } catch (e: any) {
-      toast.error('Error al guardar: ' + (e.response?.data?.message || 'Error'));
+      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la orden de compra');
     }
   };
 
@@ -818,7 +818,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
               toast.success('Elementos eliminados');
               onRefresh();
             } catch (e) {
-              toast.error('Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           } : undefined}
           actions={(row) => (

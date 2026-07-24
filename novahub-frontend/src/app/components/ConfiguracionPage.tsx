@@ -30,6 +30,7 @@ import { cn } from './ui/utils';
 import { type RoleManagement, type Permission } from '../types';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
 import { modulePricingService, type ModulePriceItem } from '../services/module-pricing.service';
+import { CountriesView } from './admin/CountriesView';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -336,6 +337,7 @@ const ALL_TABS: TabDef[] = [
   { id: 'tenancy', label: 'Multi-Tenancy', icon: Layers, scenario: ['superadmin', 'partner'] },
   { id: 'currency', label: 'Moneda & Cambio', icon: Coins, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'plataforma', label: 'Plataforma', icon: Server, scenario: ['superadmin'] },
+  { id: 'paises', label: 'Países', icon: Globe, scenario: ['superadmin'] },
   { id: 'precios', label: 'Precios Módulos', icon: DollarSign, scenario: ['superadmin'] },
   { id: 'dominios', label: 'Dominios', icon: Globe, scenario: ['superadmin', 'partner', 'client'] },
 ];
@@ -1943,6 +1945,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         </TabsContent>
 
         {/* ══════════ TAB: PLATAFORMA (Super Admin only) ══════════ */}
+        <TabsContent value="paises" className="space-y-6 mt-0">
+          <CountriesView />
+        </TabsContent>
         <TabsContent value="plataforma" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="border-border/50 shadow-sm">

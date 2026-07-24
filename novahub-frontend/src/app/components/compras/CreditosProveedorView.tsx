@@ -84,7 +84,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
 
   const handleUpdate = async (id: string | number, updates: Partial<SupplierCredit>) => {
     try { await vendorCreditsService.update(id as string, updates); toast.success('Crédito actualizado'); onRefresh(); }
-    catch { toast.error('Error al actualizar'); throw new Error('Update failed'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
   };
 
   const recalculatedTotal = (localDoc?.items || []).reduce((acc, it) => acc + (Number(it.quantity || 0) * Number(it.unitPrice || 0)), 0);
@@ -108,7 +108,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
       setEditingId(null);
       onRefresh();
     } catch (e: any) { 
-        toast.error('Error al registrar: ' + (e.response?.data?.message || 'Error')); 
+        toast.error(e?.response?.data?.message || e?.message || 'Error al registrar'); 
     }
   };
 

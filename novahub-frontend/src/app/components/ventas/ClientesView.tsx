@@ -202,8 +202,8 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
       await customersService.update(id.toString(), updates);
       toast.success('Cliente actualizado correctamente');
       onRefresh();
-    } catch (error) {
-      toast.error('Error al actualizar cliente');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar cliente');
       throw error;
     }
   };
@@ -218,9 +218,9 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
       });
       toast.success('Nuevo cliente creado');
       onRefresh();
-    } catch (error) {
-      console.error('Error creating customer:', error);
-      toast.error('Error al crear cliente');
+    } catch (e: any) {
+      console.error('Error creating customer:', e);
+      toast.error(e?.response?.data?.message || e?.message || 'Error al crear cliente');
     }
   };
 
@@ -376,7 +376,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
               toast.success('Elementos eliminados');
               onRefresh();
             } catch (e) {
-              toast.error('Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           }}
           columns={columns}

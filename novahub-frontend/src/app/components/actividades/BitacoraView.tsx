@@ -60,7 +60,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
 
         setAvailableTasks(taskArray.filter((t: any) => !linkedActivityIds.has(t.id)));
         setAvailableEvents(eventArray.filter((e: any) => !linkedActivityIds.has(e.id)));
-      }).catch(() => toast.error('Error al cargar Tareas/Eventos vinculables'));
+      }).catch((e: any) => toast.error(e?.response?.data?.message || e?.message || 'Error al cargar Tareas/Eventos vinculables'));
     }
   }, [isAddOpen, data]);
 
@@ -103,8 +103,8 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
       await activityLogsService.update(String(id), updates);
       toast.success('Registro actualizado');
       onRefresh();
-    } catch {
-      toast.error('Error al actualizar');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
     }
   };
 
@@ -209,8 +209,8 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
               await activityLogsService.delete(String(id));
               toast.success('Registro eliminado');
               onRefresh();
-            } catch {
-              toast.error('Error al eliminar registro');
+            } catch (e) {
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar registro');
             }
           } : undefined}
         />

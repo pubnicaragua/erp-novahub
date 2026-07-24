@@ -70,9 +70,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
         toast.success('Cotización actualizada');
       }
       onRefresh();
-    } catch (error) {
-      toast.error('Error al actualizar');
-      throw error;
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
+      throw e;
     }
   };
 
@@ -157,8 +157,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
       await onRefresh();
       toast.success('Nueva cotización en borrador creada exitosamente');
       setEditingId(newEst.id);
-    } catch (error) {
-      toast.error('Error al iniciar la edición');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al iniciar la edición');
     }
   };
 
@@ -606,7 +606,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
               toast.success('Elementos eliminados');
               onRefresh();
             } catch (e) {
-              toast.error('Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           }}
           columns={columns}

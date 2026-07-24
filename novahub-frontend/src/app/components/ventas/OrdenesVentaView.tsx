@@ -131,8 +131,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       await onRefresh();
       toast.success('Nueva orden de venta en borrador creada exitosamente');
       setEditingId(newOrd.id);
-    } catch (error) {
-      toast.error('Error al crear la orden de venta');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al crear la orden de venta');
     }
   };
 

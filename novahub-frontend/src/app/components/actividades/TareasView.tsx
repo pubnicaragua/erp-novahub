@@ -66,7 +66,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
 
   const handleUpdate = async (id: string | number, updates: Partial<Task>) => {
     try { await tasksService.update(id as string, updates); toast.success('Tarea actualizada'); onRefresh(); }
-    catch { toast.error('Error al actualizar tarea'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar tarea'); }
   };
 
   const handleCreateTask = async () => {
@@ -86,8 +86,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
       setIsAddOpen(false);
       setNewTask({ title: '', description: '', dueDate: '', priority: 'MEDIUM', assignedTo: [] });
       onRefresh();
-    } catch {
-      toast.error('Error al crear tarea');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al crear tarea');
     }
   };
 
@@ -106,8 +106,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
       setEvidenceFile(null);
       setSelectedTask(null);
       onRefresh();
-    } catch {
-      toast.error('Error al completar la tarea');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al completar la tarea');
     }
   };
 
@@ -210,7 +210,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           columns={columns} 
           onRowUpdate={canPerform('ACTIVITIES_TASKS', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('ACTIVITIES_TASKS', 'delete') ? async (id) => { try { await tasksService.delete(id as string); toast.success('Tarea eliminada'); onRefresh(); } catch { toast.error('Error al eliminar'); } } : undefined} 
+          onRowDelete={canPerform('ACTIVITIES_TASKS', 'delete') ? async (id) => { try { await tasksService.delete(id as string); toast.success('Tarea eliminada'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar tarea'); } } : undefined} 
         />
       </Card>
 

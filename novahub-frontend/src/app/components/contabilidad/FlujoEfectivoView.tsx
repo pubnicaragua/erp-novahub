@@ -85,8 +85,8 @@ export function FlujoEfectivoView() {
         endingCash: raw?.endingCashBalance || 0,
       };
       setData(result);
-    } catch {
-      toast.error('Error al cargar flujo de efectivo');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar flujo de efectivo');
     } finally {
       setLoading(false);
     }

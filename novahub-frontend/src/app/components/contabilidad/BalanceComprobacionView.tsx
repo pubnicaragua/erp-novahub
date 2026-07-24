@@ -55,8 +55,8 @@ export function BalanceComprobacionView() {
         saldo: r.balance || r.saldo || 0,
       }));
       setData(rows);
-    } catch {
-      toast.error('Error al cargar balance de comprobación');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar balance de comprobación');
     } finally {
       setLoading(false);
     }

@@ -93,8 +93,8 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         setPayments(Array.isArray(payRes) ? payRes : payRes?.data || []);
         setOrders(Array.isArray(ordRes) ? ordRes : ordRes?.data || []);
         setCustomers(Array.isArray(cusRes) ? cusRes : cusRes?.data || []);
-      } catch (e) {
-        toast.error("Error cargando clientes");
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || "Error cargando clientes");
       } finally {
         setLoading(false);
       }
@@ -297,7 +297,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         doc.save(`Reporte_Clientes_${now.toISOString().split('T')[0]}.pdf`);
         toast.success("PDF generado exitosamente");
-      } catch (e) { console.error(e); toast.error("Error al generar PDF"); }
+      } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar PDF"); }
     },
     exportExcel: async () => {
       try {
@@ -401,7 +401,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `Clientes_${new Date().toISOString().split('T')[0]}.xlsx`; link.click();
         toast.success("Excel generado exitosamente");
-      } catch (e) { console.error(e); toast.error("Error al generar Excel"); }
+      } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar Excel"); }
     }
   }));
 

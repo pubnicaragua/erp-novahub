@@ -71,8 +71,8 @@ export function EstadoResultadosView() {
         result.gastos = result.gastos.map(a => ({ ...a, previousAmount: prevGasMap.get(a.codigo) as number | undefined }));
       }
       setData(result);
-    } catch {
-      toast.error('Error al cargar estado de resultados');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar estado de resultados');
     } finally {
       setLoading(false);
     }

@@ -9,6 +9,7 @@ import { Input } from '../ui/input';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { soporteTecnicoService } from '../../services/soporte-tecnico.service';
 import { cn } from '../ui/utils';
 
@@ -44,6 +45,7 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
   const [adminResponse, setAdminResponse] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [saving, setSaving] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -69,7 +71,7 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
       ]);
       setTickets(Array.isArray(ticketsRes) ? ticketsRes : []);
       setStats(statsRes || {});
-    } catch { toast.error('Error al cargar soporte técnico'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al cargar soporte técnico'); }
     finally { setLoading(false); }
   };
 
@@ -86,17 +88,12 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
       setAdminResponse('');
       setNewStatus('');
       fetchAll();
-    } catch { toast.error('Error al responder'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al responder'); }
     finally { setSaving(false); }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Eliminar este ticket?')) return;
-    try {
-      await soporteTecnicoService.remove(id);
-      toast.success('Ticket eliminado');
-      fetchAll();
-    } catch { toast.error('Error al eliminar'); }
+    setPendingDeleteId(id);
   };
 
   const openTicketDetail = (ticket: any) => {
@@ -267,6 +264,22 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
           </div>
         )}
       </AnimatePresence>
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="¿Eliminar ticket?"
+        description="¿Estás seguro de que deseas eliminar este ticket de soporte? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        onConfirm={async () => {
+          try {
+            await soporteTecnicoService.remove(pendingDeleteId);
+            toast.success('Ticket eliminado');
+            fetchAll();
+          } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); }
+          finally { setPendingDeleteId(null); }
+        }}
+      />
     </div>
   );
 }

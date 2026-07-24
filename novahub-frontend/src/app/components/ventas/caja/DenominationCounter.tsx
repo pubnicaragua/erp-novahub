@@ -1,8 +1,6 @@
 import React from 'react';
-import { Card, CardHeader, CardContent } from '../../ui/card';
 import { Label } from '../../ui/label';
 import { Input } from '../../ui/input';
-import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../../ui/accordion';
 import { Minus, Plus, ChevronDown, ChevronRight } from 'lucide-react';
 
 export const NIO_BILLS = [1000, 500, 200, 100, 50, 20, 10];

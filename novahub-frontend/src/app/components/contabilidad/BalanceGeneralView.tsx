@@ -72,8 +72,8 @@ export function BalanceGeneralView() {
         result.equity = result.equity.map(a => ({ ...a, previousAmount: prevEqMap.get(a.codigo) as number | undefined }));
       }
       setData(result);
-    } catch {
-      toast.error('Error al cargar balance general');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar balance general');
     } finally {
       setLoading(false);
     }

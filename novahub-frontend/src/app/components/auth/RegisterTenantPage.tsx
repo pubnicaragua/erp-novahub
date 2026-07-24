@@ -192,6 +192,32 @@ const SUBMODULE_NAMES_ES: Record<string, string> = {
 };
 const PARENT_KEYS = new Set(Object.keys(PARENT_SUBMODULES));
 
+const PARENT_NAMES_ES: Record<string, string> = {
+  SALES: 'Ventas',
+  PURCHASES: 'Compras',
+  INVENTORY: 'Inventario',
+  FINANCIAL: 'Finanzas',
+  HR: 'Recursos Humanos',
+  PROJECTS: 'Proyectos',
+  REPORTS: 'Reportes',
+  DOCUMENTS: 'Documentos',
+  ACTIVITIES: 'Actividades',
+  NOTIFICATIONS: 'Notificaciones',
+  ACCOUNTING: 'Contabilidad',
+  LEGAL: 'Asesoría Legal',
+  TOOLS: 'Herramientas',
+  FINANCING: 'Financiamiento',
+  NOVACHAT: 'Nova Suite',
+};
+
+const FALLBACK_PARENT_PRICES: Record<string, number> = {
+  SALES: 15, PURCHASES: 12, INVENTORY: 18, FINANCIAL: 25, HR: 20,
+  PROJECTS: 15, REPORTS: 10, DOCUMENTS: 8, ACTIVITIES: 5,
+  NOTIFICATIONS: 0, ACCOUNTING: 25, LEGAL: 15, TOOLS: 0, FINANCING: 0, NOVACHAT: 69,
+};
+
+const VISIBLE_PARENT_KEYS = Array.from(PARENT_KEYS).filter(k => k !== 'CONFIGURATION');
+
 export function RegisterTenantPage() {
   const navigate = useNavigate();
   const { setSession } = useAuth();
@@ -234,7 +260,7 @@ export function RegisterTenantPage() {
           setRecommendations(data);
           setSelectedModules(data.recommended?.map((m: any) => m.module) || []);
         })
-        .catch(() => toast.error('Error al carrar recomendaciones'))
+        .catch((e: any) => toast.error(e?.response?.data?.message || e?.message || 'Error al cargar recomendaciones'))
         .finally(() => setLoadingModules(false));
     }
   }, [step, industry, recommendations]);
@@ -273,7 +299,7 @@ export function RegisterTenantPage() {
       ...(recommendations?.recommended || []),
       ...(recommendations?.optional || []),
     ].find((m) => m.module === mod);
-    return sum + (found?.price || 0);
+    return sum + (found?.price ?? FALLBACK_PARENT_PRICES[mod] ?? 0);
   }, 0);
 
   const handleFinalSubmit = async () => {
@@ -316,6 +342,24 @@ export function RegisterTenantPage() {
     setSelectedModules((prev) =>
       prev.includes(moduleKey) ? prev.filter((m) => m !== moduleKey) : [...prev, moduleKey],
     );
+  };
+
+  const toggleParentAndSubs = (parentKey: string) => {
+    const subs = PARENT_SUBMODULES[parentKey] || [];
+    if (subs.length === 0) {
+      toggleModule(parentKey);
+    } else {
+      const allActive = subs.every(s => selectedModules.includes(s));
+      if (allActive) {
+        setSelectedModules(prev => prev.filter(m => m !== parentKey && !subs.includes(m)));
+      } else {
+        setSelectedModules(prev => {
+          const next = new Set([...prev, parentKey]);
+          subs.forEach(s => next.add(s));
+          return Array.from(next);
+        });
+      }
+    }
   };
 
   const renderProgress = () => {
@@ -626,6 +670,18 @@ export function RegisterTenantPage() {
     const recommendedParents = toParentMod(recommendations.recommended);
     const optionalParents = toParentMod(recommendations.optional);
 
+    const recommendedParentKeys = new Set(recommendations.recommended.map(m => m.module));
+    const optionalParentKeys = new Set(recommendations.optional.map(m => m.module));
+    const availableParentKeys = VISIBLE_PARENT_KEYS.filter(
+      k => !recommendedParentKeys.has(k) && !optionalParentKeys.has(k)
+    );
+    const availableParents = availableParentKeys.map(k => ({
+      module: k,
+      name: PARENT_NAMES_ES[k] || k.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase()),
+      price: FALLBACK_PARENT_PRICES[k] ?? 0,
+      submodules: [],
+    }));
+
     const isParentActive = (parent: string) => {
       const subs = PARENT_SUBMODULES[parent] || [];
       if (subs.length === 0) return selectedModules.includes(parent);
@@ -647,7 +703,7 @@ export function RegisterTenantPage() {
       setExpandedParent(expandedParent === parent ? null : parent);
     };
 
-    const renderParentCards = (list: any[], recommended: boolean) => {
+    const renderParentCards = (list: any[], recommended: boolean, showSubs = true) => {
       if (list.length === 0) return null;
       return (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -686,7 +742,7 @@ export function RegisterTenantPage() {
                         {recommended ? 'Incluido en tu trial' : `$${mod.price}/mes`}
                       </div>
                     </div>
-                    {hasSubs && (
+                    {hasSubs && showSubs && (
                       <div 
                         className="p-1 hover:bg-muted/30 rounded-md cursor-pointer"
                         onClick={(e) => { e.stopPropagation(); expandParent(mod.module); }}
@@ -869,8 +925,8 @@ export function RegisterTenantPage() {
               }
               setUsers([...users, { ...newUser }]);
               setNewUser({ name: '', email: '', password: '', roleName: '' });
-            } catch (e) {
-              toast.error('Error al verificar el correo');
+            } catch (e: any) {
+              toast.error(e?.response?.data?.message || e?.message || 'Error al verificar el correo');
             }
           } else {
             toast.error('Nombre, Email y Contraseña son obligatorios para crear un usuario');
@@ -1019,12 +1075,12 @@ export function RegisterTenantPage() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
-      {renderLeftPanel()}
+      {step < 2 && renderLeftPanel()}
       <div className={cn(
         "flex-1 flex items-center justify-center p-6 md:p-10 bg-background",
-        ""
+        step >= 2 ? "w-full" : ""
       )}>
-        <div className={cn("w-full space-y-6", step === 2 ? "max-w-2xl" : "max-w-md")}>
+        <div className={cn("w-full space-y-6", step === 2 ? "max-w-4xl" : step === 3 ? "max-w-2xl" : "max-w-md")}>
           <div className="lg:hidden flex items-center gap-3 mb-4">
             <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <Package className="size-6 text-primary" />

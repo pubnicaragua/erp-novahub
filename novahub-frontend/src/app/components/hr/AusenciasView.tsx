@@ -57,8 +57,8 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
         reason: '',
       });
       onRefresh();
-    } catch (error) {
-      toast.error('Error al crear solicitud');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al crear solicitud');
     }
   };
 
@@ -67,8 +67,8 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       await hrService.approveLeaveRequest(id, 'current-user-id');
       toast.success('Solicitud aprobada');
       onRefresh();
-    } catch (error) {
-      toast.error('Error al aprobar solicitud');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al aprobar solicitud');
     }
   };
 
@@ -80,8 +80,8 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       await hrService.rejectLeaveRequest(id, reason);
       toast.success('Solicitud rechazada');
       onRefresh();
-    } catch (error) {
-      toast.error('Error al rechazar solicitud');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al rechazar solicitud');
     }
   };
 

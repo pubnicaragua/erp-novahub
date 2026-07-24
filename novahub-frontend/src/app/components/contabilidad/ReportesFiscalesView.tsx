@@ -57,8 +57,8 @@ export function ReportesFiscalesView() {
       setLoading(true);
       const res = await contabilidadService.getFiscalReports();
       setReports(res || []);
-    } catch {
-      toast.error('Error al cargar reportes fiscales');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar reportes fiscales');
     } finally {
       setLoading(false);
     }

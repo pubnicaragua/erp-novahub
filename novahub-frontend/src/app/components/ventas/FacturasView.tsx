@@ -170,9 +170,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       await invoicesService.update(id.toString(), updates);
       toast.success('Factura actualizada');
       onRefresh();
-    } catch (error) {
-      toast.error('Error al actualizar');
-      throw error;
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
+      throw e;
     }
   };
 
