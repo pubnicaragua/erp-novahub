@@ -16,6 +16,7 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ProductThumbnail } from '../ui/ProductImage';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { cn } from '../ui/utils';
 import {
   cajaService,
   type CashRegister,
