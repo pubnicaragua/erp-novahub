@@ -117,7 +117,7 @@ export function ControlDashboardCajaView({
           </div>
 
           <Tabs value={activeSection} onValueChange={(v: any) => setActiveSection(v)} className="w-full mt-4">
-            <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-2">
+            <TabsList className="w-full h-auto min-w-0 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-nowrap overflow-x-auto justify-start gap-1.5 rounded-2xl border border-border/40 mb-2 [&>button]:flex-none">
               <TabsTrigger 
                 value="session"
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest

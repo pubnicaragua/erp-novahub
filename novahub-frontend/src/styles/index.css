@@ -1,3 +1,96 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+/* Sales module responsive guardrails. Keep layouts within the viewport and
+   let dense data wrap instead of creating a second horizontal scrollbar. */
+.sales-module,
+.sales-module * {
+  box-sizing: border-box;
+}
+
+.sales-module [data-slot="table-container"] {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.sales-module [data-slot="table"] {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+}
+
+.sales-module [data-slot="table-head"],
+.sales-module [data-slot="table-cell"] {
+  min-width: 0 !important;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.sales-module [data-slot="table-cell"] > *,
+.sales-module [data-slot="table-cell"] span,
+.sales-module [data-slot="table-cell"] p {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.sales-module .sales-data-table,
+.sales-module .sales-data-table > div,
+.sales-module .sales-data-table table {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sales-module input,
+.sales-module select,
+.sales-module textarea,
+.sales-module button {
+  max-width: 100%;
+}
+
+.sales-module .grid > *,
+.sales-module .flex > * {
+  min-width: 0;
+}
+
+.sales-responsive-table {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.sales-responsive-table table {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+}
+
+.sales-responsive-table th,
+.sales-responsive-table td {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 639px) {
+  .sales-module .w-64,
+  .sales-module .w-\[220px\] {
+    width: 100%;
+  }
+
+  .sales-module [data-slot="table-head"],
+  .sales-module [data-slot="table-cell"] {
+    padding-left: 0.375rem;
+    padding-right: 0.375rem;
+  }
+
+  .sales-responsive-table th,
+  .sales-responsive-table td {
+    padding-left: 0.375rem;
+    padding-right: 0.375rem;
+  }
+}

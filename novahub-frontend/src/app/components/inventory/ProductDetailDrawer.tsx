@@ -438,7 +438,7 @@ export function ProductDetailDrawer({
             </div>
 
             {/* ===== Tabs (Radix Root sigue siendo el mismo de arriba) ===== */}
-            <TabsList className="w-full justify-start overflow-x-auto">
+            <TabsList className="w-full justify-start overflow-x-auto [&>button]:flex-none">
               <TabsTrigger value="general" className="gap-1.5">
                 <Info className="size-3.5" />
                 General

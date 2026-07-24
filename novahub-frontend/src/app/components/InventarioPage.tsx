@@ -187,7 +187,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           if (onSubModuleChange) onSubModuleChange(nextTab);
         }}
       >
-        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40")}>
+        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 [&>button]:flex-none")}>
           {INVENTORY_SECTIONS.map((section) => {
             const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
             const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('INVENTORY_'));

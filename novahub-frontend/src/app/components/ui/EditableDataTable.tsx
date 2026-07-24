@@ -212,7 +212,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   };
 
   return (
-    <div className="w-full space-y-4" onPaste={handlePaste}>
+    <div className="sales-data-table w-full min-w-0 max-w-full space-y-4" onPaste={handlePaste}>
       {/* Bulk Actions Toolbar */}
       <AnimatePresence>
         {selectedIds.size > 0 && (
@@ -220,9 +220,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="flex items-center justify-between p-3 bg-primary/5 border border-primary/20 rounded-xl mb-4"
+            className="flex flex-wrap items-center justify-between gap-3 p-3 bg-primary/5 border border-primary/20 rounded-xl mb-4"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <span className="text-xs font-black uppercase tracking-widest text-primary/60">
                 {selectedIds.size} Seleccionados
               </span>
@@ -230,7 +230,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                 <Eraser className="size-3 mr-2" /> Despejar
               </Button>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                {bulkActions && bulkActions(Array.from(selectedIds))}
                {onBulkDuplicate && (
                  <Button
@@ -404,8 +404,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         </Table>
       </div>
 
-      <div className="flex items-center justify-between px-2">
-         <p className="text-[11px] font-medium text-muted-foreground/50 italic">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-2">
+         <p className="min-w-0 text-[11px] font-medium text-muted-foreground/50 italic">
             Tip: Usa Tab para moverte entre celdas y Enter para guardar. O pega desde Excel.
          </p>
          <Button 

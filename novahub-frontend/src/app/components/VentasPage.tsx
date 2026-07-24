@@ -173,15 +173,15 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
 
 
   return (
-    <div className="flex flex-1 bg-background w-full">
-      <main className="flex-1 relative">
-        <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
+    <div className="sales-module flex min-w-0 flex-1 overflow-x-hidden bg-background w-full">
+      <main className="min-w-0 max-w-full flex-1 relative overflow-x-hidden">
+        <div className="min-w-0 max-w-full p-4 sm:p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-primary/10 rounded-xl">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="shrink-0 p-3 bg-primary/10 rounded-xl">
                 <ShoppingBag className="size-9 text-primary" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
                   Ventas <span className="text-primary">& CRM</span>
                 </h1>
@@ -197,7 +197,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
           </div>
 
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
-            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6")}>
+            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto min-w-0 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-nowrap overflow-x-auto justify-start gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none")}>
               {SALES_SECTIONS.map((section) => {
                 const hasAccess = !section.requiredModules || !user?.enabledModules
                   || user.enabledModules.includes('SALES')
@@ -207,7 +207,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 <TabsTrigger 
                   key={section.id} 
                   value={section.id}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+                  className="flex flex-none shrink-0 items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
                     data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
                 >
@@ -219,6 +219,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
             </TabsList>
           <AnimatePresence mode="wait">
             <motion.div
+              className="min-w-0 max-w-full"
               key={activeSection}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}

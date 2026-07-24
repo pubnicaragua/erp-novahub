@@ -58,6 +58,13 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
 
   const [draftProduct, setDraftProduct] = useState<any>({ ...defaultDraft });
 
+  // Categories arrive asynchronously when this modal is opened from POS.
+  // Select the first one once loaded so the required category is not left empty.
+  useEffect(() => {
+    if (!open || draftProduct.categoryId || effectiveCategories.length === 0) return;
+    setDraftProduct((prev: any) => ({ ...prev, categoryId: effectiveCategories[0].id }));
+  }, [open, draftProduct.categoryId, effectiveCategories]);
+
   const handleImageSelected = (file: File) => {
     if (draftProduct.imagePreviewUrl) URL.revokeObjectURL(draftProduct.imagePreviewUrl);
     setDraftProduct((prev: any) => ({ ...prev, imageFile: file, imagePreviewUrl: URL.createObjectURL(file) }));
@@ -122,13 +129,16 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           code: product.code,
           name: product.name,
           categoryId: product.categoryId,
+          type: product.itemType || 'PRODUCT',
+          trackInventory: product.itemType === 'PRODUCT',
+          trackSeries: Boolean(product.trackSerialNumbers),
           salePrice: convertedSale,
           costPrice: convertedCost,
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           itemType: product.itemType || 'PRODUCT',
           initialStock: 0,
           imageUrl: uploadedImageUri || undefined,
-        });
+        } as any);
 
         const created = (createdResponse as any)?.data || createdResponse;
         const createdId = created?.id;
@@ -320,7 +330,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           </div>
 
           {/* TABLA INFERIOR */}
-          <div className="border rounded-md bg-card flex-1 overflow-auto min-h-[200px]">
+          <div className="sales-responsive-table border rounded-md bg-card flex-1 overflow-auto min-h-[200px]">
              <Table>
                <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
                  <TableRow>

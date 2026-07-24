@@ -204,7 +204,7 @@ function CountryDetail({ country, onRefresh }: { country: CountryConfig; onRefre
   return (
     <div className="space-y-4">
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-4">
+        <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-4 [&>button]:flex-none">
           <TabsTrigger value="impacto"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
             <BarChart3 className="size-4" /> Checklist Impacto

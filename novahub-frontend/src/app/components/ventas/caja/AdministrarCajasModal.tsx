@@ -100,8 +100,8 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-5xl max-h-[85vh] flex flex-col">
-          <DialogHeader className="flex flex-row items-center justify-between">
+        <DialogContent className="sales-modal sm:max-w-5xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <DialogTitle className="flex items-center gap-2 text-lg font-black">
                 <Banknote className="size-5 text-primary" /> Puntos de Venta (Cajas)
@@ -121,7 +121,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
             {cajasLoading ? (
               <div className="flex items-center justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-border">
+              <div className="sales-responsive-table rounded-lg border border-border">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/20">

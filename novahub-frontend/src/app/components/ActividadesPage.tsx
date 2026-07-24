@@ -108,7 +108,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
             setActiveTab(val);
             if (onSubModuleChange) onSubModuleChange(val);
           }}>
-            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6")}>
+            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none")}>
               {tabs.map((tab) => {
                 const hasRequired = user?.enabledModules?.includes(tab.module);
                 const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('ACTIVITIES_'));

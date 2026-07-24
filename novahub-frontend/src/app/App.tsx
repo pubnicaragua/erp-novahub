@@ -219,14 +219,14 @@ function DashboardLayout() {
         onClose={() => setSidebarOpen(false)}
         onOverview={handleOverview}
       />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar
           onMenuClick={() => setSidebarOpen(true)}
           onNavigate={handleNavigate}
           isCollapsed={isCollapsed}
           onToggleCollapse={handleToggleCollapse}
         />
-        <main className="flex-1 overflow-y-auto">
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
           {renderContent()}
         </main>
       </div>
