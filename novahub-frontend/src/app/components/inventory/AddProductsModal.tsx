@@ -57,6 +57,26 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
   };
 
   const [draftProduct, setDraftProduct] = useState<any>({ ...defaultDraft });
+  
+  const [skuError, setSkuError] = useState('');
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const validateSkuDebounced = (code: string) => {
+    if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+    if (!code.trim()) {
+      setSkuError('');
+      return;
+    }
+    debounceTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await inventoryService.checkProductCode(code);
+        const exists = response?.exists;
+        setSkuError(exists ? 'Código duplicado' : '');
+      } catch (e) {
+        console.error('Error validating SKU', e);
+      }
+    }, 1000);
+  };
 
   // Categories arrive asynchronously when this modal is opened from POS.
   // Select the first one once loaded so the required category is not left empty.
@@ -77,6 +97,9 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
 
   const handleUpdateDraft = (field: string, value: any) => {
     setDraftProduct((prev: any) => ({ ...prev, [field]: value }));
+    if (field === 'code') {
+      validateSkuDebounced(value as string);
+    }
   };
 
   const handleAddToList = () => {
@@ -98,6 +121,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       id: `draft-${Date.now()}`,
       categoryId: effectiveCategories[0]?.id || '',
     });
+    setSkuError('');
   };
 
   const handleRemoveFromList = (id: string) => {
@@ -211,14 +235,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
               />
             </div>
             <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="col-span-1">
+              <div className="col-span-1 relative">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Código *</label>
                 <Input 
                   value={draftProduct.code} 
                   onChange={e => handleUpdateDraft('code', e.target.value)} 
-                  className="h-8 text-xs font-mono mt-1" 
+                  className={`h-8 text-xs font-mono mt-1 ${skuError ? 'border-red-500 focus-visible:ring-red-500' : ''}`} 
                   placeholder="SKU-001" 
                 />
+                {skuError && <span className="text-[9px] text-red-500 absolute -bottom-3 left-0 font-bold uppercase tracking-wider">{skuError}</span>}
               </div>
               <div className="col-span-2">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Nombre *</label>
@@ -320,7 +345,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
               )}
               
               <div className={`col-span-5 flex justify-end ${draftProduct.itemType === 'SERVICE' ? 'mt-0' : 'mt-0'}`}>
-                <Button onClick={handleAddToList} className="h-8 text-xs font-bold" variant="secondary">
+                <Button onClick={handleAddToList} className="h-8 text-xs font-bold" variant="secondary" disabled={!!skuError}>
                   <Plus className="size-3 mr-2" />
                   Agregar a la lista
                 </Button>

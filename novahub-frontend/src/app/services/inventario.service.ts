@@ -16,6 +16,8 @@ export const inventoryService = {
   duplicateProduct: (id: string) => api.post<Product>(`/inventory/products/${id}/duplicate`, {}),
   updateProduct: (id: string, data: Partial<Product>) => api.patch<Product>(`/inventory/products/${id}`, data),
   deleteProduct: (id: string) => api.delete(`/inventory/products/${id}`),
+  checkProductCode: (code: string, excludeId?: string) => 
+    api.get<{ exists: boolean }>('/inventory/products/check-code', { code, excludeId } as any),
 
   // ==================== CATEGORIES ====================
   getCategories: () => api.get<any[]>('/inventory/categories'),

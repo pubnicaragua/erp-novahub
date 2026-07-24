@@ -133,6 +133,9 @@ export function SuscripcionesPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>('');
   const [uploading, setUploading] = useState(false);
+  const [passwordDialogUser, setPasswordDialogUser] = useState<any>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [pendingDeleteTenant, setPendingDeleteTenant] = useState<{ id: string; name: string } | null>(null);
 
   // Form state for module request
@@ -431,6 +434,24 @@ export function SuscripcionesPage() {
       console.error('Error operación masiva:', error);
       toast.error('Error en operación masiva', { id: 'batch-toggle' });
       fetchData();
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+    try {
+      setIsChangingPassword(true);
+      await tenantsService.updateUser(selectedTenant!.id, passwordDialogUser.id, { password: newPassword });
+      toast.success('Contraseña actualizada correctamente');
+      setPasswordDialogUser(null);
+      setNewPassword('');
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al cambiar la contraseña');
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -1021,15 +1042,50 @@ export function SuscripcionesPage() {
                       <p className="text-xs text-muted-foreground">{u.email}</p>
                     </div>
                   </div>
-                  <Badge variant="outline" className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 ${u.isActive ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-red-500/10 text-red-400 border-red-400/30'}`}>
-                    {u.isActive ? 'Activo' : 'Inactivo'}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 ${u.isActive ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-red-500/10 text-red-400 border-red-400/30'}`}>
+                      {u.isActive ? 'Activo' : 'Inactivo'}
+                    </Badge>
+                    <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full" onClick={() => setPasswordDialogUser(u)} title="Cambiar Contraseña">
+                      <KeyRound className="size-3" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             )) : <p className="text-center py-10 text-muted-foreground italic text-xs">No hay usuarios registrados</p>}
           </div>
           <DialogFooter>
             <Button variant="outline" className="w-full rounded-xl" onClick={() => setIsUserDialogOpen(false)}>Cerrar Panel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!passwordDialogUser} onOpenChange={(open) => !open && setPasswordDialogUser(null)}>
+        <DialogContent className="sm:max-w-md border-border/50">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="size-5 text-primary" />
+              Cambiar Contraseña
+            </DialogTitle>
+            <DialogDescription>
+              Introduce una nueva contraseña para el usuario <span className="font-bold text-foreground">{passwordDialogUser?.name}</span> ({passwordDialogUser?.email}).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Nueva Contraseña</Label>
+            <Input 
+              type="password" 
+              placeholder="Min. 6 caracteres" 
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="bg-muted/10 border-border/50 h-11 rounded-xl"
+            />
+          </div>
+          <DialogFooter className="gap-3">
+            <Button variant="outline" className="border-border/50 rounded-xl h-11" onClick={() => setPasswordDialogUser(null)} disabled={isChangingPassword}>Cancelar</Button>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-11 px-8 font-bold" onClick={handleChangePassword} disabled={isChangingPassword || newPassword.length < 6}>
+              {isChangingPassword ? 'Guardando...' : 'Guardar Contraseña'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

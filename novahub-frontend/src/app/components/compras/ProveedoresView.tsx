@@ -300,7 +300,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
               </Button>
             )}
             {canPerform('proveedores', 'create') && (
-              <Button onClick={handleAdd} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2">
+              <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-sm hover:shadow-md transition-all">
                 <Plus className="size-4" /> Nuevo Proveedor
               </Button>
             )}

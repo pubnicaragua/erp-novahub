@@ -5,24 +5,30 @@
 /* Sales module responsive guardrails. Keep layouts within the viewport and
    let dense data wrap instead of creating a second horizontal scrollbar. */
 .sales-module,
-.sales-module * {
+.sales-module *,
+.purchases-module,
+.purchases-module * {
   box-sizing: border-box;
 }
 
-.sales-module [data-slot="table-container"] {
+.sales-module [data-slot="table-container"],
+.purchases-module [data-slot="table-container"] {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
 }
 
-.sales-module [data-slot="table"] {
+.sales-module [data-slot="table"],
+.purchases-module [data-slot="table"] {
   width: 100%;
   max-width: 100%;
   table-layout: fixed;
 }
 
 .sales-module [data-slot="table-head"],
-.sales-module [data-slot="table-cell"] {
+.sales-module [data-slot="table-cell"],
+.purchases-module [data-slot="table-head"],
+.purchases-module [data-slot="table-cell"] {
   min-width: 0 !important;
   max-width: 100%;
   white-space: normal;
@@ -31,7 +37,10 @@
 
 .sales-module [data-slot="table-cell"] > *,
 .sales-module [data-slot="table-cell"] span,
-.sales-module [data-slot="table-cell"] p {
+.sales-module [data-slot="table-cell"] p,
+.purchases-module [data-slot="table-cell"] > *,
+.purchases-module [data-slot="table-cell"] span,
+.purchases-module [data-slot="table-cell"] p {
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -39,7 +48,10 @@
 
 .sales-module .sales-data-table,
 .sales-module .sales-data-table > div,
-.sales-module .sales-data-table table {
+.sales-module .sales-data-table table,
+.purchases-module .sales-data-table,
+.purchases-module .sales-data-table > div,
+.purchases-module .sales-data-table table {
   min-width: 0;
   max-width: 100%;
 }
@@ -47,12 +59,18 @@
 .sales-module input,
 .sales-module select,
 .sales-module textarea,
-.sales-module button {
+.sales-module button,
+.purchases-module input,
+.purchases-module select,
+.purchases-module textarea,
+.purchases-module button {
   max-width: 100%;
 }
 
 .sales-module .grid > *,
-.sales-module .flex > * {
+.sales-module .flex > *,
+.purchases-module .grid > *,
+.purchases-module .flex > * {
   min-width: 0;
 }
 
@@ -60,6 +78,37 @@
   width: 100%;
   max-width: 100%;
   overflow: hidden;
+}
+
+.responsive-data-table {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+}
+
+.responsive-data-table th,
+.responsive-data-table td {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.sales-module table:not([data-slot]),
+.purchases-module table:not([data-slot]) {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+}
+
+.sales-module table:not([data-slot]) th,
+.sales-module table:not([data-slot]) td,
+.purchases-module table:not([data-slot]) th,
+.purchases-module table:not([data-slot]) td {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .sales-responsive-table table {
@@ -78,12 +127,16 @@
 
 @media (max-width: 639px) {
   .sales-module .w-64,
-  .sales-module .w-\[220px\] {
+  .sales-module .w-\[220px\],
+  .purchases-module .w-64,
+  .purchases-module .w-\[220px\] {
     width: 100%;
   }
 
   .sales-module [data-slot="table-head"],
-  .sales-module [data-slot="table-cell"] {
+  .sales-module [data-slot="table-cell"],
+  .purchases-module [data-slot="table-head"],
+  .purchases-module [data-slot="table-cell"] {
     padding-left: 0.375rem;
     padding-right: 0.375rem;
   }

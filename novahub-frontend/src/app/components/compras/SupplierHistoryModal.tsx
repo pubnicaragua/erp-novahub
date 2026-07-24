@@ -184,7 +184,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
              </div>
           ) : (
             <div className="w-full">
-              <table className="w-full text-sm text-left">
+              <table className="responsive-data-table w-full text-sm text-left">
                 <thead className="text-xs uppercase bg-muted/50 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
                     <th className="px-4 py-3 font-semibold w-[100px]">Fecha</th>

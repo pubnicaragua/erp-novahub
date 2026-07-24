@@ -18,7 +18,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ProductImagePicker, ProductThumbnail } from '../ui/ProductImage';
 import { storageService } from '../../services/storage.service';
-import { AddProductsModal } from './AddProductsModal';
+
 
 interface ProductosViewProps {
   products: any[];
@@ -75,10 +75,32 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDescription, setNewCategoryDescription] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
+  
+  const [skuErrors, setSkuErrors] = useState<Map<string, string>>(new Map());
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const validateSkuDebounced = (productId: string, code: string, isNew: boolean) => {
+    if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+    debounceTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await inventoryService.checkProductCode(code, isNew ? undefined : productId);
+        const exists = response?.exists;
+        setSkuErrors(prev => {
+          const next = new Map(prev);
+          if (exists) next.set(productId, 'Código duplicado');
+          else next.delete(productId);
+          return next;
+        });
+      } catch (e) {
+        console.error('Error validating SKU', e);
+      }
+    }, 1000);
+  };
+
   const newRowRef = useRef<HTMLInputElement>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [isAddProductsModalOpen, setIsAddProductsModalOpen] = useState(false);
+
 
   // Reset page to 1 when filters change
   useEffect(() => {
@@ -126,8 +148,23 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     return { label: 'OK', color: 'bg-green-500/10 text-green-500' };
   };
 
-  const handleOpenAddProductsModal = () => {
-    setIsAddProductsModalOpen(true);
+  const handleAddRow = () => {
+    const tempId = `new-${Date.now()}`;
+    const newProduct: EditingProduct = {
+      id: tempId,
+      code: '',
+      name: '',
+      categoryId: categories[0]?.id || '',
+      salePrice: '',
+      costPrice: '',
+      trackSerialNumbers: false,
+      itemType: 'PRODUCT',
+      isNew: true,
+      initialStock: 0,
+      initialAllocations: warehouses.length > 0 ? [{ id: `alloc-${Date.now()}-0`, warehouseId: warehouses[0]?.id || '', quantity: 0 }] : []
+    };
+    setEditingRows(new Map(editingRows).set(tempId, newProduct));
+    setTimeout(() => newRowRef.current?.focus(), 100);
   };
 
   const handleEditRow = (product: any) => {
@@ -147,6 +184,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       itemType: (product.itemType || 'PRODUCT').toUpperCase() as 'PRODUCT' | 'SERVICE',
       imageUrl: product.imageUrl,
       imageStorageUri: product.imageUrlStorageUri || (String(product.imageUrl || '').startsWith('storage://') ? product.imageUrl : undefined),
+      initialAllocations: (product.stockLevels && product.stockLevels.length > 0)
+        ? product.stockLevels.map((sl: any, idx: number) => ({
+            id: `alloc-edit-${Date.now()}-${idx}`,
+            warehouseId: sl.warehouseId,
+            quantity: Number(sl.quantity) || 0,
+          }))
+        : [{ id: `alloc-edit-${Date.now()}-0`, warehouseId: '', quantity: 0 }]
     };
     setEditingRows(new Map(editingRows.set(product.id, editProduct)));
   };
@@ -201,6 +245,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         finalValue = Math.max(0, Number(value) || 0);
       }
       setEditingRows(new Map(editingRows.set(id, { ...current, [field]: finalValue })));
+      
+      if (field === 'code') {
+        validateSkuDebounced(id, finalValue as string, !!current.isNew);
+      }
     }
   };
 
@@ -210,7 +258,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     patch: Partial<{ warehouseId: string; quantity: number }>,
   ) => {
     const product = editingRows.get(productId);
-    if (!product || !product.isNew) return;
+    if (!product) return;
     const nextAllocations = (product.initialAllocations || []).map((item) =>
       item.id === allocationId ? { ...item, ...patch } : item,
     );
@@ -219,7 +267,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
   const addInitialAllocation = (productId: string) => {
     const product = editingRows.get(productId);
-    if (!product || !product.isNew) return;
+    if (!product) return;
     const next = [
       ...(product.initialAllocations || []),
       { id: `alloc-${Date.now()}-${(product.initialAllocations || []).length}`, warehouseId: '', quantity: 0 },
@@ -229,7 +277,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
   const removeInitialAllocation = (productId: string, allocationId: string) => {
     const product = editingRows.get(productId);
-    if (!product || !product.isNew) return;
+    if (!product) return;
     const current = product.initialAllocations || [];
     if (current.length <= 1) return;
     const next = current.filter((item) => item.id !== allocationId);
@@ -239,6 +287,11 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const handleSaveRow = async (id: string) => {
     const product = editingRows.get(id);
     if (!product) return;
+
+    if (skuErrors.get(id)) {
+      toast.error('Corrige el error en el código antes de guardar');
+      return;
+    }
 
     if (!product.name || !product.code) {
       toast.error('Nombre y código son requeridos');
@@ -330,6 +383,38 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           itemType: product.itemType || 'PRODUCT',
           imageUrl: nextImageUrl,
         });
+
+        const originalProduct = products.find(p => p.id === id);
+        const variantId = originalProduct?.variants?.[0]?.id;
+        if (product.itemType !== 'SERVICE' && variantId && product.initialAllocations) {
+          const allocations = product.initialAllocations.filter(item => item.warehouseId);
+          await Promise.all(
+            allocations.map(async (item) => {
+              const originalAlloc = originalProduct?.stockLevels?.find((sl: any) => sl.warehouseId === item.warehouseId);
+              const oldQuantity = Number(originalAlloc?.quantity || 0);
+              const newQuantity = Number(item.quantity || 0);
+              if (oldQuantity !== newQuantity) {
+                await inventoryService.updateStockLevel({
+                  productId: id,
+                  warehouseId: item.warehouseId,
+                  variantId: variantId,
+                  quantity: newQuantity,
+                  minStock: Number(originalAlloc?.minStock || 0),
+                });
+                const diff = newQuantity - oldQuantity;
+                await inventoryService.createMovement({
+                  productId: id,
+                  warehouseId: item.warehouseId,
+                  variantId: variantId,
+                  type: diff > 0 ? 'IN' : 'OUT',
+                  quantity: Math.abs(diff),
+                  reference: `AJUSTE-EDICION-${product.code || id}`,
+                });
+              }
+            })
+          );
+        }
+
         toast.success('Producto actualizado');
       }
       if (!product.isNew && product.imageStorageUri && product.imageStorageUri !== uploadedImageUri && (uploadedImageUri || product.removeImage)) {
@@ -420,19 +505,21 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     const isSaving = savingIds.has(product.id);
     return (
       <TableRow key={product.id} className="bg-blue-500/5">
-        <TableCell>
+        <TableCell className="align-top pt-3 relative">
           <Input
             ref={product.isNew ? newRowRef : undefined}
             value={product.code}
             onChange={(e) => handleUpdateField(product.id, 'code', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
-            placeholder="SKU-001"
-            className="h-8 text-xs font-mono"
+            className={`h-8 text-xs font-mono min-w-[90px] w-full ${skuErrors.get(product.id) ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
             disabled={isSaving}
           />
+          {skuErrors.get(product.id) && (
+            <span className="text-[9px] text-red-500 absolute -bottom-1 left-2 font-bold uppercase tracking-wider">{skuErrors.get(product.id)}</span>
+          )}
         </TableCell>
-        <TableCell>
-          <div className="flex min-w-[220px] items-start gap-3">
+        <TableCell className="align-top pt-3">
+          <div className="flex min-w-[200px] items-start gap-3">
             <ProductImagePicker
               src={product.imagePreviewUrl || product.imageUrl}
               productName={product.name}
@@ -440,51 +527,66 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               onSelect={(file) => handleImageSelected(product.id, file)}
               onRemove={() => handleImageRemoved(product.id)}
             />
-            <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="min-w-0 flex-1 space-y-2 mt-0.5">
               <Input
                 value={product.name}
                 onChange={(e) => handleUpdateField(product.id, 'name', e.target.value)}
                 onKeyDown={(e) => handleKeyDown(e, product.id)}
-                placeholder="Nombre del producto"
-                className="h-8 text-xs"
+                placeholder="Nombre"
+                className="h-8 text-xs w-full min-w-[200px]"
                 disabled={isSaving}
               />
               <Button
                 type="button"
                 variant={product.trackSerialNumbers ? 'default' : 'outline'}
                 size="sm"
-                className={`h-6 text-[9px] uppercase tracking-wider px-2 ${product.trackSerialNumbers ? 'bg-primary text-primary-foreground' : ''}`}
+                className={`h-6 text-[9px] uppercase tracking-wider px-2 w-full ${product.trackSerialNumbers ? 'bg-primary text-primary-foreground' : ''}`}
                 onClick={() => handleUpdateField(product.id, 'trackSerialNumbers', !product.trackSerialNumbers)}
                 disabled={isSaving}
               >
-                IMEI {product.trackSerialNumbers ? 'Activado' : 'Desactivado'}
+                IMEI {product.trackSerialNumbers ? 'Activo' : 'Inactivo'}
               </Button>
             </div>
           </div>
         </TableCell>
-        <TableCell>
-          <Select 
-            value={product.categoryId} 
-            onValueChange={(v) => handleUpdateField(product.id, 'categoryId', v)}
-            disabled={isSaving}
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="Categoría" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories.map((c: any) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <TableCell className="align-top pt-3">
+          <div className="space-y-1.5 min-w-[120px]">
+            <Select 
+              value={product.categoryId} 
+              onValueChange={(v) => handleUpdateField(product.id, 'categoryId', v)}
+              disabled={isSaving}
+            >
+              <SelectTrigger className="h-8 text-xs w-full min-w-[120px]">
+                <SelectValue placeholder="Categoría" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((c: any) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[9px] uppercase tracking-wider text-muted-foreground hover:text-primary px-2"
+                onClick={() => setCategoryModalOpen(true)}
+                disabled={isSaving}
+              >
+                <Plus className="size-3 mr-1" />
+                Categoría
+              </Button>
+            </div>
+          </div>
         </TableCell>
-        <TableCell>
+        <TableCell className="align-top pt-3">
           <Select 
             value={product.itemType || 'PRODUCT'} 
             onValueChange={(v) => handleUpdateField(product.id, 'itemType', v)}
             disabled={isSaving || !product.isNew}
           >
-            <SelectTrigger className="h-8 text-xs">
+            <SelectTrigger className="h-8 text-xs w-full min-w-[100px]">
               <SelectValue placeholder="Tipo" />
             </SelectTrigger>
             <SelectContent>
@@ -493,54 +595,32 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             </SelectContent>
           </Select>
         </TableCell>
-        <TableCell className="text-right">
+        <TableCell className="align-top pt-3">
           {product.itemType === 'SERVICE' ? (
-            <span className="text-xs text-muted-foreground/50 italic flex justify-end items-center h-8">N/A</span>
-          ) : product.isNew ? (() => {
+            <span className="text-xs text-muted-foreground/50 italic h-8 flex items-center">N/A</span>
+          ) : (() => {
             const allocations = product.initialAllocations || [];
-            const totalAllocated = allocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
             return (
-              <div className="space-y-2">
-                <div className="flex flex-col items-end gap-1.5">
-                  {allocations.map((alloc) => (
-                    <div key={alloc.id} className="flex items-center gap-1.5 bg-muted/30 rounded-lg px-2 py-1">
-                      <Select
-                        value={alloc.warehouseId || ''}
-                        onValueChange={(v) => updateInitialAllocation(product.id, alloc.id, { warehouseId: v })}
-                        disabled={isSaving}
-                      >
-                        <SelectTrigger className="h-7 text-xs min-w-[120px] border-none bg-transparent shadow-none px-1">
-                          <SelectValue placeholder="Bodega..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {warehouses.map((w: any) => (
-                            <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={alloc.quantity}
-                        onChange={(e) => updateInitialAllocation(product.id, alloc.id, { quantity: Math.max(0, parseInt(e.target.value) || 0) })}
-                        className="h-7 text-xs text-right w-16 border-none bg-transparent shadow-none"
-                        placeholder="0"
-                        disabled={isSaving}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-6 text-red-500/60 hover:text-red-500 hover:bg-red-500/10 rounded-md"
-                        onClick={() => removeInitialAllocation(product.id, alloc.id)}
-                        disabled={isSaving || allocations.length <= 1}
-                      >
-                        <Trash2 className="size-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center justify-between gap-2">
+              <div className="space-y-1.5 min-w-[120px]">
+                {allocations.map((alloc) => (
+                  <div key={alloc.id} className="h-8 flex items-center">
+                    <Select
+                      value={alloc.warehouseId || ''}
+                      onValueChange={(v) => updateInitialAllocation(product.id, alloc.id, { warehouseId: v })}
+                      disabled={isSaving}
+                    >
+                      <SelectTrigger className="h-8 text-xs w-full min-w-[120px] bg-muted/30">
+                        <SelectValue placeholder="Bodega..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {warehouses.map((w: any) => (
+                          <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+                <div className="pt-1">
                   <Button
                     type="button"
                     variant="ghost"
@@ -552,17 +632,52 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     <Plus className="size-3 mr-1" />
                     Bodega
                   </Button>
-                  <Badge className={`text-[10px] tabular-nums ${totalAllocated > 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/20 text-muted-foreground'}`}>
+                </div>
+              </div>
+            );
+          })()}
+        </TableCell>
+        <TableCell className="align-top pt-3 text-right">
+          {product.itemType === 'SERVICE' ? (
+            <span className="text-xs text-muted-foreground/50 italic h-8 flex items-center justify-end">N/A</span>
+          ) : (() => {
+            const allocations = product.initialAllocations || [];
+            const totalAllocated = allocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
+            return (
+              <div className="space-y-1.5 min-w-[90px]">
+                {allocations.map((alloc) => (
+                  <div key={alloc.id} className="h-8 flex items-center justify-end gap-1 bg-muted/30 rounded-lg px-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={alloc.quantity}
+                      onChange={(e) => updateInitialAllocation(product.id, alloc.id, { quantity: Math.max(0, parseInt(e.target.value) || 0) })}
+                      className="h-7 text-xs text-right w-16 border-none bg-transparent shadow-none"
+                      placeholder="0"
+                      disabled={isSaving}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 text-red-500/60 hover:text-red-500 hover:bg-red-500/10 rounded-md"
+                      onClick={() => removeInitialAllocation(product.id, alloc.id)}
+                      disabled={isSaving || allocations.length <= 1}
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                ))}
+                <div className="pt-1 flex justify-end">
+                  <Badge className={`text-[10px] tabular-nums h-6 flex items-center ${totalAllocated > 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/20 text-muted-foreground'}`}>
                     Total: {totalAllocated}
                   </Badge>
                 </div>
               </div>
             );
-          })() : (
-            <span className="text-xs text-muted-foreground">-</span>
-          )}
+          })()}
         </TableCell>
-        <TableCell>
+        <TableCell className="align-top pt-3">
           <Input
             type="number"
             min={0}
@@ -570,11 +685,11 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             value={product.salePrice}
             onChange={(e) => handleUpdateField(product.id, 'salePrice', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
-            className="h-8 text-xs text-right"
+            className="h-8 text-xs text-right min-w-[90px]"
             disabled={isSaving}
           />
         </TableCell>
-        <TableCell>
+        <TableCell className="align-top pt-3">
           <Input
             type="number"
             min={0}
@@ -582,16 +697,16 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             value={product.costPrice}
             onChange={(e) => handleUpdateField(product.id, 'costPrice', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
-            className="h-8 text-xs text-right"
+            className="h-8 text-xs text-right min-w-[90px]"
             disabled={isSaving}
           />
         </TableCell>
-        <TableCell className="text-right">
+        <TableCell className="text-right align-top pt-4">
           <Badge className={(Number(product.salePrice || 0) - Number(product.costPrice || 0)) >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}>
             {formatAmount(Number(product.salePrice || 0) - Number(product.costPrice || 0), baseCurrency)}
           </Badge>
         </TableCell>
-        <TableCell className="text-right">
+        <TableCell className="text-right align-top pt-3">
           <div className="flex items-center justify-end gap-1">
             <Button 
               variant="ghost" 
@@ -834,7 +949,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <Button 
               size="sm" 
               className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
-              onClick={handleOpenAddProductsModal}
+              onClick={handleAddRow}
             >
               <Plus className="size-4" />
               Agregar
@@ -1301,13 +1416,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         </DialogContent>
         </Dialog>
 
-        <AddProductsModal 
-          open={isAddProductsModalOpen} 
-          onOpenChange={setIsAddProductsModalOpen}
-          categories={categories}
-          warehouses={warehouses}
-          onRefresh={onRefresh}
-        />
+
       </Card>
     );
 }

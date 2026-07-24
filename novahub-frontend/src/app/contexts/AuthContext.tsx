@@ -493,6 +493,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem('nh-auth-token');
+    localStorage.removeItem('erp-active-module');
+    localStorage.removeItem('erp-active-submodule');
   }, []);
 
   const switchIdentity = useCallback(async (userId: string) => {
@@ -503,6 +505,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
       localStorage.setItem('nh-auth-token', response.access_token);
+      localStorage.removeItem('erp-active-module');
+      localStorage.removeItem('erp-active-submodule');
       
       setUser(createUserObject(response.user));
       window.location.reload(); // Recargar para asegurar que todos los servicios se reinicien
