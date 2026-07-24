@@ -195,7 +195,7 @@ function DashboardLayout() {
       case 'transferencias': return <TransferenciasPage />;
       case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'roles': return <ConfiguracionPage initialTab="roles" />;
-      case 'configuracion': return <ConfiguracionPage />;
+      case 'configuracion': return <ConfiguracionPage initialTab={activeSubModule || 'branding'} />;
       case 'suscripciones': return <SuscripcionesPage />;
       case 'schema': return <PrismaSchemaPage />;
       case 'financiamiento-pyme': return <FinanciamientoPymePage />;

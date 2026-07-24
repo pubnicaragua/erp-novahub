@@ -17,6 +17,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '..
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { CajaSetupGuide } from './caja/CajaSetupGuide';
 import { getApiErrorMessage } from '../../services/api';
+import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
 
 type SectionType = 'dashboard' | 'session' | 'history';
 
@@ -34,6 +35,7 @@ export function ControlDashboardCajaView({
   const [activeSection, setActiveSection] = useState<SectionType>(initialSection || 'dashboard');
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [manageCajasOpen, setManageCajasOpen] = useState(false);
+  const [initialCajaModalMode, setInitialCajaModalMode] = useState<'create-register' | undefined>();
 
   const { displayCurrency, exchangeRate: globalRate } = useCurrency();
   const isUSD = displayCurrency === 'USD';
@@ -44,7 +46,6 @@ export function ControlDashboardCajaView({
     logs,
     loading,
     sessionStep,
-    setSessionStep,
     closureMode,
     countAttempts,
     savePartialCount,
@@ -69,6 +70,17 @@ export function ControlDashboardCajaView({
     if (initialRegisterId) setSelectedRegister(initialRegisterId);
     if (initialSection) setActiveSection(initialSection);
   }, [initialRegisterId, initialSection]);
+
+  useEffect(() => {
+    const context = consumeImplementationTourContext('ventas', 'control-caja');
+    if (!context) return;
+
+    if (context.action === 'open-cash-register-form') {
+      setActiveSection('session');
+      setInitialCajaModalMode('create-register');
+      setManageCajasOpen(true);
+    }
+  }, []);
 
   const loadRegisters = async () => {
     try {
@@ -491,6 +503,8 @@ export function ControlDashboardCajaView({
         open={manageCajasOpen} 
         onOpenChange={setManageCajasOpen}
         onRegistersChanged={loadRegisters}
+        initialMode={initialCajaModalMode}
+        onInitialModeHandled={() => setInitialCajaModalMode(undefined)}
       />
     </div>
   );

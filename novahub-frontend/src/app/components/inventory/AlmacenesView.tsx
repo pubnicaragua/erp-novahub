@@ -15,8 +15,9 @@ import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { SucursalesView } from './SucursalesView';
 import { Store } from 'lucide-react';
-import { api } from '../../services/api';
+import { api, getApiErrorMessage } from '../../services/api';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
 
 interface AlmacenesViewProps {
   warehouses: any[];
@@ -80,6 +81,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [isManageSucursalesDialogOpen, setIsManageSucursalesDialogOpen] = useState(false);
+  const [autoOpenSucursalForm, setAutoOpenSucursalForm] = useState(false);
 
   // Estados de Cajas
   const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
@@ -114,8 +116,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       const res = await cajaService.getRegisterAccess(caja.id!);
       setAllUsers(res.allUsers || []);
       setAssignedUsers(new Set(res.assignedUserIds || []));
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar accesos');
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, 'Error al cargar accesos'));
     } finally {
       setAccessLoading(false);
     }
@@ -124,12 +126,15 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const handleSaveAccess = async () => {
     if (!accessCaja) return;
     try {
-      await cajaService.updateRegisterAccess(accessCaja.id!, Array.from(assignedUsers));
+      await cajaService.updateRegisterAccess(
+        accessCaja.id!,
+        Array.from(assignedUsers).map((userId) => ({ userId, closureMode: 'NORMAL' as const }))
+      );
       toast.success('Accesos actualizados');
       setIsAccessModalOpen(false);
       setIsManageDialogOpen(true);
     } catch (e) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar accesos');
+      toast.error(getApiErrorMessage(e, 'Error al guardar accesos'));
     }
   };
 
@@ -138,8 +143,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     try {
       const res = await cajaService.getRegisters(true);
       setCajasList(Array.isArray(res) ? res : []);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar cajas');
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, 'Error al cargar cajas'));
     } finally {
       setCajasLoading(false);
     }
@@ -162,6 +167,22 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     };
     setEditingRows(new Map(editingRows.set(tempId, newWarehouse)));
   };
+
+  React.useEffect(() => {
+    const context = consumeImplementationTourContext('inventario', 'almacenes');
+    if (!context) return;
+
+    setShowTutorial(context.tourActive);
+    window.setTimeout(() => {
+      if (context.action === 'open-warehouse-form') {
+        handleAddNewRow();
+      }
+      if (context.action === 'open-branch-form') {
+        setAutoOpenSucursalForm(true);
+        setIsManageSucursalesDialogOpen(true);
+      }
+    }, 250);
+  }, []);
 
   const handleEditRow = (wh: any) => {
     const editWarehouse: EditingWarehouse = {
@@ -204,7 +225,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           location: warehouse.location,
           type: warehouse.type,
           parentId: warehouse.parentId,
-        });
+        } as any);
         toast.success('Almacén creado');
       } else {
         await inventoryService.updateWarehouse(id, {
@@ -212,7 +233,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           location: warehouse.location,
           type: warehouse.type,
           parentId: warehouse.parentId,
-        });
+        } as any);
         toast.success('Almacén actualizado');
       }
       handleCancelEdit(id);
@@ -510,18 +531,19 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         confirmLabel="Eliminar"
         variant="destructive"
         onConfirm={async () => {
+          if (!pendingDeleteCajaId) return;
           try {
             await cajaService.deleteRegister(pendingDeleteCajaId);
             toast.success('Caja eliminada');
             fetchCajas();
-          } catch(e: any) {
-            toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+          } catch(e) {
+            toast.error(getApiErrorMessage(e, 'Error al eliminar la caja'));
           } finally {
             setPendingDeleteCajaId(null);
           }
         }}
       />
-      {showTutorial && <GuidedTour steps={ALMACEN_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Almacenes y Sucursales" />}
+      {showTutorial && <GuidedTour steps={ALMACEN_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Almacenes y Sucursales" allowTargetInteraction />}
     </Card>
     {/* Modal de Gestión de Cajas */}
     <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>
@@ -661,7 +683,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
               setIsManageDialogOpen(true);
               fetchCajas();
             } catch (e) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la caja');
+              toast.error(getApiErrorMessage(e, 'Error al guardar la caja'));
             }
           }}>Guardar Caja</Button>
         </DialogFooter>
@@ -726,7 +748,13 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           <DialogDescription>Gestiona las sucursales asociadas a los almacenes.</DialogDescription>
         </DialogHeader>
         <div className="overflow-y-auto py-2">
-          <SucursalesView warehouses={warehouses} onRefresh={onRefresh} isModal={true} />
+          <SucursalesView
+            warehouses={warehouses}
+            onRefresh={onRefresh}
+            isModal={true}
+            autoOpenCreate={autoOpenSucursalForm}
+            onAutoOpenHandled={() => setAutoOpenSucursalForm(false)}
+          />
         </div>
       </DialogContent>
     </Dialog>

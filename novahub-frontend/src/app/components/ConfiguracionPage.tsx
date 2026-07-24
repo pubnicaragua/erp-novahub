@@ -424,6 +424,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [activeTab, setActiveTab] = useState(initialTab);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
   // Security state
   const [twoFaEnabled, setTwoFaEnabled] = useState(false);
   const [sessionTimeout, setSessionTimeout] = useState('480');

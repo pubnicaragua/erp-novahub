@@ -17,6 +17,11 @@ import {
 import { cajaService } from '../services/caja.service';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { ImplementationSetupDashboard } from './ImplementationSetupDashboard';
+import {
+  getImplementationSetupSummary,
+  type ImplementationSetupSummary,
+} from '../services/implementation-setup.service';
 
 interface TenantOverviewProps {
   onNavigate?: (module: Module) => void;
@@ -57,6 +62,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
   const [period, setPeriod] = useState('month');
   const [cajaData, setCajaData] = useState<any>(null);
   const [prevData, setPrevData] = useState<any>(null);
+  const [setupSummary, setSetupSummary] = useState<ImplementationSetupSummary | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const { formatConvertedAmount } = useCurrency();
 
@@ -69,6 +75,15 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
   const loadData = async () => {
     setLoading(true);
     try {
+      const setup = await getImplementationSetupSummary();
+      setSetupSummary(setup);
+
+      if (!setup.isComplete) {
+        setCajaData(null);
+        setPrevData(null);
+        return;
+      }
+
       const [current, prev] = await Promise.all([
         cajaService.getDashboard(period).catch(() => null),
         cajaService.getDashboard('last-month' as any).catch(() => null),
@@ -260,6 +275,30 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
       iconBg: 'bg-cyan-500/10',
     },
   ] : [];
+
+  if (loading && !setupSummary) {
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background p-6">
+        <Loader2 className="size-8 animate-spin text-primary/40" />
+      </div>
+    );
+  }
+
+  if (setupSummary && !setupSummary.isComplete) {
+    return (
+      <ImplementationSetupDashboard
+        summary={setupSummary}
+        onRefresh={async () => {
+          setLoading(true);
+          try {
+            setSetupSummary(await getImplementationSetupSummary(true));
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 p-4 md:p-6 pb-16">

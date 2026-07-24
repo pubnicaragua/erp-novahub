@@ -16,6 +16,7 @@ interface GuidedTourProps {
   onClose: () => void;
   onComplete?: () => void;
   title?: string;
+  allowTargetInteraction?: boolean;
 }
 
 interface HighlightRect {
@@ -41,7 +42,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiado' }: GuidedTourProps) {
+export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiado', allowTargetInteraction = false }: GuidedTourProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [highlight, setHighlight] = useState<HighlightRect | null>(null);
   const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -164,21 +165,21 @@ export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiad
   if (!currentStep || typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[10000]" aria-live="polite">
+    <div className={cn('fixed inset-0 z-[10000]', allowTargetInteraction && 'pointer-events-none')} aria-live="polite">
       {highlight ? (
         <>
-          <div className="fixed left-0 top-0 w-full bg-slate-950/75 backdrop-blur-[2px]" style={{ height: highlight.top }} />
-          <div className="fixed left-0 bg-slate-950/75 backdrop-blur-[2px]" style={{ top: highlight.top, width: highlight.left, height: highlight.height }} />
-          <div className="fixed right-0 bg-slate-950/75 backdrop-blur-[2px]" style={{ top: highlight.top, width: viewport.width - highlight.right, height: highlight.height }} />
-          <div className="fixed bottom-0 left-0 w-full bg-slate-950/75 backdrop-blur-[2px]" style={{ top: highlight.bottom }} />
-          <div className="fixed z-[10001]" style={{ top: highlight.top, left: highlight.left, width: highlight.width, height: highlight.height }} />
+          <div className={cn('fixed left-0 top-0 w-full bg-slate-950/75 backdrop-blur-[2px]', allowTargetInteraction && 'pointer-events-auto')} style={{ height: highlight.top }} />
+          <div className={cn('fixed left-0 bg-slate-950/75 backdrop-blur-[2px]', allowTargetInteraction && 'pointer-events-auto')} style={{ top: highlight.top, width: highlight.left, height: highlight.height }} />
+          <div className={cn('fixed right-0 bg-slate-950/75 backdrop-blur-[2px]', allowTargetInteraction && 'pointer-events-auto')} style={{ top: highlight.top, width: viewport.width - highlight.right, height: highlight.height }} />
+          <div className={cn('fixed bottom-0 left-0 w-full bg-slate-950/75 backdrop-blur-[2px]', allowTargetInteraction && 'pointer-events-auto')} style={{ top: highlight.bottom }} />
+          <div className="pointer-events-none fixed z-[10001]" style={{ top: highlight.top, left: highlight.left, width: highlight.width, height: highlight.height }} />
           <div
             className="pointer-events-none fixed z-[10002] rounded-xl border-2 border-cyan-400 shadow-[0_0_0_3px_rgba(34,211,238,0.18),0_0_34px_rgba(34,211,238,0.5)] transition-all duration-200"
             style={{ top: highlight.top, left: highlight.left, width: highlight.width, height: highlight.height }}
           />
         </>
       ) : (
-        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-[2px]" />
+        <div className={cn('fixed inset-0 bg-slate-950/75 backdrop-blur-[2px]', allowTargetInteraction && 'pointer-events-auto')} />
       )}
 
       <div
@@ -187,7 +188,7 @@ export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiad
         aria-modal="true"
         aria-label={`${title}: ${currentStep.title}`}
         tabIndex={-1}
-        className="fixed z-[10003] overflow-y-auto overscroll-contain rounded-2xl border border-cyan-400/30 bg-slate-950 text-slate-100 shadow-[0_24px_80px_rgba(0,0,0,0.55)] outline-none"
+        className="pointer-events-auto fixed z-[10003] overflow-y-auto overscroll-contain rounded-2xl border border-cyan-400/30 bg-slate-950 text-slate-100 shadow-[0_24px_80px_rgba(0,0,0,0.55)] outline-none"
         style={tooltipStyle}
       >
         <div className="h-1 bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300" />

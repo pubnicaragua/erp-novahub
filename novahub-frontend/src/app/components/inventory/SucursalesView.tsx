@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Store, Plus, Trash2, Edit2, Loader2, MapPin } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -21,7 +21,18 @@ function toSucursalPayload(form: any) {
   };
 }
 
-export function SucursalesView({ warehouses, isModal = false }: { warehouses: any[], onRefresh: () => void, isModal?: boolean }) {
+export function SucursalesView({
+  warehouses,
+  isModal = false,
+  autoOpenCreate = false,
+  onAutoOpenHandled,
+}: {
+  warehouses: any[];
+  onRefresh: () => void;
+  isModal?: boolean;
+  autoOpenCreate?: boolean;
+  onAutoOpenHandled?: () => void;
+}) {
   const [branches, setBranches] = useState<any[]>([]);
   const [cajas, setCajas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +40,7 @@ export function SucursalesView({ warehouses, isModal = false }: { warehouses: an
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const autoOpenHandledRef = useRef(false);
 
   const fetchBranches = async () => {
     try {
@@ -50,6 +62,14 @@ export function SucursalesView({ warehouses, isModal = false }: { warehouses: an
   useEffect(() => {
     fetchBranches();
   }, []);
+
+  useEffect(() => {
+    if (!autoOpenCreate || autoOpenHandledRef.current) return;
+    autoOpenHandledRef.current = true;
+    setForm({ warehouseId: warehouses[0]?.id || '', isActive: true });
+    setIsFormOpen(true);
+    onAutoOpenHandled?.();
+  }, [autoOpenCreate, onAutoOpenHandled, warehouses]);
 
   const handleSave = async () => {
     if (!form.name || !form.code || !form.warehouseId) {
