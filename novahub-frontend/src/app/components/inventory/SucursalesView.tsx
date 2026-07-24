@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Store, Plus, Trash2, Edit2, Loader2, MapPin } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -9,9 +9,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { api } from '../../services/api';
+import { api, getApiErrorMessage } from '../../services/api';
 
-export function SucursalesView({ warehouses, onRefresh, isModal = false }: { warehouses: any[], onRefresh: () => void, isModal?: boolean }) {
+function toSucursalPayload(form: any) {
+  return {
+    name: String(form.name || '').trim(),
+    code: String(form.code || '').trim(),
+    location: String(form.location || '').trim(),
+    warehouseId: form.warehouseId,
+    isActive: form.isActive !== false,
+  };
+}
+
+export function SucursalesView({ warehouses, isModal = false }: { warehouses: any[], onRefresh: () => void, isModal?: boolean }) {
   const [branches, setBranches] = useState<any[]>([]);
   const [cajas, setCajas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,7 +41,7 @@ export function SucursalesView({ warehouses, onRefresh, isModal = false }: { war
       const cajasData = Array.isArray(cajasRes) ? cajasRes : (cajasRes?.data || []);
       setCajas(cajasData);
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar sucursales');
+      toast.error(getApiErrorMessage(e, 'Error al cargar sucursales'));
     } finally {
       setLoading(false);
     }
@@ -47,17 +57,18 @@ export function SucursalesView({ warehouses, onRefresh, isModal = false }: { war
     }
     setSaving(true);
     try {
+      const payload = toSucursalPayload(form);
       if (form.id) {
-        await api.put(`/sucursales/${form.id}`, form);
+        await api.put(`/sucursales/${form.id}`, payload);
         toast.success('Sucursal actualizada');
       } else {
-        await api.post('/sucursales', form);
+        await api.post('/sucursales', payload);
         toast.success('Sucursal creada');
       }
       setIsFormOpen(false);
       fetchBranches();
     } catch (e) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar sucursal');
+      toast.error(getApiErrorMessage(e, 'Error al guardar sucursal'));
     } finally {
       setSaving(false);
     }
@@ -70,7 +81,7 @@ export function SucursalesView({ warehouses, onRefresh, isModal = false }: { war
       toast.success('Sucursal eliminada');
       fetchBranches();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar sucursal');
+      toast.error(getApiErrorMessage(e, 'Error al eliminar sucursal'));
     } finally {
       setDeleteId(null);
     }
@@ -143,7 +154,17 @@ export function SucursalesView({ warehouses, onRefresh, isModal = false }: { war
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => { setForm(b); setIsFormOpen(true); }}>
+                    <Button variant="ghost" size="icon" onClick={() => {
+                      setForm({
+                        id: b.id,
+                        name: b.name,
+                        code: b.code,
+                        location: b.location || '',
+                        warehouseId: b.warehouseId,
+                        isActive: b.isActive !== false,
+                      });
+                      setIsFormOpen(true);
+                    }}>
                       <Edit2 className="size-3.5" />
                     </Button>
                     <Button variant="ghost" size="icon" className="text-red-600 hover:bg-red-500 hover:text-white" onClick={() => setDeleteId(b.id)}>

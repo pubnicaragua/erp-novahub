@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
@@ -9,12 +9,22 @@ import { Badge } from '../../ui/badge';
 import { Banknote, Plus, Loader2, Edit2, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { cajaService, type CashRegister } from '../../../services/caja.service';
-import { api } from '../../../services/api';
+import { api, getApiErrorMessage } from '../../../services/api';
 
 interface AdministrarCajasModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRegistersChanged?: () => void;
+}
+
+function toCajaPayload(form: Partial<CashRegister>) {
+  return {
+    name: String(form.name || '').trim(),
+    code: String(form.code || '').trim(),
+    location: String(form.location || '').trim(),
+    branchId: form.branchId || undefined,
+    isActive: form.isActive !== false,
+  };
 }
 
 export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }: AdministrarCajasModalProps) {
@@ -36,7 +46,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
       const res = await cajaService.getRegisters(true);
       setCajasList(Array.isArray(res) ? res : []);
     } catch (e) {
-      toast.error('Error al cargar cajas');
+      toast.error(getApiErrorMessage(e, 'Error al cargar cajas'));
     } finally {
       setCajasLoading(false);
     }
@@ -68,7 +78,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
       setAllUsers(res.allUsers || []);
       setAssignedUsers(new Set(res.assignedUserIds || []));
     } catch (e) {
-      toast.error('Error al cargar accesos');
+      toast.error(getApiErrorMessage(e, 'Error al cargar accesos'));
     } finally {
       setAccessLoading(false);
     }
@@ -82,7 +92,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
       setIsAccessModalOpen(false);
       onOpenChange(true);
     } catch (e) {
-      toast.error('Error al guardar accesos');
+      toast.error(getApiErrorMessage(e, 'Error al guardar accesos'));
     }
   };
 
@@ -143,7 +153,14 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
                             </Button>
                             <Button variant="ghost" size="icon" onClick={() => {
                               onOpenChange(false);
-                              setCajaForm(caja);
+                              setCajaForm({
+                                id: caja.id,
+                                name: caja.name,
+                                code: caja.code,
+                                location: caja.location || '',
+                                branchId: caja.branchId,
+                                isActive: caja.isActive !== false,
+                              });
                               setIsCajaFormOpen(true);
                             }}>
                               <Edit2 className="size-4" />
@@ -156,7 +173,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
                                   fetchCajas();
                                   onRegistersChanged?.();
                                 } catch(e) {
-                                  toast.error('Error al eliminar');
+                                  toast.error(getApiErrorMessage(e, 'Error al eliminar la caja'));
                                 }
                               }
                             }}>
@@ -228,11 +245,12 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
             <Button onClick={async () => {
               if (!cajaForm.name || !cajaForm.code) return toast.error('Nombre y código son obligatorios');
               try {
+                const payload = toCajaPayload(cajaForm);
                 if (cajaForm.id) {
-                  await cajaService.updateRegister(cajaForm.id, cajaForm as any);
+                  await cajaService.updateRegister(cajaForm.id, payload);
                   toast.success('Caja actualizada');
                 } else {
-                  await cajaService.createRegister(cajaForm as any);
+                  await cajaService.createRegister(payload);
                   toast.success('Caja creada');
                 }
                 setIsCajaFormOpen(false);
@@ -240,7 +258,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }
                 fetchCajas();
                 onRegistersChanged?.();
               } catch (e) {
-                toast.error('Error al guardar la caja');
+                toast.error(getApiErrorMessage(e, 'Error al guardar la caja'));
               }
             }}>Guardar Caja</Button>
           </DialogFooter>

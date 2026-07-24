@@ -254,5 +254,5 @@ export const cajaService = {
   },
 
   getDashboard: (period?: string, registerId?: string, startDate?: string, endDate?: string) =>
-    api.get<DashboardData>('/caja/dashboard', { params: { period, registerId, startDate, endDate } }).then(res => res?.data !== undefined ? res.data : res),
+    api.get<DashboardData>('/caja/dashboard', { params: { period, registerId, startDate, endDate } }),
 };

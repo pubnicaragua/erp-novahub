@@ -1,8 +1,26 @@
-import { useState, useEffect, useCallback } from 'react';
-import { cajaService, CashRegisterSession, SessionLog } from '../services/caja.service';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { cajaService, CashRegisterSession, SessionLog } from '../services/caja.service';
+import { getApiErrorMessage } from '../services/api';
 
 export type SessionStep = 'idle' | 'active' | 'close_counting';
+
+function calculateExpectedAmount(
+  session: CashRegisterSession | null,
+  logs: SessionLog[],
+  currency: 'NIO' | 'USD'
+) {
+  const initial = Number(currency === 'NIO' ? session?.initialAmountNIO : session?.initialAmountUSD) || 0;
+
+  return logs.reduce((total, log) => {
+    if (log.paymentMethod && log.paymentMethod !== 'CASH') return total;
+
+    const amount = Number(currency === 'NIO' ? log.amountNIO : log.amountUSD) || 0;
+    if (log.type === 'SALE' || log.type === 'ENTRY') return total + amount;
+    if (log.type === 'EXIT') return total - amount;
+    return total;
+  }, initial);
+}
 
 export function useCajaSession(selectedRegister: string) {
   const [session, setSession] = useState<CashRegisterSession | null>(null);
@@ -12,28 +30,27 @@ export function useCajaSession(selectedRegister: string) {
 
   const loadSessionData = useCallback(async () => {
     if (!selectedRegister) return;
+
     setLoading(true);
     setSession(null);
     setLogs([]);
     setSessionStep('idle');
+
     try {
       const active = await cajaService.getActiveSession(selectedRegister);
       setSession(active || null);
-      if (active) {
-        const logData = await cajaService.getSessionLog(active.id);
-        setLogs(logData || []);
-        
-        if (active.status === 'COUNTING') {
-          setSessionStep('close_counting');
-        } else {
-          setSessionStep('active');
-        }
-      } else {
+
+      if (!active) {
         setSessionStep('idle');
+        return;
       }
-    } catch (err: any) {
+
+      const logData = await cajaService.getSessionLog(active.id);
+      setLogs(logData || []);
+      setSessionStep(active.status === 'COUNTING' ? 'close_counting' : 'active');
+    } catch (err) {
       console.error(err);
-      toast.error('Error al cargar la sesión: ' + (err.message || 'Error desconocido'));
+      toast.error(getApiErrorMessage(err, 'Error al cargar la sesion de caja'));
     } finally {
       setLoading(false);
     }
@@ -42,18 +59,6 @@ export function useCajaSession(selectedRegister: string) {
   useEffect(() => {
     loadSessionData();
   }, [loadSessionData]);
-
-  const expectedNIO = session?.initialAmountNIO 
-    ? Number(session.initialAmountNIO) + 
-      logs.filter(l => (l.type === 'SALE' || l.type === 'ENTRY') && (!l.paymentMethod || l.paymentMethod === 'CASH')).reduce((acc, l) => acc + Number(l.amountNIO || 0), 0) -
-      logs.filter(l => l.type === 'EXIT' && (!l.paymentMethod || l.paymentMethod === 'CASH')).reduce((acc, l) => acc + Number(l.amountNIO || 0), 0)
-    : 0;
-
-  const expectedUSD = session?.initialAmountUSD 
-    ? Number(session.initialAmountUSD) + 
-      logs.filter(l => (l.type === 'SALE' || l.type === 'ENTRY') && (!l.paymentMethod || l.paymentMethod === 'CASH')).reduce((acc, l) => acc + Number(l.amountUSD || 0), 0) -
-      logs.filter(l => l.type === 'EXIT' && (!l.paymentMethod || l.paymentMethod === 'CASH')).reduce((acc, l) => acc + Number(l.amountUSD || 0), 0)
-    : 0;
 
   const openSession = async (dto: any) => {
     await cajaService.openSession(dto);
@@ -84,12 +89,12 @@ export function useCajaSession(selectedRegister: string) {
     loading,
     sessionStep,
     setSessionStep,
-    expectedNIO,
-    expectedUSD,
+    expectedNIO: calculateExpectedAmount(session, logs, 'NIO'),
+    expectedUSD: calculateExpectedAmount(session, logs, 'USD'),
     refreshSession: loadSessionData,
     openSession,
     addMovement,
     savePartialCount,
-    closeSession
+    closeSession,
   };
 }

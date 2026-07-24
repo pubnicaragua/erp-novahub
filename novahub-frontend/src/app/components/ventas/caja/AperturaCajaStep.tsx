@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Lock } from 'lucide-react';
 import { DenominationCounter, NIO_BILLS, NIO_COINS, USD_BILLS, USD_COINS, DenominationState } from './DenominationCounter';
 import { useCurrency } from '../../../contexts/CurrencyContext';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '../../../services/api';
 
 interface AperturaCajaStepProps {
   selectedRegister: string;
@@ -48,8 +49,8 @@ export function AperturaCajaStep({ selectedRegister, onOpenSession }: AperturaCa
         notes: ''
       });
       toast.success('Caja aperturada exitosamente');
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Error al aperturar caja');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Error al aperturar caja'));
     }
   };
 

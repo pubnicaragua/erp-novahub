@@ -1,22 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { useCajaSession } from '../../hooks/useCajaSession';
 import { cajaService, CashRegister } from '../../services/caja.service';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
-import { Loader2, LayoutDashboard, Coins, History as HistoryIcon, Settings2, Eye } from 'lucide-react';
+import { Loader2, Coins, Settings2, Eye } from 'lucide-react';
 import { DashboardCajaView } from './DashboardCajaView';
 import { AperturaCajaStep } from './caja/AperturaCajaStep';
 import { SesionActivaStep } from './caja/SesionActivaStep';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../ui/table';
 import { Button } from '../ui/button';
 import { AdministrarCajasModal } from './caja/AdministrarCajasModal';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../ui/accordion';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { CajaSetupGuide } from './caja/CajaSetupGuide';
+import { getApiErrorMessage } from '../../services/api';
 
 type SectionType = 'dashboard' | 'session' | 'history';
 
@@ -44,12 +44,10 @@ export function ControlDashboardCajaView({
     logs,
     loading,
     sessionStep,
-    setSessionStep,
     expectedNIO,
     expectedUSD,
     openSession,
     addMovement,
-    savePartialCount,
     closeSession
   } = useCajaSession(selectedRegister);
 
@@ -78,7 +76,7 @@ export function ControlDashboardCajaView({
         setSelectedRegister(openRegister ? openRegister.id : registersData[0].id);
       }
     } catch (err) {
-      toast.error('Error al cargar cajas');
+      toast.error(getApiErrorMessage(err, 'Error al cargar cajas'));
     }
   };
 
@@ -86,8 +84,8 @@ export function ControlDashboardCajaView({
     try {
       const data = await cajaService.getSessionHistory(selectedRegister === 'ALL' ? undefined : selectedRegister);
       setHistoryItems(data.items || []);
-    } catch {
-      toast.error('Error al cargar historial');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Error al cargar historial de caja'));
     }
   };
 
@@ -181,6 +179,13 @@ export function ControlDashboardCajaView({
 
         {activeSection === 'session' && selectedRegister !== 'ALL' && (
           <div className="space-y-4">
+            <CajaSetupGuide
+              registers={registers}
+              selectedRegister={selectedRegister}
+              onSelectRegister={setSelectedRegister}
+              onRegistersChanged={loadRegisters}
+            />
+
             {sessionStep === 'idle' && (
               <AperturaCajaStep 
                 selectedRegister={selectedRegister} 
@@ -307,14 +312,14 @@ export function ControlDashboardCajaView({
                                       <div className="font-bold border-b pb-2">Denominación</div>
                                       <div className="font-bold border-b pb-2 text-right">Subtotal</div>
                                       {h.denominations.filter((d: any) => d.phase === 'OPEN').map((d: any, i: number) => (
-                                        <React.Fragment key={i}>
+                                        <Fragment key={i}>
                                           <div className="flex items-center">
                                             {d.currency === 'NIO' ? 'C$' : '$'} {d.value} x {d.quantity}
                                           </div>
                                           <div className="font-mono text-right font-medium">
                                             {Number(d.subtotal).toFixed(2)}
                                           </div>
-                                        </React.Fragment>
+                                        </Fragment>
                                       ))}
                                     </div>
                                   </DialogContent>
@@ -378,14 +383,14 @@ export function ControlDashboardCajaView({
                                         <div className="font-bold border-b pb-2">Denominación</div>
                                         <div className="font-bold border-b pb-2 text-right">Subtotal</div>
                                         {h.denominations.filter((d: any) => d.phase === 'CLOSE').map((d: any, i: number) => (
-                                          <React.Fragment key={i}>
+                                          <Fragment key={i}>
                                             <div className="flex items-center">
                                               {d.currency === 'NIO' ? 'C$' : '$'} {d.value} x {d.quantity}
                                             </div>
                                             <div className="font-mono text-right font-medium">
                                               {Number(d.subtotal).toFixed(2)}
                                             </div>
-                                          </React.Fragment>
+                                          </Fragment>
                                         ))}
                                       </div>
                                     </DialogContent>
