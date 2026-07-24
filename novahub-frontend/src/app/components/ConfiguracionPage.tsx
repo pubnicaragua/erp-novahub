@@ -521,6 +521,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       if (b.accentColor) setAccentHex(b.accentColor.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : b.accentColor);
       if (b.companyName) setCompanyName(b.companyName);
       if (b.logo) setLogoPreview(b.logo);
+      if (b.industry) setCompanyIndustry(b.industry);
       if (b.whiteLabel !== undefined) setWhiteLabel(b.whiteLabel);
       updateTheme(generateThemeFromColor(
         b.primaryColor?.startsWith('oklch') ? oklchToApproxHex(b.primaryColor) : (b.primaryColor || '#10b981'),
@@ -529,6 +530,19 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       ));
     } catch (error) {
       console.error('Error fetching branding:', error);
+    }
+  };
+
+  const handleSaveCompanyInfo = async () => {
+    try {
+      updateConfig({ tenantName: companyName });
+      await brandingService.update({
+        companyName,
+        industry: companyIndustry,
+      });
+      toast.success('Información corporativa guardada');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Error al guardar la información');
     }
   };
 
@@ -674,16 +688,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       console.error('Error fetching modules:', error);
     } finally {
       setIsLoadingModules(false);
-    }
-  };
-
-  const handleSaveCompanyInfo = async () => {
-    try {
-      updateConfig({ tenantName: companyName });
-      await brandingService.update({ companyName });
-      toast.success('Información guardada');
-    } catch (error) {
-      toast.error('Error al guardar la información en el servidor');
     }
   };
 

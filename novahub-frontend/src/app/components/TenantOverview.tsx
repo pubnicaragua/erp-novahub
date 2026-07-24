@@ -4,12 +4,12 @@ import {
   DollarSign, TrendingDown, ShoppingCart, Target,
   ArrowUpRight, Loader2, AlertTriangle,
   TrendingUp, Coins, Clock, BarChart3, Package, Store, Receipt,
-  FileDown,
+  FileDown, ClipboardCheck,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { type Module } from '../contexts/AuthContext';
+import { type Module, useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -25,6 +25,7 @@ import {
 
 interface TenantOverviewProps {
   onNavigate?: (module: Module) => void;
+  onNavigateToDashboard?: () => void;
 }
 
 const containerVariants: Variants = {
@@ -57,28 +58,30 @@ const statusLabel: Record<string, string> = {
   REORDEN: 'Reordenar',
 };
 
-export function TenantOverview({ onNavigate }: TenantOverviewProps) {
+export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOverviewProps) {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
   const [cajaData, setCajaData] = useState<any>(null);
   const [prevData, setPrevData] = useState<any>(null);
   const [setupSummary, setSetupSummary] = useState<ImplementationSetupSummary | null>(null);
+  const [skipSetup, setSkipSetup] = useState(() => localStorage.getItem('erp-skip-setup') === 'true');
   const [isExporting, setIsExporting] = useState(false);
   const { formatConvertedAmount } = useCurrency();
+  const { user } = useAuth();
 
   const fmt = (amount: number) => formatConvertedAmount(amount);
 
   useEffect(() => {
     loadData();
-  }, [period]);
+  }, [period, user?.enabledModules]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const setup = await getImplementationSetupSummary();
+      const setup = await getImplementationSetupSummary(false, user?.enabledModules);
       setSetupSummary(setup);
 
-      if (!setup.isComplete) {
+      if (!setup.isComplete && !skipSetup) {
         setCajaData(null);
         setPrevData(null);
         return;
@@ -284,14 +287,20 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
     );
   }
 
-  if (setupSummary && !setupSummary.isComplete) {
+  if (setupSummary && !setupSummary.isComplete && !skipSetup) {
     return (
       <ImplementationSetupDashboard
         summary={setupSummary}
+        onNavigateToDashboard={() => {
+          setSkipSetup(true);
+          localStorage.setItem('erp-skip-setup', 'true');
+          onNavigateToDashboard?.();
+          loadData();
+        }}
         onRefresh={async () => {
           setLoading(true);
           try {
-            setSetupSummary(await getImplementationSetupSummary(true));
+            setSetupSummary(await getImplementationSetupSummary(true, user?.enabledModules));
           } finally {
             setLoading(false);
           }
@@ -330,6 +339,20 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
               ))}
             </SelectContent>
           </Select>
+          {setupSummary && !setupSummary.isComplete && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSkipSetup(false);
+                localStorage.removeItem('erp-skip-setup');
+              }}
+              className="rounded-xl border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary font-black uppercase text-[10px] tracking-widest gap-1.5"
+            >
+              <ClipboardCheck className="size-3.5" />
+              Ver Implementación
+            </Button>
+          )}
           <Button
             disabled={isExporting || loading}
             onClick={handleExport}

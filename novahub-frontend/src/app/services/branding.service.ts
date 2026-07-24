@@ -7,6 +7,7 @@ export interface Branding {
   accentColor: string;
   whiteLabel: boolean;
   companyName: string;
+  industry?: string;
 }
 
 export const brandingService = {

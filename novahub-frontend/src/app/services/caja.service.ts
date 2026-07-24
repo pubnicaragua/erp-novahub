@@ -120,6 +120,14 @@ export interface PosInvoice {
   items?: any[];
 }
 
+export type PosPaymentMethod = 'CASH' | 'CARD' | 'TRANSFER';
+export interface PosPaymentLine {
+  method: PosPaymentMethod;
+  amount: number;
+  reference?: string;
+  accountId?: string;
+}
+
 export interface DashboardKPIs {
   totalRevenue: number;
   totalExpenses: number;
@@ -214,12 +222,16 @@ export const cajaService = {
 
   createInvoice: (dto: {
     registerId: string;
+    sessionId: string;
     customerId?: string;
     customCustomerName?: string;
     date: string;
     discountPercent?: number;
     items: PosInvoiceItem[];
     includeTax?: boolean;
+    currency: 'NIO' | 'USD';
+    exchangeRate: number;
+    payments: PosPaymentLine[];
   }) =>
     api.post<PosInvoice>('/caja/invoices', dto),
 

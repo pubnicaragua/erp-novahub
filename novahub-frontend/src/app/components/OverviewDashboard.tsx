@@ -7,9 +7,10 @@ import { Loader2 } from 'lucide-react';
 
 interface OverviewDashboardProps {
   onNavigate?: (module: Module) => void;
+  onOverview?: () => void;
 }
 
-export function OverviewDashboard({ onNavigate }: OverviewDashboardProps) {
+export function OverviewDashboard({ onNavigate, onOverview }: OverviewDashboardProps) {
   const { user } = useAuth();
   const role = user?.role?.toLowerCase();
 
@@ -32,5 +33,5 @@ export function OverviewDashboard({ onNavigate }: OverviewDashboardProps) {
   }
 
   // --- TENANT ROLE (Default for admin, manager, employee, viewer) ---
-  return <TenantOverview onNavigate={onNavigate} />;
+  return <TenantOverview onNavigate={onNavigate} onNavigateToDashboard={onOverview} />;
 }

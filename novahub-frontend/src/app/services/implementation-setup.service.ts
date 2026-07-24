@@ -66,7 +66,7 @@ export interface ImplementationTourContext {
 export const IMPLEMENTATION_TOUR_STORAGE_KEY = 'novahub:implementation-setup-tour';
 const STEP_VALIDATION_TIMEOUT_MS = 2500;
 const SUMMARY_CACHE_TTL_MS = 45000;
-let cachedSummary: { value: ImplementationSetupSummary; createdAt: number } | null = null;
+let cachedSummary: { value: ImplementationSetupSummary; createdAt: number; moduleKey: string } | null = null;
 
 export function rememberImplementationTourContext(context: Omit<ImplementationTourContext, 'createdAt'>) {
   sessionStorage.setItem(IMPLEMENTATION_TOUR_STORAGE_KEY, JSON.stringify({
@@ -311,12 +311,42 @@ const STEP_DEFINITIONS: StepDefinition[] = [
   },
 ];
 
-export async function getImplementationSetupSummary(forceRefresh = false): Promise<ImplementationSetupSummary> {
-  if (!forceRefresh && cachedSummary && Date.now() - cachedSummary.createdAt < SUMMARY_CACHE_TTL_MS) {
+function hasModuleAccess(target: ImplementationNavigationTarget, enabledModules?: string[]) {
+  if (!enabledModules) return true;
+  if (target.module === 'overview') return true;
+
+  const has = (...modules: string[]) => modules.some((module) => enabledModules.includes(module));
+  const subModule = target.subModule || '';
+
+  if (target.module === 'configuracion') {
+    const configModule = subModule === 'empresa' ? 'CONFIG_COMPANY' : subModule === 'currency' ? 'CONFIG_CURRENCY' : subModule === 'roles' ? 'CONFIG_ROLES' : 'CONFIGURATION';
+    return has('CONFIGURATION', configModule, 'CONFIG_TENANCY', 'CONFIG_USERS');
+  }
+  if (target.module === 'ventas') {
+    const salesModule = subModule === 'clientes' ? 'SALES_CLIENTS' : subModule === 'estimaciones' ? 'SALES_QUOTES' : subModule === 'facturas' ? 'SALES_INVOICES' : subModule === 'pagos-recibidos' ? 'SALES_PAYMENTS' : subModule === 'control-caja' ? 'RETAIL_POS' : 'SALES';
+    return has('SALES', salesModule, 'SALES_POS');
+  }
+  if (target.module === 'inventario') {
+    const inventoryModule = subModule === 'productos' ? 'INVENTORY_PRODUCTS' : subModule === 'almacenes' ? 'INVENTORY_WAREHOUSES' : subModule === 'ajustes' ? 'INVENTORY_ADJUSTMENTS' : 'INVENTORY';
+    return has('INVENTORY', inventoryModule);
+  }
+  if (target.module === 'compras') {
+    const purchasingModule = subModule === 'proveedores' ? 'PURCHASES_PROVIDERS' : subModule === 'facturas-proveedor' ? 'PURCHASES_INVOICES' : subModule === 'gastos' ? 'PURCHASES_EXPENSES' : 'PURCHASES';
+    return has('PURCHASES', purchasingModule);
+  }
+  if (target.module === 'rh') return has('HR', 'HR_EMPLOYEES', 'HR_PAYROLL', 'HR_PAYROLL_CONFIG');
+  if (target.module === 'contabilidad') return has('ACCOUNTING', 'ACCOUNTING_CHART', 'ACCOUNTING_JOURNAL', 'ACCOUNTING_CONFIG');
+  return true;
+}
+
+export async function getImplementationSetupSummary(forceRefresh = false, enabledModules?: string[]): Promise<ImplementationSetupSummary> {
+  const moduleKey = enabledModules ? [...enabledModules].sort().join('|') : '*';
+  if (!forceRefresh && cachedSummary && cachedSummary.moduleKey === moduleKey && Date.now() - cachedSummary.createdAt < SUMMARY_CACHE_TTL_MS) {
     return cachedSummary.value;
   }
 
-  const settled = await Promise.allSettled(STEP_DEFINITIONS.map((definition) =>
+  const activeDefinitions = STEP_DEFINITIONS.filter((definition) => hasModuleAccess(definition.target, enabledModules));
+  const settled = await Promise.allSettled(activeDefinitions.map((definition) =>
     Promise.race([
       definition.load(),
       new Promise((_, reject) => {
@@ -325,7 +355,7 @@ export async function getImplementationSetupSummary(forceRefresh = false): Promi
     ])
   ));
 
-  const baseSteps = STEP_DEFINITIONS.map<ImplementationStep>((definition, index) => {
+  const baseSteps = activeDefinitions.map<ImplementationStep>((definition, index) => {
     const result = settled[index];
     if (result.status === 'rejected') {
       return {
@@ -407,6 +437,6 @@ export async function getImplementationSetupSummary(forceRefresh = false): Promi
     isComplete: completedRequiredSteps === requiredSteps.length,
   };
 
-  cachedSummary = { value: summary, createdAt: Date.now() };
+  cachedSummary = { value: summary, createdAt: Date.now(), moduleKey };
   return summary;
 }

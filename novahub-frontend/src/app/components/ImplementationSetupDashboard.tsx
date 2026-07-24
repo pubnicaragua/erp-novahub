@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   Clock3,
   FileWarning,
+  LayoutDashboard,
   PlayCircle,
 } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -25,6 +26,7 @@ import {
 interface ImplementationSetupDashboardProps {
   summary: ImplementationSetupSummary;
   onRefresh: () => void;
+  onNavigateToDashboard?: () => void;
 }
 
 const statusCopy: Record<ImplementationStatus, { label: string; className: string; icon: typeof Clock3 }> = {
@@ -85,7 +87,7 @@ function navigateToStep(step: ImplementationStep, tourActive: boolean, onRefresh
   }));
 }
 
-export function ImplementationSetupDashboard({ summary, onRefresh }: ImplementationSetupDashboardProps) {
+export function ImplementationSetupDashboard({ summary, onRefresh, onNavigateToDashboard }: ImplementationSetupDashboardProps) {
   const [showTour, setShowTour] = useState(false);
   const progress = Math.round((summary.completedRequiredSteps / Math.max(summary.requiredSteps, 1)) * 100);
   const pendingSteps = summary.steps.filter((step) => step.status !== 'completed').length;
@@ -120,25 +122,37 @@ export function ImplementationSetupDashboard({ summary, onRefresh }: Implementat
       <div className="mx-auto max-w-[1500px] space-y-5">
         <div
           data-tour="implementation-header"
-          className="relative overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm"
+          className="relative overflow-hidden rounded-3xl border border-border/50 bg-card/80 shadow-sm backdrop-blur-sm"
         >
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300" />
           <div className="absolute right-0 top-0 h-40 w-72 bg-primary/10 blur-3xl" />
-          <div className="relative z-10 flex flex-col gap-5 p-5 md:flex-row md:items-end md:justify-between">
+          <div className="relative z-10 flex flex-col gap-5 p-5 md:p-7 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
-              <Badge className="mb-3 border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-600">
-                Dashboard de arranque
+              <Badge className="mb-3 border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-primary">
+                Configuración inicial
               </Badge>
-              <h1 className="text-2xl font-black tracking-tight md:text-4xl">Implementacion del ERP</h1>
+              <h1 className="text-3xl font-black uppercase italic leading-none tracking-[-0.04em] md:text-5xl">
+                Implementación <span className="text-primary">del ERP</span>
+              </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Para operar correctamente, completa estos datos base. Cada objetivo abre el modulo real para cargar, revisar o corregir informacion en tiempo real.
+                Completa los datos base de los módulos habilitados para dejar NovaHub listo para operar. Cada objetivo abre el módulo real para cargar, revisar o corregir información en tiempo real.
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              {onNavigateToDashboard && (
+                <Button
+                  variant="outline"
+                  onClick={onNavigateToDashboard}
+                  className="gap-2 rounded-xl border-border/60 bg-background/50 font-black uppercase tracking-widest text-[10px]"
+                >
+                  <LayoutDashboard className="size-4" />
+                  Ir al dashboard
+                </Button>
+              )}
               <Button
                 onClick={() => setShowTour(true)}
-                className="gap-2 rounded-xl font-black"
+                className="gap-2 rounded-xl bg-primary font-black uppercase tracking-widest text-[10px] shadow-lg shadow-primary/20"
               >
                 <PlayCircle className="size-4" />
                 Recorrido guiado
@@ -147,13 +161,13 @@ export function ImplementationSetupDashboard({ summary, onRefresh }: Implementat
           </div>
         </div>
 
-        <Card data-tour="implementation-progress" className="overflow-hidden rounded-2xl border-border/50 bg-card shadow-sm">
+        <Card data-tour="implementation-progress" className="overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm backdrop-blur-sm">
           <CardContent className="p-5">
             <div className="grid gap-5 lg:grid-cols-[1fr_320px] lg:items-center">
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-black uppercase tracking-widest">Puesta en marcha</p>
+                    <p className="text-sm font-black uppercase italic tracking-widest">Puesta en marcha</p>
                     <p className="text-xs text-muted-foreground">
                       {summary.completedRequiredSteps}/{summary.requiredSteps} pasos requeridos completados
                     </p>
@@ -170,7 +184,7 @@ export function ImplementationSetupDashboard({ summary, onRefresh }: Implementat
                 <Progress value={progress} className="h-2" />
               </div>
 
-              <div className="grid grid-cols-3 gap-2 rounded-xl border border-border/50 bg-muted/20 p-2">
+              <div className="grid grid-cols-2 gap-2 rounded-xl border border-border/50 bg-muted/20 p-2">
                 <div className="rounded-lg bg-background/70 p-3 text-center">
                   <p className="text-xl font-black tabular-nums">{summary.completedSteps}</p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Listos</p>
@@ -179,18 +193,14 @@ export function ImplementationSetupDashboard({ summary, onRefresh }: Implementat
                   <p className="text-xl font-black tabular-nums">{pendingSteps}</p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Pendientes</p>
                 </div>
-                <div className="rounded-lg bg-background/70 p-3 text-center">
-                  <p className="text-xl font-black tabular-nums">{summary.steps.filter((step) => step.status === 'error').length}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Errores</p>
-                </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-border/50 bg-card shadow-sm">
+        <Card className="rounded-3xl border-border/50 bg-card/80 shadow-sm backdrop-blur-sm">
           <CardHeader className="border-b border-border/50 pb-4">
-            <CardTitle className="flex items-center gap-2 text-base font-black uppercase tracking-tight">
+            <CardTitle className="flex items-center gap-2 text-base font-black uppercase italic tracking-tight">
               <ClipboardCheck className="size-5 text-primary" />
               Objetivos iniciales de implementacion
             </CardTitle>
@@ -227,7 +237,7 @@ export function ImplementationSetupDashboard({ summary, onRefresh }: Implementat
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <p className={cn(
                           'text-sm font-black tracking-tight',
-                          completed && 'text-muted-foreground line-through decoration-2'
+                          completed && 'text-foreground'
                         )}>
                           Paso {step.order}/{summary.totalSteps} - {step.title}
                         </p>

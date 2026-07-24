@@ -7,7 +7,7 @@ import { z } from 'zod';
 import {
   Package, Mail, Lock, User, Building2, CheckCircle2, ArrowRight, ArrowLeft,
   Sparkles, Loader2, Store, Laptop, Wrench, Factory, HardHat, UtensilsCrossed,
-  Stethoscope, GraduationCap, Briefcase, Building, Upload,
+  Stethoscope, GraduationCap, Briefcase, Building, Upload, Eye, EyeOff,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -82,7 +82,7 @@ const LEFT_BRANDING = [
 ];
 
 const PARENT_SUBMODULES: Record<string, string[]> = {
-  SALES: ['SALES_CLIENTS', 'SALES_QUOTES', 'SALES_ORDERS', 'SALES_INVOICES', 'SALES_RECURRING', 'SALES_PAYMENTS', 'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_COMMISSIONS'],
+  SALES: ['SALES_CLIENTS', 'SALES_QUOTES', 'SALES_ORDERS', 'SALES_INVOICES', 'SALES_RECURRING', 'SALES_PAYMENTS', 'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_COMMISSIONS', 'RETAIL_POS'],
   PURCHASES: ['PURCHASES_PROVIDERS', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC', 'PURCHASES_REQUESTS', 'PURCHASES_QUOTES', 'PURCHASES_ORDERS', 'PURCHASES_RECEIPTS', 'PURCHASES_INVOICES', 'PURCHASES_INVOICES_REC', 'PURCHASES_RETURNS', 'PURCHASES_PAYMENTS'],
   INVENTORY: ['INVENTORY_PRODUCTS', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS', 'INVENTORY_ADJUSTMENTS', 'INVENTORY_MOVEMENTS', 'INVENTORY_COUNT', 'INVENTORY_SERIALS', 'INVENTORY_LOTS', 'INVENTORY_DASHBOARD'],
   FINANCIAL: ['FINANCIAL_ACCOUNTS', 'FINANCIAL_JOURNAL', 'FINANCIAL_LEDGER', 'FINANCIAL_BANK', 'FINANCIAL_BUDGET', 'FINANCIAL_REPORTS', 'FINANCIAL_INCOMES', 'FINANCIAL_EXPENSES', 'FINANCIAL_EXPENSES_REC', 'FINANCIAL_BALANCE', 'FINANCIAL_DASHBOARD', 'FINANCIAL_INCOMES_REC'],
@@ -93,14 +93,23 @@ const PARENT_SUBMODULES: Record<string, string[]> = {
   ACTIVITIES: ['ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS', 'ACTIVITIES_REMINDERS', 'ACTIVITIES_BITACORA', 'ACTIVITIES_LOGS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS'],
   CONFIGURATION: ['CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_ROLES', 'CONFIG_SECURITY', 'CONFIG_CURRENCY', 'CONFIG_USERS', 'CONFIG_SUBSCRIPTION', 'CONFIG_TENANCY', 'CONFIG_PLATFORM', 'CONFIG_DOMAINS'],
   NOTIFICATIONS: ['NOTIFICATIONS_ALERTS', 'NOTIFICATIONS_MESSAGES', 'NOTIFICATIONS_PUSH'],
-  ACCOUNTING: ['ACCOUNTING_CHART', 'ACCOUNTING_JOURNAL'],
-  LEGAL: [],
+  ACCOUNTING: ['ACCOUNTING_CHART', 'ACCOUNTING_JOURNAL', 'ACCOUNTING_TRIAL_BALANCE', 'ACCOUNTING_PROFIT_LOSS', 'ACCOUNTING_BALANCE_SHEET', 'ACCOUNTING_CASH_FLOW', 'ACCOUNTING_RECONCILIATION', 'ACCOUNTING_PERIODS', 'ACCOUNTING_FISCAL'],
+  LEGAL: ['LEGAL_CASES', 'LEGAL_REMINDERS'],
   TOOLS: [],
   FINANCING: [],
   NOVACHAT: [],
+  TICKETS: ['TICKETS_LIST', 'TICKETS_FAQS', 'TICKETS_AGENTS'],
+  TRAINING: ['TRAINING_COURSES'],
+  SUPPORT_TECH: [],
 };
 
 const SUBMODULE_NAMES_ES: Record<string, string> = {
+  TICKETS_LIST: 'Tickets',
+  TICKETS_FAQS: 'Base de Conocimiento',
+  TICKETS_AGENTS: 'Agentes',
+  TRAINING_COURSES: 'Cursos',
+  LEGAL_CASES: 'Casos',
+  LEGAL_REMINDERS: 'Recordatorios',
   SALES_CLIENTS: 'Clientes',
   SALES_QUOTES: 'Cotizaciones',
   SALES_ORDERS: 'Pedidos',
@@ -189,6 +198,14 @@ const SUBMODULE_NAMES_ES: Record<string, string> = {
   NOTIFICATIONS_PUSH: 'Notificaciones Push',
   ACCOUNTING_CHART: 'Plan de Cuentas',
   ACCOUNTING_JOURNAL: 'Libro Diario',
+  ACCOUNTING_TRIAL_BALANCE: 'Balance de Comprobación',
+  ACCOUNTING_PROFIT_LOSS: 'Estado de Resultados',
+  ACCOUNTING_BALANCE_SHEET: 'Balance General',
+  ACCOUNTING_CASH_FLOW: 'Flujo de Efectivo',
+  ACCOUNTING_RECONCILIATION: 'Conciliación Bancaria',
+  ACCOUNTING_PERIODS: 'Períodos Contables',
+  ACCOUNTING_FISCAL: 'Reportes Fiscales',
+  RETAIL_POS: 'Facturación por Caja',
 };
 const PARENT_KEYS = new Set(Object.keys(PARENT_SUBMODULES));
 
@@ -200,14 +217,38 @@ const PARENT_NAMES_ES: Record<string, string> = {
   HR: 'Recursos Humanos',
   PROJECTS: 'Proyectos',
   REPORTS: 'Reportes',
-  DOCUMENTS: 'Documentos',
+  DOCUMENTS: 'Nova Cloud',
   ACTIVITIES: 'Actividades',
   NOTIFICATIONS: 'Notificaciones',
   ACCOUNTING: 'Contabilidad',
   LEGAL: 'Asesoría Legal',
   TOOLS: 'Herramientas',
-  FINANCING: 'Financiamiento',
+  FINANCING: 'Financiamiento PYME',
   NOVACHAT: 'Nova Suite',
+  TICKETS: 'Tickets y Soporte',
+  TRAINING: 'Centro de Capacitación',
+  SUPPORT_TECH: 'Soporte Técnico',
+};
+
+const PARENT_DESCRIPTIONS_ES: Record<string, string> = {
+  SALES: 'Controla clientes, cotizaciones y facturación.',
+  PURCHASES: 'Gestiona proveedores, órdenes y gastos.',
+  INVENTORY: 'Bodegas, existencias y conteo físico.',
+  FINANCIAL: 'Cuentas bancarias, presupuestos y saldos.',
+  HR: 'Nómina, asistencia y gestión de personal.',
+  PROJECTS: 'Planificación de proyectos y tareas.',
+  REPORTS: 'Análisis detallado de todas las áreas.',
+  DOCUMENTS: 'Almacenamiento en la nube y archivos.',
+  ACTIVITIES: 'Calendario, eventos y recordatorios.',
+  NOTIFICATIONS: 'Alertas y avisos del sistema.',
+  ACCOUNTING: 'Libro diario, balances y flujo de caja.',
+  LEGAL: 'Seguimiento de casos legales y recordatorios.',
+  TOOLS: 'Utilidades y herramientas.',
+  FINANCING: 'Opciones de financiamiento PYME.',
+  NOVACHAT: 'Centro de mensajes omnicanal.',
+  TICKETS: 'Mesa de ayuda y base de conocimiento.',
+  TRAINING: 'Aprende a usar el ERP NovaHub.',
+  SUPPORT_TECH: 'Asistencia y soporte en vivo.',
 };
 
 const FALLBACK_PARENT_PRICES: Record<string, number> = {
@@ -216,7 +257,11 @@ const FALLBACK_PARENT_PRICES: Record<string, number> = {
   NOTIFICATIONS: 0, ACCOUNTING: 25, LEGAL: 15, TOOLS: 0, FINANCING: 0, NOVACHAT: 69,
 };
 
-const VISIBLE_PARENT_KEYS = Array.from(PARENT_KEYS).filter(k => k !== 'CONFIGURATION');
+const VISIBLE_PARENT_KEYS = [
+  'FINANCING', 'SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 
+  'ACCOUNTING', 'HR', 'ACTIVITIES', 'TICKETS', 'TRAINING', 
+  'SUPPORT_TECH', 'LEGAL', 'NOVACHAT', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS'
+];
 
 export function RegisterTenantPage() {
   const navigate = useNavigate();
@@ -243,6 +288,8 @@ export function RegisterTenantPage() {
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleModules, setNewRoleModules] = useState<string[]>([]);
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', roleName: '' });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showUserPassword, setShowUserPassword] = useState(false);
 
   const { register, handleSubmit, formState: { errors }, watch, setError: setFormError } = useForm<Step1Data>({
     resolver: zodResolver(step1Schema),
@@ -254,7 +301,7 @@ export function RegisterTenantPage() {
   useEffect(() => {
     if (step === 2 && industry && !recommendations) {
       setLoadingModules(true);
-      authService.getModuleRecommendations(industry)
+      authService.getModuleRecommendations(industry, companySize || undefined)
         .then((res: any) => {
           const data = res?.data || res;
           setRecommendations(data);
@@ -324,6 +371,8 @@ export function RegisterTenantPage() {
       const token = response?.access_token || response?.data?.access_token;
       const user = response?.user || response?.data?.user;
       if (token && user) {
+        localStorage.removeItem('erp-skip-setup');
+        localStorage.setItem('erp-active-module', 'overview');
         setSession(token, user);
         setShowWelcome(true);
         setTimeout(() => navigate('/dashboard'), 7000);
@@ -512,8 +561,11 @@ export function RegisterTenantPage() {
         <Label htmlFor="password" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Contraseña</Label>
         <div className="relative">
           <Lock className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input id="password" {...register('password')} type="password" placeholder="Mín. 8 caracteres, 1 mayúscula, 1 número" autoComplete="new-password"
-            className={cn('h-11 pl-11 rounded-xl bg-white/5 border-white/10', errors.password && 'border-destructive')} />
+          <Input id="password" {...register('password')} type={showPassword ? 'text' : 'password'} placeholder="Mín. 8 caracteres, 1 mayúscula, 1 número" autoComplete="new-password"
+            className={cn('h-11 pl-11 pr-11 rounded-xl bg-white/5 border-white/10', errors.password && 'border-destructive')} />
+          <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+            {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </button>
         </div>
         {errors.password && <p className="text-xs text-destructive ml-1">{errors.password.message}</p>}
       </div>
@@ -568,7 +620,7 @@ export function RegisterTenantPage() {
             const selected = industry === ind.key;
             return (
               <motion.button
-                key={ind.key} type="button" onClick={() => setIndustry(ind.key)}
+                key={ind.key} type="button" onClick={() => { setIndustry(ind.key); setRecommendations(null); }}
                 variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0 } }}
                 transition={{ type: 'spring', stiffness: 300, damping: 20 }}
                 whileHover={{ scale: 1.02 }}
@@ -595,7 +647,7 @@ export function RegisterTenantPage() {
         <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1 block mb-3">Tamaño de empresa</Label>
         <div className="grid grid-cols-2 gap-2.5">
           {COMPANY_SIZES.map((cs) => (
-            <button key={cs.key} type="button" onClick={() => setCompanySize(cs.key)}
+            <button key={cs.key} type="button" onClick={() => { setCompanySize(cs.key); setRecommendations(null); }}
               className={cn(
                 'rounded-2xl border border-border/50 p-3 cursor-pointer transition-all text-center',
                 companySize === cs.key ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'hover:border-primary/50',
@@ -728,7 +780,7 @@ export function RegisterTenantPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={cn('text-xs font-black', active ? (recommended ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary') : 'text-muted-foreground')}>
-                        ${mod.price}/mes
+                        {/* ${mod.price}/mes */}
                       </span>
                       {activeCount > 0 && activeCount < totalCount && (
                         <span className="text-[9px] uppercase font-black text-amber-600">{activeCount}/{totalCount}</span>
@@ -738,8 +790,9 @@ export function RegisterTenantPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-sm font-bold">{mod.name}</div>
-                      <div className={cn('text-[10px] mt-0.5', recommended ? 'text-emerald-600/70 dark:text-emerald-400/70' : 'text-muted-foreground')}>
-                        {recommended ? 'Incluido en tu trial' : `$${mod.price}/mes`}
+                      <p className="text-[11px] text-muted-foreground/80 mt-1 leading-tight">{PARENT_DESCRIPTIONS_ES[mod.module] || 'Módulo del sistema'}</p>
+                      <div className={cn('text-[10px] mt-1.5', recommended ? 'text-emerald-600/70 dark:text-emerald-400/70' : 'text-muted-foreground')}>
+                        {recommended ? 'Incluido en tu trial' : /* `$${mod.price}/mes` */ ''}
                       </div>
                     </div>
                     {hasSubs && showSubs && (
@@ -765,7 +818,7 @@ export function RegisterTenantPage() {
                             <span className={cn('size-1.5 rounded-full', subActive ? 'bg-emerald-500' : 'bg-muted-foreground/30')} />
                             {SUBMODULE_NAMES_ES[subKey] || subInfo?.name || subKey.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase())}
                           </span>
-                          <span className="text-[10px]">{subActive ? '✓ Activo' : `+$${subInfo?.price || 0}`}</span>
+                          <span className="text-[10px]">{subActive ? '✓ Activo' : /* `+$${subInfo?.price || 0}` */ ''}</span>
                         </button>
                       );
                     })}
@@ -789,13 +842,19 @@ export function RegisterTenantPage() {
           <h4 className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Módulos adicionales</h4>
           {renderParentCards(optionalParents, false)}
         </div>
-        <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-4 flex items-center justify-between">
+        {availableParents.length > 0 && (
+          <div className="space-y-3">
+            <h4 className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Otros Módulos</h4>
+            {renderParentCards(availableParents, false)}
+          </div>
+        )}
+        {/* <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-4 flex items-center justify-between">
           <div>
             <span className="text-sm text-emerald-700 dark:text-emerald-400">Total estimado si contratas:</span>
             <p className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70">Durante los 3 días de prueba, todos los módulos seleccionados son GRATIS</p>
           </div>
           <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">${totalPrice}/mes</span>
-        </div>
+        </div> */}
         <div className="flex gap-3 pt-2">
           <Button type="button" variant="outline" onClick={() => setStep(1)}
           className="h-12 rounded-xl font-bold uppercase tracking-widest gap-2 flex-1">
@@ -861,9 +920,12 @@ export function RegisterTenantPage() {
                         mod === 'PROJECTS' ? 'Proyectos' :
                         mod === 'NOTIFICATIONS' ? 'Notificaciones' :
                         mod === 'ACTIVITIES' ? 'Actividades' :
-                        mod === 'DOCUMENTS' ? 'Documentos' :
+                        mod === 'DOCUMENTS' ? 'Nova Cloud' :
                         mod === 'REPORTS' ? 'Reportes' :
                         mod === 'SUPPORT_TECH' ? 'Soporte Técnico' :
+                        mod === 'TICKETS' ? 'Tickets y Soporte' :
+                        mod === 'TRAINING' ? 'Centro de Capacitación' :
+                        mod === 'FINANCING' ? 'Financiamiento PYME' :
                         mod === 'TOOLS' ? 'Herramientas' :
                         mod === 'NOVACHAT' ? 'Nova Suite' :
                         mod.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
@@ -908,7 +970,12 @@ export function RegisterTenantPage() {
             type="email" 
             className="h-9 bg-white/5 text-xs border-border/50" 
           />
-          <Input value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="Contraseña" type="password" className="h-9 bg-white/5 text-xs border-border/50" />
+          <div className="relative">
+            <Input value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="Contraseña" type={showUserPassword ? 'text' : 'password'} className="h-9 bg-white/5 text-xs border-border/50 pr-8" />
+            <button type="button" onClick={() => setShowUserPassword(!showUserPassword)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+              {showUserPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+            </button>
+          </div>
           <select value={newUser.roleName} onChange={(e) => setNewUser({ ...newUser, roleName: e.target.value })} className="h-9 bg-white/5 text-xs rounded-md border border-border/50 px-2 outline-none text-muted-foreground">
             <option value="">Rol Base (Sin módulos extras)</option>
             {roles.map((r, i) => <option key={i} value={r.name}>{r.name}</option>)}
@@ -973,7 +1040,7 @@ export function RegisterTenantPage() {
   ];
 
   const renderWelcome = () => {
-    const selectedCount = selectedModules.length;
+    const selectedCount = selectedModules.filter(m => Object.keys(PARENT_SUBMODULES).includes(m)).length;
     const sizeLabel = COMPANY_SIZES.find(s => s.key === companySize)?.label || companySize || '';
     return (
       <motion.div

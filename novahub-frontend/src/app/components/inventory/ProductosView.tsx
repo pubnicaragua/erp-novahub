@@ -505,18 +505,20 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     const isSaving = savingIds.has(product.id);
     return (
       <TableRow key={product.id} className="bg-blue-500/5">
-        <TableCell className="align-top pt-3 relative">
-          <Input
-            ref={product.isNew ? newRowRef : undefined}
-            value={product.code}
-            onChange={(e) => handleUpdateField(product.id, 'code', e.target.value)}
-            onKeyDown={(e) => handleKeyDown(e, product.id)}
-            className={`h-8 text-xs font-mono min-w-[90px] w-full ${skuErrors.get(product.id) ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-            disabled={isSaving}
-          />
-          {skuErrors.get(product.id) && (
-            <span className="text-[9px] text-red-500 absolute -bottom-1 left-2 font-bold uppercase tracking-wider">{skuErrors.get(product.id)}</span>
-          )}
+        <TableCell className="align-top pt-3">
+          <div className="flex flex-col gap-1 w-full min-w-[90px]">
+            <Input
+              ref={product.isNew ? newRowRef : undefined}
+              value={product.code}
+              onChange={(e) => handleUpdateField(product.id, 'code', e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, product.id)}
+              className={`h-8 text-xs font-mono w-full ${skuErrors.get(product.id) ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+              disabled={isSaving}
+            />
+            {skuErrors.get(product.id) && (
+              <span className="text-[9px] text-red-500 font-bold uppercase tracking-wider leading-tight">{skuErrors.get(product.id)}</span>
+            )}
+          </div>
         </TableCell>
         <TableCell className="align-top pt-3">
           <div className="flex min-w-[200px] items-start gap-3">
@@ -713,7 +715,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               size="icon" 
               className="size-7 text-green-600 hover:text-green-700 hover:bg-green-500/10"
               onClick={() => handleSaveRow(product.id)}
-              disabled={isSaving}
+              disabled={isSaving || !!skuErrors.get(product.id)}
             >
               {isSaving ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Check className="size-4" />}
             </Button>

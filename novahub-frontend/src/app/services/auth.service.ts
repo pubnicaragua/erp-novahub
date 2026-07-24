@@ -40,8 +40,8 @@ export const authService = {
   registerTenant: (dto: RegisterTenantDto) =>
     api.post<AuthResponse>('/auth/register-tenant', dto),
 
-  getModuleRecommendations: (industry: string) =>
-    api.get<ModuleRecommendationsResponse>(`/auth/module-recommendations/${industry}`),
+  getModuleRecommendations: (industry: string, size?: string) =>
+    api.get<ModuleRecommendationsResponse>(`/auth/module-recommendations/${industry}${size ? `?size=${size}` : ''}`),
 
   checkEmail: (email: string) =>
     api.get<{ exists: boolean }>(`/auth/check-email?email=${encodeURIComponent(email)}`),

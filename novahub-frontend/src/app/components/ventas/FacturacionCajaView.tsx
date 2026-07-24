@@ -23,7 +23,11 @@ import {
   type PosCustomer,
   type PosInvoice,
   type PosInvoiceItem,
+  type PosPaymentLine,
+  type CashRegisterSession,
 } from '../../services/caja.service';
+import { accountsService } from '../../services/finanzas.service';
+import type { Account } from '../../types';
 import { AddProductsModal } from '../inventory/AddProductsModal';
 import { QuickAddCustomerModal } from './QuickAddCustomerModal';
 
@@ -64,6 +68,18 @@ const GENERAL_CUSTOMER_NAME = 'Cliente General';
 const MIN_QUANTITY = 1;
 const MIN_DISCOUNT_PERCENT = 0;
 const MAX_DISCOUNT_PERCENT = 100;
+
+type PaymentCurrency = 'NIO' | 'USD';
+
+function printPosTicket(invoice: PosInvoice, cart: CartItem[], currency: PaymentCurrency, exchangeRate: number) {
+  const win = window.open('', '_blank', 'width=420,height=700');
+  if (!win) return;
+  const money = (value: number) => `${currency === 'USD' ? '$' : 'C$'} ${value.toFixed(2)}`;
+  win.document.write(`<html><head><title>${invoice.number}</title><style>@page{size:80mm auto;margin:0}body{width:72mm;margin:4mm auto;font:12px monospace;color:#000}h2{text-align:center;margin:0 0 8px}.row{display:flex;justify-content:space-between;margin:3px 0}.line{border-top:1px dashed #000;margin:8px 0}small{font-size:10px}</style></head><body><h2>NOVAHUB</h2><div style="text-align:center">${invoice.number}<br>${new Date(invoice.date).toLocaleString('es-NI')}</div><div class="line">${cart.map(item => `<div class="row"><span>${item.quantity} x ${item.description}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div>`).join('')}</div><div class="row"><b>TOTAL</b><b>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</b></div><small>Gracias por su compra</small></body></html>`);
+  win.document.close();
+  win.focus();
+  win.print();
+}
 
 const POS_TOUR_STEPS: GuidedTourStep[] = [
   {
@@ -208,6 +224,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
   const [showTutorial, setShowTutorial] = useState(false);
   const [includeTax, setIncludeTax] = useState(true);
   const [catalogView, setCatalogView] = useState<CatalogViewMode>(getInitialCatalogView);
+  const [showPayment, setShowPayment] = useState(false);
+  const [paymentCurrency, setPaymentCurrency] = useState<PaymentCurrency>('NIO');
+  const [activeSession, setActiveSession] = useState<CashRegisterSession | null>(null);
+  const [bankAccounts, setBankAccounts] = useState<Account[]>([]);
+  const [payments, setPayments] = useState<PosPaymentLine[]>([{ method: 'CASH', amount: 0 }]);
+  const [createdInvoice, setCreatedInvoice] = useState<PosInvoice | null>(null);
+  const [createdTicketCart, setCreatedTicketCart] = useState<CartItem[]>([]);
 
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
@@ -219,6 +242,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
     if (selectedRegisterId && !skipSave) {
       cartSessions.current.set(selectedRegisterId, {
         cart,
+        selectedCustomerId,
         emitDate,
         discountPercent,
         includeTax
@@ -229,14 +253,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
     const savedSession = cartSessions.current.get(newRegisterId);
     if (savedSession) {
       setCart(savedSession.cart);
-      // Mantenemos el selectedCustomerId actual
+      setSelectedCustomerId(savedSession.selectedCustomerId);
       setEmitDate(savedSession.emitDate);
       setDiscountPercent(savedSession.discountPercent);
       setIncludeTax(savedSession.includeTax);
     } else {
       // Estado fresco
       setCart([]);
-      // Mantenemos el selectedCustomerId actual
+      setSelectedCustomerId(undefined);
       setEmitDate(getTodayInputDate());
       setDiscountPercent(0);
       setIncludeTax(true);
@@ -293,7 +317,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
 
   useEffect(() => {
     void loadInitialData();
+    accountsService.getAll({ page: 1, pageSize: 100 }).then((response: any) => {
+      const items = response?.data ?? response?.items ?? response;
+      setBankAccounts(Array.isArray(items) ? items.filter((account: Account) => account.isActive && account.type === 'asset') : []);
+    }).catch(() => setBankAccounts([]));
   }, [loadInitialData]);
+
+  useEffect(() => {
+    if (!selectedRegisterId) return;
+    cajaService.getActiveSession(selectedRegisterId).then(setActiveSession).catch(() => setActiveSession(null));
+  }, [selectedRegisterId]);
 
   useEffect(() => {
     try {
@@ -441,7 +474,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
     );
   };
 
-  const handlePay = async () => {
+  const handlePay = () => {
     if (cart.length === 0) {
       toast.error('Agregá al menos un producto');
       return;
@@ -452,20 +485,49 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
       return;
     }
 
+    if (!activeSession) {
+      toast.error('La caja no tiene una sesión activa');
+      return;
+    }
+    setPayments([{ method: 'CASH', amount: 0 }]);
+    setPaymentCurrency('NIO');
+    setCreatedInvoice(null);
+    setCreatedTicketCart([...cart]);
+    setShowPayment(true);
+  };
+
+  const submitPayment = async () => {
+    if (!activeSession) return;
+    const totalInPaymentCurrency = paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total;
+    const received = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    if (received + 0.005 < totalInPaymentCurrency) {
+      toast.error('El monto recibido debe ser igual o mayor al total');
+      return;
+    }
+    if (payments.some((payment) => payment.method === 'TRANSFER' && (!payment.accountId || !payment.reference?.trim()))) {
+      toast.error('La transferencia requiere cuenta bancaria y referencia');
+      return;
+    }
     setSubmitting(true);
     try {
       const createdResponse = await cajaService.createInvoice({
         registerId: selectedRegisterId,
+        sessionId: activeSession.id,
         customerId: selectedCustomerId,
         customCustomerName: selectedCustomerId ? undefined : GENERAL_CUSTOMER_NAME,
         date: emitDate,
         discountPercent: discountPercent || undefined,
         items: buildInvoiceItems(cart),
         includeTax,
+        currency: paymentCurrency,
+        exchangeRate: Number(activeSession.exchangeRateUSD),
+        payments,
       });
       const created = (createdResponse as any)?.data || createdResponse;
       
       toast.success('Factura emitida exitosamente');
+      setCreatedInvoice(created);
+      setShowPayment(false);
       
       // Limpiar datos en memoria de esta caja
       setCart([]);
@@ -941,6 +1003,95 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
         </Card>
       </div>
       </div>
+      )}
+      {createdInvoice && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-xl border bg-background p-3 shadow-xl">
+          <span className="text-xs font-bold">{createdInvoice.number}</span>
+          <Button size="sm" onClick={() => printPosTicket(createdInvoice, createdTicketCart, paymentCurrency, Number(activeSession?.exchangeRateUSD || 1))}>
+            Imprimir Ticket
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setCreatedInvoice(null)}>Cerrar</Button>
+        </div>
+      )}
+      {showPayment && activeSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-xl rounded-2xl border bg-background p-6 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between">
+              <div>
+                <h2 className="text-lg font-black">Checkout / Pago</h2>
+                <p className="text-xs text-muted-foreground">Sesión: {activeSession.id.slice(0, 8)} · Tasa de cambio (Global): {Number(activeSession.exchangeRateUSD).toFixed(2)}</p>
+              </div>
+              <Button variant="ghost" onClick={() => setShowPayment(false)}>✕</Button>
+            </div>
+            
+            {(() => {
+              const totalToPay = paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total;
+              const totalPaid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+              const changeLocal = Math.max(0, totalPaid * (paymentCurrency === 'USD' ? Number(activeSession.exchangeRateUSD) : 1) - summary.total);
+              
+              return (
+                <>
+                  <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="rounded-xl bg-primary/10 p-3">
+                      <span className="text-xs text-primary font-bold">Total a cobrar</span>
+                      <div className="text-xl font-black text-primary">{paymentCurrency === 'USD' ? '$' : 'C$'} {totalToPay.toFixed(2)}</div>
+                    </div>
+                    <div className="rounded-xl bg-muted/40 p-3 border border-border/50">
+                      <span className="text-xs text-muted-foreground">Total pagado</span>
+                      <div className="text-xl font-black">{paymentCurrency === 'USD' ? '$' : 'C$'} {totalPaid.toFixed(2)}</div>
+                    </div>
+                    <div className={cn("rounded-xl p-3 border", changeLocal > 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-muted/20 border-border/30 text-muted-foreground")}>
+                      <span className="text-xs font-bold">Cambio a entregar</span>
+                      <div className="text-xl font-black">C$ {changeLocal.toFixed(2)}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4 space-y-2">
+                    <Label>Moneda de pago</Label>
+                    <Select value={paymentCurrency} onValueChange={(value: PaymentCurrency) => setPaymentCurrency(value)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NIO">Córdobas (NIO)</SelectItem>
+                        <SelectItem value="USD">Dólares (USD)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {payments.map((payment, index) => (
+                      <div key={`${payment.method}-${index}`} className="rounded-xl border p-3">
+                        <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                          <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: value === 'TRANSFER' ? item.reference : undefined, accountId: value === 'TRANSFER' ? item.accountId : undefined } : item))}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="CASH">Efectivo</SelectItem>
+                              <SelectItem value="CARD">Tarjeta</SelectItem>
+                              <SelectItem value="TRANSFER">Transferencia</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input type="number" min="0" step="0.01" placeholder="Monto" value={payment.amount || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} />
+                          <Button variant="ghost" disabled={payments.length === 1} onClick={() => setPayments(current => current.filter((_, itemIndex) => itemIndex !== index))}>✕</Button>
+                        </div>
+                        {payment.method === 'CARD' && <Input className="mt-2" placeholder="Voucher / referencia (opcional)" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
+                        {payment.method === 'TRANSFER' && (
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                            <Select value={payment.accountId || ''} onValueChange={(value) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, accountId: value } : item))}>
+                              <SelectTrigger><SelectValue placeholder="Cuenta bancaria destino" /></SelectTrigger>
+                              <SelectContent>{bankAccounts.map(account => <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                            <Input placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <Button variant="outline" className="mt-3 w-full" onClick={() => setPayments(current => [...current, { method: 'CARD', amount: 0 }])}>+ Agregar pago mixto</Button>
+                </>
+              );
+            })()}
+            <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setShowPayment(false)}>Cancelar</Button><Button onClick={submitPayment} disabled={submitting}>{submitting ? <Loader2 className="size-4 animate-spin" /> : 'Confirmar y emitir'}</Button></div>
+          </div>
+        </div>
       )}
       {showTutorial && <GuidedTour steps={POS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Facturación por Caja" />}
       <AddProductsModal

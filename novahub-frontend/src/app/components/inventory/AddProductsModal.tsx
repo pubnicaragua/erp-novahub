@@ -129,12 +129,32 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
   };
 
   const handleSave = async () => {
-    if (productsList.length === 0) return;
+    const listToSave = [...productsList];
+    
+    if (productsList.length === 0) {
+      if (!draftProduct.code.trim() || !draftProduct.name.trim() || !draftProduct.categoryId) {
+        toast.error('Código, Nombre y Categoría son obligatorios');
+        return;
+      }
+      if (skuError) {
+        toast.error('Corrige el error en el código antes de guardar');
+        return;
+      }
+      const initialStockNum = Number(draftProduct.initialStock || 0);
+      if (draftProduct.itemType === 'PRODUCT' && initialStockNum > 0 && !draftProduct.initialWarehouseId) {
+        toast.error('Debes seleccionar un almacén para el stock inicial');
+        return;
+      }
+      listToSave.push(draftProduct);
+    }
+
+    if (listToSave.length === 0) return;
+    
     setIsSaving(true);
     let successCount = 0;
 
     try {
-      for (const product of productsList) {
+      for (const product of listToSave) {
         let uploadedImageUri: string | undefined;
         if (product.imageFile) {
           const uploaded = await storageService.uploadFile('product-image', product.imageFile, {
@@ -201,6 +221,12 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       }
       toast.success(`${successCount} producto(s) guardado(s) correctamente`);
       setProductsList([]);
+      setDraftProduct({
+        ...defaultDraft,
+        id: `draft-${Date.now()}`,
+        categoryId: effectiveCategories[0]?.id || '',
+      });
+      setSkuError('');
       onOpenChange(false);
       onRefresh();
     } catch (error: any) {
@@ -215,10 +241,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg font-black">
-            <Package className="size-5 text-primary" /> Agregar Múltiples Productos
+            <Package className="size-5 text-primary" /> Agregar productos
           </DialogTitle>
           <DialogDescription>
-            Llena los campos y haz clic en "Agregar a la lista". Cuando termines, presiona "Guardar productos".
+            Llena los campos para guardar un producto, o haz clic en "Agregar a la lista" si deseas crear varios al mismo tiempo.
           </DialogDescription>
         </DialogHeader>
 
@@ -235,15 +261,17 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
               />
             </div>
             <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="col-span-1 relative">
+              <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Código *</label>
-                <Input 
-                  value={draftProduct.code} 
-                  onChange={e => handleUpdateDraft('code', e.target.value)} 
-                  className={`h-8 text-xs font-mono mt-1 ${skuError ? 'border-red-500 focus-visible:ring-red-500' : ''}`} 
-                  placeholder="SKU-001" 
-                />
-                {skuError && <span className="text-[9px] text-red-500 absolute -bottom-3 left-0 font-bold uppercase tracking-wider">{skuError}</span>}
+                <div className="flex flex-col gap-1 mt-1 w-full">
+                  <Input 
+                    value={draftProduct.code} 
+                    onChange={e => handleUpdateDraft('code', e.target.value)} 
+                    className={`h-8 text-xs font-mono w-full ${skuError ? 'border-red-500 focus-visible:ring-red-500' : ''}`} 
+                    placeholder="SKU-001" 
+                  />
+                  {skuError && <span className="text-[9px] text-red-500 font-bold uppercase tracking-wider leading-tight">{skuError}</span>}
+                </div>
               </div>
               <div className="col-span-2">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Nombre *</label>
@@ -355,9 +383,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           </div>
 
           {/* TABLA INFERIOR */}
-          <div className="sales-responsive-table border rounded-md bg-card flex-1 overflow-auto min-h-[200px]">
-             <Table>
-               <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
+          {productsList.length > 0 && (
+            <div className="sales-responsive-table border rounded-md bg-card flex-1 overflow-auto min-h-[200px]">
+               <Table>
+                 <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
                  <TableRow>
                    <TableHead className="text-[10px] uppercase w-8"></TableHead>
                    <TableHead className="text-[10px] uppercase">Código</TableHead>
@@ -369,14 +398,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                  </TableRow>
                </TableHeader>
                <TableBody>
-                 {productsList.length === 0 ? (
-                   <TableRow>
-                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-xs italic">
-                       No has agregado ningún producto a la lista.
-                     </TableCell>
-                   </TableRow>
-                 ) : (
-                   productsList.map((product) => (
+                 {productsList.map((product) => (
                      <TableRow key={product.id}>
                        <TableCell className="p-2">
                          {product.imagePreviewUrl ? (
@@ -410,11 +432,11 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                          </Button>
                        </TableCell>
                      </TableRow>
-                   ))
-                 )}
+                   ))}
                </TableBody>
              </Table>
-          </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="mt-2 pt-4 border-t">
@@ -423,10 +445,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           </Button>
           <Button 
             onClick={handleSave} 
-            disabled={isSaving || productsList.length === 0}
+            disabled={isSaving || (productsList.length === 0 && (!!skuError || !draftProduct.code.trim() || !draftProduct.name.trim()))}
             className="font-bold bg-primary text-primary-foreground"
           >
-            {isSaving ? 'Guardando...' : `Guardar ${productsList.length} producto(s)`}
+            {isSaving ? 'Guardando...' : (productsList.length > 0 ? `Guardar ${productsList.length} producto(s)` : 'Guardar producto')}
           </Button>
         </DialogFooter>
       </DialogContent>

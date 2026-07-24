@@ -122,14 +122,10 @@ function DashboardLayout() {
     setActiveSubModule(undefined);
   };
 
-  // Auto-redirigir si está en un módulo para el cual no tiene acceso (o al iniciar sesión)
   useEffect(() => {
     const isDeny = activeModule !== 'overview' && !hasAccess(activeModule as Module);
-    const isOverview = activeModule === 'overview';
     
-    // Si no tiene acceso al módulo actual o si estamos en overview pero hay un primer módulo preferido
-    if (isDeny || isOverview) {
-      // Intentar encontrar el primer módulo operativo disponible
+    if (isDeny) {
       const preferredOrder: Module[] = [
         'inventario', 'ventas', 'compras', 'finanzas', 'contabilidad', 'rh',
         'clientes', 'proveedores', 'actividades', 'tickets',
@@ -139,13 +135,8 @@ function DashboardLayout() {
       ];
       
       const firstAllowed = preferredOrder.find(m => hasAccess(m));
-      
-      // Si fue denegado, forzar redirección
-      // Si estaba en overview pero el usuario no es admin/partner, mejor mandarlo a su módulo de trabajo real
-      if (isDeny || (isOverview && user && !user.isPlatformAdmin && !user.isTenantAdmin)) {
-        if (firstAllowed) {
-          setActiveModule(firstAllowed);
-        }
+      if (firstAllowed) {
+        setActiveModule(firstAllowed);
       }
     }
   }, [activeModule, hasAccess, user]);
@@ -166,7 +157,7 @@ function DashboardLayout() {
       if (user?.role === 'partner') {
         return <PartnerDashboard onNavigate={handleNavigate} />;
       }
-      return <OverviewDashboard onNavigate={handleNavigate} />;
+      return <OverviewDashboard onNavigate={handleNavigate} onOverview={handleOverview} />;
     }
 
     if (!hasAccess(activeModule as Module)) {
