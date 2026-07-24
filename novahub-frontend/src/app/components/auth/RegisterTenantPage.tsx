@@ -1098,27 +1098,27 @@ export function RegisterTenantPage() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="text-muted-foreground"
+          className="max-w-xl text-muted-foreground"
         >
-          Hemos configurado todo para <strong className="text-foreground">{step1Data?.companyName || 'tu empresa'}</strong>
+          Hemos configurado todo para <strong className="break-words text-foreground">{step1Data?.companyName || 'tu empresa'}</strong>
         </motion.p>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="grid grid-cols-3 gap-3 w-full max-w-sm"
+          className="grid w-full max-w-xl grid-cols-1 gap-3 sm:grid-cols-3"
         >
           <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-3 text-center">
             <div className="text-2xl font-black text-emerald-600">{selectedCount}</div>
             <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-700/60">Módulos</div>
           </div>
-          <div className="rounded-2xl bg-blue-50 border border-blue-200 p-3 text-center">
-            <div className="text-lg font-black text-blue-600 truncate">{industry ? INDUSTRIES.find(i => i.key === industry)?.label?.split('/')[0] || '—' : '—'}</div>
+          <div className="flex min-h-[86px] flex-col justify-center rounded-2xl bg-blue-50 border border-blue-200 p-3 text-center">
+            <div className="text-base font-black leading-tight text-blue-600 break-words sm:text-lg">{industry ? INDUSTRIES.find(i => i.key === industry)?.label?.split('/')[0] || '—' : '—'}</div>
             <div className="text-[9px] font-bold uppercase tracking-widest text-blue-700/60">Industria</div>
           </div>
-          <div className="rounded-2xl bg-purple-50 border border-purple-200 p-3 text-center">
-            <div className="text-lg font-black text-purple-600 truncate">{sizeLabel.split('(')[0]?.trim() || '—'}</div>
+          <div className="flex min-h-[86px] flex-col justify-center rounded-2xl bg-purple-50 border border-purple-200 p-3 text-center">
+            <div className="text-base font-black leading-tight text-purple-600 break-words sm:text-lg">{sizeLabel.split('(')[0]?.trim() || '—'}</div>
             <div className="text-[9px] font-bold uppercase tracking-widest text-purple-700/60">Tamaño</div>
           </div>
         </motion.div>
