@@ -880,9 +880,24 @@ export function RegisterTenantPage() {
             <Input value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} placeholder="Nombre del Rol (Ej: Vendedor)" className="flex-1 h-9 bg-white/5 text-xs" />
             <Button type="button" onClick={() => {
               if (newRoleName && newRoleModules.length > 0) {
-                // Generamos los permisos base para los módulos seleccionados
-                const newPerms = newRoleModules.map(m => ({ module: m, read: true, write: true, delete: true }));
-                setRoles([...roles, { name: newRoleName, allowedModules: newRoleModules, permissions: newPerms }]);
+                // Un módulo padre habilita también todas sus subvistas. Antes
+                // solo se guardaba el permiso del padre, por lo que al editar
+                // el rol los switches de las subvistas aparecían apagados.
+                const expandedModules = Array.from(new Set(
+                  newRoleModules.flatMap((moduleKey) => [
+                    moduleKey,
+                    ...(PARENT_SUBMODULES[moduleKey] || []),
+                  ]),
+                ));
+                const newPerms = expandedModules.map(module => ({
+                  module,
+                  read: true,
+                  write: true,
+                  create: true,
+                  edit: true,
+                  delete: true,
+                }));
+                setRoles([...roles, { name: newRoleName, allowedModules: expandedModules, permissions: newPerms }]);
                 setNewRoleName('');
                 setNewRoleModules([]);
               } else if (!newRoleName) {

@@ -31,6 +31,7 @@ import { accountsService } from '../../services/finanzas.service';
 import type { Account } from '../../types';
 import { AddProductsModal } from '../inventory/AddProductsModal';
 import { QuickAddCustomerModal } from './QuickAddCustomerModal';
+import { brandingService } from '../../services/branding.service';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -72,14 +73,30 @@ const MAX_DISCOUNT_PERCENT = 100;
 
 type PaymentCurrency = 'NIO' | 'USD';
 
-function printPosTicket(invoice: PosInvoice, cart: CartItem[], currency: PaymentCurrency, exchangeRate: number) {
+function escapeTicketHtml(value: unknown) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character] || character));
+}
+
+function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: PosPaymentLine[], currency: PaymentCurrency, exchangeRate: number, companyName: string) {
   const win = window.open('', '_blank', 'width=420,height=700');
   if (!win) return;
   const money = (value: number) => `${currency === 'USD' ? '$' : 'C$'} ${value.toFixed(2)}`;
-  win.document.write(`<html><head><title>${invoice.number}</title><style>@page{size:80mm auto;margin:0}body{width:72mm;margin:4mm auto;font:12px monospace;color:#000}h2{text-align:center;margin:0 0 8px}.row{display:flex;justify-content:space-between;margin:3px 0}.line{border-top:1px dashed #000;margin:8px 0}small{font-size:10px}</style></head><body><h2>NOVAHUB</h2><div style="text-align:center">${invoice.number}<br>${new Date(invoice.date).toLocaleString('es-NI')}</div><div class="line">${cart.map(item => `<div class="row"><span>${item.quantity} x ${item.description}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div>`).join('')}</div><div class="row"><b>TOTAL</b><b>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</b></div><small>Gracias por su compra</small></body></html>`);
+  const paidDisplay = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const paidLocal = paidDisplay * (currency === 'USD' ? exchangeRate : 1);
+  const changeLocal = Math.max(0, paidLocal - Number(invoice.total));
+  const customerName = invoice.customer?.name || invoice.customCustomerName || GENERAL_CUSTOMER_NAME;
+  const customerPhone = invoice.customer?.phone;
+  const paymentLabel = (method: PosPaymentLine['method']) => method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : 'Transferencia';
+  const paymentRows = payments.map((payment) => `<div class="row"><span>${paymentLabel(payment.method)}</span><span>${money(Number(payment.amount || 0))}</span></div>`).join('');
+  const itemRows = cart.map(item => `<div class="item"><div>${escapeTicketHtml(item.description)}</div><div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`).join('');
+  const discount = Number(invoice.discountAmount || 0);
+  win.document.write(`<html><head><title>${escapeTicketHtml(invoice.number)}</title><style>@page{size:80mm auto;margin:0}body{width:72mm;margin:4mm auto;font:11px monospace;color:#000}h2{text-align:center;margin:0 0 5px;font-size:16px}h3{text-align:center;margin:0 0 8px;font-size:11px;font-weight:normal}.center{text-align:center}.row{display:flex;justify-content:space-between;gap:8px;margin:3px 0}.line{border-top:1px dashed #000;margin:8px 0}.item{margin:5px 0}.item .row{font-size:10px}.totals{margin-top:6px}.total{font-size:14px;font-weight:bold}.label{font-weight:bold;margin-top:7px}.muted{font-size:10px}.footer{text-align:center;margin-top:14px;font-size:10px}</style></head><body><h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3><div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Fecha: ${new Date(invoice.date).toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div><div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}<div class="row"><span>Total recibido</span><span>${money(paidDisplay)}</span></div><div class="row"><span>Cambio / vuelto</span><span>C$ ${changeLocal.toFixed(2)}</span></div></div><div class="footer">Gracias por su compra</div></body></html>`);
   win.document.close();
-  win.focus();
-  win.print();
+  // Esperar a que el documento se pinte evita que Chrome abra una vista previa en blanco.
+  window.setTimeout(() => {
+    win.focus();
+    win.print();
+  }, 300);
 }
 
 const POS_TOUR_STEPS: GuidedTourStep[] = [
@@ -203,10 +220,9 @@ function getInvoiceCustomerName(invoice: PosInvoice) {
 
 interface FacturacionCajaViewProps {
   onNavigateToControlCaja?: (registerId?: string) => void;
-  onInvoiceCreated?: (invoiceId: string) => void;
 }
 
-export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated }: FacturacionCajaViewProps) {
+export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCajaViewProps) {
   const { formatConvertedAmount: formatCurrency } = useCurrency();
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [products, setProducts] = useState<PosProduct[]>([]);
@@ -232,6 +248,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
   const [payments, setPayments] = useState<PosPaymentLine[]>([{ method: 'CASH', amount: 0 }]);
   const [createdInvoice, setCreatedInvoice] = useState<PosInvoice | null>(null);
   const [createdTicketCart, setCreatedTicketCart] = useState<CartItem[]>([]);
+  const [createdPaymentLines, setCreatedPaymentLines] = useState<PosPaymentLine[]>([]);
+  const [createdExchangeRate, setCreatedExchangeRate] = useState(1);
+  const [companyName, setCompanyName] = useState('Empresa');
 
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
@@ -318,6 +337,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
 
   useEffect(() => {
     void loadInitialData();
+    brandingService.getCurrent().then((branding) => {
+      if (branding?.companyName?.trim()) setCompanyName(branding.companyName.trim());
+    }).catch(() => undefined);
     accountsService.getAll({ page: 1, pageSize: 100 }).then((response: any) => {
       const items = response?.data ?? response?.items ?? response;
       setBankAccounts(Array.isArray(items) ? items.filter((account: Account) => account.isActive && account.type === 'asset') : []);
@@ -494,6 +516,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
     setPaymentCurrency('NIO');
     setCreatedInvoice(null);
     setCreatedTicketCart([...cart]);
+    setCreatedPaymentLines([]);
     setShowPayment(true);
   };
 
@@ -528,6 +551,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
       
       toast.success('Factura emitida exitosamente');
       setCreatedInvoice(created);
+      setCreatedPaymentLines([...payments]);
+      setCreatedExchangeRate(Number(activeSession.exchangeRateUSD));
       setShowPayment(false);
       
       // Limpiar datos en memoria de esta caja
@@ -542,9 +567,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
       
       if (!pendingSessionEntry) {
         setSelectedCustomerId(undefined); // Solo borrar cliente global si no hay mas cajas
-        if (onInvoiceCreated && created?.id) {
-          onInvoiceCreated(created.id);
-        }
       } else {
         handleRegisterChange(pendingSessionEntry[0], true); // skipSave = true
       }
@@ -1006,12 +1028,59 @@ export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated 
       </div>
       )}
       {createdInvoice && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-xl border bg-background p-3 shadow-xl">
-          <span className="text-xs font-bold">{createdInvoice.number}</span>
-          <Button size="sm" onClick={() => printPosTicket(createdInvoice, createdTicketCart, paymentCurrency, Number(activeSession?.exchangeRateUSD || 1))}>
-            Imprimir Ticket
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setCreatedInvoice(null)}>Cerrar</Button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-labelledby="invoice-result-title">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border/50 pb-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Factura emitida correctamente</p>
+                <h2 id="invoice-result-title" className="mt-1 text-2xl font-black uppercase italic tracking-tight">{createdInvoice.number}</h2>
+                <p className="mt-1 text-xs text-muted-foreground">{formatInvoiceDate(createdInvoice.date)} · {getInvoiceCustomerName(createdInvoice)}{createdInvoice.customer?.phone ? ` · ${createdInvoice.customer.phone}` : ''}</p>
+              </div>
+              <Button variant="ghost" onClick={() => setCreatedInvoice(null)} aria-label="Cerrar detalle de factura">✕</Button>
+            </div>
+
+            <div className="mt-5 overflow-hidden rounded-2xl border border-border/50">
+              <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-border/50 bg-muted/30 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                <span>Artículo</span><span>Cant.</span><span>Total</span>
+              </div>
+              {createdTicketCart.map((item) => (
+                <div key={item.productId} className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-border/30 px-4 py-3 text-sm last:border-0">
+                  <span className="font-bold">{item.description}</span>
+                  <span className="font-mono text-muted-foreground">{item.quantity}</span>
+                  <span className="font-mono font-bold">{formatCurrency(item.lineTotal)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl bg-muted/30 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Métodos de pago</p>
+                <div className="mt-2 space-y-1 text-sm">
+                  {createdPaymentLines.map((payment, index) => (
+                    <div key={`${payment.method}-${index}`} className="flex justify-between gap-3">
+                      <span>{payment.method === 'CASH' ? 'Efectivo' : payment.method === 'CARD' ? 'Tarjeta' : 'Transferencia'}</span>
+                      <span className="font-mono font-bold">{paymentCurrency === 'USD' ? '$' : 'C$'} {Number(payment.amount).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-primary/20 bg-primary/10 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Total factura</p>
+                <p className="mt-2 text-2xl font-black text-primary">{formatCurrency(Number(createdInvoice.total))}</p>
+                {Number(createdInvoice.discountAmount) > 0 && <p className="mt-1 text-[11px] text-rose-600">Descuento: - {formatCurrency(Number(createdInvoice.discountAmount))}</p>}
+                <p className="mt-1 text-[11px] text-muted-foreground">IVA: {formatCurrency(Number(createdInvoice.taxAmount))}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Recibido: {paymentCurrency === 'USD' ? '$' : 'C$'} {createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0), 0).toFixed(2)}</p>
+                <p className="text-[11px] font-bold text-emerald-600">Cambio: C$ {Math.max(0, createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) * (paymentCurrency === 'USD' ? createdExchangeRate : 1) - Number(createdInvoice.total)).toFixed(2)}</p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse justify-end gap-2 sm:flex-row">
+              <Button variant="outline" onClick={() => setCreatedInvoice(null)} className="rounded-xl font-black">Cerrar</Button>
+              <Button onClick={() => printPosTicket(createdInvoice, createdTicketCart, createdPaymentLines, paymentCurrency, createdExchangeRate, companyName)} className="gap-2 rounded-xl font-black">
+                <Receipt className="size-4" /> Imprimir ticket
+              </Button>
+            </div>
+          </div>
         </div>
       )}
       {showPayment && activeSession && (

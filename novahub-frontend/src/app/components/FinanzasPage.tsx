@@ -87,7 +87,9 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     const payload = {
       code: accountKind === 'INCOME' ? `ING-${suffix}` : `GAS-${suffix}`,
       name: accountKind === 'INCOME' ? 'Ingresos Generales' : 'Gastos Generales',
-      type: accountKind.toLowerCase() as any,
+      // El backend valida el enum AccountType de Prisma en mayúsculas.
+      // Mantenerlo así evita un 400 al crear la primera cuenta del tenant.
+      type: accountKind as any,
     };
 
     const createdResponse = await accountsService.create(payload);

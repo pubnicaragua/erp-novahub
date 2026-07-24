@@ -270,11 +270,6 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                     setActiveSection('control-caja');
                     onSubModuleChange?.('control-caja');
                   }}
-                  onInvoiceCreated={(invoiceId) => {
-                    setTargetInvoiceId(invoiceId);
-                    setActiveSection('facturas');
-                    onSubModuleChange?.('facturas');
-                  }}
                 />
               )}
               {activeSection === 'control-caja' && (

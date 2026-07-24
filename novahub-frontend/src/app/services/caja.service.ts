@@ -95,6 +95,7 @@ export interface PosCustomer {
   name: string;
   taxId?: string;
   email?: string;
+  phone?: string;
 }
 
 export interface PosInvoiceItem {
