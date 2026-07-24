@@ -29,8 +29,10 @@ interface FacturasViewProps {
   series?: any[];
   warehouses?: any[];
   employees?: any[];
-  invoiceDraft?: any;
+  invoiceDraft?: Partial<Invoice>;
   onClearInvoiceDraft?: () => void;
+  targetInvoiceId?: string | null;
+  onClearTargetInvoiceId?: () => void;
 }
 
 // Todos los estados posibles (para visualización en badges)
@@ -52,7 +54,7 @@ const editableStatusOptions = [
   { label: 'Cancelada', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft }: FacturasViewProps) {
+export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId }: FacturasViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -145,7 +147,18 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     } else if (!isCreating) {
       setLocalDoc(null);
     }
-  }, [editingId, invoiceDraft]);
+  }, [editingId, invoiceDraft, data]);
+
+  useEffect(() => {
+    if (targetInvoiceId) {
+      const exists = data.find(x => x.id === targetInvoiceId);
+      if (exists) {
+        setEditingId(targetInvoiceId);
+        setIsCreating(false);
+        onClearTargetInvoiceId?.();
+      }
+    }
+  }, [targetInvoiceId, data, onClearTargetInvoiceId]);
 
   const filtered = data.filter(f =>
     f.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -602,7 +615,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 <div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
+                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-start">
                   <div className="col-span-5">
                     <Combobox
                       options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))}

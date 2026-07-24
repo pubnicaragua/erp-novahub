@@ -6,30 +6,45 @@ import {
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Input } from '../ui/input';
 import { toast } from 'sonner';
 import { cajaService, type DashboardData } from '../../services/caja.service';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
-function formatCurrency(value: number) {
-  return `C$ ${Number(value).toLocaleString('en-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-export function DashboardCajaView({ onNavigateToFacturacion }: { onNavigateToFacturacion?: () => void }) {
+export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onNavigateToFacturacion?: () => void, registerId?: string }) {
+  const { displayCurrency, exchangeRate: globalRate } = useCurrency();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState('month');
+
+  const formatCurrency = useCallback((value: number) => {
+    const isUSD = displayCurrency === 'USD';
+    const symbol = isUSD ? '$' : 'C$';
+    const converted = isUSD ? value / globalRate : value;
+    return `${symbol} ${Number(converted).toLocaleString('en-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }, [displayCurrency, globalRate]);
+  const getTodayDateString = () => {
+    const today = new Date();
+    // Ajustar a la zona horaria local de forma sencilla
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const [startDate, setStartDate] = useState(getTodayDateString());
+  const [endDate, setEndDate] = useState(getTodayDateString());
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await cajaService.getDashboard(period);
+      const res = await cajaService.getDashboard(undefined, registerId, startDate, endDate);
       setData(res);
     } catch {
       toast.error('Error al cargar dashboard de caja');
     } finally {
       setLoading(false);
     }
-  }, [period]);
+  }, [startDate, endDate, registerId]);
 
   useEffect(() => {
     void loadDashboard();
@@ -54,7 +69,6 @@ export function DashboardCajaView({ onNavigateToFacturacion }: { onNavigateToFac
   const { kpis, productPerformance, salesByRegister, inventoryAlerts, recentTransactions } = data;
 
   const totalSalesByRegister = salesByRegister.reduce((s, r) => s + r.total, 0);
-  const usdRate = 36.5;
 
   return (
     <div className="space-y-6">
@@ -65,17 +79,21 @@ export function DashboardCajaView({ onNavigateToFacturacion }: { onNavigateToFac
             Panel interactivo de <span className="text-primary">rendimiento financiero</span>, rotación de productos y operaciones de caja.
           </h2>
         </div>
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-56 h-10 rounded-xl">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="month">Este Mes</SelectItem>
-            <SelectItem value="last-month">Mes Anterior</SelectItem>
-            <SelectItem value="quarter">Este Trimestre</SelectItem>
-            <SelectItem value="year">Este Año</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Input 
+            type="date" 
+            value={startDate} 
+            onChange={(e) => setStartDate(e.target.value)} 
+            className="w-40 h-10 rounded-xl"
+          />
+          <span className="text-muted-foreground text-sm font-bold">hasta</span>
+          <Input 
+            type="date" 
+            value={endDate} 
+            onChange={(e) => setEndDate(e.target.value)} 
+            className="w-40 h-10 rounded-xl"
+          />
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -86,7 +104,7 @@ export function DashboardCajaView({ onNavigateToFacturacion }: { onNavigateToFac
               <div>
                 <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Ingresos Totales</p>
                 <p className="text-2xl font-black mt-1">{formatCurrency(kpis.totalRevenue)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">≈ $ {(kpis.totalRevenue / usdRate).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD</p>
+                <p className="text-[10px] text-muted-foreground mt-1">≈ {displayCurrency === 'USD' ? 'C$' : '$'} {(displayCurrency === 'USD' ? kpis.totalRevenue : kpis.totalRevenue / globalRate).toLocaleString('en-US', { maximumFractionDigits: 0 })} {displayCurrency === 'USD' ? 'NIO' : 'USD'}</p>
               </div>
               <div className="p-2 bg-cyan-500/10 rounded-xl ring-1 ring-cyan-500/15">
                 <TrendingUp className="size-5 text-cyan-600" />
@@ -176,7 +194,7 @@ export function DashboardCajaView({ onNavigateToFacturacion }: { onNavigateToFac
                   {productPerformance.topSelling.length === 0 && (
                     <p className="text-[10px] text-muted-foreground text-center py-4">Sin ventas registradas</p>
                   )}
-                  {productPerformance.topSelling.map((p) => (
+                  {productPerformance.topSelling.slice(0, 10).map((p) => (
                     <div key={p.productId} className="rounded-xl border border-cyan-500/15 bg-cyan-500/[0.04] px-3 py-2.5 hover:bg-cyan-500/[0.07] transition-colors cursor-pointer">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold">{p.name}</span>
@@ -199,7 +217,7 @@ export function DashboardCajaView({ onNavigateToFacturacion }: { onNavigateToFac
                   {productPerformance.topMargin.length === 0 && (
                     <p className="text-[10px] text-muted-foreground text-center py-4">Sin datos de margen</p>
                   )}
-                  {productPerformance.topMargin.map((p) => (
+                  {productPerformance.topMargin.slice(0, 10).map((p) => (
                     <div key={p.productId} className="rounded-xl border border-indigo-500/15 bg-indigo-500/[0.04] px-3 py-2.5 hover:bg-indigo-500/[0.07] transition-colors cursor-pointer">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold">{p.name}</span>
@@ -222,7 +240,7 @@ export function DashboardCajaView({ onNavigateToFacturacion }: { onNavigateToFac
                   {productPerformance.noSaleProducts.length === 0 && (
                     <p className="text-[10px] text-muted-foreground text-center py-4">Todos los productos tienen rotación</p>
                   )}
-                  {productPerformance.noSaleProducts.map((p) => (
+                  {productPerformance.noSaleProducts.slice(0, 10).map((p) => (
                     <div key={p.id} className="rounded-xl border border-slate-500/15 bg-slate-500/[0.04] px-3 py-2.5 hover:bg-slate-500/[0.07] transition-colors cursor-pointer">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold">{p.name}</span>
@@ -327,7 +345,7 @@ export function DashboardCajaView({ onNavigateToFacturacion }: { onNavigateToFac
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/20">
-                  {recentTransactions.map((tx) => (
+                  {recentTransactions.slice(0, 10).map((tx) => (
                     <tr key={tx.id} className="hover:bg-muted/20 transition-colors cursor-pointer">
                       <td className="px-4 py-3 font-mono text-primary font-bold">{tx.number}</td>
                       <td className="px-4 py-3">

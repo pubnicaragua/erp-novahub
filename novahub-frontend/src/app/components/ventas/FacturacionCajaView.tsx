@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
   CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
-  UserPlus, PackagePlus, AlertCircle
+  UserPlus, PackagePlus, AlertCircle, Coins
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { Switch } from '../ui/switch';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ProductThumbnail } from '../ui/ProductImage';
+import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import {
   cajaService,
@@ -29,6 +30,14 @@ import { QuickAddCustomerModal } from './QuickAddCustomerModal';
 interface CartItem extends PosInvoiceItem {
   productId: string;
   lineTotal: number;
+}
+
+interface CartSession {
+  cart: CartItem[];
+  selectedCustomerId: string | undefined;
+  emitDate: string;
+  discountPercent: number;
+  includeTax: boolean;
 }
 
 interface InvoiceSummary {
@@ -175,7 +184,12 @@ function getInvoiceCustomerName(invoice: PosInvoice) {
   return invoice.customer?.name || invoice.customCustomerName || GENERAL_CUSTOMER_NAME;
 }
 
-export function FacturacionCajaView() {
+interface FacturacionCajaViewProps {
+  onNavigateToControlCaja?: (registerId?: string) => void;
+  onInvoiceCreated?: (invoiceId: string) => void;
+}
+
+export function FacturacionCajaView({ onNavigateToControlCaja, onInvoiceCreated }: FacturacionCajaViewProps) {
   const { formatConvertedAmount: formatCurrency } = useCurrency();
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [products, setProducts] = useState<PosProduct[]>([]);
@@ -183,8 +197,6 @@ export function FacturacionCajaView() {
   const [recentInvoices, setRecentInvoices] = useState<PosInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [hasActiveSession, setHasActiveSession] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(false);
 
   const [selectedRegisterId, setSelectedRegisterId] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(undefined);
@@ -200,20 +212,61 @@ export function FacturacionCajaView() {
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
 
+  const cartSessions = useRef<Map<string, CartSession>>(new Map());
+
+  const handleRegisterChange = (newRegisterId: string, skipSave = false) => {
+    // Guardar sesión de la caja actual
+    if (selectedRegisterId && !skipSave) {
+      cartSessions.current.set(selectedRegisterId, {
+        cart,
+        emitDate,
+        discountPercent,
+        includeTax
+      });
+    }
+
+    // Restaurar sesión de la nueva caja
+    const savedSession = cartSessions.current.get(newRegisterId);
+    if (savedSession) {
+      setCart(savedSession.cart);
+      // Mantenemos el selectedCustomerId actual
+      setEmitDate(savedSession.emitDate);
+      setDiscountPercent(savedSession.discountPercent);
+      setIncludeTax(savedSession.includeTax);
+    } else {
+      // Estado fresco
+      setCart([]);
+      // Mantenemos el selectedCustomerId actual
+      setEmitDate(getTodayInputDate());
+      setDiscountPercent(0);
+      setIncludeTax(true);
+    }
+
+    setSelectedRegisterId(newRegisterId);
+  };
+
+
   const loadInitialData = useCallback(async () => {
     setLoading(true);
     try {
-      const [cashRegisters, availableProducts, registeredCustomers] = await Promise.all([
-        cajaService.getRegisters(),
-        cajaService.getProducts(),
+      const cashRegisters = await cajaService.getRegisters();
+      setRegisters(cashRegisters);
+      
+      let initialRegisterId = '';
+      if (cashRegisters.length > 0) {
+        const openRegister = cashRegisters.find(r => r.hasActiveSession);
+        initialRegisterId = openRegister ? openRegister.id : cashRegisters[0].id;
+        setSelectedRegisterId(initialRegisterId);
+      }
+
+      const initialWarehouseId = cashRegisters.find(r => r.id === initialRegisterId)?.resolvedWarehouseId || undefined;
+
+      const [availableProducts, registeredCustomers] = await Promise.all([
+        cajaService.getProducts(undefined, initialWarehouseId),
         cajaService.getCustomers(),
       ]);
-      setRegisters(cashRegisters);
       setProducts(availableProducts);
       setCustomers(registeredCustomers);
-      if (cashRegisters.length > 0) {
-        setSelectedRegisterId(cashRegisters[0].id);
-      }
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'Error al cargar datos de caja'));
     } finally {
@@ -253,20 +306,10 @@ export function FacturacionCajaView() {
   useEffect(() => {
     if (!selectedRegisterId) {
       setRecentInvoices([]);
-      setHasActiveSession(false);
       return;
     }
 
     void loadRecentInvoices(selectedRegisterId);
-    
-    setCheckingSession(true);
-    cajaService.getActiveSession(selectedRegisterId).then(session => {
-      setHasActiveSession(!!session);
-      setCheckingSession(false);
-    }).catch(() => {
-      setHasActiveSession(false);
-      setCheckingSession(false);
-    });
   }, [loadRecentInvoices, selectedRegisterId]);
 
   const productsById = useMemo(
@@ -279,7 +322,9 @@ export function FacturacionCajaView() {
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const availableProducts = await cajaService.getProducts(productSearch.trim() || undefined);
+        const selectedRegister = registers.find(r => r.id === selectedRegisterId);
+        const warehouseId = selectedRegister?.resolvedWarehouseId || undefined;
+        const availableProducts = await cajaService.getProducts(productSearch.trim() || undefined, warehouseId);
         setProducts(availableProducts);
       } catch (error) {
         console.error('Error fetching products:', error);
@@ -289,14 +334,37 @@ export function FacturacionCajaView() {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [productSearch]);
+  }, [productSearch, selectedRegisterId, registers]);
 
   const filteredProducts = products; // Ya están filtrados por el backend
+
+  const getGlobalCartQuantity = (productId: string) => {
+    let total = 0;
+    cartSessions.current.forEach((session, regId) => {
+      if (regId !== selectedRegisterId) {
+        const item = session.cart.find((i: any) => i.productId === productId);
+        if (item) total += item.quantity;
+      }
+    });
+    return total;
+  };
 
   const addItem = (product: PosProduct) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.productId === product.id);
+      const globalQty = getGlobalCartQuantity(product.id);
+      
       if (existing) {
+        if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined) {
+          if (existing.quantity + 1 + globalQty > product.currentStock) {
+            toast.error(
+              globalQty > 0 
+              ? `Stock insuficiente. Tienes ${globalQty} unidades en otras cajas. Solo hay ${product.currentStock} en stock global.`
+              : `Stock insuficiente. Solo hay ${product.currentStock} unidades disponibles.`
+            );
+            return prev;
+          }
+        }
         return prev.map((i) =>
           i.productId === product.id
             ? {
@@ -307,6 +375,18 @@ export function FacturacionCajaView() {
             : i,
         );
       }
+      
+      if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined) {
+        if (1 + globalQty > product.currentStock) {
+          toast.error(
+            globalQty > 0 
+            ? `Stock insuficiente. Tienes ${globalQty} unidades separadas en otras cajas y solo hay ${product.currentStock} en total.`
+            : `Stock insuficiente. El producto está agotado.`
+          );
+          return prev;
+        }
+      }
+
       return [
         ...prev,
         {
@@ -321,10 +401,24 @@ export function FacturacionCajaView() {
   };
 
   const updateQty = (productId: string, quantity: number) => {
+    const product = productsById.get(productId);
+    let finalQty = quantity;
+    if (product && product.trackInventory && product.currentStock !== null && product.currentStock !== undefined) {
+      const globalQty = getGlobalCartQuantity(productId);
+      if (quantity + globalQty > product.currentStock) {
+        toast.error(
+          globalQty > 0
+          ? `Stock insuficiente. Tienes ${globalQty} separadas en otras cajas y solo quedan ${Math.max(0, product.currentStock - globalQty)} disponibles acá.`
+          : `Stock insuficiente. Solo hay ${product.currentStock} unidades disponibles.`
+        );
+        finalQty = Math.max(1, product.currentStock - globalQty);
+      }
+    }
+    
     setCart((prev) =>
       prev.map((item) =>
         item.productId === productId
-          ? { ...item, quantity, lineTotal: calculateLineTotal(quantity, item.unitPrice) }
+          ? { ...item, quantity: finalQty, lineTotal: calculateLineTotal(finalQty, item.unitPrice) }
           : item,
       ),
     );
@@ -360,7 +454,7 @@ export function FacturacionCajaView() {
 
     setSubmitting(true);
     try {
-      await cajaService.createInvoice({
+      const createdResponse = await cajaService.createInvoice({
         registerId: selectedRegisterId,
         customerId: selectedCustomerId,
         customCustomerName: selectedCustomerId ? undefined : GENERAL_CUSTOMER_NAME,
@@ -369,11 +463,28 @@ export function FacturacionCajaView() {
         items: buildInvoiceItems(cart),
         includeTax,
       });
+      const created = (createdResponse as any)?.data || createdResponse;
+      
       toast.success('Factura emitida exitosamente');
+      
+      // Limpiar datos en memoria de esta caja
       setCart([]);
       setDiscountPercent(0);
-      setSelectedCustomerId(undefined);
+      cartSessions.current.delete(selectedRegisterId);
+      
       await loadRecentInvoices(selectedRegisterId);
+
+      // Verificamos si existen otras cajas en la "cola" con productos pendientes
+      const pendingSessionEntry = Array.from(cartSessions.current.entries()).find(([id, session]) => session.cart && session.cart.length > 0);
+      
+      if (!pendingSessionEntry) {
+        setSelectedCustomerId(undefined); // Solo borrar cliente global si no hay mas cajas
+        if (onInvoiceCreated && created?.id) {
+          onInvoiceCreated(created.id);
+        }
+      } else {
+        handleRegisterChange(pendingSessionEntry[0], true); // skipSave = true
+      }
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'Error al emitir factura'));
     } finally {
@@ -394,7 +505,7 @@ export function FacturacionCajaView() {
     );
   }
 
-
+  const isRegisterDisabled = selectedRegister ? !selectedRegister.hasActiveSession : false;
 
   if (registers.length === 0) {
     return (
@@ -428,6 +539,7 @@ export function FacturacionCajaView() {
             variant="outline"
             size="sm"
             onClick={() => setShowAddCustomer(true)}
+            disabled={isRegisterDisabled}
             className="h-10 gap-2 px-3 text-xs font-black rounded-xl border-primary/30 hover:bg-primary/10 shadow-sm bg-background/80"
           >
             <UserPlus className="size-4 text-primary" /> Agregar Cliente
@@ -436,6 +548,7 @@ export function FacturacionCajaView() {
             variant="outline"
             size="sm"
             onClick={() => setShowAddProduct(true)}
+            disabled={isRegisterDisabled}
             className="h-10 gap-2 px-3 text-xs font-black rounded-xl border-primary/30 hover:bg-primary/10 shadow-sm bg-background/80"
           >
             <PackagePlus className="size-4 text-primary" /> Agregar Producto
@@ -446,16 +559,45 @@ export function FacturacionCajaView() {
         </div>
       </div>
       
-      {!checkingSession && !hasActiveSession && selectedRegisterId && (
-        <div className="bg-destructive/10 text-destructive border border-destructive/20 p-4 rounded-xl flex items-center gap-3">
-          <AlertCircle className="size-5 shrink-0" />
-          <div>
-            <p className="font-bold text-sm">Caja Cerrada</p>
-            <p className="text-xs">Debe aperturar esta caja en la pestaña "Control de Caja" antes de poder emitir facturas.</p>
+      {isRegisterDisabled ? (
+        <div className="flex flex-col items-center justify-center py-24 px-4 text-center border-2 border-dashed border-border/50 rounded-2xl bg-muted/10">
+          <div className="size-24 rounded-full bg-destructive/10 flex items-center justify-center mb-6">
+            <AlertCircle className="size-12 text-destructive" />
+          </div>
+          <h2 className="text-3xl font-black tracking-tight text-foreground mb-3 uppercase">Caja Cerrada</h2>
+          <p className="text-muted-foreground max-w-lg mb-8 text-sm">
+            Esta caja no tiene una sesión activa o ya fue cerrada. El módulo de facturación (POS) está bloqueado por seguridad.
+            Debe aperturar la caja para poder agregar productos y emitir facturas.
+          </p>
+          
+          <div className="flex flex-col items-center gap-6 w-full max-w-sm">
+            <div className="space-y-1.5 w-full text-left" data-tour="pos-register">
+              <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Cambiar Caja Operativa</Label>
+              <Select value={selectedRegisterId} onValueChange={handleRegisterChange}>
+                <SelectTrigger className="h-12 rounded-xl border-border/60"><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
+                <SelectContent>
+                  {registers.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      <span className={!r.hasActiveSession ? 'text-muted-foreground' : ''}>
+                        {r.code} - {r.name}{!r.hasActiveSession && ' (sin sesión)'}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <Button 
+              size="lg" 
+              onClick={() => onNavigateToControlCaja?.(selectedRegisterId)}
+              className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest"
+            >
+              <Coins className="mr-2 size-5" />
+              Ir a Control de Caja para Abrir
+            </Button>
           </div>
         </div>
-      )}
-
+      ) : (
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
       <div className="space-y-5">
         <Card className="border-border/50 shadow-sm">
@@ -466,33 +608,37 @@ export function FacturacionCajaView() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5" data-tour="pos-register">
                 <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Caja Operativa</Label>
-                <Select value={selectedRegisterId} onValueChange={setSelectedRegisterId}>
-                  <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
+                <Select value={selectedRegisterId} onValueChange={handleRegisterChange}>
+                  <SelectTrigger className="!h-11 rounded-xl"><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
                   <SelectContent>
                     {registers.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>{r.code} - {r.name}</SelectItem>
+                      <SelectItem key={r.id} value={r.id}>
+                        <span className={!r.hasActiveSession ? 'text-muted-foreground' : ''}>
+                          {r.code} - {r.name}{!r.hasActiveSession && ' (sin sesión)'}
+                        </span>
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5" data-tour="pos-customer">
                 <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Cliente / Empresa</Label>
-                <Select
+                <Combobox
+                  options={[
+                    { label: GENERAL_CUSTOMER_NAME, value: GENERAL_CUSTOMER_SELECT_VALUE },
+                    ...customers.map(c => ({ label: c.name, value: c.id, description: c.documentNumber || undefined }))
+                  ]}
                   value={selectedCustomerId ?? GENERAL_CUSTOMER_SELECT_VALUE}
-                  onValueChange={handleCustomerChange}
-                >
-                  <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder={GENERAL_CUSTOMER_NAME} /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={GENERAL_CUSTOMER_SELECT_VALUE}>{GENERAL_CUSTOMER_NAME}</SelectItem>
-                    {customers.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={handleCustomerChange}
+                  disabled={isRegisterDisabled}
+                  placeholder={GENERAL_CUSTOMER_NAME}
+                  emptyMessage="No se encontraron clientes"
+                  className="!h-11 rounded-xl text-sm font-normal"
+                />
               </div>
               <div className="space-y-1.5" data-tour="pos-date">
                 <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Fecha de Emisión</Label>
-                <Input type="date" value={emitDate} onChange={(e) => setEmitDate(e.target.value)} className="h-11 rounded-xl" />
+                <Input type="date" value={emitDate} onChange={(e) => setEmitDate(e.target.value)} disabled={isRegisterDisabled} className="!h-11 !py-0 rounded-xl w-full flex items-center justify-between" />
               </div>
             </div>
           </CardContent>
@@ -538,6 +684,7 @@ export function FacturacionCajaView() {
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
                     placeholder="Buscar producto..."
+                    disabled={isRegisterDisabled}
                     className="pl-9 h-9 rounded-lg text-xs focus-visible:ring-primary focus-visible:border-primary"
                   />
                 </div>
@@ -556,18 +703,26 @@ export function FacturacionCajaView() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/20">
-                      {filteredProducts.map((prod) => (
+                      {filteredProducts.slice(0, 30).map((prod) => (
                         <tr key={prod.id} className="transition-colors hover:bg-muted/20">
                           <td className="px-3 py-2.5 font-mono font-bold text-primary">{prod.code}</td>
                           <td className="px-3 py-2.5">
-                            <p className="truncate font-bold">{prod.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="truncate font-bold">{prod.name}</p>
+                              {prod.trackInventory && (
+                                <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
+                                  {prod.currentStock ?? 0} unid.
+                                </Badge>
+                              )}
+                            </div>
                             {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
                           </td>
                           <td className="px-3 py-2.5 text-right font-mono">{formatCurrency(prod.salePrice)}</td>
                           <td className="px-3 py-2.5 text-center">
                             <Button size="sm" variant="ghost" onClick={() => addItem(prod)}
-                              className="h-7 rounded-lg px-2 text-[10px] font-bold text-primary hover:bg-primary/10">
-                              <Plus className="mr-1 size-3" /> Agregar
+                              disabled={isRegisterDisabled || (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
+                              className="h-7 rounded-lg px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
+                              <Plus className="mr-1 size-3" /> {prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar'}
                             </Button>
                           </td>
                         </tr>
@@ -583,7 +738,7 @@ export function FacturacionCajaView() {
               <div className="max-h-[34rem] overflow-y-auto pr-1">
                 {filteredProducts.length > 0 ? (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-                    {filteredProducts.map((prod) => (
+                    {filteredProducts.slice(0, 30).map((prod) => (
                       <article key={prod.id} className="group overflow-hidden rounded-2xl border border-border/60 bg-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
                         <ProductThumbnail
                           src={prod.imageUrl}
@@ -595,7 +750,14 @@ export function FacturacionCajaView() {
                         <div className="space-y-3 p-4">
                           <div>
                             <div className="mb-1.5 flex items-center justify-between gap-2">
-                              <Badge variant="outline" className="font-mono text-[9px] text-primary">{prod.code}</Badge>
+                              <div className="flex items-center gap-1.5">
+                                <Badge variant="outline" className="font-mono text-[9px] text-primary">{prod.code}</Badge>
+                                {prod.trackInventory && (
+                                  <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
+                                    {prod.currentStock ?? 0} unid.
+                                  </Badge>
+                                )}
+                              </div>
                               <span className="font-mono text-sm font-black text-primary">{formatCurrency(prod.salePrice)}</span>
                             </div>
                             <h4 className="truncate text-sm font-black">{prod.name}</h4>
@@ -603,8 +765,13 @@ export function FacturacionCajaView() {
                               {prod.description || 'Producto disponible para facturación inmediata.'}
                             </p>
                           </div>
-                          <Button onClick={() => addItem(prod)} className="h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider">
-                            <ShoppingCart className="mr-2 size-3.5" /> Agregar a factura
+                          <Button 
+                            onClick={() => addItem(prod)} 
+                            disabled={isRegisterDisabled || (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))} 
+                            className="h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider"
+                          >
+                            <ShoppingCart className="mr-2 size-3.5" /> 
+                            {prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar a factura'}
                           </Button>
                         </div>
                       </article>
@@ -658,6 +825,7 @@ export function FacturacionCajaView() {
                                 normalizeQuantity(e.target.value, item.quantity),
                               )
                             }
+                            disabled={isRegisterDisabled}
                             className="h-7 w-16 rounded-lg text-center text-xs font-mono"
                             min={1}
                           />
@@ -666,6 +834,7 @@ export function FacturacionCajaView() {
                         <td className="px-3 py-2 text-right font-mono font-bold">{formatCurrency(item.lineTotal)}</td>
                         <td className="px-3 py-2 text-center">
                           <Button variant="ghost" onClick={() => removeItem(item.productId)}
+                            disabled={isRegisterDisabled}
                             className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 rounded-lg">
                             <Trash2 className="size-3.5" />
                           </Button>
@@ -680,8 +849,8 @@ export function FacturacionCajaView() {
         </Card>
       </div>
 
-      <div className="space-y-5">
-        <Card className="border-border/50 shadow-sm sticky top-24" data-tour="pos-summary">
+      <div className="space-y-5 sticky top-24">
+        <Card className="border-border/50 shadow-sm" data-tour="pos-summary">
           <CardContent className="p-5 space-y-4">
             <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
               <Calculator className="size-4 text-primary" /> Resumen Financiero
@@ -696,11 +865,12 @@ export function FacturacionCajaView() {
                 className="h-10 rounded-xl"
                 min={0}
                 max={100}
+                disabled={isRegisterDisabled}
               />
             </div>
             <div className="flex items-center justify-between pt-2">
               <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Incluir IVA</Label>
-              <Switch checked={includeTax} onCheckedChange={setIncludeTax} />
+              <Switch checked={includeTax} onCheckedChange={setIncludeTax} disabled={isRegisterDisabled} />
             </div>
             <div className="space-y-2 pt-2 border-t border-border/30">
               <div className="flex justify-between text-xs">
@@ -726,13 +896,13 @@ export function FacturacionCajaView() {
               size="lg"
               data-tour="pos-pay"
               onClick={handlePay}
-              disabled={submitting || cart.length === 0 || !hasActiveSession || checkingSession}
+              disabled={submitting || cart.length === 0 || isRegisterDisabled}
               className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest gap-2 shadow-lg shadow-primary/20"
             >
               {submitting ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
               Pagar y Emitir Factura
             </Button>
-            <Button variant="outline" onClick={clearCart} className="w-full h-10 rounded-xl font-bold text-xs gap-2">
+            <Button variant="outline" onClick={clearCart} disabled={isRegisterDisabled} className="w-full h-10 rounded-xl font-bold text-xs gap-2">
               Limpiar
             </Button>
           </CardContent>
@@ -749,12 +919,14 @@ export function FacturacionCajaView() {
               </p>
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto">
-                {recentInvoices.map((inv) => (
+                {recentInvoices.map((inv) => {
+                  const statusLabel = inv.status === 'PAID' ? 'PAGADA' : inv.status === 'DRAFT' ? 'BORRADOR' : inv.status === 'CANCELLED' ? 'ANULADA' : inv.status;
+                  return (
                   <div key={inv.id} className="rounded-xl border border-border/30 px-3 py-2 flex items-center justify-between">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-[10px] text-muted-foreground">{inv.number}</span>
-                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[9px]">{inv.status}</Badge>
+                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[9px]">{statusLabel}</Badge>
                       </div>
                       <p className="text-[10px] text-muted-foreground truncate">
                         {getInvoiceCustomerName(inv)} &middot; {formatInvoiceDate(inv.date)}
@@ -762,13 +934,14 @@ export function FacturacionCajaView() {
                     </div>
                     <span className="text-xs font-black font-mono shrink-0">{formatCurrency(inv.total)}</span>
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </CardContent>
         </Card>
       </div>
       </div>
+      )}
       {showTutorial && <GuidedTour steps={POS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Facturación por Caja" />}
       <AddProductsModal
         open={showAddProduct}

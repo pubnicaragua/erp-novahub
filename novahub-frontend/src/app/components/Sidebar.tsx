@@ -52,11 +52,23 @@ import {
   LifeBuoy,
   BookOpen,
   Cloud,
+  Calculator,
+  Store,
+  Coins,
+  BookOpenCheck,
+  PieChart,
+  TrendingUp,
+  Calendar,
+  FileBarChart,
+  Settings2,
+  TicketIcon,
+  Gavel,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { NovaHubLogo } from './NovaHubLogo';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface SidebarProps {
   activeModule: Module | 'overview';
@@ -180,8 +192,8 @@ const menuItems: MenuItem[] = [
       { id: 'pagos-recibidos', label: 'Pagos recibidos', icon: <CreditCard className="size-4" /> },
       { id: 'devoluciones-venta', label: 'Devoluciones de venta', icon: <FileOutput className="size-4" /> },
       { id: 'notas-credito', label: 'Notas de credito', icon: <FileMinus className="size-4" /> },
-      { id: 'facturacion-caja', label: 'Facturación por Caja', icon: <ShoppingCart className="size-4" /> },
-      { id: 'control-caja', label: 'Control de Caja', icon: <ShoppingCart className="size-4" /> },
+      { id: 'facturacion-caja', label: 'Facturación por Caja', icon: <Calculator className="size-4" /> },
+      { id: 'control-caja', label: 'Control de Caja', icon: <Coins className="size-4" /> },
     ]
   },
   {
@@ -232,6 +244,21 @@ const menuItems: MenuItem[] = [
     label: 'Contabilidad',
     icon: <BookOpen className="size-5" />,
     section: 'Administracion',
+    submenu: [
+      { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: <BookOpen className="size-4" /> },
+      { id: 'diario', label: 'Libro Diario', icon: <FileText className="size-4" /> },
+      { id: 'libro-mayor', label: 'Libro Mayor', icon: <BookOpenCheck className="size-4" /> },
+      { id: 'balance-comprobacion', label: 'Balance de Comprobación', icon: <Scale className="size-4" /> },
+      { id: 'estado-resultados', label: 'Estado de Resultados', icon: <TrendingUp className="size-4" /> },
+      { id: 'balance-general', label: 'Balance General', icon: <PieChart className="size-4" /> },
+      { id: 'flujo-efectivo', label: 'Flujo de Efectivo', icon: <DollarSign className="size-4" /> },
+      { id: 'cambios-patrimonio', label: 'Cambios Patrimonio', icon: <FileSpreadsheet className="size-4" /> },
+      { id: 'activos-fijos', label: 'Activos Fijos', icon: <Building2 className="size-4" /> },
+      { id: 'conciliacion', label: 'Conciliación Bancaria', icon: <Landmark className="size-4" /> },
+      { id: 'periodos', label: 'Períodos Contables', icon: <Calendar className="size-4" /> },
+      { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: <FileBarChart className="size-4" /> },
+      { id: 'configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
+    ]
   },
   {
     id: 'rh',
@@ -261,7 +288,16 @@ const menuItems: MenuItem[] = [
       { id: 'bitacora', label: 'Bitácora', icon: <Database className="size-4" /> }
     ]
   },
-  { id: 'tickets', label: 'Tickets y Soporte', icon: <Headphones className="size-5" /> },
+  { 
+    id: 'tickets', 
+    label: 'Tickets y Soporte', 
+    icon: <Headphones className="size-5" />,
+    submenu: [
+      { id: 'tickets', label: 'Tickets', icon: <TicketIcon className="size-4" /> },
+      { id: 'faqs', label: 'Base de Conocimiento', icon: <BookOpen className="size-4" /> },
+      { id: 'agents', label: 'Agentes', icon: <Users className="size-4" /> }
+    ]
+  },
   {
     id: 'centro-capacitacion',
     label: 'Centro de Capacitación',
@@ -269,7 +305,15 @@ const menuItems: MenuItem[] = [
     section: 'Ayuda',
   },
   { id: 'soporte-tecnico', label: 'Soporte Técnico', icon: <LifeBuoy className="size-5" /> },
-  { id: 'asesoria-legal', label: 'Asesoría Legal', icon: <Scale className="size-5" /> },
+  { 
+    id: 'asesoria-legal', 
+    label: 'Asesoría Legal', 
+    icon: <Scale className="size-5" />,
+    submenu: [
+      { id: 'cases', label: 'Casos', icon: <FileText className="size-4" /> },
+      { id: 'reminders', label: 'Recordatorios', icon: <Bell className="size-4" /> }
+    ]
+  },
   { id: 'novachat', label: 'Nova Suite', icon: <MessageSquare className="size-5" /> },
   {
     id: 'documentos',
@@ -344,11 +388,11 @@ const platformMenuItems: MenuItem[] = [
 export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview }: SidebarProps) {
   const { hasAccess, user } = useAuth();
   const { themeConfig } = useTheme();
-  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(['ventas', 'compras']));
+  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(activeModule && activeModule !== 'overview' ? [activeModule] : []));
 
   useEffect(() => {
     if (activeModule && activeModule !== 'overview') {
-      setExpandedMenus(prev => new Set(prev).add(activeModule));
+      setExpandedMenus(new Set([activeModule]));
     }
   }, [activeModule]);
 
@@ -356,10 +400,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
   const toggleMenu = (id: string) => {
     setExpandedMenus(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+      if (prev.has(id)) return new Set();
+      return new Set([id]);
     });
   };
 
@@ -502,6 +544,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
           {/* Navigation */}
           <div className="flex-1 min-h-0 overflow-y-auto py-3 no-scrollbar">
+            <TooltipProvider delayDuration={100}>
             <nav className="px-3 space-y-0.5">
               {activeMenuArray.map((item) => {
                 if (item.id !== 'overview' && !hasAccess(item.id as Module)) return null;
@@ -527,25 +570,48 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                     )}
                     {showSection && isCollapsed && <div className="pt-4" />}
                     <div>
-                      <button
-                        onClick={() => handleMenuClick(item)}
-                        aria-label={isCollapsed ? item.label : undefined}
-                        title={isCollapsed ? item.label : undefined}
-                        className={cn(
-                          'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-all duration-150',
-                          'hover:bg-sidebar-accent hover:text-sidebar-foreground',
-                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-                          isActive && !item.submenu
-                            ? 'bg-sidebar-accent/80 text-sidebar-foreground shadow-sm font-semibold'
-                            : isActive && item.submenu
-                              ? 'bg-sidebar-accent/80 text-sidebar-foreground'
-                              : 'text-sidebar-foreground/70'
-                        )}
-                      >
-                        <span className="flex items-center justify-center shrink-0">
-                          {item.icon}
-                        </span>
-                        {!isCollapsed && (
+                      {isCollapsed ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => handleMenuClick(item)}
+                              className={cn(
+                                'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-all duration-150',
+                                'hover:bg-sidebar-accent hover:text-sidebar-foreground',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                                isActive && !item.submenu
+                                  ? 'bg-sidebar-accent/80 text-sidebar-foreground shadow-sm font-semibold'
+                                  : isActive && item.submenu
+                                    ? 'bg-sidebar-accent/80 text-sidebar-foreground'
+                                    : 'text-sidebar-foreground/70'
+                              )}
+                            >
+                              <span className="flex items-center justify-center shrink-0">
+                                {item.icon}
+                              </span>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" sideOffset={10} className="font-bold text-xs bg-sidebar-accent text-sidebar-foreground border-sidebar-border shadow-lg">
+                            {user?.role === 'partner' && item.id === 'clientes' ? 'Mis Clientes' : item.label}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <button
+                          onClick={() => handleMenuClick(item)}
+                          className={cn(
+                            'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-all duration-150',
+                            'hover:bg-sidebar-accent hover:text-sidebar-foreground',
+                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                            isActive && !item.submenu
+                              ? 'bg-sidebar-accent/80 text-sidebar-foreground shadow-sm font-semibold'
+                              : isActive && item.submenu
+                                ? 'bg-sidebar-accent/80 text-sidebar-foreground'
+                                : 'text-sidebar-foreground/70'
+                          )}
+                        >
+                          <span className="flex items-center justify-center shrink-0">
+                            {item.icon}
+                          </span>
                           <>
                             <span className="flex-1 text-left truncate">
                               {user?.role === 'partner' && item.id === 'clientes' ? 'Mis Clientes' : item.label}
@@ -560,8 +626,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                               </motion.span>
                             )}
                           </>
-                        )}
-                      </button>
+                        </button>
+                      )}
 
                       <AnimatePresence>
                         {visibleSubmenu && visibleSubmenu.length > 0 && isExpanded && !isCollapsed && (
@@ -588,9 +654,6 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                                 >
                                   {subItem.icon}
                                   <span className="flex-1 text-left truncate">{subItem.label}</span>
-                                  {subItem.hasAdd && (
-                                    <Plus className="size-3.5 opacity-40 hover:opacity-100 transition-opacity" />
-                                  )}
                                 </button>
                               ))}
                             </div>
@@ -602,6 +665,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                 );
               })}
             </nav>
+            </TooltipProvider>
           </div>
 
           {/* User Info Footer */}

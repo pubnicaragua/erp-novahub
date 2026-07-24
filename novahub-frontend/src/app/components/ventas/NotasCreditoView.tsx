@@ -244,7 +244,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
                 <div className="col-span-6">Descripción</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
+                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-start">
                   <div className="col-span-6"><Input value={item.description || ''} onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], description: e.target.value };
                     setLocalDoc({ ...localDoc, items: ni }); }} className="h-8 text-xs" placeholder="Descripción del concepto..." /></div>

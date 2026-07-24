@@ -1,3 +1,4 @@
+import { cn } from './ui/utils';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -28,10 +29,11 @@ import { ConfigNominaView } from './hr/ConfigNominaView';
 
 interface RecursosHumanosPageProps {
   activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
   onSubModuleChange?: (subModule?: string) => void;
 }
 
-export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: RecursosHumanosPageProps) {
+export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: RecursosHumanosPageProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -162,7 +164,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange }: Recu
 
       {/* Main Navigation Tabs - Estilo Compras (Píldoras Flexibles y con Scroll) */}
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-        <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar">
+        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar")}>
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'HR_DASHBOARD' },
             { id: 'empleados', label: 'Empleados', icon: Users, module: 'HR_EMPLOYEES' },

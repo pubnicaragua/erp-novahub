@@ -28,18 +28,37 @@ const PRIORITY_MAP: Record<string, { label: string; color: string }> = {
 
 const STATUS_OPTIONS = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
 
-export function SoporteTecnicoAdminView() {
+interface SoporteTecnicoAdminViewProps {
+  activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
+  onSubModuleChange?: (module: string) => void;
+}
+
+export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: SoporteTecnicoAdminViewProps) {
   const [loading, setLoading] = useState(true);
   const [tickets, setTickets] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({});
   const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState(activeSubModule || 'ALL');
   const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
   const [adminResponse, setAdminResponse] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { fetchAll(); }, []);
+
+  useEffect(() => {
+    if (activeSubModule && activeSubModule !== filterStatus) {
+      setFilterStatus(activeSubModule);
+    }
+  }, [activeSubModule]);
+
+  const handleStatusChange = (status: string) => {
+    setFilterStatus(status);
+    if (onSubModuleChange) {
+      onSubModuleChange(status);
+    }
+  };
 
   const fetchAll = async () => {
     try {
@@ -129,9 +148,9 @@ export function SoporteTecnicoAdminView() {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input placeholder="Buscar por empresa, asunto o número..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-11 bg-background/50 border-transparent focus:bg-background rounded-2xl h-12 text-sm font-bold shadow-none" />
         </div>
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 px-2 no-scrollbar">
+        <div className={cn("flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 px-2 no-scrollbar", !isSidebarCollapsed && "hidden lg:hidden")}>
           {['ALL', ...STATUS_OPTIONS].map(s => (
-            <button key={s} onClick={() => setFilterStatus(s)} className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border border-transparent", filterStatus === s ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105" : "bg-background/50 text-muted-foreground hover:bg-background hover:text-primary")}>{s === 'ALL' ? 'Todos' : STATUS_MAP[s]?.label}</button>
+            <button key={s} onClick={() => handleStatusChange(s)} className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border border-transparent", filterStatus === s ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105" : "bg-background/50 text-muted-foreground hover:bg-background hover:text-primary")}>{s === 'ALL' ? 'Todos' : STATUS_MAP[s]?.label}</button>
           ))}
         </div>
       </div>

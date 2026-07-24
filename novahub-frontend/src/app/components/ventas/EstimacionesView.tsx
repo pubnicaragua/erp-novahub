@@ -447,7 +447,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
                 <div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
+                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-start">
                   <div className="col-span-6">
                     <Combobox 
                       options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))}

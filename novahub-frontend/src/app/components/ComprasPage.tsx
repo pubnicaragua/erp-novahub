@@ -47,6 +47,7 @@ const COMPRAS_SECTIONS = [
 
 interface ComprasPageProps {
   activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
 }
 
 type ComprasData = {
@@ -61,7 +62,7 @@ type ComprasData = {
   creditos:      SupplierCredit[];
 };
 
-export function ComprasPage({ activeSubModule }: ComprasPageProps) {
+export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageProps) {
   const { user } = useAuth();
   const normalize = (s?: string) => {
     if (!s) return 'proveedores';
@@ -141,8 +142,8 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
   const current = COMPRAS_SECTIONS.find(s => s.id === activeSection) || COMPRAS_SECTIONS[0];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <main className="flex-1 overflow-y-auto custom-scrollbar relative">
+    <div className="flex flex-1 bg-background w-full">
+      <main className="flex-1 relative">
         <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div className="flex items-center gap-3">
@@ -165,7 +166,7 @@ export function ComprasPage({ activeSubModule }: ComprasPageProps) {
           </div>
 
           <Tabs value={activeSection} className="w-full" onValueChange={setActiveSection}>
-            <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
+            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6")}>
               {COMPRAS_SECTIONS.map((section) => {
                 const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
                 const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('PURCHASES_'));

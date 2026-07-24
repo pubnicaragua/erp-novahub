@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
+import { cn } from './ui/utils';
 import {
   Users, FileSpreadsheet, ClipboardList, FileText,
   RotateCcw, CreditCard, FileOutput, FileMinus,
-  ShoppingCart, BarChart3, Vault
+  ShoppingCart, BarChart3, Vault, Calculator, Coins
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -49,19 +50,22 @@ const SALES_SECTIONS = [
   { id: 'pagos-recibidos', label: 'Pagos Recibidos', icon: CreditCard, description: 'Historial de ingresos', requiredModules: ['SALES_PAYMENTS'] },
   { id: 'devoluciones-venta', label: 'Devoluciones', icon: FileOutput, description: 'Retornos de mercancía', requiredModules: ['SALES_RETURNS'] },
   { id: 'notas-credito', label: 'Notas de Crédito', icon: FileMinus, description: 'Ajustes y créditos emitidos', requiredModules: ['SALES_CREDIT_NOTES'] },
-  { id: 'facturacion-caja', label: 'Facturación por Caja', icon: ShoppingCart, description: 'POS y facturación directa', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
-  { id: 'control-caja', label: 'Control de Caja', icon: Vault, description: 'Apertura, arqueo y dashboard', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
+  { id: 'facturacion-caja', label: 'Facturación por Caja', icon: Calculator, description: 'POS y facturación directa', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
+  { id: 'control-caja', label: 'Control de Caja', icon: Coins, description: 'Apertura, arqueo y dashboard', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
 ];
 
 interface VentasPageProps {
   activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
   onSubModuleChange?: (sub: string) => void;
 }
 
-export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPageProps) {
+export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: VentasPageProps) {
   const { user } = useAuth();
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
+  const [targetInvoiceId, setTargetInvoiceId] = useState<string | null>(null);
+  const [controlCajaTargetParams, setControlCajaTargetParams] = useState<{registerId?: string, section?: 'dashboard' | 'session' | 'history'} | null>(null);
 
   // Sync section with Sidebar prop
   useEffect(() => {
@@ -169,8 +173,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
 
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <main className="flex-1 overflow-y-auto custom-scrollbar relative">
+    <div className="flex flex-1 bg-background w-full">
+      <main className="flex-1 relative">
         <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div className="flex items-center gap-3">
@@ -193,7 +197,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
           </div>
 
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
-            <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
+            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6")}>
               {SALES_SECTIONS.map((section) => {
                 const hasAccess = !section.requiredModules || !user?.enabledModules
                   || user.enabledModules.includes('SALES')
@@ -240,8 +244,10 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
                   series={data.series}
                   warehouses={data.warehouses}
                   employees={data.employees}
-                  invoiceDraft={invoiceDraft}
+                  invoiceDraft={invoiceDraft || undefined}
                   onClearInvoiceDraft={() => setInvoiceDraft(null)}
+                  targetInvoiceId={targetInvoiceId}
+                  onClearTargetInvoiceId={() => setTargetInvoiceId(null)}
                 />
               )}
               {activeSection === 'facturas-recurrentes' && (
@@ -257,10 +263,28 @@ export function VentasPage({ activeSubModule, onSubModuleChange }: VentasPagePro
                 <NotasCreditoView data={data.notasCredito} loading={loading} onRefresh={fetchData} customers={data.clientes} />
               )}
               {activeSection === 'facturacion-caja' && (
-                <FacturacionCajaView />
+                <FacturacionCajaView 
+                  onNavigateToControlCaja={(registerId) => {
+                    setControlCajaTargetParams(registerId ? { registerId, section: 'dashboard' } : null);
+                    setActiveSection('control-caja');
+                    onSubModuleChange?.('control-caja');
+                  }}
+                  onInvoiceCreated={(invoiceId) => {
+                    setTargetInvoiceId(invoiceId);
+                    setActiveSection('facturas');
+                    onSubModuleChange?.('facturas');
+                  }}
+                />
               )}
               {activeSection === 'control-caja' && (
-                <ControlDashboardCajaView />
+                <ControlDashboardCajaView 
+                  onNavigateToFacturacion={() => {
+                    setActiveSection('facturacion-caja');
+                    if (onSubModuleChange) onSubModuleChange('facturacion-caja');
+                  }}
+                  initialRegisterId={controlCajaTargetParams?.registerId}
+                  initialSection={controlCajaTargetParams?.section}
+                />
               )}
             </motion.div>
           </AnimatePresence>

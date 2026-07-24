@@ -98,7 +98,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw new Error(normalizeErrorMessage(serverMessage, response.status));
   }
 
-  return response.json();
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch (err) {
+    return text as any;
+  }
 }
 
 // Convenience methods

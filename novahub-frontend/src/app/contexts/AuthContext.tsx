@@ -451,6 +451,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'ACTIVITIES_': 'actividades',
       'PROVIDERS_': 'proveedores',
       'CLIENTS_': 'clientes',
+      'ACCOUNTING_': 'contabilidad',
     };
 
     const findPermission = (moduleName: string) => permissions.find(

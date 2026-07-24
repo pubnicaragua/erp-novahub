@@ -257,7 +257,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                 <div className="col-span-5">Descripción</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div><div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
+                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-start">
                   <div className="col-span-5"><Combobox options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
                     onChange={(val) => { const ni = [...(localDoc.items || [])]; const prod = products.find(p => p.id === val);
                       ni[idx] = { ...ni[idx], productId: val, description: prod?.name || '', unitPrice: Number(prod?.price || 0), total: Number(ni[idx].quantity || 1) * Number(prod?.price || 0) };

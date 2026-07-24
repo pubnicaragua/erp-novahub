@@ -10,10 +10,11 @@ import { alertsService, messagesService, pushNotificationsService } from '../ser
 
 interface NotificacionesPageProps {
   activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
   onSubModuleChange?: (sub: string) => void;
 }
 
-export const NotificacionesPage = ({ activeSubModule, onSubModuleChange }: NotificacionesPageProps) => {
+export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: NotificacionesPageProps) => {
   const tabs = [
     { id: 'alertas', label: 'Alertas', icon: AlertTriangle },
     { id: 'mensajes', label: 'Mensajes', icon: MessageSquare },
@@ -103,7 +104,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange }: Notif
             onSubModuleChange?.(value);
           }}
         >
-          <TabsList className="mb-5 grid h-auto w-full grid-cols-3 gap-1 rounded-xl border border-border/50 bg-muted/30 p-1">
+          <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "mb-5 grid h-auto w-full grid-cols-3 gap-1 rounded-xl border border-border/50 bg-muted/30 p-1")}>
             {tabs.map((tab) => (
               <TabsTrigger
                 key={tab.id}

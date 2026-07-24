@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BookOpen, FileText, Scale, TrendingUp, PieChart,
   DollarSign, Landmark, Calendar, FileBarChart,
@@ -211,11 +211,33 @@ const HELP_DATA: Record<string, {
   },
 };
 
-export function ContabilidadPage() {
-  const [activeSection, setActiveSection] = useState('plan-cuentas');
+interface ContabilidadPageProps {
+  activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
+  onSubModuleChange?: (module: string) => void;
+}
+
+export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ContabilidadPageProps) {
+  const [activeSection, setActiveSection] = useState(activeSubModule || 'plan-cuentas');
   const [showHelp, setShowHelp] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const help = HELP_DATA[activeSection];
+
+  useEffect(() => {
+    if (activeSubModule && activeSubModule !== activeSection) {
+      const validSection = SECTIONS.find(s => s.id === activeSubModule);
+      if (validSection) {
+        setActiveSection(validSection.id);
+      }
+    }
+  }, [activeSubModule]);
+
+  const handleSectionChange = (id: string) => {
+    setActiveSection(id);
+    if (onSubModuleChange) {
+      onSubModuleChange(id);
+    }
+  };
 
   return (
     <div className="flex h-full min-h-[calc(100vh-5rem)]">
@@ -258,7 +280,7 @@ export function ContabilidadPage() {
                 return (
                   <button
                     key={section.id}
-                    onClick={() => setActiveSection(section.id)}
+                    onClick={() => handleSectionChange(section.id)}
                     className={cn(
                       'flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all shrink-0',
                       isActive

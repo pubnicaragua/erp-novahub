@@ -20,8 +20,15 @@ import { legalService, type LegalCase, type LegalReminder } from '../../services
 import { useAuth } from '../../contexts/AuthContext';
 import { LegalChatPanel } from './LegalChatPanel';
 
-export function AsesoriaLegalView() {
+interface AsesoriaLegalViewProps {
+  activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
+  onSubModuleChange?: (module: string) => void;
+}
+
+export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: AsesoriaLegalViewProps) {
   const { canPerform } = useAuth();
+  const [activeTab, setActiveTab] = useState(activeSubModule || 'cases');
   const [cases, setCases] = useState<LegalCase[]>([]);
   const [reminders, setReminders] = useState<LegalReminder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +56,19 @@ export function AsesoriaLegalView() {
   };
 
   useEffect(() => { fetchData(); }, [filterType, filterStatus]);
+
+  useEffect(() => {
+    if (activeSubModule && activeSubModule !== activeTab) {
+      setActiveTab(activeSubModule);
+    }
+  }, [activeSubModule]);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    if (onSubModuleChange) {
+      onSubModuleChange(value);
+    }
+  };
 
   const filteredCases = cases.filter((c) =>
     !search || c.number.toLowerCase().includes(search.toLowerCase()) || c.description.toLowerCase().includes(search.toLowerCase())
@@ -96,8 +116,8 @@ export function AsesoriaLegalView() {
           </motion.div>
         ) : (
           <motion.div key="main" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
-            <Tabs defaultValue="cases" className="w-full">
-              <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+              <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6")}>
                 <TabsTrigger value="cases"
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80

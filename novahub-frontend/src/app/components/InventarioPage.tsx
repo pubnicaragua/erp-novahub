@@ -1,3 +1,4 @@
+import { cn } from './ui/utils';
 import { useState, useEffect, useCallback } from 'react';
 import {
   Package,
@@ -34,10 +35,11 @@ const INVENTORY_SECTIONS = [
 
 interface InventarioPageProps {
   activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
   onSubModuleChange?: (subModule?: string) => void;
 }
 
-export function InventarioPage({ activeSubModule, onSubModuleChange }: InventarioPageProps) {
+export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: InventarioPageProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -185,7 +187,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange }: Inventari
           if (onSubModuleChange) onSubModuleChange(nextTab);
         }}
       >
-        <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40">
+        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40")}>
           {INVENTORY_SECTIONS.map((section) => {
             const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
             const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('INVENTORY_'));

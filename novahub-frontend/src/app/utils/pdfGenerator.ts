@@ -656,3 +656,140 @@ export const generateSupplierInvoicePDF = async ({
 
   doc.save(`${invoice.number || invoice.id || 'factura_proveedor'}.pdf`);
 };
+
+export const generateSessionSummaryPDF = async ({
+  session,
+  logs,
+  tenantName,
+  tenantLogo,
+  displayCurrency,
+  isUSD,
+  sessionRate,
+  totals
+}: {
+  session: any;
+  logs: any[];
+  tenantName: string;
+  tenantLogo?: string;
+  displayCurrency: string;
+  isUSD: boolean;
+  sessionRate: number;
+  totals: {
+    fondoInicial: number;
+    ventas: number;
+    gastos: number;
+    esperado: number;
+    contado: number;
+    diferencia: number;
+  }
+}) => {
+  const doc = new jsPDF();
+  const primaryColor = [16, 185, 129] as [number, number, number];
+  const textColor = [51, 65, 85] as [number, number, number];
+  const symbol = isUSD ? '$' : 'C$';
+
+  let titleY = 25;
+  if (tenantLogo) {
+    try {
+      doc.addImage(tenantLogo, 'PNG', 14, 15, 30, 15);
+      titleY = 38;
+      doc.setFontSize(14);
+    } catch (error) {
+      doc.setFontSize(22);
+    }
+  } else {
+    doc.setFontSize(22);
+  }
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Resumen de Turno (Caja)', 14, titleY + 7);
+  
+  doc.setFontSize(18);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text('ARQUEO DE CAJA', 196, 25, { align: 'right' });
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Sesión iniciada: ${new Date(session.openedAt).toLocaleString()}`, 196, 32, { align: 'right' });
+  doc.text(`Generado: ${new Date().toLocaleString()}`, 196, 38, { align: 'right' });
+  
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(14, 46, 196, 46);
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Resumen Financiero', 14, 55);
+
+  autoTable(doc, {
+    startY: 60,
+    head: [['Concepto', `Monto (${displayCurrency})`]],
+    body: [
+      ['Fondo Inicial', `${symbol} ${totals.fondoInicial.toFixed(2)}`],
+      ['Ventas Totales', `${symbol} ${totals.ventas.toFixed(2)}`],
+      ['Gastos Registrados', `${symbol} ${totals.gastos.toFixed(2)}`],
+      ['Saldo Esperado', `${symbol} ${totals.esperado.toFixed(2)}`],
+      ['Efectivo Contado', `${symbol} ${totals.contado.toFixed(2)}`],
+      ['Diferencia', `${symbol} ${totals.diferencia.toFixed(2)}`],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 9, fontStyle: 'bold' },
+    bodyStyles: { textColor: textColor, fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 100 },
+      1: { cellWidth: 'auto', halign: 'right' }
+    },
+    styles: { cellPadding: 3, overflow: 'linebreak' }
+  });
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Transacciones del Turno', 14, (doc as any).lastAutoTable.finalY + 10);
+
+  const tableData = logs.map((log: any) => {
+    const logNIO = Number(log.amountNIO || 0);
+    const logUSD = Number(log.amountUSD || 0);
+    const logConverted = isUSD ? (logUSD + (logNIO / sessionRate)) : (logNIO + (logUSD * sessionRate));
+    const sign = log.type === 'EXIT' ? '-' : '+';
+    
+    return [
+      log.reference || (log.type === 'SALE' ? 'TKT-' + log.id.slice(0,4).toUpperCase() : 'GST-' + log.id.slice(0,4).toUpperCase()),
+      log.type === 'SALE' ? 'VENTA' : log.type === 'EXIT' ? 'GASTO' : log.type === 'ENTRY' ? 'ENTRADA' : log.type === 'OPEN' ? 'APERTURA' : log.type,
+      log.description || 'N/A',
+      new Date(log.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+      `${sign}${symbol} ${logConverted.toFixed(2)}`
+    ];
+  });
+
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 15,
+    head: [['Ref / Ticket', 'Tipo', 'Descripción', 'Hora', `Monto (${displayCurrency})`]],
+    body: tableData,
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 9, fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { textColor: textColor, fontSize: 8 },
+    columnStyles: {
+      0: { cellWidth: 25, halign: 'center' },
+      1: { cellWidth: 20, halign: 'center' },
+      2: { cellWidth: 'auto', halign: 'left' },
+      3: { cellWidth: 20, halign: 'center' },
+      4: { cellWidth: 25, halign: 'right' }
+    },
+    styles: { overflow: 'linebreak', cellPadding: 3 }
+  });
+
+  const pageHeight = doc.internal.pageSize.height;
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'italic');
+  doc.text(`Generado por ${tenantName} - Módulo de Caja POS`, 14, pageHeight - 10);
+
+  doc.save(`Arqueo_Caja_${new Date().getTime()}.pdf`);
+};

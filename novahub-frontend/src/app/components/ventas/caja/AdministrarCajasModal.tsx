@@ -1,0 +1,299 @@
+import React, { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { Button } from '../../ui/button';
+import { Input } from '../../ui/input';
+import { Label } from '../../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
+import { Switch } from '../../ui/switch';
+import { Badge } from '../../ui/badge';
+import { Banknote, Plus, Loader2, Edit2, Trash2, Users } from 'lucide-react';
+import { toast } from 'sonner';
+import { cajaService, type CashRegister } from '../../../services/caja.service';
+import { api } from '../../../services/api';
+
+interface AdministrarCajasModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRegistersChanged?: () => void;
+}
+
+export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged }: AdministrarCajasModalProps) {
+  const [cajasList, setCajasList] = useState<CashRegister[]>([]);
+  const [cajasLoading, setCajasLoading] = useState(false);
+  const [isCajaFormOpen, setIsCajaFormOpen] = useState(false);
+  const [cajaForm, setCajaForm] = useState<Partial<CashRegister>>({});
+  const [sucursalesList, setSucursalesList] = useState<any[]>([]);
+
+  const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
+  const [accessCaja, setAccessCaja] = useState<CashRegister | null>(null);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [assignedUsers, setAssignedUsers] = useState<Set<string>>(new Set());
+  const [accessLoading, setAccessLoading] = useState(false);
+
+  const fetchCajas = async () => {
+    setCajasLoading(true);
+    try {
+      const res = await cajaService.getRegisters(true);
+      setCajasList(Array.isArray(res) ? res : []);
+    } catch (e) {
+      toast.error('Error al cargar cajas');
+    } finally {
+      setCajasLoading(false);
+    }
+  };
+
+  const fetchSucursales = async () => {
+    try {
+      const res: any = await api.get('/sucursales');
+      setSucursalesList(Array.isArray(res) ? res : (res?.data || []));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      fetchCajas();
+      fetchSucursales();
+    }
+  }, [open]);
+
+  const handleManageAccess = async (caja: CashRegister) => {
+    onOpenChange(false);
+    setAccessCaja(caja);
+    setIsAccessModalOpen(true);
+    setAccessLoading(true);
+    try {
+      const res = await cajaService.getRegisterAccess(caja.id!);
+      setAllUsers(res.allUsers || []);
+      setAssignedUsers(new Set(res.assignedUserIds || []));
+    } catch (e) {
+      toast.error('Error al cargar accesos');
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
+  const handleSaveAccess = async () => {
+    if (!accessCaja) return;
+    try {
+      await cajaService.updateRegisterAccess(accessCaja.id!, Array.from(assignedUsers));
+      toast.success('Accesos actualizados');
+      setIsAccessModalOpen(false);
+      onOpenChange(true);
+    } catch (e) {
+      toast.error('Error al guardar accesos');
+    }
+  };
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-5xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex flex-row items-center justify-between">
+            <div>
+              <DialogTitle className="flex items-center gap-2 text-lg font-black">
+                <Banknote className="size-5 text-primary" /> Puntos de Venta (Cajas)
+              </DialogTitle>
+              <DialogDescription>Crea y gestiona las cajas para el sistema POS</DialogDescription>
+            </div>
+            <Button onClick={() => {
+              onOpenChange(false);
+              setCajaForm({ isActive: true });
+              setIsCajaFormOpen(true);
+            }} className="gap-2 mt-0 mr-8">
+              <Plus className="size-4" /> Nueva Caja
+            </Button>
+          </DialogHeader>
+          
+          <div className="py-4 overflow-y-auto">
+            {cajasLoading ? (
+              <div className="flex items-center justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/20">
+                      <th className="px-4 py-3 text-left font-semibold">Código</th>
+                      <th className="px-4 py-3 text-left font-semibold">Nombre</th>
+                      <th className="px-4 py-3 text-left font-semibold">Sucursal</th>
+                      <th className="px-4 py-3 text-left font-semibold">Ubicación</th>
+                      <th className="px-4 py-3 text-left font-semibold">Estado</th>
+                      <th className="px-4 py-3 text-right font-semibold">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {cajasList.map((caja) => {
+                      const sucursal = sucursalesList.find(s => s.id === caja.branchId);
+                      return (
+                      <tr key={caja.id} className="hover:bg-muted/10">
+                        <td className="px-4 py-3 font-medium">{caja.code}</td>
+                        <td className="px-4 py-3">{caja.name}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{sucursal ? sucursal.name : 'No Asignada'}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{caja.location || '-'}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant={caja.isActive ? 'default' : 'secondary'} className={caja.isActive ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : ''}>
+                            {caja.isActive ? 'Activa' : 'Inactiva'}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => handleManageAccess(caja)}>
+                              <Users className="size-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => {
+                              onOpenChange(false);
+                              setCajaForm(caja);
+                              setIsCajaFormOpen(true);
+                            }}>
+                              <Edit2 className="size-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="text-destructive" onClick={async () => {
+                              if (confirm('¿Eliminar esta caja?')) {
+                                try {
+                                  await cajaService.deleteRegister(caja.id!);
+                                  toast.success('Caja eliminada');
+                                  fetchCajas();
+                                  onRegistersChanged?.();
+                                } catch(e) {
+                                  toast.error('Error al eliminar');
+                                }
+                              }
+                            }}>
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    )})}
+                    {cajasList.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                          No hay cajas creadas. Haz clic en "Nueva Caja" para empezar.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Formulario de Caja */}
+      <Dialog open={isCajaFormOpen} onOpenChange={(open) => {
+        setIsCajaFormOpen(open);
+        if (!open) onOpenChange(true);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{cajaForm.id ? 'Editar Caja' : 'Nueva Caja'}</DialogTitle>
+            <DialogDescription>Completa la información de la caja.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Código *</Label>
+              <Input value={cajaForm.code || ''} onChange={e => setCajaForm({...cajaForm, code: e.target.value})} placeholder="Ej. CJ-01" />
+            </div>
+            <div className="space-y-2">
+              <Label>Nombre *</Label>
+              <Input value={cajaForm.name || ''} onChange={e => setCajaForm({...cajaForm, name: e.target.value})} placeholder="Caja Principal" />
+            </div>
+            <div className="space-y-2">
+              <Label>Sucursal</Label>
+              <Select value={cajaForm.branchId || ''} onValueChange={v => setCajaForm({...cajaForm, branchId: v})}>
+                <SelectTrigger><SelectValue placeholder="Seleccione una Sucursal" /></SelectTrigger>
+                <SelectContent>
+                  {sucursalesList.map(w => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Ubicación</Label>
+              <Input value={cajaForm.location || ''} onChange={e => setCajaForm({...cajaForm, location: e.target.value})} placeholder="Primer Piso" />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label>Estado de la Caja</Label>
+              <Switch checked={cajaForm.isActive} onCheckedChange={c => setCajaForm({...cajaForm, isActive: c})} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCajaFormOpen(false)}>Cancelar</Button>
+            <Button onClick={async () => {
+              if (!cajaForm.name || !cajaForm.code) return toast.error('Nombre y código son obligatorios');
+              try {
+                if (cajaForm.id) {
+                  await cajaService.updateRegister(cajaForm.id, cajaForm as any);
+                  toast.success('Caja actualizada');
+                } else {
+                  await cajaService.createRegister(cajaForm as any);
+                  toast.success('Caja creada');
+                }
+                setIsCajaFormOpen(false);
+                onOpenChange(true);
+                fetchCajas();
+                onRegistersChanged?.();
+              } catch (e) {
+                toast.error('Error al guardar la caja');
+              }
+            }}>Guardar Caja</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Gestión de Accesos a Caja */}
+      <Dialog open={isAccessModalOpen} onOpenChange={(open) => {
+        setIsAccessModalOpen(open);
+        if (!open) onOpenChange(true);
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Accesos - {accessCaja?.name}</DialogTitle>
+            <DialogDescription>Selecciona qué usuarios pueden usar esta caja</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {accessLoading ? (
+              <div className="flex items-center justify-center py-8"><Loader2 className="size-6 animate-spin text-primary" /></div>
+            ) : (
+              <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
+                {allUsers.map(user => {
+                  const isAssigned = assignedUsers.has(user.id);
+                  return (
+                    <div key={user.id} className="flex items-center justify-between border-b border-border pb-2 last:border-0 last:pb-0">
+                      <div>
+                        <p className="font-medium text-sm">{user.name}</p>
+                        <p className="text-xs text-muted-foreground">{user.email}</p>
+                      </div>
+                      <Switch
+                        checked={isAssigned}
+                        onCheckedChange={(checked) => {
+                          const newSet = new Set(assignedUsers);
+                          if (checked) newSet.add(user.id);
+                          else newSet.delete(user.id);
+                          setAssignedUsers(newSet);
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+                {allUsers.length === 0 && (
+                  <p className="text-center text-sm text-muted-foreground py-4">No hay usuarios disponibles</p>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAccessModalOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSaveAccess} disabled={accessLoading}>Guardar Accesos</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

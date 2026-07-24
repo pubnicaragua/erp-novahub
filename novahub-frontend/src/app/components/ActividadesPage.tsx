@@ -14,10 +14,11 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface ActividadesPageProps {
   activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
   onSubModuleChange?: (sub: string) => void;
 }
 
-export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: ActividadesPageProps) => {
+export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ActividadesPageProps) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'tareas');
   const [data, setData] = useState<{ tareas: any[], eventos: any[], recordatorios: any[], bitacora: any[] }>({
@@ -84,8 +85,8 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <main className="flex-1 overflow-y-auto custom-scrollbar relative">
+    <div className="flex flex-1 bg-background w-full">
+      <main className="flex-1 relative">
         <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div className="flex items-center gap-3">
@@ -107,7 +108,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
             setActiveTab(val);
             if (onSubModuleChange) onSubModuleChange(val);
           }}>
-            <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6">
+            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6")}>
               {tabs.map((tab) => {
                 const hasRequired = user?.enabledModules?.includes(tab.module);
                 const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('ACTIVITIES_'));

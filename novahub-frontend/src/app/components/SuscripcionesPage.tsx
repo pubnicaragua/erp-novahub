@@ -1047,6 +1047,100 @@ export function SuscripcionesPage() {
               Detalles: {tenantDetails?.name}
             </DialogTitle>
           </DialogHeader>
+          {tenantDetails && (
+            <div className="py-4 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card className="bg-muted/10 border-border/50 shadow-none">
+                  <CardContent className="p-4 space-y-4">
+                    <h3 className="font-bold text-sm uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                      <Building2 className="size-4" /> Información General
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between items-center border-b border-border/50 pb-2">
+                        <span className="text-muted-foreground">Nombre:</span>
+                        <span className="font-bold">{tenantDetails.name}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/50 pb-2">
+                        <span className="text-muted-foreground">URL:</span>
+                        <span className="font-bold">{tenantDetails.slug}.novahub.io</span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/50 pb-2">
+                        <span className="text-muted-foreground">Industria:</span>
+                        <span className="font-bold capitalize">{tenantDetails.industry?.toLowerCase()}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Plan:</span>
+                        <Badge variant="outline" className={getPlanColor(tenantDetails.plan)}>
+                          {tenantDetails.plan}
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-muted/10 border-border/50 shadow-none">
+                  <CardContent className="p-4 space-y-4">
+                    <h3 className="font-bold text-sm uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                      <Users className="size-4" /> Usuarios y Accesos
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between items-center border-b border-border/50 pb-2">
+                        <span className="text-muted-foreground">Total Usuarios:</span>
+                        <span className="font-bold">{tenantDetails._count?.users || tenantDetails.users?.length || 0}</span>
+                      </div>
+                      {tenantDetails.users && tenantDetails.users.length > 0 ? (
+                        <>
+                          <div className="flex justify-between items-center border-b border-border/50 pb-2">
+                            <span className="text-muted-foreground">Admin Principal:</span>
+                            <span className="font-bold">{tenantDetails.users[0]?.name}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Email Admin:</span>
+                            <span className="font-bold">{tenantDetails.users[0]?.email}</span>
+                          </div>
+                        </>
+                      ) : (
+                         <div className="text-xs text-muted-foreground italic text-center py-2">
+                           No hay datos de usuarios detallados.
+                         </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="font-bold text-sm uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                  <Zap className="size-4" /> Módulos Activos
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {tenantDetails.subscriptions?.filter((s: any) => s.isActive).length > 0 ? (
+                    tenantDetails.subscriptions.filter((s: any) => s.isActive).map((sub: any) => {
+                      // Buscar en módulos principales
+                      let mod = AVAILABLE_MODULES.find(m => m.id === sub.module);
+                      let label = mod?.label;
+                      // Si no está, buscar en submódulos
+                      if (!mod) {
+                        AVAILABLE_MODULES.forEach(m => {
+                          if (m.submodules) {
+                            const found = m.submodules.find(sm => sm.id === sub.module);
+                            if (found) label = found.label;
+                          }
+                        });
+                      }
+                      return (
+                        <Badge key={sub.id} className="bg-primary/10 text-primary border-primary/20 px-3 py-1">
+                          {label || sub.module}
+                        </Badge>
+                      );
+                    })
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic bg-muted/50 w-full p-3 rounded-lg text-center border border-dashed border-border/50">No hay módulos activos para esta empresa.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" className="w-full rounded-xl" onClick={() => setIsDetailsDialogOpen(false)}>Cerrar</Button>
           </DialogFooter>

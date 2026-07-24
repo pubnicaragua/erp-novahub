@@ -1,3 +1,4 @@
+import { cn } from './ui/utils';
 import { useState, useEffect } from 'react';
 import { 
   DollarSign, TrendingUp, TrendingDown, BarChart3, 
@@ -16,10 +17,11 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
   onSubModuleChange?: (subModule?: string) => void;
 }
 
-export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPageProps) {
+export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: FinanzasPageProps) {
   const { user, canPerform } = useAuth();
   const { displayCurrency, exchangeRate: globalRate, convertAmount } = useCurrency();
 
@@ -375,7 +377,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
 
       {/* Main Navigation Tabs — matches RH pattern with primary theme colors */}
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-        <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar">
+        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar")}>
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'FINANCIAL_DASHBOARD' },
             { id: 'ingresos', label: 'Ingresos', icon: TrendingUp, module: 'FINANCIAL_INCOMES' },

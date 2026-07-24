@@ -45,8 +45,14 @@ const TICKETS_TOUR_STEPS: GuidedTourStep[] = [
   },
 ];
 
-export const TicketsPage = () => {
-  const [activeTab, setActiveTab] = useState('tickets');
+interface TicketsPageProps {
+  activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
+  onSubModuleChange?: (module: string) => void;
+}
+
+export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: TicketsPageProps) => {
+  const [activeTab, setActiveTab] = useState(activeSubModule || 'tickets');
   const [data, setData] = useState<{
     tickets: Ticket[];
     knowledgeBase: KnowledgeArticle[];
@@ -94,6 +100,19 @@ export const TicketsPage = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (activeSubModule && activeSubModule !== activeTab) {
+      setActiveTab(activeSubModule);
+    }
+  }, [activeSubModule]);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    if (onSubModuleChange) {
+      onSubModuleChange(value);
+    }
+  };
+
   const tabs = [
     { id: 'tickets', label: 'Tickets', icon: TicketIcon, color: 'text-blue-500' },
     { id: 'faqs', label: 'Base de Conocimiento', icon: BookOpen, color: 'text-emerald-500' },
@@ -101,8 +120,8 @@ export const TicketsPage = () => {
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <main className="flex-1 overflow-y-auto custom-scrollbar relative">
+    <div className="flex flex-1 bg-background w-full">
+      <main className="flex-1 relative">
         <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div className="flex items-center gap-3" data-tour="tickets-title">
@@ -123,8 +142,8 @@ export const TicketsPage = () => {
             </Button>
           </div>
 
-          <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
-            <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6" data-tour="tickets-tabs">
+          <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
+            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6")} data-tour="tickets-tabs">
               {tabs.map((tab) => (
                 <TabsTrigger 
                   key={tab.id} 

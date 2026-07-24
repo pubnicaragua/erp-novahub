@@ -40,11 +40,17 @@ const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = 
   CLOSED: { label: 'Cerrado', color: 'bg-muted/50 text-muted-foreground border-border/50', icon: X },
 };
 
-export function SoporteTecnicoView() {
+interface SoporteTecnicoViewProps {
+  activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
+  onSubModuleChange?: (module: string) => void;
+}
+
+export function SoporteTecnicoView({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: SoporteTecnicoViewProps) {
   const [loading, setLoading] = useState(true);
   const [tickets, setTickets] = useState<any[]>([]);
   const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState('ALL');
+  const [activeCategory, setActiveCategory] = useState(activeSubModule || 'ALL');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
@@ -55,6 +61,19 @@ export function SoporteTecnicoView() {
   });
 
   useEffect(() => { fetchTickets(); }, []);
+
+  useEffect(() => {
+    if (activeSubModule && activeSubModule !== activeCategory) {
+      setActiveCategory(activeSubModule);
+    }
+  }, [activeSubModule]);
+
+  const handleCategoryChange = (id: string) => {
+    setActiveCategory(id);
+    if (onSubModuleChange) {
+      onSubModuleChange(id);
+    }
+  };
 
   const fetchTickets = async () => {
     try {
@@ -157,9 +176,9 @@ export function SoporteTecnicoView() {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input placeholder="Buscar por asunto o número..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-11 bg-background/50 border-transparent focus:bg-background rounded-2xl h-12 text-sm font-bold shadow-none" />
         </div>
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 px-2 no-scrollbar">
+        <div className={cn("flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 px-2 no-scrollbar", !isSidebarCollapsed && "hidden lg:hidden")}>
           {CATEGORIES.map(cat => (
-            <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border border-transparent", activeCategory === cat.id ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105" : "bg-background/50 text-muted-foreground hover:bg-background hover:text-primary")}>{cat.label}</button>
+            <button key={cat.id} onClick={() => handleCategoryChange(cat.id)} className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border border-transparent", activeCategory === cat.id ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105" : "bg-background/50 text-muted-foreground hover:bg-background hover:text-primary")}>{cat.label}</button>
           ))}
         </div>
       </div>

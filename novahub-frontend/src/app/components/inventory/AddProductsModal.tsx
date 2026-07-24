@@ -21,7 +21,7 @@ interface AddProductsModalProps {
 }
 
 export function AddProductsModal({ open, onOpenChange, categories, warehouses, onRefresh }: AddProductsModalProps) {
-  const { formatAmount } = useCurrency();
+  const { formatAmount, exchangeRate, baseCurrency } = useCurrency();
   const [internalCategories, setInternalCategories] = useState<any[]>([]);
   const [internalWarehouses, setInternalWarehouses] = useState<any[]>([]);
 
@@ -46,6 +46,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
     name: '',
     categoryId: effectiveCategories[0]?.id || '',
     itemType: 'PRODUCT',
+    priceCurrency: 'NIO',
     costPrice: '',
     salePrice: '',
     trackSerialNumbers: false,
@@ -111,12 +112,18 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           uploadedImageUri = uploaded.uri;
         }
 
+        const rate = product.priceCurrency !== baseCurrency ? 
+                      (product.priceCurrency === 'USD' ? exchangeRate : (1 / exchangeRate)) 
+                      : 1;
+        const convertedCost = Number(product.costPrice || 0) * rate;
+        const convertedSale = Number(product.salePrice || 0) * rate;
+
         const createdResponse = await inventoryService.createProduct({
           code: product.code,
           name: product.name,
           categoryId: product.categoryId,
-          salePrice: Number(product.salePrice || 0),
-          costPrice: Number(product.costPrice || 0),
+          salePrice: convertedSale,
+          costPrice: convertedCost,
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           itemType: product.itemType || 'PRODUCT',
           initialStock: 0,
@@ -193,7 +200,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 onRemove={handleImageRemoved}
               />
             </div>
-            <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-3">
               <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Código *</label>
                 <Input 
@@ -212,7 +219,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   placeholder="Nombre del producto" 
                 />
               </div>
-              <div className="col-span-1">
+              <div className="col-span-2">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría *</label>
                 <Select value={draftProduct.categoryId} onValueChange={v => handleUpdateDraft('categoryId', v)}>
                   <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
@@ -229,6 +236,17 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   <SelectContent>
                     <SelectItem value="PRODUCT">Producto</SelectItem>
                     <SelectItem value="SERVICE">Servicio</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="col-span-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Moneda</label>
+                <Select value={draftProduct.priceCurrency} onValueChange={v => handleUpdateDraft('priceCurrency', v)}>
+                  <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NIO">NIO</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -255,14 +273,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 />
               </div>
 
-              <div className="col-span-1 flex flex-col justify-end">
+              <div className="col-span-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Serie/IMEI</label>
                 <Button
                   type="button"
                   variant={draftProduct.trackSerialNumbers ? 'default' : 'outline'}
-                  className={`h-8 w-full text-[10px] uppercase tracking-wider ${draftProduct.trackSerialNumbers ? 'bg-primary text-primary-foreground' : ''}`}
+                  className={`h-8 w-full mt-1 text-[10px] uppercase tracking-wider ${draftProduct.trackSerialNumbers ? 'bg-primary text-primary-foreground' : ''}`}
                   onClick={() => handleUpdateDraft('trackSerialNumbers', !draftProduct.trackSerialNumbers)}
                 >
-                  IMEI {draftProduct.trackSerialNumbers ? 'Sí' : 'No'}
+                  {draftProduct.trackSerialNumbers ? 'Sí' : 'No'}
                 </Button>
               </div>
 
@@ -290,7 +309,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 </>
               )}
               
-              <div className={`col-span-4 flex justify-end ${draftProduct.itemType === 'SERVICE' ? 'mt-0' : 'mt-0'}`}>
+              <div className={`col-span-5 flex justify-end ${draftProduct.itemType === 'SERVICE' ? 'mt-0' : 'mt-0'}`}>
                 <Button onClick={handleAddToList} className="h-8 text-xs font-bold" variant="secondary">
                   <Plus className="size-3 mr-2" />
                   Agregar a la lista
@@ -343,7 +362,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                          {product.itemType === 'SERVICE' ? '-' : (product.initialStock || 0)}
                        </TableCell>
                        <TableCell className="text-xs text-right p-2 tabular-nums">
-                         {formatAmount(Number(product.salePrice || 0))}
+                         {product.priceCurrency === 'USD' ? '$' : 'C$'} {Number(product.salePrice || 0).toFixed(2)}
                        </TableCell>
                        <TableCell className="text-right p-2">
                          <Button 

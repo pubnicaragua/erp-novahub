@@ -396,7 +396,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                 <div className="col-span-2">Tipo</div><div className="col-span-3">Producto / Servicio</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div><div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
+                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-start">
                   <div className="col-span-2">
                     <label className="flex items-center gap-2 text-[10px] font-bold uppercase">
                       <input

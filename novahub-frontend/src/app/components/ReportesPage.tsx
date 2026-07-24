@@ -1,3 +1,4 @@
+import { cn } from './ui/utils';
 import { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -18,10 +19,11 @@ import type { ReportExportRef } from './reportes/types';
 
 interface ReportesPageProps {
   activeSubModule?: string;
+  isSidebarCollapsed?: boolean;
   onSubModuleChange?: (subModule: string) => void;
 }
 
-export function ReportesPage({ activeSubModule, onSubModuleChange }: ReportesPageProps) {
+export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ReportesPageProps) {
   const { user } = useAuth();
   const [dateRange, setDateRange] = useState('ultimo-mes');
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'reportes-financieros');
@@ -119,7 +121,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange }: ReportesPag
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar">
+        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar")}>
           {[
             { id: 'reportes-ventas', label: 'Ventas', module: 'REPORTS_SALES' },
             { id: 'reportes-compras', label: 'Compras', module: 'REPORTS_PURCHASES' },

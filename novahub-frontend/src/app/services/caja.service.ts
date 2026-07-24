@@ -9,6 +9,8 @@ export interface CashRegister {
   isActive: boolean;
   branchId?: string;
   warehouse?: any;
+  hasActiveSession?: boolean;
+  resolvedWarehouseId?: string | null;
 }
 
 export interface SessionDenomination {
@@ -22,10 +24,11 @@ export interface SessionDenomination {
 
 export interface SessionLog {
   id: string;
-  type: 'OPEN' | 'SALE' | 'REFUND' | 'COUNT' | 'CLOSE';
+  type: 'OPEN' | 'SALE' | 'REFUND' | 'COUNT' | 'CLOSE' | 'ENTRY' | 'EXIT';
   description: string;
   amountNIO?: number;
   amountUSD?: number;
+  paymentMethod?: string;
   reference?: string;
   createdAt: string;
 }
@@ -43,6 +46,8 @@ export interface CashRegisterSession {
   finalAmountUSD?: number;
   differenceNIO?: number;
   differenceUSD?: number;
+  expectedAmountNIO?: number;
+  expectedAmountUSD?: number;
   notes?: string;
   openedBy?: { name: string };
   closedBy?: { name: string };
@@ -59,6 +64,7 @@ export interface PosProduct {
   imageUrl?: string | null;
   imageUrlStorageUri?: string;
   trackInventory: boolean;
+  currentStock?: number | null;
 }
 
 export interface PosCustomer {
@@ -173,8 +179,11 @@ export const cajaService = {
   updateRegisterAccess: (id: string, userIds: string[]) =>
     api.put<{ success: boolean }>(`/caja/registers/${id}/access`, { userIds }),
 
-  getProducts: async (search?: string) => {
-    const products = await api.get<PosProduct[]>('/caja/products', { params: search ? { search } : undefined });
+  getProducts: async (search?: string, warehouseId?: string) => {
+    const params: any = {};
+    if (search) params.search = search;
+    if (warehouseId) params.warehouseId = warehouseId;
+    const products = await api.get<PosProduct[]>('/caja/products', { params: Object.keys(params).length > 0 ? params : undefined });
     return resolveStorageReferences(products);
   },
 
@@ -195,43 +204,55 @@ export const cajaService = {
   getRecentInvoices: async (registerId?: string) => {
     const params = registerId ? { registerId } : {};
     const res = await api.get<any>('/caja/invoices/recent', { params });
-    return res.data !== undefined ? res.data : res;
+    return res?.data !== undefined ? res.data : res;
   },
 
   // --- Módulo de Control de Cajas (Sesiones) ---
 
   openSession: async (dto: any) => {
     const res = await api.post<any>('/caja/sessions/open', dto);
-    return res.data !== undefined ? res.data : res;
+    return res?.data !== undefined ? res.data : res;
   },
 
   getActiveSession: async (registerId: string) => {
     const res = await api.get<any>(`/caja/sessions/active/${registerId}`);
-    return res.data !== undefined ? res.data : res;
+    return res?.data !== undefined ? res.data : res;
   },
 
   getSessionHistory: async (registerId?: string, page: number = 1) => {
     const params: any = { page };
     if (registerId) params.registerId = registerId;
     const res = await api.get<any>('/caja/sessions/history', { params });
-    return res.data !== undefined ? res.data : res; // { items, total, pages }
+    return res?.data !== undefined ? res.data : res; // { items, total, pages }
   },
 
   countSession: async (id: string, dto: any) => {
     const res = await api.post<any>(`/caja/sessions/${id}/count`, dto);
-    return res.data !== undefined ? res.data : res;
+    return res?.data !== undefined ? res.data : res;
   },
 
   closeSession: async (id: string, dto: any) => {
     const res = await api.post<any>(`/caja/sessions/${id}/close`, dto);
-    return res.data !== undefined ? res.data : res;
+    return res?.data !== undefined ? res.data : res;
   },
 
   getSessionLog: async (id: string) => {
     const res = await api.get<any>(`/caja/sessions/${id}/log`);
-    return res.data !== undefined ? res.data : res;
+    return res?.data !== undefined ? res.data : res;
   },
 
-  getDashboard: (period?: string) =>
-    api.get<DashboardData>('/caja/dashboard', { params: period ? { period } : undefined }),
+  addMovement: async (sessionId: string, dto: {
+    type: 'ENTRY' | 'EXIT';
+    amountNIO: number;
+    amountUSD?: number;
+    paymentMethod?: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
+    description: string;
+    reference?: string;
+  }) => {
+    const res = await api.post<any>(`/caja/sessions/${sessionId}/movement`, dto);
+    return res?.data !== undefined ? res.data : res;
+  },
+
+  getDashboard: (period?: string, registerId?: string, startDate?: string, endDate?: string) =>
+    api.get<DashboardData>('/caja/dashboard', { params: { period, registerId, startDate, endDate } }).then(res => res?.data !== undefined ? res.data : res),
 };
