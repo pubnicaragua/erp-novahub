@@ -143,7 +143,7 @@ function DashboardLayout() {
 
   useEffect(() => {
     const handler = (e: any) => {
-      if (hasAccess(e.detail.module)) {
+      if (e.detail.module === 'overview' || hasAccess(e.detail.module)) {
         setActiveModule(e.detail.module);
         setActiveSubModule(e.detail.subModule);
       }

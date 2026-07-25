@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import { useCajaSession } from '../../hooks/useCajaSession';
 import { cajaService, CashRegister } from '../../services/caja.service';
 import { toast } from 'sonner';
@@ -36,6 +36,7 @@ export function ControlDashboardCajaView({
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [manageCajasOpen, setManageCajasOpen] = useState(false);
   const [initialCajaModalMode, setInitialCajaModalMode] = useState<'create-register' | undefined>();
+  const cameFromSetupRef = useRef(false);
 
   const { displayCurrency, exchangeRate: globalRate } = useCurrency();
   const isUSD = displayCurrency === 'USD';
@@ -75,6 +76,7 @@ export function ControlDashboardCajaView({
     const context = consumeImplementationTourContext('ventas', 'control-caja');
     if (!context) return;
 
+    cameFromSetupRef.current = true;
     if (context.action === 'open-cash-register-form') {
       setActiveSection('session');
       setInitialCajaModalMode('create-register');
@@ -90,6 +92,10 @@ export function ControlDashboardCajaView({
       if (registersData.length > 0 && !selectedRegister) {
         const openRegister = registersData.find((r: any) => r.hasActiveSession);
         setSelectedRegister(openRegister ? openRegister.id : registersData[0].id);
+      }
+      if (cameFromSetupRef.current && registersData.length > 0) {
+        cameFromSetupRef.current = false;
+        window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } }));
       }
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Error al cargar cajas'));

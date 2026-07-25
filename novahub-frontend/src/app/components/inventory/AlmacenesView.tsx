@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2, Banknote, Loader2, Settings2, Users, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -82,6 +82,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [isManageSucursalesDialogOpen, setIsManageSucursalesDialogOpen] = useState(false);
   const [autoOpenSucursalForm, setAutoOpenSucursalForm] = useState(false);
+  const cameFromSetupRef = useRef(false);
 
   // Estados de Cajas
   const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
@@ -172,6 +173,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     const context = consumeImplementationTourContext('inventario', 'almacenes');
     if (!context) return;
 
+    cameFromSetupRef.current = true;
     setShowTutorial(context.tourActive);
     window.setTimeout(() => {
       if (context.action === 'open-warehouse-form') {
@@ -238,6 +240,11 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       }
       handleCancelEdit(id);
       onRefresh();
+      if (cameFromSetupRef.current) {
+        cameFromSetupRef.current = false;
+        window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } }));
+        return;
+      }
     } catch (e: any) {
       toast.error(e.message || 'Error al guardar');
     } finally {

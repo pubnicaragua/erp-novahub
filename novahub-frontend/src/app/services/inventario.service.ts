@@ -74,17 +74,31 @@ export const inventoryService = {
   getLowStockProducts: () => api.get<any[]>('/inventory/dashboard/low-stock'),
 
   // ==================== BULK IMPORT ====================
-  bulkCreateProducts: async (items: Array<Partial<Product> & { initialStock?: number }>) => {
-    const results: { success: number; failed: number; errors: string[] } = { success: 0, failed: 0, errors: [] };
-    for (let i = 0; i < items.length; i++) {
-      try {
-        await api.post<Product>('/inventory/products', items[i]);
-        results.success++;
-      } catch (e: any) {
-        results.failed++;
-        results.errors.push(`Fila ${i + 1} (${items[i].code || items[i].name || '?'}): ${e?.message || 'Error desconocido'}`);
-      }
+  bulkCreateProducts: async (items: Array<Partial<Product> & { initialStock?: number }>, onProgress?: (done: number, total: number) => void) => {
+    const results: { success: number; skipped: number; failed: number; errors: string[] } = { success: 0, skipped: 0, failed: 0, errors: [] };
+    const total = items.length;
+    let progressTick: ReturnType<typeof setInterval> | null = null;
+    if (onProgress) {
+      let pct = 5;
+      progressTick = setInterval(() => {
+        pct = Math.min(pct + 3, 92);
+        onProgress?.(Math.round(pct * total / 100), total);
+        if (pct >= 92) clearInterval(progressTick!);
+      }, 80);
+    }
+    try {
+      const data = await api.post<{ success: number; skipped: number; errors: string[] }>('/inventory/products/batch', { items });
+      results.success += data.success || 0;
+      results.skipped += data.skipped || 0;
+      if (data.errors) results.errors.push(...data.errors);
+    } catch (e: any) {
+      results.errors.push(`Error: ${e?.message || 'Error de red'}`);
+    } finally {
+      if (progressTick) clearInterval(progressTick);
+      results.failed = results.errors.length;
+      onProgress?.(total, total);
     }
     return results;
   },
+  deleteProducts: (ids: string[]) => api.post<{ deleted: number }>('/inventory/products/batch-delete', { ids }),
 };

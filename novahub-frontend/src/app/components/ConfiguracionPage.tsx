@@ -541,6 +541,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         industry: companyIndustry,
       });
       toast.success('Información corporativa guardada');
+      const raw = sessionStorage.getItem('novahub:implementation-setup-tour');
+      if (raw) {
+        try { const ctx = JSON.parse(raw); if (ctx.module === 'configuracion' && ctx.subModule === 'empresa') { sessionStorage.removeItem('novahub:implementation-setup-tour'); window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } })); return; } } catch {}
+      }
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Error al guardar la información');
     }
@@ -711,6 +715,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         setAllowCurrencySwitch(resp.allowCurrencySwitch !== false);
         await refreshCurrencyContext();
         toast.success('Configuración de moneda actualizada');
+        const raw = sessionStorage.getItem('novahub:implementation-setup-tour');
+        if (raw) {
+          try { const ctx = JSON.parse(raw); if (ctx.module === 'configuracion' && ctx.subModule === 'currency') { sessionStorage.removeItem('novahub:implementation-setup-tour'); window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } })); return; } } catch {}
+        }
       }
     } catch (error) {
       toast.error('Error al guardar configuración de moneda');

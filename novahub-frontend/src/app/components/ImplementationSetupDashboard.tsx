@@ -69,15 +69,13 @@ function navigateToStep(step: ImplementationStep, tourActive: boolean, onRefresh
     return;
   }
 
-  if (tourActive) {
-    rememberImplementationTourContext({
-      stepId: step.id,
-      module: step.target.module,
-      subModule: step.target.subModule,
-      action: step.target.action,
-      tourActive,
-    });
-  }
+  rememberImplementationTourContext({
+    stepId: step.id,
+    module: step.target.module,
+    subModule: step.target.subModule,
+    action: step.target.action,
+    tourActive,
+  });
 
   window.dispatchEvent(new CustomEvent('navigate-module', {
     detail: {
@@ -89,8 +87,20 @@ function navigateToStep(step: ImplementationStep, tourActive: boolean, onRefresh
 
 export function ImplementationSetupDashboard({ summary, onRefresh, onNavigateToDashboard }: ImplementationSetupDashboardProps) {
   const [showTour, setShowTour] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const progress = Math.round((summary.completedRequiredSteps / Math.max(summary.requiredSteps, 1)) * 100);
   const pendingSteps = summary.steps.filter((step) => step.status !== 'completed').length;
+
+  const filteredSteps = filter === 'all'
+    ? summary.steps
+    : summary.steps.filter((s) => s.status === filter);
+
+  const filterCounts = {
+    all: summary.steps.length,
+    pending: summary.steps.filter((s) => s.status === 'pending' || s.status === 'in_progress').length,
+    completed: summary.steps.filter((s) => s.status === 'completed').length,
+    error: summary.steps.filter((s) => s.status === 'error').length,
+  };
 
   const tourSteps = useMemo<GuidedTourStep[]>(() => [
     {
@@ -184,15 +194,19 @@ export function ImplementationSetupDashboard({ summary, onRefresh, onNavigateToD
                 <Progress value={progress} className="h-2" />
               </div>
 
-              <div className="grid grid-cols-2 gap-2 rounded-xl border border-border/50 bg-muted/20 p-2">
-                <div className="rounded-lg bg-background/70 p-3 text-center">
+              <div className="grid grid-cols-3 gap-2 rounded-xl border border-border/50 bg-muted/20 p-2">
+                <button onClick={() => setFilter('all')} className={cn('rounded-lg p-3 text-center transition-colors', filter === 'all' ? 'bg-background/90 shadow-sm' : 'hover:bg-background/40')}>
+                  <p className="text-xl font-black tabular-nums">{summary.steps.length}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Total</p>
+                </button>
+                <button onClick={() => setFilter('pending')} className={cn('rounded-lg p-3 text-center transition-colors', filter === 'pending' ? 'bg-background/90 shadow-sm' : 'hover:bg-background/40')}>
+                  <p className="text-xl font-black tabular-nums">{summary.steps.filter(s => s.status !== 'completed').length}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Pendientes</p>
+                </button>
+                <button onClick={() => setFilter('completed')} className={cn('rounded-lg p-3 text-center transition-colors', filter === 'completed' ? 'bg-background/90 shadow-sm' : 'hover:bg-background/40')}>
                   <p className="text-xl font-black tabular-nums">{summary.completedSteps}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Listos</p>
-                </div>
-                <div className="rounded-lg bg-background/70 p-3 text-center">
-                  <p className="text-xl font-black tabular-nums">{pendingSteps}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Pendientes</p>
-                </div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Completados</p>
+                </button>
               </div>
             </div>
           </CardContent>
@@ -207,7 +221,7 @@ export function ImplementationSetupDashboard({ summary, onRefresh, onNavigateToD
           </CardHeader>
           <CardContent className="p-0">
             <div className="divide-y divide-border/50">
-              {summary.steps.map((step, index) => {
+              {filteredSteps.map((step, index) => {
                 const status = statusCopy[step.status];
                 const StatusIcon = status.icon;
                 const completed = step.status === 'completed';
@@ -258,12 +272,14 @@ export function ImplementationSetupDashboard({ summary, onRefresh, onNavigateToD
                     <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-1">
                       <div>
                         <p className="font-black tabular-nums">{step.validCount}</p>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">validos</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">registros</p>
                       </div>
-                      <div>
-                        <p className={cn('font-black tabular-nums', step.discardedCount > 0 && 'text-rose-600')}>{step.discardedCount}</p>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">descartados</p>
-                      </div>
+                      {step.discardedCount > 0 && (
+                        <div>
+                          <p className={cn('font-black tabular-nums', step.discardedCount > 0 && 'text-rose-600')}>{step.discardedCount}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">con errores</p>
+                        </div>
+                      )}
                       <div className="col-span-2 md:col-span-1">
                         <p className="truncate text-[11px] font-medium text-muted-foreground">{formatLastLoaded(step.lastLoadedAt)}</p>
                       </div>

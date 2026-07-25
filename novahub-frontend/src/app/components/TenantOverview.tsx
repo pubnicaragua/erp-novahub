@@ -65,6 +65,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const [prevData, setPrevData] = useState<any>(null);
   const [setupSummary, setSetupSummary] = useState<ImplementationSetupSummary | null>(null);
   const [skipSetup, setSkipSetup] = useState(() => localStorage.getItem('erp-skip-setup') === 'true');
+  const [dataLoadError, setDataLoadError] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const { formatConvertedAmount } = useCurrency();
   const { user } = useAuth();
@@ -73,12 +74,28 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
 
   useEffect(() => {
     loadData();
+    const onVisible = () => { if (document.visibilityState === 'visible') loadData(); };
+    const onFocus = () => loadData();
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+    };
   }, [period, user?.enabledModules]);
+
+  useEffect(() => {
+    if (setupSummary && !setupSummary.isComplete && !skipSetup) {
+      const id = setInterval(() => loadData(), 4000);
+      return () => clearInterval(id);
+    }
+  }, [setupSummary?.isComplete, skipSetup]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const setup = await getImplementationSetupSummary(false, user?.enabledModules);
+      const force = setupSummary === null || !setupSummary.isComplete;
+      const setup = await getImplementationSetupSummary(force, user?.enabledModules);
       setSetupSummary(setup);
 
       if (!setup.isComplete && !skipSetup) {
@@ -88,14 +105,22 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       }
 
       const [current, prev] = await Promise.all([
-        cajaService.getDashboard(period).catch(() => null),
-        cajaService.getDashboard('last-month' as any).catch(() => null),
+        Promise.race([
+          cajaService.getDashboard(period),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000)),
+        ]).catch(() => null),
+        Promise.race([
+          cajaService.getDashboard('last-month' as any),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000)),
+        ]).catch(() => null),
       ]);
       setCajaData(current);
       setPrevData(prev);
+      setDataLoadError(current === null);
     } catch {
       setCajaData(null);
       setPrevData(null);
+      setDataLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -366,16 +391,33 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="size-8 animate-spin text-primary/30" />
+        <div className="space-y-4 py-8">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-28 rounded-2xl bg-muted/30 animate-pulse" />
+            ))}
+          </div>
+          <div className="h-64 rounded-2xl bg-muted/20 animate-pulse" />
         </div>
       ) : !kpis ? (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="border-border/50 rounded-3xl bg-card shadow-sm">
             <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
               <AlertTriangle className="size-12 text-muted-foreground/30" />
-              <p className="text-sm text-muted-foreground font-bold">No hay datos de caja disponibles</p>
-              <p className="text-xs text-muted-foreground/60">Verificá que hayas realizado facturaciones en este período.</p>
+              {dataLoadError ? (
+                <>
+                  <p className="text-sm text-muted-foreground font-bold">No se pudieron cargar los datos del dashboard</p>
+                  <p className="text-xs text-muted-foreground/60">El servicio tardó demasiado en responder. Intentá recargar la página.</p>
+                  <Button variant="outline" size="sm" onClick={() => loadData()} className="mt-2 rounded-xl">
+                    Reintentar
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground font-bold">No hay datos de caja disponibles</p>
+                  <p className="text-xs text-muted-foreground/60">Verificá que hayas realizado facturaciones en este período.</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </motion.div>

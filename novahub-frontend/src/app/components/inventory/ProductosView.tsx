@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { Search, Plus, Trash2, X, Check, Copy, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { flushSync } from 'react-dom';
+import { Search, Plus, Trash2, X, Check, Copy, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
@@ -36,6 +37,8 @@ interface EditingProduct {
   categoryId: string;
   salePrice: number | '';
   costPrice: number | '';
+  unit?: string;
+  minStock?: number;
   trackSerialNumbers?: boolean;
   itemType?: 'PRODUCT' | 'SERVICE';
   imageUrl?: string;
@@ -75,9 +78,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDescription, setNewCategoryDescription] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [importProgress, setImportProgress] = useState(0);
+  const [importResults, setImportResults] = useState<{ success: number; skipped: number; failed: number; errors: string[] } | null>(null);
   
   const [skuErrors, setSkuErrors] = useState<Map<string, string>>(new Map());
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const validateSkuDebounced = (productId: string, code: string, isNew: boolean) => {
     if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
@@ -102,10 +108,16 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [pageSize, setPageSize] = useState(25);
 
 
-  // Reset page to 1 when filters change
+  // Reset page & selection when filters change
   useEffect(() => {
     setPage(1);
+    setSelectedIds(new Set());
   }, [searchTerm, categoryFilters, warehouseFilters, typeFilter, stockFilter]);
+
+  // Clear selection when products list changes (e.g. after refresh)
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [products]);
 
   const filteredProducts = products.filter((p: any) => {
     const matchesSearch = !searchTerm || 
@@ -157,6 +169,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       categoryId: categories[0]?.id || '',
       salePrice: '',
       costPrice: '',
+      unit: 'unidad',
+      minStock: 0,
       trackSerialNumbers: false,
       itemType: 'PRODUCT',
       isNew: true,
@@ -175,6 +189,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       categoryId: product.categoryId || '',
       salePrice: Number(product.salePrice) || 0,
       costPrice: Number(product.costPrice) || 0,
+      unit: product.unit || 'unidad',
+      minStock: Number(product.minStock) || 0,
       trackSerialNumbers: Boolean(
         product.trackSerialNumbers ||
         product.serialTracking ||
@@ -241,7 +257,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           const parsed = Number(value);
           finalValue = Number.isFinite(parsed) ? Math.max(0, parsed) : current[field];
         }
-      } else if (field === 'initialStock') {
+      } else if (field === 'initialStock' || field === 'minStock') {
         finalValue = Math.max(0, Number(value) || 0);
       }
       setEditingRows(new Map(editingRows.set(id, { ...current, [field]: finalValue })));
@@ -331,6 +347,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           categoryId: product.categoryId,
           salePrice: Number(product.salePrice || 0),
           costPrice: Number(product.costPrice || 0),
+          unit: product.unit || 'unidad',
+          minStock: Number(product.minStock || 0),
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           itemType: product.itemType || 'PRODUCT',
           initialStock: 0,
@@ -379,6 +397,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           categoryId: product.categoryId,
           salePrice: Number(product.salePrice || 0),
           costPrice: Number(product.costPrice || 0),
+          unit: product.unit || 'unidad',
+          minStock: Number(product.minStock || 0),
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           itemType: product.itemType || 'PRODUCT',
           imageUrl: nextImageUrl,
@@ -598,6 +618,40 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           </Select>
         </TableCell>
         <TableCell className="align-top pt-3">
+          <Select 
+            value={product.unit || 'unidad'} 
+            onValueChange={(v) => handleUpdateField(product.id, 'unit', v)}
+            disabled={isSaving}
+          >
+            <SelectTrigger className="h-8 text-xs w-full min-w-[100px]">
+              <SelectValue placeholder="Unidad" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unidad">Unidad</SelectItem>
+              <SelectItem value="kilo">Kilo</SelectItem>
+              <SelectItem value="libra">Libra</SelectItem>
+              <SelectItem value="docena">Docena</SelectItem>
+              <SelectItem value="caja">Caja</SelectItem>
+              <SelectItem value="litro">Litro</SelectItem>
+              <SelectItem value="metro">Metro</SelectItem>
+              <SelectItem value="par">Par</SelectItem>
+              <SelectItem value="rollo">Rollo</SelectItem>
+              <SelectItem value="pieza">Pieza</SelectItem>
+            </SelectContent>
+          </Select>
+        </TableCell>
+        <TableCell className="align-top pt-3">
+          <Input
+            type="number"
+            min={0}
+            value={product.minStock ?? 0}
+            onChange={(e) => handleUpdateField(product.id, 'minStock', Math.max(0, Number(e.target.value) || 0))}
+            onKeyDown={(e) => handleKeyDown(e, product.id)}
+            className="h-8 text-xs text-right min-w-[70px]"
+            disabled={isSaving}
+          />
+        </TableCell>
+        <TableCell className="align-top pt-3">
           {product.itemType === 'SERVICE' ? (
             <span className="text-xs text-muted-foreground/50 italic h-8 flex items-center">N/A</span>
           ) : (() => {
@@ -734,14 +788,44 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     );
   };
 
+  // ==================== SELECTION ====================
+  const toggleSelectAll = () => {
+    if (selectedIds.size === paginatedProducts.length && paginatedProducts.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(paginatedProducts.map((p: any) => p.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const confirmed = window.confirm(`¿Eliminar ${selectedIds.size} producto(s)?`);
+    if (!confirmed) return;
+    try {
+      await inventoryService.deleteProducts(Array.from(selectedIds));
+      toast.success(`${selectedIds.size} producto(s) eliminado(s)`);
+      setSelectedIds(new Set());
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+    }
+  };
+
   // ==================== EXCEL IMPORT ====================
   const handleDownloadTemplate = useCallback(() => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['Código', 'Nombre', 'Categoría', 'Tipo', 'Precio Venta', 'Precio Costo', 'Stock Inicial', 'IMEI'],
-      ['SKU-001', 'Ejemplo Producto', 'Electrónica', 'PRODUCTO', 150, 100, 50, 'NO'],
-      ['SRV-001', 'Ejemplo Servicio', 'Consultoría', 'SERVICIO', 500, 0, 0, 'NO'],
+      ['Código', 'Nombre', 'Categoría', 'Tipo', 'Unidad', 'Precio Venta', 'Precio Costo', 'Stock Inicial', 'Stock Mínimo', 'IMEI'],
+      ['SKU-001', 'Ejemplo Producto', 'Electrónica', 'PRODUCTO', 'unidad', 150, 100, 50, 5, 'NO'],
+      ['SRV-001', 'Ejemplo Servicio', 'Consultoría', 'SERVICIO', 'unidad', 500, 0, 0, 0, 'NO'],
     ]);
-    ws['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 8 }];
+    ws['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 8 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
     XLSX.writeFile(wb, 'plantilla_importar_productos.xlsx');
@@ -767,9 +851,11 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           name: ['nombre', 'name', 'producto', 'descripción', 'descripcion'],
           category: ['categoría', 'categoria', 'category', 'cat'],
           itemType: ['tipo', 'type', 'item type', 'itemtype'],
+          unit: ['unidad', 'unit', 'medida', 'u.medida', 'umedida'],
           salePrice: ['precio venta', 'precio_venta', 'sale price', 'saleprice', 'venta', 'precio'],
           costPrice: ['precio costo', 'precio_costo', 'cost price', 'costprice', 'costo'],
           initialStock: ['stock inicial', 'stock', 'initial stock', 'cantidad', 'qty'],
+          minStock: ['stock mínimo', 'stock minimo', 'min stock', 'minstock', 'stock min', 'stock_min'],
           imei: ['imei', 'serial', 'tracking'],
         };
         for (const [key, alts] of Object.entries(aliases)) {
@@ -785,15 +871,18 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             name: String(get('name') || '').trim(),
             category: String(get('category') || '').trim(),
             itemType: isService ? 'SERVICE' : 'PRODUCT',
+            unit: String(get('unit') || 'unidad').trim().toLowerCase() || 'unidad',
             salePrice: Number(get('salePrice') || 0),
             costPrice: Number(get('costPrice') || 0),
             initialStock: isService ? 0 : Number(get('initialStock') || 0),
+            minStock: isService ? 0 : Number(get('minStock') || 0),
             trackSerialNumbers: String(get('imei') || '').toUpperCase() === 'SI' || String(get('imei') || '').toUpperCase() === 'YES',
             _hasError: !String(get('code') || '').trim() || !String(get('name') || '').trim(),
           };
         });
         setImportData(parsed);
         setImportFileName(file.name);
+        setImportProgress(0);
         toast.success(`${parsed.length} registros encontrados`);
       } catch (err) {
         console.error('Parse error', err);
@@ -803,6 +892,17 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     reader.readAsArrayBuffer(file);
   }, []);
 
+  const handleImportRowUpdate = (index: number, field: string, value: any) => {
+    setImportData((prev) => {
+      const next = [...prev];
+      const row = { ...next[index], [field]: value };
+      if (field === 'code') row._hasError = !String(value).trim() || !row.name;
+      if (field === 'name') row._hasError = !String(value).trim() || !row.code;
+      next[index] = row;
+      return next;
+    });
+  };
+
   const handleImportConfirm = useCallback(async () => {
     const valid = importData.filter((row) => !row._hasError);
     if (valid.length === 0) {
@@ -810,23 +910,33 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       return;
     }
     setImporting(true);
+    setImportProgress(0);
     try {
+      const defaultCategoryId = categories[0]?.id;
+      if (!defaultCategoryId) {
+        toast.error('No hay categorías disponibles. Creá al menos una categoría antes de importar.');
+        setImporting(false);
+        return;
+      }
       const items = valid.map((row) => {
         const cat = categories.find((c: any) => c.name?.toLowerCase() === row.category?.toLowerCase());
         return {
           code: row.code,
           name: row.name,
-          categoryId: cat?.id || categories[0]?.id || '',
+          categoryId: cat?.id || defaultCategoryId,
           itemType: row.itemType as 'PRODUCT' | 'SERVICE',
+          unit: row.unit || 'unidad',
           salePrice: row.salePrice,
           costPrice: row.costPrice,
           initialStock: row.initialStock,
+          minStock: row.minStock || 0,
           trackSerialNumbers: row.trackSerialNumbers,
         };
       });
-      const results = await inventoryService.bulkCreateProducts(items);
-      if (results.success > 0) toast.success(`${results.success} registros importados correctamente`);
-      if (results.failed > 0) toast.error(`${results.failed} registros fallaron: ${results.errors.slice(0, 3).join(', ')}`);
+      const results = await inventoryService.bulkCreateProducts(items, (done, total) => {
+        flushSync(() => setImportProgress(Math.round((done / total) * 100)));
+      });
+      setImportResults(results);
       setImportModalOpen(false);
       setImportData([]);
       setImportFileName('');
@@ -835,6 +945,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       toast.error('Error durante la importación: ' + (e.message || 'Error'));
     } finally {
       setImporting(false);
+      setImportProgress(0);
     }
   }, [importData, categories, onRefresh]);
 
@@ -947,6 +1058,17 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               Importar Excel
             </Button>
           )}
+          {selectedIds.size > 0 && (
+            <Button
+              size="sm"
+              variant="destructive"
+              className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
+              onClick={handleBatchDelete}
+            >
+              <Trash2 className="size-4 mr-2" />
+              Eliminar {selectedIds.size}
+            </Button>
+          )}
           {canPerform('INVENTORY_PRODUCTS', 'create') && (
             <Button 
               size="sm" 
@@ -965,10 +1087,20 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
+              <TableHead className="w-10">
+                <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelectAll(); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60">
+                  {selectedIds.size === paginatedProducts.length && paginatedProducts.length > 0
+                    ? <SquareCheckBig className="size-4 text-primary" />
+                    : <Square className="size-4 text-muted-foreground" />
+                  }
+                </button>
+              </TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Código</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Producto</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Categoría</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-24">Tipo</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-20">U.Medida</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-16">Min</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Almacenes</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Venta</TableHead>
@@ -986,7 +1118,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             {/* Existing products */}
             {filteredProducts.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
                   <Package className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">{products.length > 0 ? 'No hay coincidencias' : 'No hay productos registrados'}</p>
                   <p className="text-sm">
@@ -1020,12 +1152,20 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 const status = getStockStatus(product.stock || 0);
                  return (
                    <TableRow 
-                     key={product.id} 
-                     className="group hover:bg-muted/30 cursor-pointer"
-                     onClick={() => setProductDetail(product)}
-                     onDoubleClick={() => canPerform('INVENTORY_PRODUCTS', 'edit') && handleEditRow(product)}
-                    >
-                    <TableCell className="font-mono text-xs text-muted-foreground">{product.code}</TableCell>
+                      key={product.id} 
+                      className="group hover:bg-muted/30 cursor-pointer"
+                      onClick={() => setProductDetail(product)}
+                      onDoubleClick={() => canPerform('INVENTORY_PRODUCTS', 'edit') && handleEditRow(product)}
+                     >
+                     <TableCell className="w-10">
+                       <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(product.id); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60">
+                         {selectedIds.has(product.id)
+                           ? <SquareCheckBig className="size-4 text-primary" />
+                           : <Square className="size-4 text-muted-foreground" />
+                         }
+                       </button>
+                     </TableCell>
+                     <TableCell className="font-mono text-xs text-muted-foreground">{product.code}</TableCell>
                     <TableCell>
                       <div className="flex min-w-[190px] items-center gap-3">
                         {canPerform('INVENTORY_PRODUCTS', 'edit') ? (
@@ -1078,6 +1218,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                       ) : (
                         <Badge className="bg-sky-500/10 text-sky-500 text-[9px] font-black uppercase px-1.5 py-0">Producto</Badge>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground capitalize">{product.unit || 'unidad'}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground text-right block">{Number(product.minStock || 0)}</span>
                     </TableCell>
                     <TableCell>
                       {(product.itemType || 'PRODUCT').toUpperCase() === 'SERVICE' ? (
@@ -1291,7 +1437,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       <Dialog open={importModalOpen} onOpenChange={(open) => {
         if (!importing) {
           setImportModalOpen(open);
-          if (!open) { setImportData([]); setImportFileName(''); }
+          if (!open) { setImportData([]); setImportFileName(''); setImportProgress(0); }
         }
       }}>
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
@@ -1356,48 +1502,133 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 </div>
 
                 <div className="border rounded-md flex-1 overflow-auto">
-                  <Table>
-                    <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
-                      <TableRow>
-                        <TableHead className="text-[10px] uppercase w-8"></TableHead>
-                        <TableHead className="text-[10px] uppercase">Código</TableHead>
-                        <TableHead className="text-[10px] uppercase">Nombre</TableHead>
-                        <TableHead className="text-[10px] uppercase">Tipo</TableHead>
-                        <TableHead className="text-[10px] uppercase">Categoría</TableHead>
-                        <TableHead className="text-[10px] uppercase text-right">Venta</TableHead>
-                        <TableHead className="text-[10px] uppercase text-right">Stock</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {importData.slice(0, 100).map((row, i) => (
-                        <TableRow key={i} className={row._hasError ? 'bg-red-500/10' : ''}>
-                          <TableCell>
-                            {row._hasError ? (
-                              <AlertTriangle className="size-4 text-red-500" />
-                            ) : (
-                              <Check className="size-4 text-emerald-500" />
-                            )}
-                          </TableCell>
-                          <TableCell className="text-xs font-mono">{row.code || <span className="text-red-500">Falta</span>}</TableCell>
-                          <TableCell className="text-xs truncate max-w-[200px]">{row.name || <span className="text-red-500">Falta</span>}</TableCell>
-                          <TableCell className="text-xs">
-                            {row.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}
-                          </TableCell>
-                          <TableCell className="text-xs max-w-[120px] truncate">{row.category || '-'}</TableCell>
-                          <TableCell className="text-xs text-right tabular-nums">{formatAmount(row.salePrice, baseCurrency)}</TableCell>
-                          <TableCell className="text-xs text-right tabular-nums">
-                            {row.itemType === 'SERVICE' ? 'N/A' : row.initialStock}
-                          </TableCell>
+                  <div className="min-w-[900px]">
+                    <Table>
+                      <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
+                        <TableRow>
+                          <TableHead className="text-[10px] uppercase w-8"></TableHead>
+                          <TableHead className="text-[10px] uppercase w-32">Código</TableHead>
+                          <TableHead className="text-[10px] uppercase">Nombre</TableHead>
+                          <TableHead className="text-[10px] uppercase w-24">Tipo</TableHead>
+                          <TableHead className="text-[10px] uppercase w-32">Categoría</TableHead>
+                          <TableHead className="text-[10px] uppercase w-28 text-right">Unidad</TableHead>
+                          <TableHead className="text-[10px] uppercase w-28 text-right">Venta</TableHead>
+                          <TableHead className="text-[10px] uppercase w-24 text-right">Stock</TableHead>
+                          <TableHead className="text-[10px] uppercase w-24 text-right">Min</TableHead>
+                          <TableHead className="text-[10px] uppercase w-20 text-center">IMEI</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {importData.slice(0, 100).map((row, i) => (
+                          <TableRow key={i} className={row._hasError ? 'bg-red-500/10' : ''}>
+                            <TableCell>
+                              {row._hasError ? (
+                                <AlertTriangle className="size-4 text-red-500" />
+                              ) : (
+                                <Check className="size-4 text-emerald-500" />
+                              )}
+                            </TableCell>
+                            <TableCell className="p-1">
+                              <Input
+                                value={row.code}
+                                onChange={(e) => handleImportRowUpdate(i, 'code', e.target.value)}
+                                className={`h-8 text-xs font-mono ${!row.code ? 'border-red-500' : ''}`}
+                              />
+                            </TableCell>
+                            <TableCell className="p-1">
+                              <Input
+                                value={row.name}
+                                onChange={(e) => handleImportRowUpdate(i, 'name', e.target.value)}
+                                className={`h-8 text-xs ${!row.name ? 'border-red-500' : ''}`}
+                              />
+                            </TableCell>
+                            <TableCell className="p-1">
+                              <Select value={row.itemType} onValueChange={(v) => handleImportRowUpdate(i, 'itemType', v)}>
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="PRODUCT">Producto</SelectItem>
+                                  <SelectItem value="SERVICE">Servicio</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell className="p-1">
+                              <Input
+                                value={row.category}
+                                onChange={(e) => handleImportRowUpdate(i, 'category', e.target.value)}
+                                className="h-8 text-xs"
+                              />
+                            </TableCell>
+                            <TableCell className="p-1">
+                              <Input
+                                value={row.unit || 'unidad'}
+                                onChange={(e) => handleImportRowUpdate(i, 'unit', e.target.value)}
+                                className="h-8 text-xs"
+                              />
+                            </TableCell>
+                            <TableCell className="p-1">
+                              <Input
+                                type="number"
+                                min={0}
+                                value={row.salePrice}
+                                onChange={(e) => handleImportRowUpdate(i, 'salePrice', Number(e.target.value) || 0)}
+                                className="h-8 text-xs text-right"
+                              />
+                            </TableCell>
+                            <TableCell className="p-1">
+                              {row.itemType === 'SERVICE' ? (
+                                <span className="text-xs text-muted-foreground/50 italic h-8 flex items-center justify-end">N/A</span>
+                              ) : (
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={row.initialStock}
+                                  onChange={(e) => handleImportRowUpdate(i, 'initialStock', Number(e.target.value) || 0)}
+                                  className="h-8 text-xs text-right"
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell className="p-1">
+                              {row.itemType === 'SERVICE' ? (
+                                <span className="text-xs text-muted-foreground/50 italic h-8 flex items-center justify-end">N/A</span>
+                              ) : (
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={row.minStock}
+                                  onChange={(e) => handleImportRowUpdate(i, 'minStock', Number(e.target.value) || 0)}
+                                  className="h-8 text-xs text-right"
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell className="p-1 text-center">
+                              <input
+                                type="checkbox"
+                                checked={row.trackSerialNumbers}
+                                onChange={(e) => handleImportRowUpdate(i, 'trackSerialNumbers', e.target.checked)}
+                                className="size-4 accent-primary"
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                   {importData.length > 100 && (
                     <p className="text-xs text-center p-2 text-muted-foreground border-t bg-muted/20">
                       Mostrando 100 de {importData.length} filas
                     </p>
                   )}
                 </div>
+                {importing && (
+                  <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-300 ease-out"
+                      style={{ width: `${importProgress}%` }}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1411,13 +1642,34 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 disabled={importing || importData.filter(r => !r._hasError).length === 0}
                 className="bg-primary text-primary-foreground font-bold"
               >
-                {importing ? 'Importando...' : `Importar ${importData.filter(r => !r._hasError).length} Registros`}
+                {importing ? `Importando... ${importProgress}%` : `Importar ${importData.filter(r => !r._hasError).length} Registros`}
               </Button>
             )}
           </DialogFooter>
         </DialogContent>
         </Dialog>
 
+
+      <Dialog open={importResults !== null} onOpenChange={(open) => { if (!open) setImportResults(null); }}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Resultado de importación</DialogTitle>
+            <DialogDescription>
+              {importResults?.success} importados, {importResults?.skipped} saltados, {importResults?.failed} errores
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-60 overflow-y-auto space-y-1">
+            {importResults?.success ? <p className="text-xs text-emerald-600 font-medium">✓ {importResults.success} producto(s) importado(s) correctamente</p> : null}
+            {importResults?.skipped ? <p className="text-xs text-amber-600 font-medium">⏭ {importResults.skipped} producto(s) saltado(s) por código duplicado</p> : null}
+            {importResults?.errors?.map((err, i) => (
+              <p key={i} className="text-xs text-red-600">✗ {err}</p>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setImportResults(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       </Card>
     );

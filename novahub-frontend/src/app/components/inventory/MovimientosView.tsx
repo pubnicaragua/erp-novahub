@@ -106,7 +106,7 @@ export function MovimientosView({ movements, warehouses }: MovimientosViewProps)
         </div>
         <Button variant="outline" size="sm" className="gap-2 rounded-xl font-bold" onClick={handleExport}>
           <Download className="size-4" />
-          Exportar CSV
+          Exportar
         </Button>
       </div>
 

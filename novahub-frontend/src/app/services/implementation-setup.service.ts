@@ -155,7 +155,21 @@ const STEP_DEFINITIONS: StepDefinition[] = [
     description: 'Cuentas financieras y base monetaria para ventas, compras y reportes.',
     actionLabel: 'Configurar',
     target: { module: 'configuracion', subModule: 'currency', action: 'open-currency-settings' },
-    load: () => api.get('/financials/accounts'),
+    load: async () => {
+      const [accounts, exchange] = await Promise.allSettled([
+        api.get('/financials/accounts'),
+        api.get('/tools/exchange-rate'),
+      ]);
+      const accountsData = accounts.status === 'fulfilled' ? accounts.value : [];
+      const exchangeData = exchange.status === 'fulfilled' ? exchange.value : null;
+      const hasExchange = exchangeData && (typeof exchangeData === 'object') && ('rate' in exchangeData);
+      return { accounts: normalizeList(accountsData), hasExchange };
+    },
+    isComplete: (value) => {
+      const v = value as any;
+      const accounts = Array.isArray(v?.accounts) ? v.accounts : [];
+      return accounts.length > 0 || Boolean(v?.hasExchange);
+    },
   },
   {
     id: 'users-permissions',

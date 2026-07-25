@@ -21,11 +21,14 @@ import { AlmacenesView } from './inventory/AlmacenesView';
 import { TransferenciasView } from './inventory/TransferenciasView';
 import { ControlStockView } from './inventory/ControlStockView';
 import { MovimientosView } from './inventory/MovimientosView';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { useCurrency } from '../contexts/CurrencyContext';
 
 import { inventoryService } from '../services/inventario.service';
 import { motion } from 'motion/react';
 
 const INVENTORY_SECTIONS = [
+  { id: 'dashboard',       label: 'Resumen',         icon: Package,   requiredModules: ['INVENTORY_DASHBOARD'] },
   { id: 'productos',       label: 'Existencias',     icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
   { id: 'almacenes',       label: 'Almacenes',       icon: Warehouse, requiredModules: ['INVENTORY_WAREHOUSES'] },
   { id: 'transferencias',  label: 'Transferencias',  icon: Truck,     requiredModules: ['INVENTORY_TRANSFERS'] },
@@ -41,6 +44,7 @@ interface InventarioPageProps {
 
 export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: InventarioPageProps) {
   const { user } = useAuth();
+  const { formatAmount } = useCurrency();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -52,9 +56,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     adjustments: [],
     lots: [],
     series: [],
-    movements: []
+    movements: [],
+    dashboardStats: null,
   });
-  const [activeTab, setActiveTab] = useState('productos');
+  const [activeTab, setActiveTab] = useState(activeSubModule || 'productos');
 
   const fetchData = useCallback(async (showRefresh = false) => {
     try {
@@ -70,7 +75,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
         inventoryService.getAdjustments(),
         inventoryService.getLots(),
         inventoryService.getSeries(),
-        inventoryService.getMovements()
+        inventoryService.getMovements(),
+        inventoryService.getDashboardStats(),
       ]);
 
       const safeVal = (i: number) => {
@@ -82,6 +88,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       if (results[0].status === 'rejected') {
         setLoadError('No pudimos cargar las existencias. Revisa la conexion e intenta nuevamente.');
       }
+      const statsResult = results[8];
+      const dashboardStats = statsResult.status === 'fulfilled'
+        ? ((statsResult as any).value?.data || (statsResult as any).value || null)
+        : null;
       setData({
         products: safeVal(0),
         warehouses: safeVal(1),
@@ -90,7 +100,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
         adjustments: safeVal(4),
         lots: safeVal(5),
         series: safeVal(6),
-        movements: safeVal(7)
+        movements: safeVal(7),
+        dashboardStats,
       });
     } catch (error) {
       console.error('Error fetching inventory data:', error);
@@ -173,7 +184,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             className="rounded-xl font-bold"
           >
             <Download className="size-4 mr-2" />
-            Exportar CSV
+            Exportar
           </Button>
         </div>
       </div>
@@ -229,6 +240,54 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             </div>
           ) : (
             <>
+              <TabsContent value="dashboard" className="m-0" asChild>
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                      <Card className="rounded-2xl border-border/40 shadow-sm">
+                        <CardContent className="p-4">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Productos</p>
+                          <p className="text-2xl font-black mt-1">{data.products.length}</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-2xl border-border/40 shadow-sm">
+                        <CardContent className="p-4">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Almacenes</p>
+                          <p className="text-2xl font-black mt-1">{data.warehouses.length}</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-2xl border-border/40 shadow-sm">
+                        <CardContent className="p-4">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Valor Inventario</p>
+                          <p className="text-2xl font-black mt-1">{formatAmount(data.products.reduce((acc: number, p: any) => acc + Number(p.stock || 0) * Number(p.costPrice || 0), 0))}</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-2xl border-border/40 shadow-sm">
+                        <CardContent className="p-4">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Stock Bajo</p>
+                          <p className="text-2xl font-black mt-1 text-amber-500">{data.products.filter((p: any) => Number(p.stock || 0) > 0 && Number(p.stock || 0) < 10).length}</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                    {data.dashboardStats && (
+                      <Card className="rounded-2xl border-border/40 shadow-sm">
+                        <CardHeader>
+                          <CardTitle className="text-sm font-black uppercase tracking-tight">Dashboard de Inventario</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <pre className="text-xs text-muted-foreground overflow-auto max-h-80">
+                            {JSON.stringify(data.dashboardStats, null, 2)}
+                          </pre>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                </motion.div>
+              </TabsContent>
               <TabsContent value="productos" className="m-0" asChild>
                 <motion.div 
                   initial={{ opacity: 0, y: 16 }} 

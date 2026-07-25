@@ -7,7 +7,7 @@ import { z } from 'zod';
 import {
   Package, Mail, Lock, User, Building2, CheckCircle2, ArrowRight, ArrowLeft,
   Sparkles, Loader2, Store, Laptop, Wrench, Factory, HardHat, UtensilsCrossed,
-  Stethoscope, GraduationCap, Briefcase, Building, Upload, Eye, EyeOff,
+  Stethoscope, GraduationCap, Briefcase, Building, Upload, Eye, EyeOff, Circle,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -297,6 +297,14 @@ export function RegisterTenantPage() {
   });
 
   const acceptTerms = watch('acceptTerms');
+  const passwordValue = watch('password');
+
+  const passwordRules = [
+    { label: 'Mínimo 8 caracteres', test: (v: string) => v.length >= 8 },
+    { label: '1 mayúscula', test: (v: string) => /[A-Z]/.test(v) },
+    { label: '1 número', test: (v: string) => /\d/.test(v) },
+    { label: '1 caracter especial', test: (v: string) => /[^a-zA-Z0-9\s]/.test(v) },
+  ];
 
   useEffect(() => {
     if (step === 2 && industry && !recommendations) {
@@ -375,7 +383,7 @@ export function RegisterTenantPage() {
         localStorage.setItem('erp-active-module', 'overview');
         setSession(token, user);
         setShowWelcome(true);
-        setTimeout(() => navigate('/dashboard'), 7000);
+        setTimeout(() => navigate('/dashboard', { replace: true }), 7000);
       } else {
         setError('Respuesta inesperada del servidor');
         setSubmitting(false);
@@ -568,6 +576,19 @@ export function RegisterTenantPage() {
           </button>
         </div>
         {errors.password && <p className="text-xs text-destructive ml-1">{errors.password.message}</p>}
+        {passwordValue && (
+          <div className="ml-1 space-y-0.5">
+            {passwordRules.map((rule) => {
+              const passed = rule.test(passwordValue);
+              return (
+                <p key={rule.label} className={cn('flex items-center gap-1.5 text-[11px] transition-colors', passed ? 'text-emerald-500' : 'text-muted-foreground')}>
+                  {passed ? <CheckCircle2 className="size-3" /> : <Circle className="size-3" />}
+                  {rule.label}
+                </p>
+              );
+            })}
+          </div>
+        )}
       </div>
       <div className="space-y-1.5 pt-1">
         <label className="flex items-start gap-2.5 cursor-pointer">
@@ -737,7 +758,7 @@ export function RegisterTenantPage() {
     const isParentActive = (parent: string) => {
       const subs = PARENT_SUBMODULES[parent] || [];
       if (subs.length === 0) return selectedModules.includes(parent);
-      return subs.every(s => selectedModules.includes(s));
+      return selectedModules.includes(parent) || subs.every(s => selectedModules.includes(s));
     };
 
     const getParentActiveCount = (parent: string) => {
