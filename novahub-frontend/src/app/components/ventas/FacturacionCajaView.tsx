@@ -36,6 +36,7 @@ import { brandingService } from '../../services/branding.service';
 interface CartItem extends PosInvoiceItem {
   productId: string;
   lineTotal: number;
+  taxRate: number;
 }
 
 interface CartSession {
@@ -70,6 +71,9 @@ const GENERAL_CUSTOMER_NAME = 'Cliente General';
 const MIN_QUANTITY = 1;
 const MIN_DISCOUNT_PERCENT = 0;
 const MAX_DISCOUNT_PERCENT = 100;
+// IVA general vigente para ventas en Nicaragua. Se usa como regla de cálculo
+// del POS; no depende de un porcentaje guardado en el catálogo del producto.
+const NICARAGUA_IVA_RATE = 15;
 
 type PaymentCurrency = 'NIO' | 'USD';
 
@@ -91,7 +95,8 @@ function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: PosPaym
   const itemRows = cart.map(item => `<div class="item"><div>${escapeTicketHtml(item.description)}</div><div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`).join('');
   const discount = Number(invoice.discountAmount || 0);
   const totalRecibidoHtml = payments.length > 1 ? `<div class="row"><span>Total recibido</span><span>${money(paidDisplay)}</span></div>` : '';
-  win.document.write(`<html><head><title>${escapeTicketHtml(invoice.number)}</title><style>@page{size:80mm auto;margin:0}body{width:72mm;margin:4mm auto;font:11px monospace;color:#000}h2{text-align:center;margin:0 0 5px;font-size:16px}h3{text-align:center;margin:0 0 8px;font-size:11px;font-weight:normal}.center{text-align:center}.row{display:flex;justify-content:space-between;gap:8px;margin:3px 0}.line{border-top:1px dashed #000;margin:8px 0}.item{margin:5px 0}.item .row{font-size:10px}.totals{margin-top:6px}.total{font-size:14px;font-weight:bold}.label{font-weight:bold;margin-top:7px}.muted{font-size:10px}.footer{text-align:center;margin-top:14px;font-size:10px}</style></head><body><h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3><div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div><div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${changeLocal.toFixed(2)}</span></div></div><div class="footer">Gracias por su compra</div></body></html>`);
+  const registerCode = invoice.register?.code || 'N/D';
+  win.document.write(`<html><head><title>${escapeTicketHtml(invoice.number)}</title><style>@page{size:80mm auto;margin:0}body{width:72mm;margin:4mm auto;font:11px monospace;color:#000}h2{text-align:center;margin:0 0 5px;font-size:16px}h3{text-align:center;margin:0 0 8px;font-size:11px;font-weight:normal}.center{text-align:center}.row{display:flex;justify-content:space-between;gap:8px;margin:3px 0}.line{border-top:1px dashed #000;margin:8px 0}.item{margin:5px 0}.item .row{font-size:10px}.totals{margin-top:6px}.total{font-size:14px;font-weight:bold}.label{font-weight:bold;margin-top:7px}.muted{font-size:10px}.footer{text-align:center;margin-top:14px;font-size:10px}</style></head><body><h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3><div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Caja: ${escapeTicketHtml(registerCode)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div><div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${changeLocal.toFixed(2)}</span></div></div><div class="footer">Gracias por su compra</div></body></html>`);
   win.document.close();
   // Esperar a que el documento se pinte evita que Chrome abra una vista previa en blanco.
   window.setTimeout(() => {
@@ -192,10 +197,9 @@ function calculateInvoiceSummary(
   includeTax: boolean
 ): InvoiceSummary {
   const subtotal = cart.reduce((sum, item) => sum + item.lineTotal, 0);
-  const tax = includeTax ? cart.reduce((sum, item) => {
-    return sum + (item.lineTotal * 0.15);
-  }, 0) : 0;
   const discount = subtotal * (discountPercent / 100);
+  const taxableSubtotal = Math.max(0, subtotal - discount);
+  const tax = includeTax ? taxableSubtotal * (NICARAGUA_IVA_RATE / 100) : 0;
 
   return {
     subtotal,
@@ -450,6 +454,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
           description: product.name,
           quantity: 1,
           unitPrice: product.salePrice,
+          // El IVA del POS es la regla fiscal nacional, no el valor del catálogo.
+          taxRate: NICARAGUA_IVA_RATE,
           lineTotal: calculateLineTotal(1, product.salePrice),
         },
       ];
@@ -1034,6 +1040,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Factura emitida correctamente</p>
                 <h2 id="invoice-result-title" className="mt-1 text-2xl font-black uppercase italic tracking-tight">{createdInvoice.number}</h2>
                 <p className="mt-1 text-xs text-muted-foreground">{formatInvoiceDate(createdInvoice.date)} · {getInvoiceCustomerName(createdInvoice)}{createdInvoice.customer?.phone ? ` · ${createdInvoice.customer.phone}` : ''}</p>
+                <p className="mt-1 text-xs font-bold text-primary">Caja: {createdInvoice.register?.code || 'N/D'}</p>
               </div>
               <Button variant="ghost" onClick={() => setCreatedInvoice(null)} aria-label="Cerrar detalle de factura">✕</Button>
             </div>

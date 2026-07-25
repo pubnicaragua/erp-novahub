@@ -410,7 +410,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             data-tour="almacenes-add-btn"
           >
             <Plus className="size-4" />
-            Agregar Almacén/Sucursal
+            Agregar Almacén
           </Button>
         </div>
       </div>
@@ -422,7 +422,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Nombre</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Ubicación</TableHead>
                <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Tipo</TableHead>
-               <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Ubicación Padre</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Almacén matriz</TableHead>
                <TableHead className="font-black text-[10px] uppercase tracking-widest">Sucursales</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
