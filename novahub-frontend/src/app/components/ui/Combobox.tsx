@@ -39,6 +39,19 @@ export function Combobox({
   disabled = false,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
+  const [search, setSearch] = React.useState('')
+
+  const visibleOptions = React.useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return options.slice(0, 100)
+    return options
+      .filter((option) => `${option.label} ${option.description || ''}`.toLowerCase().includes(query))
+      .slice(0, 100)
+  }, [options, search])
+
+  React.useEffect(() => {
+    if (!open) setSearch('')
+  }, [open])
 
   return (
     <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
@@ -48,23 +61,25 @@ export function Combobox({
           role="combobox"
           aria-expanded={open}
           disabled={disabled}
-          className={cn("w-full justify-between h-8 text-xs font-medium", className, 
+          className={cn("w-full min-w-0 justify-between overflow-hidden h-8 text-xs font-medium", className, 
             disabled && "opacity-50 cursor-not-allowed bg-muted/50"
           )}
         >
-          {value
-            ? options.find((option) => option.value === value)?.label
-            : placeholder}
+          <span className="min-w-0 flex-1 truncate text-left">
+            {value
+              ? options.find((option) => option.value === value)?.label
+              : placeholder}
+          </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0" align="start">
-        <Command>
-          <CommandInput placeholder={placeholder} className="h-8 text-xs" />
+        <Command shouldFilter={false}>
+          <CommandInput value={search} onValueChange={setSearch} placeholder={placeholder} className="h-8 text-xs" />
           <CommandList>
             <CommandEmpty className="text-xs py-2">{emptyMessage}</CommandEmpty>
             <CommandGroup>
-              {options.map((option) => (
+              {visibleOptions.map((option) => (
                 <CommandItem
                   key={option.value}
                   value={`${option.label} ${option.description || ''}`}

@@ -195,11 +195,22 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   doc.setFont('helvetica', 'italic');
   doc.text(`Documento de cotización originado por el módulo Ventas de ERP Nova Hub. Generado por ${tenantName}`, 14, pageHeight - 10);
 
+  const blob = doc.output('blob');
   if (save) {
-    doc.save(`${estimate.number || 'Cotizacion'}.pdf`);
+    // Descargar mediante un enlace explícito evita que el botón quede bloqueado
+    // cuando la tabla tiene varias acciones dentro de una celda con overflow.
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${estimate.number || 'Cotizacion'}.pdf`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  return { doc, blob: doc.output('blob') };
+  return { doc, blob };
 };
 
 export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, formatAmount, tenantLogo }: any) => {

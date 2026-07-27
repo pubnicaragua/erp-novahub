@@ -140,16 +140,19 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
 
 
   return (
-    <div className="space-y-6 p-4 md:p-8 pb-20 w-full max-w-[1920px] mx-auto min-w-0">
+    <div className="mx-auto w-full max-w-[1700px] min-w-0 space-y-6 p-4 pb-20 sm:p-6 md:p-10">
       {/* Header matching Suscripciones style */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         className="flex flex-col lg:flex-row lg:items-center justify-between gap-4"
       >
-        <div>
-          <h1 className="text-4xl font-black tracking-tighter flex items-center gap-3 uppercase italic">
+        <div className="flex items-center gap-3">
+          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <Users className="size-9 text-primary" />
+          </div>
+          <div>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
             Recursos <span className="text-primary">Humanos</span>
           </h1>
           <div className="flex items-center gap-2 mt-2">
@@ -160,12 +163,13 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
               {data.employees.length} empleados · {data.departments.length} departamentos
             </span>
           </div>
+          </div>
         </div>
       </motion.div>
 
       {/* Main Navigation Tabs - Estilo Compras (Píldoras Flexibles y con Scroll) */}
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar [&>button]:flex-none")}>
+        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'HR_DASHBOARD' },
             { id: 'empleados', label: 'Empleados', icon: Users, module: 'HR_EMPLOYEES' },

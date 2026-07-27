@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from './ui/utils';
 import {
   Users, FileSpreadsheet, ClipboardList, FileText,
@@ -40,11 +40,10 @@ import { DevolucionesView } from './ventas/DevolucionesView';
 import { NotasCreditoView } from './ventas/NotasCreditoView';
 import { FacturacionCajaView } from './ventas/FacturacionCajaView';
 import { ControlDashboardCajaView } from './ventas/ControlDashboardCajaView';
-import { DashboardVentas } from './DashboardVentas';
 
 const SALES_SECTIONS = [
   { id: 'clientes', label: 'Clientes', icon: Users, description: 'Directorio y saldos', requiredModules: ['SALES_CLIENTS'] },
-  { id: 'estimaciones', label: 'Estimaciones', icon: FileSpreadsheet, description: 'Cotizaciones comerciales', requiredModules: ['SALES_QUOTES'] },
+  { id: 'estimaciones', label: 'Cotizaciones', icon: FileSpreadsheet, description: 'Cotizaciones comerciales', requiredModules: ['SALES_QUOTES'] },
   { id: 'ordenes-venta', label: 'Órdenes de Venta', icon: ClipboardList, description: 'Pedidos por procesar', requiredModules: ['SALES_ORDERS'] },
   { id: 'facturas', label: 'Facturas', icon: FileText, description: 'Control de cobros', requiredModules: ['SALES_INVOICES'] },
   { id: 'facturas-recurrentes', label: 'Facturas Recurrentes', icon: RotateCcw, description: 'Suscripciones y contratos', requiredModules: ['SALES_RECURRING'] },
@@ -66,7 +65,9 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
   const [targetInvoiceId, setTargetInvoiceId] = useState<string | null>(null);
+  const [targetOrderId, setTargetOrderId] = useState<string | null>(null);
   const [controlCajaTargetParams, setControlCajaTargetParams] = useState<{registerId?: string, section?: 'dashboard' | 'session' | 'history'} | null>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
 
   // Sync section with Sidebar prop
   useEffect(() => {
@@ -77,6 +78,18 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
       }
     }
   }, [activeSubModule]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (activeSection === 'clientes' && tabsRef.current) {
+        tabsRef.current.scrollLeft = 0;
+        return;
+      }
+      const activeTab = tabsRef.current?.querySelector<HTMLElement>('[data-state="active"]');
+      activeTab?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeSection, isSidebarCollapsed]);
   
   // Data State
   const [data, setData] = useState({
@@ -143,32 +156,24 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   };
 
   const handleGenerateInvoice = async (order: SalesOrder) => {
-    toast.info('Preparando borrador de factura...');
-    setInvoiceDraft({
-      customerId: order.customerId,
-      number: `FAC-${Date.now().toString().slice(-6)}`,
-      salesOrderId: order.id,
-      date: new Date().toISOString().split('T')[0],
-      dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-      currency: order.currency || 'NIO',
-      exchangeRate: order.exchangeRate,
-      items: (order.items?.map(i => ({
-        id: Date.now().toString() + Math.random(),
-        productId: i.productId,
-        description: i.description,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-        taxRate: i.taxRate,
-        discount: i.discount,
-        total: i.total
-      })) || []) as any,
-      subtotal: order.subtotal,
-      taxAmount: order.taxAmount,
-      discountAmount: order.discountAmount,
-      total: order.total,
-      notes: order.notes ? `[Desde Orden ${order.number}] ${order.notes}` : `Generado desde Orden ${order.number}`,
-    });
+    const existingInvoice = data.facturas.find((invoice) => invoice.salesOrderId === order.id);
+    if (existingInvoice) {
+      toast.info(`La orden ya está facturada${existingInvoice.number ? ` con ${existingInvoice.number}` : ''}`);
+    setTargetInvoiceId(existingInvoice.id);
+      setActiveSection('facturas');
+      return;
+    }
+    toast.info('Enviando orden a Facturación...');
+    const invoice = await salesOrdersService.convertToInvoice(order.id);
+    setInvoiceDraft(null);
+    setTargetInvoiceId(invoice.id);
     setActiveSection('facturas');
+    await fetchData();
+  };
+
+  const handleConvertedQuoteToOrder = (orderId: string) => {
+    setTargetOrderId(orderId);
+    setActiveSection('ordenes-venta');
   };
 
 
@@ -176,10 +181,10 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   return (
     <div className="sales-module flex min-w-0 flex-1 overflow-x-hidden bg-background w-full">
       <main className="min-w-0 max-w-full flex-1 relative overflow-x-hidden">
-        <div className="min-w-0 max-w-full p-4 sm:p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
+        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:p-10">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="shrink-0 p-3 bg-primary/10 rounded-xl">
+              <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
                 <ShoppingBag className="size-9 text-primary" />
               </div>
               <div className="min-w-0">
@@ -197,11 +202,9 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
 
           </div>
 
-          {activeSection === 'dashboard-ventas' ? (
-            <DashboardVentas />
-          ) : (
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
-            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto min-w-0 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-nowrap overflow-x-auto justify-start gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none")}>
+            <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
+            <TabsList ref={tabsRef} className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {SALES_SECTIONS.map((section) => {
                 const hasAccess = !section.requiredModules || !user?.enabledModules
                   || user.enabledModules.includes('SALES')
@@ -221,6 +224,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 );
               })}
             </TabsList>
+            </div>
           <AnimatePresence mode="wait">
             <motion.div
               className="min-w-0 max-w-full"
@@ -234,10 +238,10 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 <ClientesView data={data.clientes} loading={loading} onRefresh={fetchData} />
               )}
               {activeSection === 'estimaciones' && (
-                <EstimacionesView data={data.estimaciones} loading={loading} onRefresh={fetchData} customers={data.clientes} products={data.productos} />
+                <EstimacionesView data={data.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={data.clientes} products={data.productos} />
               )}
               {activeSection === 'ordenes-venta' && (
-                <OrdenesVentaView data={data.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} customers={data.clientes} products={data.productos} />
+                <OrdenesVentaView data={data.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} targetOrderId={targetOrderId} onClearTargetOrderId={() => setTargetOrderId(null)} customers={data.clientes} products={data.productos} employees={data.employees} />
               )}
               {activeSection === 'facturas' && (
                 <FacturasView 
@@ -289,7 +293,6 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
             </motion.div>
           </AnimatePresence>
           </Tabs>
-          )}
         </div>
       </main>
     </div>

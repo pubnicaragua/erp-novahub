@@ -122,10 +122,10 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarColla
   return (
     <div className="flex flex-1 bg-background w-full">
       <main className="flex-1 relative">
-        <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
+        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] p-4 sm:p-6 md:p-10">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div className="flex items-center gap-3" data-tour="tickets-title">
-              <div className="p-3 bg-primary/10 rounded-xl">
+              <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
                 <Headphones className="size-9 text-primary" />
               </div>
               <div>
@@ -143,7 +143,8 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarColla
           </div>
 
           <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none")} data-tour="tickets-tabs [&>button]:flex-none">
+            <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
+            <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="tickets-tabs">
               {tabs.map((tab) => (
                 <TabsTrigger 
                   key={tab.id} 
@@ -152,11 +153,12 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarColla
                     data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
                     data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
                 >
-                  <tab.icon className={cn("size-4", activeTab === tab.id ? "" : tab.color)} />
+                  <tab.icon className="size-4" />
                   <span className="hidden sm:inline">{tab.label}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
+            </div>
             
             <AnimatePresence mode="wait">
               <motion.div

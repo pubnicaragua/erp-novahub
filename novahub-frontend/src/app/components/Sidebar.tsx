@@ -185,9 +185,8 @@ const menuItems: MenuItem[] = [
     icon: <ShoppingBag className="size-5" />,
     section: 'Operaciones',
     submenu: [
-      { id: 'dashboard-ventas', label: 'Dashboard', icon: <BarChart3 className="size-4" /> },
       { id: 'clientes', label: 'Clientes', icon: <UserCircle className="size-4" /> },
-      { id: 'estimaciones', label: 'Estimaciones', icon: <FileSpreadsheet className="size-4" /> },
+      { id: 'estimaciones', label: 'Cotizaciones', icon: <FileSpreadsheet className="size-4" /> },
       { id: 'ordenes-venta', label: 'Ordenes de venta', icon: <ClipboardList className="size-4" />, hasAdd: true },
       { id: 'facturas', label: 'Facturas', icon: <FileText className="size-4" /> },
       { id: 'facturas-recurrentes', label: 'Facturas recurrentes', icon: <RotateCcw className="size-4" /> },
@@ -518,10 +517,10 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       >
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
+          <div className={cn("flex h-16 items-center border-b border-sidebar-border px-3 overflow-visible", isCollapsed ? "justify-center" : "justify-between")}>
             <div className="flex items-center gap-3">
               {themeConfig.logo ? (
-                <img src={themeConfig.logo} alt="Company Logo" className={cn("max-h-9 object-contain transition-all", isCollapsed ? "max-w-9" : "max-w-16")} />
+                <img src={themeConfig.logo} alt="Company Logo" className="size-9 shrink-0 object-contain transition-all" />
               ) : (
                 <NovaHubLogo size={isCollapsed ? 36 : 38} />
               )}

@@ -19,6 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
+import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -40,7 +41,7 @@ const statusOptions = [
   { label: 'Borrador', value: 'DRAFT', color: 'bg-slate-500/10 text-slate-500' },
   { label: 'Pendiente', value: 'PENDING', color: 'bg-amber-500/10 text-amber-500' },
   { label: 'Pagada', value: 'PAID', color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Cancelada', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Anulada', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
   { label: 'Vencida', value: 'OVERDUE', color: 'bg-orange-500/10 text-orange-500' },
   { label: 'Parcial', value: 'PARTIAL', color: 'bg-blue-500/10 text-blue-500' },
 ];
@@ -51,7 +52,7 @@ const editableStatusOptions = [
   { label: 'Pendiente', value: 'PENDING', color: 'bg-amber-500/10 text-amber-500' },
   { label: 'Pagada', value: 'PAID', color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Vencida', value: 'OVERDUE', color: 'bg-orange-500/10 text-orange-500' },
-  { label: 'Cancelada', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Anulada', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
 export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId }: FacturasViewProps) {
@@ -65,6 +66,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
+  const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
   const [isCreating, setIsCreating] = useState(false);
   const [auditInvoiceId, setAuditInvoiceId] = useState<string | null>(null);
 
@@ -118,7 +120,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     if (invoiceDraft) {
       setIsCreating(true);
       setEditingId(null);
-      setLocalDoc(JSON.parse(JSON.stringify(invoiceDraft)));
+      setLocalDoc({ paymentMethod: 'CASH', paymentAccountId: '', ...JSON.parse(JSON.stringify(invoiceDraft)) });
 
       const sub = Number(invoiceDraft.subtotal || 0);
       if (sub > 0) {
@@ -169,7 +171,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const handleUpdate = async (id: string | number, updates: Partial<Invoice>) => {
     try {
       await invoicesService.update(id.toString(), updates);
-      toast.success('Factura actualizada');
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
@@ -188,6 +189,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     try {
       if (upperStatus === 'PAID') {
         // PAID: crear pago → el servidor cambia el estado automáticamente
+        const paymentAccountId = (targetDoc as any).paymentAccountId || (targetDoc as any).accountId;
+        if (!paymentAccountId) {
+          toast.error('Selecciona la cuenta contable del pago antes de marcar la factura como pagada');
+          return;
+        }
         await paymentsService.create({ 
           customerId: targetDoc.customerId, 
           invoiceId: targetId, 
@@ -196,6 +202,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           currency: targetDoc.currency, 
           exchangeRate: targetDoc.exchangeRate || globalRate, 
           method: 'TRANSFER', 
+          accountId: paymentAccountId,
           notes: `Cobro automático (Factura ${targetDoc.number})` 
         } as any);
       } else {
@@ -235,6 +242,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       notes: '',
       sellerEmployeeId: '',
       commissionRate: 0,
+      paymentMethod: 'CASH',
+      paymentAccountId: '',
     });
     setLocalRates({ dRate: 0, tRate: 15 });
   };
@@ -247,6 +256,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
     if (!localDoc.items || localDoc.items.length === 0) {
       toast.error('Agrega al menos un producto');
+      return;
+    }
+    if (emitir && !localDoc.paymentAccountId) {
+      toast.error('Selecciona la cuenta contable del pago antes de emitir');
       return;
     }
     const serialRows = (localDoc.items || []).filter((item: any) => {
@@ -295,6 +308,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const finalNotes = `${baseNotes}${serialNotes}`.trim();
 
     try {
+      const saveToastId = isCreating ? toast.loading(emitir ? 'Emitiendo factura...' : 'Guardando factura como borrador...') : undefined;
       if (isCreating) {
         await invoicesService.create({
           customerId: localDoc.customerId,
@@ -303,8 +317,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           dueDate: new Date(localDoc.dueDate).toISOString(),
           currency: localDoc.currency,
           exchangeRate: Number(localDoc.exchangeRate || globalRate),
+          warehouseId: (localDoc as any).warehouseId || warehouses[0]?.id || undefined,
           items: localDoc.items.map((item: any) => ({
             productId: item.productId || undefined,
+            warehouseId: item.warehouseId || undefined,
             description: item.description || '',
             quantity: Number(item.quantity || 1),
             unitPrice: Number(item.unitPrice || 0),
@@ -317,12 +333,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           discountAmount: Number(localDoc.discountAmount || 0),
           total: Number(localDoc.total || 0),
           status: emitir ? 'PENDING' : 'DRAFT',
+          autoPay: emitir,
+          paymentMethod: localDoc.paymentMethod || 'CASH',
+          paymentAccountId: localDoc.paymentAccountId || undefined,
           notes: finalNotes,
           salesOrderId: localDoc.salesOrderId || undefined,
           sellerEmployeeId: localDoc.sellerEmployeeId || undefined,
           commissionRate: localDoc.commissionRate || undefined,
         } as any);
-        toast.success(emitir ? 'Factura emitida exitosamente' : 'Factura guardada como borrador');
+        toast.success(emitir ? 'Factura emitida' : 'Factura guardada como borrador', { id: saveToastId });
       } else {
         await handleUpdate(localDoc.id, {
           ...localDoc,
@@ -330,6 +349,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           notes: finalNotes,
           status: emitir ? 'PENDING' : localDoc.status,
         });
+        toast.success(emitir ? 'Factura emitida' : 'Factura guardada como borrador', { id: saveToastId });
       }
       setIsCreating(false);
       setEditingId(null);
@@ -337,17 +357,35 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       onRefresh();
     } catch (e: any) {
       const msg = e.response?.data?.message;
-      toast.error(`Error al guardar: ${Array.isArray(msg) ? msg.join(', ') : (msg || e.message)}`);
+      toast.error(`No se pudo guardar: ${Array.isArray(msg) ? msg.join(', ') : (msg || e.message)}`);
     }
   };
 
   const recalcTotals = (items: any[], dRate: number, tRate: number) => {
+    if (pricingMode === 'individual') return recalcIndividualTotals(items);
     const subtotal = items.reduce((acc: number, it: any) => acc + Number(it.total || 0), 0);
     const discountAmount = subtotal * (dRate / 100);
     const base = subtotal - discountAmount;
     const taxAmount = base * (tRate / 100);
     const total = base + taxAmount;
     return { subtotal, discountAmount, taxAmount, total };
+  };
+
+  const recalcIndividualTotals = (items: any[]) => {
+    const pricedItems = items.map((line: any) => {
+      const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
+      const discount = gross * (Number(line.discount || 0) / 100);
+      const taxable = gross - discount;
+      const tax = taxable * (Number(line.taxRate || 0) / 100);
+      return { ...line, total: taxable + tax };
+    });
+    const subtotal = pricedItems.reduce((sum: number, line: any) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
+    const discountAmount = pricedItems.reduce((sum: number, line: any) => sum + (Number(line.quantity || 0) * Number(line.unitPrice || 0) * Number(line.discount || 0) / 100), 0);
+    const taxAmount = pricedItems.reduce((sum: number, line: any) => {
+      const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
+      return sum + ((gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100);
+    }, 0);
+    return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount };
   };
 
 
@@ -486,9 +524,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="rounded-2xl border-border/50">
-            <CardContent className="p-6 space-y-3">
+            <CardContent className="min-w-0 p-4 space-y-3 sm:p-6">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Número</p>
                   <Input value={localDoc?.number || ''} onChange={(e) => setLocalDoc({ ...localDoc, number: e.target.value })} className="h-8 text-xs font-black uppercase" />
@@ -551,41 +589,75 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   />
                   {!localDoc?.sellerEmployeeId && <p className="text-[9px] text-muted-foreground/60 mt-0.5 italic">Selecciona vendedor primero</p>}
                 </div>
-                  {/* Moneda se ajusta dinámicamente según la preferencia del topbar */}
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1">Moneda de la transacción</p>
+                    <Select value={localDoc?.currency || 'NIO'} onValueChange={(currency) => {
+                      const exchangeRate = currency === 'NIO' ? 1 : Number(globalRate || 1);
+                      setLocalDoc({ ...localDoc, currency, exchangeRate } as any);
+                      void handleUpdate(localDoc!.id, { currency, exchangeRate } as any);
+                    }}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger>
+                      <SelectContent><SelectItem value="NIO">Córdobas (C$)</SelectItem><SelectItem value="USD">Dólares (US$)</SelectItem></SelectContent>
+                    </Select>
+                    <p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc?.currency === 'NIO' ? '1.00' : Number(localDoc?.exchangeRate || globalRate || 1).toFixed(2)}</span></p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1">Forma de pago al emitir</p>
+                    <select value={localDoc?.paymentMethod || 'CASH'} onChange={(event) => setLocalDoc({ ...localDoc, paymentMethod: event.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                      <option value="CASH">Efectivo</option>
+                      <option value="CARD">Tarjeta</option>
+                      <option value="TRANSFER">Transferencia</option>
+                      <option value="CHECK">Cheque</option>
+                    </select>
+                  </div>
+                  <AccountingAccountSelect
+                    value={localDoc?.paymentAccountId}
+                    onChange={(paymentAccountId) => setLocalDoc({ ...localDoc, paymentAccountId })}
+                    assetOnly
+                    label="Cuenta del pago al emitir"
+                  />
               </div>
             </CardContent>
           </Card>
 
           <Card className="rounded-2xl border-border/50">
-            <CardContent className="p-6 space-y-3">
+            <CardContent className="min-w-0 p-4 space-y-3 sm:p-6">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-muted/10 p-2 text-[10px] font-black uppercase tracking-widest">
+                <span className="text-muted-foreground">Aplicar impuestos/descuentos:</span>
+                <Button type="button" size="sm" variant={pricingMode === 'global' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { setPricingMode('global'); setLocalRates({ dRate: 0, tRate: 15 }); }}>Global</Button>
+                <Button type="button" size="sm" variant={pricingMode === 'individual' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { setPricingMode('individual'); setLocalRates({ dRate: 0, tRate: 0 }); }}>{'Por producto'}</Button>
+              </div>
               <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Subtotal</span>
-                  <div className="flex items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="number" min="0" value={Number(localDoc?.subtotal || 0)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div></div>
-                <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Descuento</span>
-                  <div className="flex items-center gap-2 text-rose-500">
-                    <div className="flex items-center mr-2"><Input type="number" min="0" max="100" value={localRates.dRate || ''} placeholder="0" onChange={(e) => {
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">Subtotal</span>
+                  <div className="flex min-w-0 items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="number" min="0" value={Number(localDoc?.subtotal || 0).toFixed(2)} readOnly className="h-8 w-24 max-w-full text-right font-bold bg-muted/20" /></div></div>
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">Descuento</span>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 text-rose-500">
+                    <div className="flex items-center mr-2">{pricingMode === 'global' ? <Input type="number" min="0" max="100" value={localRates.dRate || ''} placeholder="0" onChange={(e) => {
                       const newRate = Number(e.target.value); setLocalRates(p => ({ ...p, dRate: newRate }));
                       const calc = recalcTotals(localDoc?.items || [], newRate, localRates.tRate);
                       setLocalDoc({ ...localDoc, ...calc });
-                    }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> <span className="ml-1 text-xs font-black">%</span></div>
-                    -{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.discountAmount || 0).toLocaleString()}
+                    }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
+                    -{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.discountAmount || 0).toFixed(2)}
                   </div></div>
-                <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">IVA</span>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center mr-2"><Input type="number" min="0" max="100" value={localRates.tRate || ''} placeholder="0" onChange={(e) => {
-                      const newRate = Number(e.target.value); setLocalRates(p => ({ ...p, tRate: newRate }));
-                      const calc = recalcTotals(localDoc?.items || [], localRates.dRate, newRate);
-                      setLocalDoc({ ...localDoc, ...calc });
-                    }} className="w-16 h-8 text-right font-bold bg-transparent" /> <span className="ml-1 text-xs font-black">%</span></div>
-                    {localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.taxAmount || 0).toLocaleString()}
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">IVA</span>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    {pricingMode === 'global' && <label className="flex h-8 items-center gap-1.5 rounded-md bg-muted/30 px-2 text-xs font-black">
+                      <input type="checkbox" checked={Number(localRates.tRate || 0) > 0} onChange={(e) => {
+                        const newRate = e.target.checked ? 15 : 0;
+                        const calc = recalcTotals(localDoc?.items || [], localRates.dRate, newRate);
+                        setLocalRates(p => ({ ...p, tRate: newRate }));
+                        setLocalDoc({ ...localDoc, ...calc });
+                      }} /> Aplicar
+                    </label>}
+                    {localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.taxAmount || 0).toFixed(2)}
                   </div></div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black">Total</span>
                   <div className="flex flex-col items-end">
-                    <span className="text-primary font-black text-lg">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.total || 0).toLocaleString()}</span>
-                    {localDoc?.currency === 'USD' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ C$ {(Number(localDoc?.total || 0) * (localDoc?.exchangeRate || globalRate)).toLocaleString()}</p>}
-                    {localDoc?.currency === 'NIO' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ $ {(Number(localDoc?.total || 0) / (localDoc?.exchangeRate || globalRate)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>}
+                    <span className="text-primary font-black text-lg">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.total || 0).toFixed(2)}</span>
+                    {localDoc?.currency === 'USD' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ C$ {(Number(localDoc?.total || 0) * (localDoc?.exchangeRate || globalRate)).toFixed(2)}</p>}
+                    {localDoc?.currency === 'NIO' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ $ {(Number(localDoc?.total || 0) / (localDoc?.exchangeRate || globalRate)).toFixed(2)}</p>}
                   </div>
                 </div>
               </div>
@@ -595,8 +667,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
         {/* Items */}
         <Card className="rounded-2xl border-border/50">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
+            <CardContent className="min-w-0 p-4 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => {
@@ -608,16 +680,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               </div>
             </div>
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className="col-span-5">Descripción</div>
-                <div className="col-span-2 text-right">Cant.</div>
+              <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+                <div className={cn("xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>Descripción</div>
+                {pricingMode === 'individual' && <div className="col-span-2" />}
+                <div className={cn("col-span-2 text-right", pricingMode === 'individual' && "xl:col-span-1")}>Cant.</div>
                 <div className="col-span-2 text-right">Precio U.</div>
                 <div className="col-span-2 text-right">Total</div>
-                <div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-start">
-                  <div className="col-span-5">
+                <div key={item.id || idx} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
+                  <div className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
                     <Combobox
                       options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))}
                       value={item.productId || ''}
@@ -627,7 +699,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         newItems[idx] = { ...newItems[idx], productId: val, warehouseId: '', serialNumbers: [] };
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
-                          newItems[idx].unitPrice = Number(selectedProd.price || 0);
+                          const baseSalePrice = Number(selectedProd.salePrice ?? selectedProd.price ?? 0);
+                          newItems[idx].unitPrice = localDoc?.currency === 'USD' ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1) : baseSalePrice;
                           newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
                         }
                         const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
@@ -709,7 +782,30 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       </div>
                     )}
                   </div>
-                  <div className="col-span-2">
+                  {pricingMode === 'individual' && (
+                    <div className="col-span-2 -mt-4 flex min-w-0 items-start gap-2 self-start text-[10px]">
+                      <label className="flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
+                        <span className="h-3 text-[9px] leading-3 text-muted-foreground">IVA</span>
+                        <span className="flex h-8 w-full items-center gap-1.5 rounded-md bg-muted/30 px-2">
+                          <input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
+                            const nextItems = [...(localDoc.items || [])];
+                            nextItems[idx] = { ...nextItems[idx], taxRate: event.target.checked ? 15 : 0 };
+                            setLocalDoc({ ...localDoc, ...recalcTotals(nextItems, 0, 0) });
+                          }} />
+                          <span className="text-xs">Aplicar</span>
+                        </span>
+                      </label>
+                      <label className="flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
+                        <span className="h-3 text-[9px] leading-3 text-muted-foreground">Descuento</span>
+                        <Input type="number" min="0" max="100" value={item.discount || ''} onChange={(event) => {
+                          const nextItems = [...(localDoc.items || [])];
+                          nextItems[idx] = { ...nextItems[idx], discount: Number(event.target.value) || 0 };
+                          setLocalDoc({ ...localDoc, ...recalcTotals(nextItems, 0, 0) });
+                        }} className="h-8 w-full rounded-md bg-muted/30 text-right text-xs" />
+                      </label>
+                    </div>
+                  )}
+                  <div className={cn("min-w-0 xl:col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
                     <Input type="number" min="0" max={Number(products.find(x => x.id === item.productId)?.stock || 1000000)} value={Number(item.quantity) || ''} placeholder="0"
                       onChange={(e) => {
                         let newQty = Number(e.target.value);
@@ -727,7 +823,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
                           handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
                         }
-                      }} className="h-8 text-xs text-right" disabled={item.productId && isSerialTracked(products.find(x => x.id === item.productId))} />
+                      }} className="h-8 w-full text-xs text-right" disabled={item.productId && isSerialTracked(products.find(x => x.id === item.productId))} />
                   </div>
                   <div className="col-span-2">
                     <Input type="number" min="0" value={Number(item.unitPrice) || ''} placeholder="0"
@@ -741,12 +837,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
                           handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
                         }
-                      }} className="h-8 text-xs text-right" />
+                      }} className="h-8 w-full text-xs text-right" />
                   </div>
-                  <div className="col-span-2 text-right">
-                    <span className="text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString()}</span>
-                  </div>
-                  <div className="col-span-1 flex justify-end">
+                  <div className="flex min-w-0 items-center justify-between gap-2 text-right xl:col-span-2">
+                    <span className="text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toFixed(2)}</span>
                     <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => {
                       const newItems = [...(localDoc.items || [])]; newItems.splice(idx, 1);
                       const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
@@ -839,12 +933,30 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           isLoading={loading}
           bulkActions={() => null}
           actions={(row) => (
-              <div className="flex items-center gap-1">
-                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'invoice' as any }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch (e: any) { console.error(e) } }}><FileDown className="size-4" /></Button>
-                <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4" /></Button>
-                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <div className="flex min-w-max items-center justify-end gap-2 pr-1">
+                <Button type="button" title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="relative z-20 size-8 shrink-0 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void (async () => {
+                    try {
+                      await generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'invoice' as any });
+                      toast.success('PDF descargado');
+                    } catch (error: any) {
+                      toast.error(error?.message || 'No se pudo descargar el PDF');
+                    }
+                  })();
+                }}><FileDown className="size-4" /></Button>
+                <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4" /></Button>
+                {canPerform('SALES_PAYMENTS', 'create') &&
+                  !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
+                  Number(row.balance ?? row.total ?? 0) > 0 && (
+                  <Button title="Pagar factura" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" onClick={() => setEditingId(row.id)}>
+                    <CheckCircle2 className="size-4" />
+                  </Button>
+                )}
+                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                 {canPerform('SALES_INVOICES', 'delete') && row.status !== 'CANCELLED' && (
-                  <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
+                  <Button title="Anular" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
                 )}
               </div>
           )}

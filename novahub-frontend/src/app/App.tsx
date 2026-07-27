@@ -35,7 +35,6 @@ const TrainingHubView = lazy(() => import('./components/help/TrainingHubView').t
 const SoporteTecnicoView = lazy(() => import('./components/help/SoporteTecnicoView').then(m => ({ default: m.SoporteTecnicoView })));
 const SoporteTecnicoAdminView = lazy(() => import('./components/help/SoporteTecnicoAdminView').then(m => ({ default: m.SoporteTecnicoAdminView })));
 const ContabilidadPage = lazy(() => import('./components/contabilidad/ContabilidadPage').then(m => ({ default: m.ContabilidadPage })));
-const DashboardVentas = lazy(() => import('./components/DashboardVentas').then(m => ({ default: m.DashboardVentas })));
 const DashboardCxc = lazy(() => import('./components/DashboardCxc').then(m => ({ default: m.DashboardCxc })));
 
 function PageLoader() {
@@ -122,7 +121,7 @@ function DashboardLayout() {
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
         'documentos', 'notificaciones', 'transferencias', 
         'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
-        'dashboard-ventas', 'dashboard-cxc'
+        'dashboard-cxc'
       ];
       
       const firstAllowed = preferredOrder.find(m => hasAccess(m));
@@ -184,7 +183,6 @@ function DashboardLayout() {
       case 'centro-capacitacion': return <TrainingHubView />;
       case 'soporte-tecnico': return user?.isPlatformAdmin ? <SoporteTecnicoAdminView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /> : <SoporteTecnicoView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'contabilidad': return <ContabilidadPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'dashboard-ventas': return <DashboardVentas />;
       case 'dashboard-cxc': return <DashboardCxc />;
       case 'asesoria-legal': return <AsesoriaLegalPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'novachat': return <NovaChatView />;
@@ -210,7 +208,7 @@ function DashboardLayout() {
           isCollapsed={isCollapsed}
           onToggleCollapse={handleToggleCollapse}
         />
-        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+        <main className="scrollbar-overlay min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
           <Suspense fallback={<PageLoader />}>
             {renderContent()}
           </Suspense>

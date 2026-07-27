@@ -5,6 +5,7 @@ import {
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { recurringInvoicesService } from '../../services/ventas.service';
 import { toast } from 'sonner';
@@ -17,6 +18,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateRecurringInvoicePDF } from '../../utils/pdfGenerator';
 import { recurringExpensesService } from '../../services/finanzas.service';
+import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
@@ -99,7 +101,6 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const handleUpdate = async (id: string | number, updates: Partial<RecurringInvoice>) => {
     try {
       await recurringInvoicesService.update(id.toString(), updates);
-      toast.success('Factura recurrente actualizada');
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
@@ -137,6 +138,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       subtotal: 0,
       taxAmount: 0,
       total: 0,
+      accountId: '',
     });
   };
 
@@ -161,6 +163,8 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const handleSave = async () => {
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
+    if (!localDoc.accountId) { toast.error('Selecciona la cuenta contable de ingresos'); return; }
+    const saveToastId = toast.loading(isCreating ? 'Creando factura recurrente...' : 'Guardando cambios...');
     const normalizedStartDate = toIsoDate(localDoc.startDate);
     const normalizedEndDate = localDoc.endDate ? toIsoDate(localDoc.endDate) : undefined;
     const calculatedNextInvoiceDate = calculateNextInvoiceDate(localDoc.frequency, localDoc.startDate);
@@ -192,6 +196,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           subtotal: localDoc.subtotal,
           taxAmount: localDoc.taxAmount,
           total: localDoc.total,
+          accountId: localDoc.accountId,
           status: 'ACTIVE',
         } as any);
 
@@ -215,7 +220,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         } catch {
           toast.warning('Factura creada, pero no se pudo vincular automáticamente a Gastos Recurrentes');
         }
-        toast.success('Factura recurrente creada exitosamente');
+        toast.success('Factura recurrente creada', { id: saveToastId });
       } else {
         await handleUpdate(localDoc.id, {
           ...localDoc,
@@ -226,7 +231,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         } as any);
       }
       setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar', { id: saveToastId }); }
   };
 
   const formatDateSafe = (dateStr: string) => {
@@ -330,7 +335,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Datos de Factura Recurrente</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
                     options={(customers || [])
@@ -367,6 +372,21 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                   <Input type="date" value={toDateInputValue(localDoc?.endDate)} onChange={(e) => setLocalDoc({ ...localDoc, endDate: e.target.value })} className="h-8 text-xs" /></div>
                 <div className="col-span-2"><p className="text-[10px] text-muted-foreground mb-1">Próxima Fecha de Facturación (calculada)</p>
                   <Input value={formatDateSafe(localDoc?.nextInvoiceDate || '')} disabled className="h-8 text-xs font-bold bg-muted/20" /></div>
+                <div className="col-span-2"><p className="text-[10px] text-muted-foreground mb-1">Moneda de la transacción</p>
+                  <Select value={localDoc?.currency || 'NIO'} onValueChange={(currency) => setLocalDoc({ ...localDoc, currency, exchangeRate: currency === 'NIO' ? 1 : Number(globalRate || 1) })}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger>
+                    <SelectContent><SelectItem value="NIO">Córdobas (C$)</SelectItem><SelectItem value="USD">Dólares (US$)</SelectItem></SelectContent>
+                  </Select>
+                  <p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc?.currency === 'NIO' ? '1.00' : Number(localDoc?.exchangeRate || globalRate || 1).toFixed(2)}</span></p>
+                </div>
+                <div className="col-span-2">
+                  <AccountingAccountSelect
+                    value={localDoc?.accountId || ''}
+                    onChange={(accountId) => setLocalDoc({ ...localDoc, accountId })}
+                    label="Cuenta contable de ingresos"
+                    required
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -392,11 +412,11 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
               }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border border-primary/20"><Plus className="size-3 mr-2" /> Agregar Item</Button>
             </div>
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+              <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                 <div className="col-span-2">Tipo</div><div className="col-span-3">Producto / Servicio</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div><div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-start">
+                <div key={item.id || idx} data-item-layout="recurrent" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div className="col-span-2">
                     <label className="flex items-center gap-2 text-[10px] font-bold uppercase">
                       <input
@@ -433,7 +453,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                     ) : (
                       <Combobox options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
                         onChange={(val) => { const ni = [...(localDoc.items || [])]; const prod = products.find(p => p.id === val);
-                          ni[idx] = { ...ni[idx], itemType: 'PRODUCT', productId: val, description: prod?.name || '', unitPrice: Number(prod?.price || 0), total: Number(ni[idx].quantity || 1) * Number(prod?.price || 0) };
+                          const baseSalePrice = Number(prod?.salePrice ?? prod?.price ?? 0);
+                          const unitPrice = localDoc?.currency === 'USD' ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1) : baseSalePrice;
+                          ni[idx] = { ...ni[idx], itemType: 'PRODUCT', productId: val, description: prod?.name || '', unitPrice, total: Number(ni[idx].quantity || 1) * unitPrice };
                           const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }} placeholder="Producto..." />
                     )}
                   </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState, useRef, useEffect } from 'react';
-import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2, Banknote, Loader2, Settings2, Users, CircleHelp } from 'lucide-react';
+import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2, Banknote, Loader2, Users, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -49,12 +49,6 @@ const ALMACEN_TOUR_STEPS: GuidedTourStep[] = [
     title: 'Almacenes y Sucursales',
     description: 'Gestiona todos tus almacenes y sucursales desde esta vista. Puedes crear, editar y desactivar almacenes, asignar tipos y configurar cajas registradoras.',
     tip: 'Cada almacén puede tener su propio inventario y estar asociado a una sucursal.',
-    placement: 'bottom',
-  },
-  {
-    target: '[data-tour="almacenes-cajas-btn"]',
-    title: 'Administrar Cajas',
-    description: 'Desde aquí puedes crear y gestionar las cajas registradoras del POS. Cada caja se asigna a un almacén y puedes controlar qué usuarios tienen acceso.',
     placement: 'bottom',
   },
   {
@@ -407,19 +401,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         <div className="flex items-center gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="mr-1">
             <CircleHelp className="size-3.5 mr-1" /> Tutorial
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-10 gap-2 font-black text-xs uppercase tracking-widest text-primary hover:bg-primary hover:text-primary-foreground border-primary/20 rounded-xl"
-            onClick={() => {
-              fetchCajas();
-              fetchSucursales();
-              setIsManageDialogOpen(true);
-            }}
-            data-tour="almacenes-cajas-btn"
-          >
-            <Settings2 className="size-4" /> Administrar Cajas
           </Button>
           <Button 
             variant="outline" 

@@ -16,6 +16,7 @@ import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 
 interface NotasCreditoViewProps {
   data: CreditNote[];
@@ -69,6 +70,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
       total: 0,
       currency: displayCurrency,
       exchangeRate: globalRate,
+      accountId: '',
     });
   };
 
@@ -76,6 +78,8 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
     if (!localDoc.reason.trim()) { toast.error('Ingresa la razón de la nota'); return; }
+    if (!localDoc.accountId) { toast.error('Selecciona la cuenta contable de la nota de crédito'); return; }
+    const saveToastId = toast.loading(isCreating ? 'Creando nota de crédito...' : 'Guardando cambios...');
     try {
       if (isCreating) {
         await creditNotesService.create({
@@ -93,14 +97,14 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           status: 'DRAFT',
           currency: localDoc.currency || displayCurrency,
           exchangeRate: localDoc.exchangeRate || globalRate,
+          accountId: localDoc.accountId,
         } as any);
-        toast.success('Nota de crédito creada exitosamente');
+        toast.success('Nota de crédito creada', { id: saveToastId });
       } else {
         await creditNotesService.update(localDoc.id, localDoc);
-        toast.success('Nota de crédito actualizada');
       }
       setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar', { id: saveToastId }); }
   };
 
   const handleIssue = async (id: string) => {
@@ -196,7 +200,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información de la Nota</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
                     options={(customers || [])
@@ -213,6 +217,12 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
                 {localDoc?.salesReturnId && <div><p className="text-[10px] text-muted-foreground mb-1">Devolución Asociada</p>
                   <span className="text-xs font-bold text-blue-500">{localDoc.salesReturnId.slice(0, 10)}...</span></div>}
               </div>
+              <AccountingAccountSelect
+                value={localDoc?.accountId || ''}
+                onChange={(accountId) => setLocalDoc({ ...localDoc, accountId })}
+                label="Cuenta contable de la nota de crédito"
+                required
+              />
               <div><p className="text-[10px] text-muted-foreground mb-1">Razón</p>
                 <textarea value={localDoc?.reason || ''} onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })}
                   className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm resize-none" placeholder="Razón de la nota de crédito..." /></div>
@@ -240,11 +250,11 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
               }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar Item</Button>
             </div>
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+              <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                 <div className="col-span-6">Descripción</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-start">
+                <div key={item.id || idx} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div className="col-span-6"><Input value={item.description || ''} onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], description: e.target.value };
                     setLocalDoc({ ...localDoc, items: ni }); }} className="h-8 text-xs" placeholder="Descripción del concepto..." /></div>

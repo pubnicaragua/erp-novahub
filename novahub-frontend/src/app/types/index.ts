@@ -94,6 +94,7 @@ export interface Estimate {
   number: string;
   customerId: string;
   customer?: Customer;
+  warehouseId?: string;
   date: string;
   expiryDate: string;
   subtotal: number;
@@ -103,6 +104,7 @@ export interface Estimate {
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;
+  accountId?: string;
   status: DocumentStatus;
   notes?: string;
   items: EstimateItem[];
@@ -139,11 +141,19 @@ export interface SalesOrder {
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;
+  accountId?: string;
+  warehouseId?: string;
   status: 'draft' | 'pending_review' | 'confirmed' | 'in_progress' | 'shipped' | 'delivered' | 'cancelled';
   notes?: string;
   items: SalesOrderItem[];
   createdAt: string;
   updatedAt: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  invoicedAt?: string;
+  invoicedBy?: { id?: string; name?: string };
+  sellerEmployeeId?: string;
+  sellerEmployee?: { id?: string; firstName?: string; lastName?: string };
 }
 
 export interface SalesOrderItem {
@@ -166,6 +176,7 @@ export interface Invoice {
   customerId: string;
   customer?: Customer;
   salesOrderId?: string;
+  warehouseId?: string;
   date: string;
   dueDate: string;
   subtotal: number;
@@ -177,6 +188,7 @@ export interface Invoice {
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;
+  accountId?: string;
   status: PaymentStatus;
   notes?: string;
   sellerEmployeeId?: string | null;
@@ -214,6 +226,7 @@ export interface RecurringInvoice {
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;
+  accountId?: string;
   status: 'active' | 'paused' | 'expired' | 'cancelled';
   sourceRecurringExpenseId?: string;
   sourceRecurringExpenseRef?: string;
@@ -251,6 +264,7 @@ export interface PaymentReceived {
   currency: Currency;
   exchangeRate?: number;
   baseAmount?: number;
+  accountId?: string;
   method: PaymentMethod;
   reference?: string;
   notes?: string;
@@ -271,6 +285,7 @@ export interface SalesReturn {
   date: string;
   total: number;
   reason: string;
+  accountId?: string;
   status: 'pending' | 'approved' | 'processed' | 'rejected';
   items: SalesReturnItem[];
   createdAt: string;
@@ -300,6 +315,7 @@ export interface CreditNote {
   total: number;
   status: 'draft' | 'issued' | 'applied' | 'voided';
   reason: string;
+  accountId?: string;
   items: CreditNoteItem[];
   createdAt: string;
   updatedAt: string;

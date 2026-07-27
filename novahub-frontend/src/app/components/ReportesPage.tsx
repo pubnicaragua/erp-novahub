@@ -79,10 +79,10 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
   };
 
   return (
-    <div className="space-y-4 p-4 md:p-6 pb-20 max-w-[1800px] mx-auto">
+    <div className="mx-auto w-full max-w-[1700px] space-y-4 p-4 pb-20 sm:p-6 md:p-10">
       <div className="flex flex-col gap-4 md:flex-row md:items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-primary/10 rounded-xl">
+          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <BarChart3 className="size-9 text-primary" />
           </div>
           <div>
@@ -121,7 +121,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar [&>button]:flex-none")}>
+        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
           {[
             { id: 'reportes-ventas', label: 'Ventas', module: 'REPORTS_SALES' },
             { id: 'reportes-compras', label: 'Compras', module: 'REPORTS_PURCHASES' },

@@ -13,6 +13,7 @@ import { cn } from '../ui/utils';
 import type { PaymentReceived, Customer, Invoice } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
+import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
@@ -51,7 +52,6 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const handleUpdate = async (id: string | number, updates: Partial<PaymentReceived>) => {
     try {
       await paymentsService.update(id.toString(), updates);
-      toast.success('Pago actualizado');
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
@@ -69,6 +69,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       currency: displayCurrency === 'USD' ? 'USD' : 'NIO',
       exchangeRate: globalRate,
       method: 'TRANSFER',
+      accountId: '',
       reference: '',
       notes: '',
     });
@@ -79,6 +80,8 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
     if (Number(localDoc.amount) <= 0) { toast.error('El monto debe ser mayor a 0'); return; }
+    if (!localDoc.accountId) { toast.error('Selecciona la cuenta contable que recibirá el pago'); return; }
+    const saveToastId = toast.loading('Registrando pago...');
     try {
       await paymentsService.create({
         customerId: localDoc.customerId,
@@ -88,12 +91,13 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         currency: localDoc.currency,
         exchangeRate: localDoc.exchangeRate || globalRate,
         method: localDoc.method,
+        accountId: localDoc.accountId,
         reference: localDoc.reference || undefined,
         notes: localDoc.notes || undefined,
       } as any);
-      toast.success('Pago registrado exitosamente');
+      toast.success('Pago registrado', { id: saveToastId });
       setIsCreating(false); setLocalDoc(null); onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al registrar pago'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo registrar el pago', { id: saveToastId }); }
   };
 
   const handleExportPDF = async (row: PaymentReceived) => {
@@ -185,7 +189,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Pago</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
                     options={(customers || [])
@@ -210,6 +214,13 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   <select value={localDoc.method} onChange={(e) => setLocalDoc({ ...localDoc, method: e.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                     {methodOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select></div>
+
+                <AccountingAccountSelect
+                  value={localDoc.accountId}
+                  onChange={(accountId) => setLocalDoc({ ...localDoc, accountId })}
+                  assetOnly
+                  label="Cuenta del pago"
+                />
 
                 <div><p className="text-[10px] text-muted-foreground mb-1">Referencia Bancaria</p>
                   <Input value={localDoc.reference} onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} className="h-8 text-xs" placeholder="Nº transferencia, cheque..." /></div>

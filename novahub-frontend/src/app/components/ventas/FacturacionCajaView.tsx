@@ -346,7 +346,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     }).catch(() => undefined);
     accountsService.getAll({ page: 1, pageSize: 100 }).then((response: any) => {
       const items = response?.data ?? response?.items ?? response;
-      setBankAccounts(Array.isArray(items) ? items.filter((account: Account) => account.isActive && account.type === 'asset') : []);
+      setBankAccounts(Array.isArray(items) ? items.filter((account: Account) => account.isActive && String(account.type || '').toUpperCase() === 'ASSET') : []);
     }).catch(() => setBankAccounts([]));
   }, [loadInitialData]);
 
@@ -534,8 +534,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       toast.error('El monto recibido debe ser igual o mayor al total');
       return;
     }
-    if (payments.some((payment) => payment.method === 'TRANSFER' && (!payment.accountId || !payment.reference?.trim()))) {
-      toast.error('La transferencia requiere cuenta bancaria y referencia');
+    if (payments.some((payment) => !payment.accountId)) {
+      toast.error('Cada método de pago requiere una cuenta contable');
+      return;
+    }
+    if (payments.some((payment) => payment.method === 'TRANSFER' && !payment.reference?.trim())) {
+      toast.error('La transferencia requiere una referencia');
       return;
     }
     setSubmitting(true);
@@ -782,22 +786,28 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                 {catalogView === 'list' ? (
                   <div className="overflow-hidden rounded-xl border border-border/50">
                     <div className="max-h-64 overflow-y-auto">
-                      <table className="w-full text-xs">
+                      <table className="w-full table-fixed text-xs">
+                        <colgroup>
+                          <col className="w-[18%]" />
+                          <col className="w-[38%]" />
+                          <col className="w-[22%]" />
+                          <col className="w-[22%]" />
+                        </colgroup>
                         <thead>
                           <tr className="border-b border-border/30 bg-muted/30">
-                            <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</th>
-                            <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción del Producto</th>
-                            <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest text-muted-foreground">Precio Unit. (C$)</th>
-                            <th className="px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">Acción</th>
+                            <th className="px-2 sm:px-3 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Código</th>
+                            <th className="px-2 sm:px-3 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground">Descripción</th>
+                            <th className="px-2 sm:px-3 py-2.5 text-right text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Precio unit.</th>
+                            <th className="px-2 sm:px-3 py-2.5 text-center text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Acción</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border/20">
                           {filteredProducts.slice(0, 30).map((prod) => (
                             <tr key={prod.id} className="transition-colors hover:bg-muted/20">
-                              <td className="px-3 py-2.5 font-mono font-bold text-primary">{prod.code}</td>
-                              <td className="px-3 py-2.5">
-                                <div className="flex items-center gap-2">
-                                  <p className="truncate font-bold">{prod.name}</p>
+                              <td className="min-w-0 px-2 sm:px-3 py-2.5 font-mono font-bold text-primary truncate">{prod.code}</td>
+                              <td className="min-w-0 px-2 sm:px-3 py-2.5">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <p className="min-w-0 truncate font-bold">{prod.name}</p>
                                   {prod.trackInventory && (
                                     <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
                                       {prod.currentStock ?? 0} unid.
@@ -806,11 +816,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                                 </div>
                                 {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
                               </td>
-                              <td className="px-3 py-2.5 text-right font-mono">{formatCurrency(prod.salePrice)}</td>
-                              <td className="px-3 py-2.5 text-center">
+                              <td className="px-2 sm:px-3 py-2.5 text-right font-mono whitespace-nowrap">{formatCurrency(prod.salePrice)}</td>
+                              <td className="px-2 sm:px-3 py-2.5 text-center">
                                 <Button size="sm" variant="ghost" onClick={() => addItem(prod)}
                                   disabled={isRegisterDisabled || (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
-                                  className="h-7 rounded-lg px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
+                                  className="h-7 max-w-full whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
                                   <Plus className="mr-1 size-3" /> {prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar'}
                                 </Button>
                               </td>
@@ -1137,7 +1147,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                     {payments.map((payment, index) => (
                       <div key={`${payment.method}-${index}`} className="rounded-xl border p-3">
                         <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                          <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: value === 'TRANSFER' ? item.reference : undefined, accountId: value === 'TRANSFER' ? item.accountId : undefined } : item))}>
+                          <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: value === 'TRANSFER' ? item.reference : undefined } : item))}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="CASH">Efectivo</SelectItem>
@@ -1149,15 +1159,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                           <Button variant="ghost" disabled={payments.length === 1} onClick={() => setPayments(current => current.filter((_, itemIndex) => itemIndex !== index))}>✕</Button>
                         </div>
                         {payment.method === 'CARD' && <Input className="mt-2" placeholder="Voucher / referencia (opcional)" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                        {payment.method === 'TRANSFER' && (
-                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                            <Select value={payment.accountId || ''} onValueChange={(value) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, accountId: value } : item))}>
-                              <SelectTrigger><SelectValue placeholder="Cuenta bancaria destino" /></SelectTrigger>
-                              <SelectContent>{bankAccounts.map(account => <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>)}</SelectContent>
-                            </Select>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <Select value={payment.accountId || ''} onValueChange={(value) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, accountId: value } : item))}>
+                            <SelectTrigger><SelectValue placeholder="Cuenta contable del cobro *" /></SelectTrigger>
+                            <SelectContent>{bankAccounts.map(account => <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>)}</SelectContent>
+                          </Select>
+                          {payment.method === 'TRANSFER' && (
                             <Input placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

@@ -144,10 +144,10 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   return (
     <div className="purchases-module flex min-w-0 flex-1 overflow-x-hidden bg-background w-full">
       <main className="min-w-0 max-w-full flex-1 relative overflow-x-hidden">
-        <div className="min-w-0 max-w-full p-4 sm:p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
+        <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:p-10">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="shrink-0 p-3 bg-primary/10 rounded-xl">
+              <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
                 <Truck className="size-9 text-primary" />
               </div>
               <div className="min-w-0">
@@ -166,7 +166,8 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
           </div>
 
           <Tabs value={activeSection} className="w-full" onValueChange={setActiveSection}>
-            <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto min-w-0 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-nowrap overflow-x-auto justify-start gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none")}>
+        <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
+        <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {COMPRAS_SECTIONS.map((section) => {
                 const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
                 const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('PURCHASES_'));
@@ -186,7 +187,8 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                 </TabsTrigger>
                 );
               })}
-            </TabsList>
+        </TabsList>
+        </div>
           <AnimatePresence mode="wait">
             {COMPRAS_SECTIONS.map(section => {
                if (activeSection !== section.id) return null;

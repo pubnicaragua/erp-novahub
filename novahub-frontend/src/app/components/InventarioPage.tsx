@@ -148,15 +148,17 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   };
 
   return (
-    <div className="space-y-4 p-4 md:p-6 pb-20 max-w-[1800px] mx-auto">
+    <div className="mx-auto w-full max-w-[1700px] space-y-4 p-4 pb-20 sm:p-6 md:p-10">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-primary/10 rounded-xl">
+          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <Package className="size-9 text-primary" />
           </div>
           <div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-none">Inventario</h1>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
+              Inventario <span className="text-primary">&amp; Stock</span>
+            </h1>
             <p className="mt-2 text-sm text-muted-foreground">Gestiona existencias, precios, almacenes y movimientos en un solo lugar.</p>
             <div className="flex items-center gap-2 mt-2">
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
@@ -198,7 +200,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           if (onSubModuleChange) onSubModuleChange(nextTab);
         }}
       >
-        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 [&>button]:flex-none")}>
+        <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
+        <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
           {INVENTORY_SECTIONS.map((section) => {
             const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
             const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('INVENTORY_'));
@@ -218,6 +221,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             );
           })}
         </TabsList>
+        </div>
 
         <div className="mt-4 min-h-[600px]">
           {loadError ? (

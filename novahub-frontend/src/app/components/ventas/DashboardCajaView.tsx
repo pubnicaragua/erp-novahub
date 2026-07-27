@@ -79,19 +79,19 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
             Panel interactivo de <span className="text-primary">rendimiento financiero</span>, rotación de productos y operaciones de caja.
           </h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 sm:gap-2 lg:w-auto">
           <Input 
             type="date" 
             value={startDate} 
             onChange={(e) => setStartDate(e.target.value)} 
-            className="w-40 h-10 rounded-xl"
+            className="h-9 w-full min-w-0 rounded-xl px-2 text-xs sm:h-10 sm:px-3 sm:text-sm lg:w-40"
           />
-          <span className="text-muted-foreground text-sm font-bold">hasta</span>
+          <span className="text-muted-foreground text-xs font-bold sm:text-sm">hasta</span>
           <Input 
             type="date" 
             value={endDate} 
             onChange={(e) => setEndDate(e.target.value)} 
-            className="w-40 h-10 rounded-xl"
+            className="h-9 w-full min-w-0 rounded-xl px-2 text-xs sm:h-10 sm:px-3 sm:text-sm lg:w-40"
           />
         </div>
       </div>

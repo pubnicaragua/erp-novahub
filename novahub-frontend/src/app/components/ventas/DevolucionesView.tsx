@@ -16,6 +16,7 @@ import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 
 interface DevolucionesViewProps {
   data: SalesReturn[];
@@ -69,6 +70,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
       total: 0,
       currency: displayCurrency,
       exchangeRate: globalRate,
+      accountId: '',
     });
   };
 
@@ -79,6 +81,8 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
     if (!localDoc.invoiceId) { toast.error('Selecciona la factura de origen'); return; }
     if (!localDoc.reason.trim()) { toast.error('Ingresa la razón de la devolución'); return; }
+    if (!localDoc.accountId) { toast.error('Selecciona la cuenta contable de la devolución'); return; }
+    const saveToastId = toast.loading(isCreating ? 'Creando devolución...' : 'Guardando cambios...');
     try {
       if (isCreating) {
         await salesReturnsService.create({
@@ -97,14 +101,14 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           status: 'PENDING',
           currency: localDoc.currency || displayCurrency,
           exchangeRate: localDoc.exchangeRate || globalRate,
+          accountId: localDoc.accountId,
         } as any);
-        toast.success('Devolución registrada exitosamente');
+        toast.success('Devolución registrada', { id: saveToastId });
       } else {
         await salesReturnsService.update(localDoc.id, localDoc);
-        toast.success('Devolución actualizada');
       }
       setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar', { id: saveToastId }); }
   };
 
   const handleExportPDF = async (row: SalesReturn) => {
@@ -201,7 +205,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
                     options={(customers || [])
@@ -226,6 +230,13 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                 {!isCreating && <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span></div>}
               </div>
+              <AccountingAccountSelect
+                value={localDoc?.accountId || ''}
+                onChange={(accountId) => setLocalDoc({ ...localDoc, accountId })}
+                assetOnly
+                label="Cuenta contable de la devolución"
+                required
+              />
               <div><p className="text-[10px] text-muted-foreground mb-1">Razón de la Devolución</p>
                 <textarea value={localDoc?.reason || ''} onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })}
                   className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm resize-none" placeholder="Describe el motivo de la devolución..." /></div>
@@ -253,11 +264,11 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
               }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar Item</Button>
             </div>
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+              <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                 <div className="col-span-5">Descripción</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div><div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-start">
+                <div key={item.id || idx} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div className="col-span-5"><Combobox options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
                     onChange={(val) => { const ni = [...(localDoc.items || [])]; const prod = products.find(p => p.id === val);
                       ni[idx] = { ...ni[idx], productId: val, description: prod?.name || '', unitPrice: Number(prod?.price || 0), total: Number(ni[idx].quantity || 1) * Number(prod?.price || 0) };

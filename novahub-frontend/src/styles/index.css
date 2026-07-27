@@ -35,6 +35,15 @@
   overflow-wrap: anywhere;
 }
 
+/* Action controls are a single compact group, never a wrapped header/cell. */
+.sales-module [data-actions-column="true"] {
+  width: 12rem !important;
+  min-width: 12rem !important;
+  max-width: 12rem !important;
+  white-space: nowrap !important;
+  overflow: visible;
+}
+
 .sales-module [data-slot="table-cell"] > *,
 .sales-module [data-slot="table-cell"] span,
 .sales-module [data-slot="table-cell"] p,
@@ -126,6 +135,32 @@
 }
 
 @media (max-width: 639px) {
+  .customer-detail-panel {
+    inset: 0.75rem !important;
+    width: calc(100% - 1.5rem) !important;
+    height: calc(100% - 1.5rem) !important;
+    max-width: none !important;
+    border: 1px solid hsl(var(--border) / 0.6) !important;
+    border-radius: 1.25rem !important;
+    overflow: hidden !important;
+  }
+
+  .customer-detail-scroll,
+  .customer-detail-scroll [data-slot="scroll-area-viewport"] {
+    min-height: 0 !important;
+    overflow-y: auto !important;
+  }
+
+  .customer-detail-scroll [data-slot="scroll-area-scrollbar"] {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  .customer-detail-panel[data-state="open"] {
+    animation: none !important;
+    transform: none !important;
+  }
+
   .sales-module .w-64,
   .sales-module .w-\[220px\],
   .purchases-module .w-64,
@@ -146,4 +181,106 @@
     padding-left: 0.375rem;
     padding-right: 0.375rem;
   }
+}
+
+@media (max-width: 1023px) {
+  .sales-module .flex:has(> button),
+  .purchases-module .flex:has(> button) {
+    flex-wrap: wrap;
+  }
+
+  .sales-module .flex > button,
+  .purchases-module .flex > button {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Compact sales editors use card rows instead of squeezed legacy grids. */
+@media (max-width: 1279px) {
+  .sales-item-row > div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+
+  .sales-item-row > div::before {
+    display: block;
+    color: hsl(var(--muted-foreground) / 0.7);
+    font-size: 0.625rem;
+    font-weight: 900;
+    line-height: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  /* Quantity/stock and unit price fit comfortably side by side in cards. */
+  .sales-item-row[data-item-layout="standard"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sales-item-row[data-item-layout="standard"] > div:nth-child(1),
+  .sales-item-row[data-item-layout="standard"] > div:nth-child(4),
+  .sales-item-row[data-item-layout="standard"] > div:nth-child(5) {
+    grid-column: 1 / -1;
+  }
+
+  .sales-item-row[data-item-layout="standard"] > div:nth-child(2),
+  .sales-item-row[data-item-layout="standard"] > div:nth-child(3) {
+    grid-column: auto !important;
+  }
+
+  .sales-item-row[data-item-layout="standard"] > div:nth-child(1)::before { content: "Descripción"; }
+  .sales-item-row[data-item-layout="standard"] > div:nth-child(2)::before { content: "Cantidad"; }
+  .sales-item-row[data-item-layout="standard"] > div:nth-child(3)::before { content: "Precio unitario"; }
+  .sales-item-row[data-item-layout="standard"] > div:nth-child(4)::before { content: "Total"; }
+  .sales-item-row[data-item-layout="standard"] > div:nth-child(5)::before { content: "Acciones"; }
+
+  .sales-item-row[data-item-layout="recurrent"] > div:nth-child(1)::before { content: "Tipo"; }
+  .sales-item-row[data-item-layout="recurrent"] > div:nth-child(2)::before { content: "Producto / servicio"; }
+  .sales-item-row[data-item-layout="recurrent"] > div:nth-child(3)::before { content: "Cantidad"; }
+  .sales-item-row[data-item-layout="recurrent"] > div:nth-child(4)::before { content: "Precio unitario"; }
+  .sales-item-row[data-item-layout="recurrent"] > div:nth-child(5)::before { content: "Total"; }
+  .sales-item-row[data-item-layout="recurrent"] > div:nth-child(6)::before { content: "Acciones"; }
+
+  .sales-module .grid-cols-1 > [class*="col-span-"] {
+    grid-column: 1 / -1 !important;
+    min-width: 0;
+  }
+
+  .sales-module .grid-cols-1,
+  .sales-module .grid-cols-1 > *,
+  .sales-module input,
+  .sales-module textarea,
+  .sales-module button,
+  .sales-module [role="combobox"] {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .sales-module [role="combobox"] {
+    overflow: hidden;
+  }
+}
+
+/* Scrollbar estable: siempre visible y sin desplazar el contenido al aparecer. */
+.scrollbar-overlay {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, hsl(var(--primary)) 55%, transparent) transparent;
+  scrollbar-gutter: stable;
+}
+
+.scrollbar-overlay::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-overlay::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, hsl(var(--primary)) 55%, transparent);
+  border-radius: 999px;
+  box-shadow: 0 0 10px color-mix(in srgb, hsl(var(--primary)) 25%, transparent);
 }

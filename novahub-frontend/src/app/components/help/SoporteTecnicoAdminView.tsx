@@ -109,18 +109,22 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
   });
 
   return (
-    <div className="space-y-6 p-4 md:p-8 animate-in fade-in duration-500">
+    <div className="mx-auto w-full max-w-[1700px] space-y-6 p-4 animate-in fade-in duration-500 sm:p-6 md:p-10">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-black tracking-tighter flex items-center gap-3 uppercase italic">
+        <div className="flex items-center gap-3">
+          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <LifeBuoy className="size-9 text-primary" />
+          </div>
+          <div>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
             Soporte <span className="text-primary">Técnico</span>
           </h1>
           <p className="text-muted-foreground mt-1 font-medium flex items-center gap-2">
             <MessageSquareText className="size-4" />
             Gestión de solicitudes de soporte de empresas
           </p>
+        </div>
         </div>
       </div>
 
@@ -145,10 +149,12 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input placeholder="Buscar por empresa, asunto o número..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-11 bg-background/50 border-transparent focus:bg-background rounded-2xl h-12 text-sm font-bold shadow-none" />
         </div>
-        <div className={cn("flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 px-2 no-scrollbar", !isSidebarCollapsed && "hidden lg:hidden")}>
+        <div className={cn("w-full overflow-x-auto custom-scrollbar", !isSidebarCollapsed && "hidden lg:hidden")}>
+        <div className="flex w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5">
           {['ALL', ...STATUS_OPTIONS].map(s => (
-            <button key={s} onClick={() => handleStatusChange(s)} className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border border-transparent", filterStatus === s ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105" : "bg-background/50 text-muted-foreground hover:bg-background hover:text-primary")}>{s === 'ALL' ? 'Todos' : STATUS_MAP[s]?.label}</button>
+            <button key={s} onClick={() => handleStatusChange(s)} className={cn("flex-none shrink-0 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap border border-transparent", filterStatus === s ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground")}>{s === 'ALL' ? 'Todos' : STATUS_MAP[s]?.label}</button>
           ))}
+        </div>
         </div>
       </div>
 

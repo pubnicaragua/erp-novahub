@@ -247,10 +247,10 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
   return (
     <div className="flex h-full min-h-[calc(100vh-5rem)]">
       <main className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="p-6 md:p-10 max-w-[1700px] mx-auto">
+        <div className="mx-auto w-full max-w-[1700px] p-4 sm:p-6 md:p-10">
           {/* Header */}
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-primary/10 rounded-xl">
+            <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
               <BookOpen className="size-9 text-primary" />
             </div>
             <div className="flex-1">
@@ -278,8 +278,8 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
           </div>
 
           {/* Horizontal tab navigation */}
-          <div className="w-full overflow-x-auto custom-scrollbar mb-8">
-            <div className="flex gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40">
+          <div className={cn("w-full overflow-x-auto custom-scrollbar mb-8", !isSidebarCollapsed && "hidden lg:hidden")}>
+            <div className="flex w-max min-w-full gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40">
               {SECTIONS.map((section) => {
                 const isActive = activeSection === section.id;
                 return (
