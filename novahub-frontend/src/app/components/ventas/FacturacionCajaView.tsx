@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
   CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
-  UserPlus, PackagePlus, AlertCircle, Coins
+  UserPlus, AlertCircle, Coins
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -29,7 +29,6 @@ import {
 } from '../../services/caja.service';
 import { accountsService } from '../../services/finanzas.service';
 import type { Account } from '../../types';
-import { AddProductsModal } from '../inventory/AddProductsModal';
 import { QuickAddCustomerModal } from './QuickAddCustomerModal';
 import { brandingService } from '../../services/branding.service';
 
@@ -256,7 +255,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const [createdExchangeRate, setCreatedExchangeRate] = useState(1);
   const [companyName, setCompanyName] = useState('Empresa');
 
-  const [showAddProduct, setShowAddProduct] = useState(false);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
 
   const cartSessions = useRef<Map<string, CartSession>>(new Map());
@@ -330,10 +328,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       toast.error(getErrorMessage(error, 'Error al cargar historial de caja'));
     }
   }, []);
-
-  const handleProductCreated = useCallback(() => {
-    void loadInitialData();
-  }, [loadInitialData]);
 
   const handleCustomerCreated = useCallback(() => {
     cajaService.getCustomers().then(setCustomers);
@@ -638,15 +632,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
             className="h-10 gap-2 px-3 text-xs font-black rounded-xl border-primary/30 hover:bg-primary/10 shadow-sm bg-background/80"
           >
             <UserPlus className="size-4 text-primary" /> Agregar Cliente
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAddProduct(true)}
-            disabled={isRegisterDisabled}
-            className="h-10 gap-2 px-3 text-xs font-black rounded-xl border-primary/30 hover:bg-primary/10 shadow-sm bg-background/80"
-          >
-            <PackagePlus className="size-4 text-primary" /> Agregar Producto
           </Button>
           <Button type="button" variant="outline" onClick={() => setShowTutorial(true)} className="h-10 rounded-xl border-primary/30 bg-background/80 text-xs font-black text-primary shadow-sm hover:bg-primary/10">
             <CircleHelp className="mr-2 size-4" /> Cómo facturar
@@ -1180,11 +1165,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         </div>
       )}
       {showTutorial && <GuidedTour steps={POS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Facturación por Caja" />}
-      <AddProductsModal
-        open={showAddProduct}
-        onOpenChange={setShowAddProduct}
-        onRefresh={handleProductCreated}
-      />
       <QuickAddCustomerModal
         open={showAddCustomer}
         onOpenChange={setShowAddCustomer}
