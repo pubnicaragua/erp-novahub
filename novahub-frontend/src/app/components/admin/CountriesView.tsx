@@ -197,7 +197,7 @@ function CountryDetail({ country, onRefresh }: { country: CountryConfig; onRefre
       await countryConfigService.update(form.code, form);
       toast.success(`${form.name} actualizado`);
       onRefresh();
-    } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar configuración del país'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar configuración del país'); }
     finally { setSaving(false); }
   };
 

@@ -20,6 +20,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generatePurchaseOrderPDF } from '../../utils/pdfGenerator';
 import { exportToCsv } from '../../utils/exportUtils';
+import { PurchaseAuditButton } from './PurchaseAuditButton';
 
 interface Props {
   data: PurchaseOrder[];
@@ -44,8 +45,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   
@@ -144,19 +146,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!pendingDeleteId) return;
-    setDeleteLoading(true);
+  const handleCancelConfirm = async () => {
+    if (!pendingCancelId || !cancelReason.trim()) return;
+    setCancelLoading(true);
     try {
-      await purchaseOrdersService.delete(pendingDeleteId);
-      toast.success('Orden de compra eliminada correctamente');
-      setPendingDeleteId(null);
-      if (editingId === pendingDeleteId) setEditingId(null);
+      await purchaseOrdersService.cancel(pendingCancelId, cancelReason.trim());
+      toast.success('Orden de compra anulada');
+      setPendingCancelId(null);
+      setCancelReason('');
+      if (editingId === pendingCancelId) setEditingId(null);
       onRefresh();
-    } catch (e) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
     } finally {
-      setDeleteLoading(false);
+      setCancelLoading(false);
     }
   };
 
@@ -416,12 +419,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                  </Button>
                </>
              )}
-             {!isNew && canPerform('PURCHASES_ORDERS', 'delete') && (
-                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => setPendingDeleteId(editingId)}>
-                  <Trash2 className="size-3 mr-2" /> Eliminar
-                </Button>
-             )}
+              {!isNew && canPerform('PURCHASES_ORDERS', 'delete') && (
+                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                   onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
+                   <Trash2 className="size-3 mr-2" /> Anular
+                 </Button>
+              )}
             {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar
@@ -813,12 +816,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
-                await purchaseOrdersService.delete(id as string);
+                await purchaseOrdersService.cancel(id as string, 'Anulación masiva');
               }
-              toast.success('Elementos eliminados');
+              toast.success('Órdenes anuladas');
               onRefresh();
-            } catch (e) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+            } catch (e: any) {
+              toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
             }
           } : undefined}
           actions={(row) => (
@@ -834,21 +837,35 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <FileInput className="size-4" />
               </Button>
               <Button title={canPerform('PURCHASES_ORDERS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <PurchaseAuditButton entity="PURCHASE_ORDER" entityId={row.id} title="Auditoria de la Orden" />
               {canPerform('PURCHASES_ORDERS', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
               )}
             </div>
           )}
         />
         <ConfirmDialog
-          open={!!pendingDeleteId}
-          onOpenChange={(open) => !open && setPendingDeleteId(null)}
-          title="Eliminar Orden de Compra"
-          description="¿Estás seguro de que deseas eliminar esta orden? Esta acción no se puede deshacer."
-          confirmLabel="Eliminar Orden"
-          onConfirm={handleDeleteConfirm}
-          loading={deleteLoading}
-        />
+          open={!!pendingCancelId}
+          onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
+          title="Anular Orden de Compra"
+          description="La orden quedará cancelada. No se podrá recibir ni facturar. Esta acción no se puede deshacer."
+          confirmLabel="Anular Orden"
+          variant="destructive"
+          loading={cancelLoading}
+          disabled={!cancelReason.trim()}
+          onConfirm={handleCancelConfirm}
+        >
+          <div className="mt-4">
+            <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
+            <textarea
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+              rows={3}
+              placeholder="Ej: Cancelada por el proveedor, error en productos..."
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+          </div>
+        </ConfirmDialog>
       </div>
     </div>
   );

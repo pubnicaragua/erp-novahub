@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { EditableDataTable } from '../ui/EditableDataTable';
 import { Task } from '../../types';
 import { Card, CardContent } from '../ui/card';
@@ -43,7 +43,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
       try {
         const u = await tenantsService.getUsers(user.tenantId);
         setEmployees(Array.isArray(u) ? u : ((u as any).data || []));
-      } catch (e) {
+      } catch (e: any) {
         console.error('Failed to load users', e);
       }
     };
@@ -210,7 +210,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           columns={columns} 
           onRowUpdate={canPerform('ACTIVITIES_TASKS', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('ACTIVITIES_TASKS', 'delete') ? async (id) => { try { await tasksService.delete(id as string); toast.success('Tarea eliminada'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar tarea'); } } : undefined} 
+          onRowDelete={canPerform('ACTIVITIES_TASKS', 'delete') ? async (id) => { try { await tasksService.delete(id as string); toast.success('Tarea eliminada'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar tarea'); } } : undefined} 
         />
       </Card>
 

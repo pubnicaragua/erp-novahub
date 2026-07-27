@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './dialog';
 import { ScrollArea } from './scroll-area';
 import { api } from '../../services/api';
@@ -45,7 +45,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
       setLoading(true);
       const res = await api.get<any[]>(`/audit/entity/${entity}/${entityId}`);
       setLogs(Array.isArray(res) ? res : []);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error fetching audit logs:', e);
     } finally {
       setLoading(false);

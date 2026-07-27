@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useState } from 'react';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { Event } from '../../types';
 import { Card, CardContent } from '../ui/card';
@@ -160,7 +161,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
           columns={columns} 
           onRowUpdate={canPerform('ACTIVITIES_EVENTS', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('ACTIVITIES_EVENTS', 'delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar evento'); } } : undefined} 
+          onRowDelete={canPerform('ACTIVITIES_EVENTS', 'delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar evento'); } } : undefined} 
         />
       </Card>
     </div>

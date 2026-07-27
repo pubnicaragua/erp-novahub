@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2, Banknote, Loader2, Settings2, Users, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -18,6 +19,7 @@ import { Store } from 'lucide-react';
 import { api, getApiErrorMessage } from '../../services/api';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
+import { contabilidadService } from '../../services/contabilidad.service';
 
 interface AlmacenesViewProps {
   warehouses: any[];
@@ -30,6 +32,7 @@ interface EditingWarehouse {
   location: string;
   type: string;
   parentId: string | null;
+  inventoryAccountId: string | null;
   isNew?: boolean;
 }
 
@@ -82,6 +85,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [isManageSucursalesDialogOpen, setIsManageSucursalesDialogOpen] = useState(false);
   const [autoOpenSucursalForm, setAutoOpenSucursalForm] = useState(false);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const cameFromSetupRef = useRef(false);
 
   // Estados de Cajas
@@ -97,7 +101,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     try {
       const res: any = await api.get('/sucursales');
       setSucursalesList(Array.isArray(res) ? res : (res?.data || []));
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
     }
   };
@@ -117,7 +121,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       const res = await cajaService.getRegisterAccess(caja.id!);
       setAllUsers(res.allUsers || []);
       setAssignedUsers(new Set(res.assignedUserIds || []));
-    } catch (e) {
+    } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al cargar accesos'));
     } finally {
       setAccessLoading(false);
@@ -134,7 +138,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       toast.success('Accesos actualizados');
       setIsAccessModalOpen(false);
       setIsManageDialogOpen(true);
-    } catch (e) {
+    } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al guardar accesos'));
     }
   };
@@ -144,7 +148,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     try {
       const res = await cajaService.getRegisters(true);
       setCajasList(Array.isArray(res) ? res : []);
-    } catch (e) {
+    } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al cargar cajas'));
     } finally {
       setCajasLoading(false);
@@ -154,6 +158,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   React.useEffect(() => {
     fetchCajas();
     fetchSucursales();
+    contabilidadService.getChartOfAccounts().then(res => setAccounts(res.data || [])).catch(() => {});
   }, []);
 
   const handleAddNewRow = () => {
@@ -227,6 +232,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           location: warehouse.location,
           type: warehouse.type,
           parentId: warehouse.parentId,
+          inventoryAccountId: warehouse.inventoryAccountId || null,
         } as any);
         toast.success('Almacén creado');
       } else {
@@ -235,6 +241,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           location: warehouse.location,
           type: warehouse.type,
           parentId: warehouse.parentId,
+          inventoryAccountId: warehouse.inventoryAccountId || null,
         } as any);
         toast.success('Almacén actualizado');
       }
@@ -344,8 +351,23 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             </SelectContent>
           </Select>
         </TableCell>
-        <TableCell>-</TableCell>
-        <TableCell className="text-right">-</TableCell>
+        <TableCell>
+          <Select 
+            value={warehouse.inventoryAccountId || 'none'} 
+            onValueChange={(v) => handleUpdateField(warehouse.id, 'inventoryAccountId', v === 'none' ? null : v)}
+            disabled={isSaving}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="Sin cuenta" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sin cuenta</SelectItem>
+              {accounts.map((a: any) => (
+                <SelectItem key={a.id} value={a.id}>{a.code} - {a.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </TableCell>
         <TableCell className="text-right">
           <div className="flex items-center justify-end gap-1">
             <Button 
@@ -430,6 +452,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Ubicación</TableHead>
                <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Tipo</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Almacén matriz</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-44">Cuenta contable</TableHead>
                <TableHead className="font-black text-[10px] uppercase tracking-widest">Sucursales</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
@@ -442,7 +465,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             
             {warehouses.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                   <Warehouse className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">No hay almacenes</p>
                   <p className="text-sm">Haz clic en "Agregar Almacén" para comenzar</p>
@@ -482,6 +505,13 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {wh.parent?.name || '-'}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {wh.inventoryAccount ? (
+                        <Badge variant="outline" className="text-[9px] font-mono">{wh.inventoryAccount.code} - {wh.inventoryAccount.name}</Badge>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">No asignada</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {assignedSucursales.length > 0 ? (
@@ -543,7 +573,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             await cajaService.deleteRegister(pendingDeleteCajaId);
             toast.success('Caja eliminada');
             fetchCajas();
-          } catch(e) {
+          } catch (e: any) {
             toast.error(getApiErrorMessage(e, 'Error al eliminar la caja'));
           } finally {
             setPendingDeleteCajaId(null);
@@ -689,7 +719,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
               setIsCajaFormOpen(false);
               setIsManageDialogOpen(true);
               fetchCajas();
-            } catch (e) {
+            } catch (e: any) {
               toast.error(getApiErrorMessage(e, 'Error al guardar la caja'));
             }
           }}>Guardar Caja</Button>

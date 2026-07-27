@@ -87,7 +87,7 @@ export function SucursalesView({
       }
       setIsFormOpen(false);
       fetchBranches();
-    } catch (e) {
+    } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al guardar sucursal'));
     } finally {
       setSaving(false);

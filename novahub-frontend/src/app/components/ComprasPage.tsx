@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ShoppingCart, Truck, Wallet, CalendarClock,
   ClipboardList, PackageCheck, FileInput, RotateCcw,
@@ -132,7 +132,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
         pagos:        toArr(pay),
         creditos:     toArr(cred),
       });
-    } catch (e) {
+    } catch (e: any) {
       toast.error('Error al cargar módulo de Compras');
     } finally {
       setLoading(false);

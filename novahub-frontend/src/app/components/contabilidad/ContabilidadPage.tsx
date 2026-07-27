@@ -8,6 +8,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
+import { Tag, Wallet } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { PlanCuentasView } from './PlanCuentasView';
 import { DiarioView } from './DiarioView';
@@ -22,6 +23,8 @@ import { LibroMayorView } from './LibroMayorView';
 import { ActivosFijosView } from './ActivosFijosView';
 import { CambiosPatrimonioView } from './CambiosPatrimonioView';
 import { ConfiguracionContableView } from './ConfiguracionContableView';
+import { CategoriasGastosView } from './CategoriasGastosView';
+import { BudgetItemsView } from './BudgetItemsView';
 
 const SECTIONS = [
   { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: BookOpen },
@@ -36,6 +39,8 @@ const SECTIONS = [
   { id: 'conciliacion', label: 'Conciliación Bancaria', icon: Landmark },
   { id: 'periodos', label: 'Períodos Contables', icon: Calendar },
   { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: FileBarChart },
+  { id: 'presupuestos', label: 'Presupuestos', icon: Wallet },
+  { id: 'categorias-gastos', label: 'Categorías Gastos', icon: Tag },
   { id: 'configuracion', label: 'Configuración', icon: Settings2 },
 ];
 
@@ -318,6 +323,8 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   {activeSection === 'conciliacion' && <ConciliacionView />}
                   {activeSection === 'periodos' && <PeriodosView />}
                   {activeSection === 'reportes-fiscales' && <ReportesFiscalesView />}
+                  {activeSection === 'presupuestos' && <BudgetItemsView />}
+                  {activeSection === 'categorias-gastos' && <CategoriasGastosView />}
                   {activeSection === 'configuracion' && <ConfiguracionContableView />}
                 </motion.div>
               </AnimatePresence>

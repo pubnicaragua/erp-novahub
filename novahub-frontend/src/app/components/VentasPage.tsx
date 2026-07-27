@@ -40,6 +40,7 @@ import { DevolucionesView } from './ventas/DevolucionesView';
 import { NotasCreditoView } from './ventas/NotasCreditoView';
 import { FacturacionCajaView } from './ventas/FacturacionCajaView';
 import { ControlDashboardCajaView } from './ventas/ControlDashboardCajaView';
+import { DashboardVentas } from './DashboardVentas';
 
 const SALES_SECTIONS = [
   { id: 'clientes', label: 'Clientes', icon: Users, description: 'Directorio y saldos', requiredModules: ['SALES_CLIENTS'] },
@@ -196,6 +197,9 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
 
           </div>
 
+          {activeSection === 'dashboard-ventas' ? (
+            <DashboardVentas />
+          ) : (
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
             <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto min-w-0 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-nowrap overflow-x-auto justify-start gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none")}>
               {SALES_SECTIONS.map((section) => {
@@ -285,6 +289,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
             </motion.div>
           </AnimatePresence>
           </Tabs>
+          )}
         </div>
       </main>
     </div>

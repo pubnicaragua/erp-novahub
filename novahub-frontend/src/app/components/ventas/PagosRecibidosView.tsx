@@ -36,8 +36,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [localDoc, setLocalDoc] = useState<any>(null);
 
@@ -270,48 +271,55 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           </div>
         </div>
         <EditableDataTable data={filtered}
-          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}
+          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.cancel(id as string, 'Anulación masiva'); } toast.success('Pagos anulados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular'); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
               {canPerform('SALES_PAYMENTS', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
               )}
             </div>
           )}
         />
       </div>
       <ConfirmDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-        title={"¿Eliminar pago recibido?"}
-        description="¿Estás seguro de que deseas eliminar este pago? Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
+        open={pendingCancelId !== null}
+        onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
+        title={"¿Anular pago recibido?"}
+        description="El pago quedará anulado y se revertirá el saldo de la factura asociada. Esta acción no se puede deshacer."
+        confirmLabel="Anular Pago"
         variant="destructive"
-        loading={deleteLoading}
+        loading={cancelLoading}
+        disabled={!cancelReason.trim()}
         onConfirm={async () => {
-          if (!pendingDeleteId) return;
+          if (!pendingCancelId || !cancelReason.trim()) return;
           try {
-            setDeleteLoading(true);
-            await paymentsService.delete(pendingDeleteId);
-            toast.success('Pago eliminado');
-
+            setCancelLoading(true);
+            await paymentsService.cancel(pendingCancelId, cancelReason.trim());
+            toast.success('Pago anulado');
             onRefresh();
           } catch (error: any) {
-            const msg = error?.response?.data?.message || error?.message || '';
-            if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
-              toast.error('No se puede eliminar: tiene dependencias en el sistema.');
-            } else {
-              toast.error(`Error al eliminar: ${msg || 'Error desconocido'}`);
-            }
+            toast.error(error?.response?.data?.message || error?.message || 'Error al anular pago');
           } finally {
-            setDeleteLoading(false);
-            setPendingDeleteId(null);
+            setCancelLoading(false);
+            setPendingCancelId(null);
+            setCancelReason('');
           }
         }}
-      />
+      >
+        <div className="mt-4">
+          <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
+          <textarea
+            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+            rows={3}
+            placeholder="Ej: Pago duplicado, error en monto..."
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+          />
+        </div>
+      </ConfirmDialog>
 
     </div>
   );

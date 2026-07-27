@@ -14,6 +14,7 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateExpensePDF } from '../../utils/pdfGenerator';
+import { PurchaseAuditButton } from './PurchaseAuditButton';
 
 interface Props {
   data: PaymentMade[];
@@ -41,7 +42,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PaymentMade> | null>(null);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   const normalizeMethod = (method?: string): 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER' => {
     const normalized = String(method || 'TRANSFER').toUpperCase();
@@ -303,8 +306,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
               )}
              {!isNew && canPerform('PURCHASES_PAYMENTS', 'delete') && (
                  <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => setPendingDeleteId(editingId)}>
-                  <Trash2 className="size-3 mr-2" /> Eliminar
+                  onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
+                  <Trash2 className="size-3 mr-2" /> Anular
                 </Button>
              )}
             {((isNew && canPerform('PURCHASES_PAYMENTS', 'create')) || (!isNew && canPerform('PURCHASES_PAYMENTS', 'edit'))) && (
@@ -487,12 +490,12 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
-                await paymentsService.delete(id as string);
+                await paymentsService.cancel(id as string, 'Anulación masiva');
               }
-              toast.success('Elementos eliminados');
+              toast.success('Pagos anulados');
               onRefresh();
-            } catch (e) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+            } catch (e: any) {
+              toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
             }
           } : undefined}
            actions={(row) => (
@@ -512,33 +515,51 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                  <Download className="size-4" />
                </Button>
                <Button title={canPerform('PURCHASES_PAYMENTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+               <PurchaseAuditButton entity="PAYMENT_MADE" entityId={row.id} title="Auditoria del Pago" />
                {canPerform('PURCHASES_PAYMENTS', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
               )}
             </div>
           )}
         />
       </div>
       <ConfirmDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => !open && setPendingDeleteId(null)}
-        title="¿Eliminar pago?"
-        description="¿Estás seguro de que deseas eliminar este pago? Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
+        open={pendingCancelId !== null}
+        onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
+        title="¿Anular pago?"
+        description="El pago quedará anulado y se revertirá el saldo del proveedor y la factura asociada. Esta acción no se puede deshacer."
+        confirmLabel="Anular Pago"
         variant="destructive"
+        loading={cancelLoading}
+        disabled={!cancelReason.trim()}
         onConfirm={async () => {
+          if (!pendingCancelId || !cancelReason.trim()) return;
           try {
-            await paymentsService.delete(pendingDeleteId);
-            toast.success('Pago eliminado');
+            setCancelLoading(true);
+            await paymentsService.cancel(pendingCancelId, cancelReason.trim());
+            toast.success('Pago anulado');
             setEditingId(null);
             onRefresh();
-          } catch (e) {
-            toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+          } catch (e: any) {
+            toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
           } finally {
-            setPendingDeleteId(null);
+            setCancelLoading(false);
+            setPendingCancelId(null);
+            setCancelReason('');
           }
         }}
-      />
+      >
+        <div className="mt-4">
+          <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
+          <textarea
+            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+            rows={3}
+            placeholder="Ej: Pago duplicado, error en monto..."
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+          />
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

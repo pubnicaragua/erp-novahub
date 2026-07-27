@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -274,7 +274,10 @@ export function CustomerDetailDrawer({
                     <Building2 className="size-4 text-purple-500" /> Datos Fiscales y Financieros
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    <InfoField label="Identificación Fiscal (RUC / Cédula)" value={customer?.taxId || 'No registrado'} icon={Hash} mono muted={!customer?.taxId} />
+                    <InfoField label="RUC" value={customer?.ruc || '—'} icon={Hash} mono muted={!customer?.ruc} />
+                    <InfoField label="DV" value={customer?.dv || '—'} icon={Hash} mono muted={!customer?.dv} />
+                    <InfoField label="Razón Social" value={customer?.razonSocial || '—'} icon={Building2} muted={!customer?.razonSocial} />
+                    <InfoField label="Identificación Fiscal" value={customer?.taxId || 'No registrado'} icon={Hash} mono muted={!customer?.taxId} />
                     <InfoField label="Límite de Crédito Concedido" value={formatConvertedAmount(creditLimit, 'NIO')} icon={DollarSign} mono />
                     <InfoField label="Saldo Deudor Actual" value={formatConvertedAmount(balance, 'NIO')} icon={TrendingUp} mono />
                     <InfoField label="Código Interno" value={customer?.code || '—'} icon={Tag} mono />

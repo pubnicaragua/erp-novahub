@@ -460,7 +460,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
               ext: { width: imgWidthPx, height: imgHeight },
             });
             currentRow += Math.ceil(imgHeight / 18) + 2;
-          } catch (e) {
+          } catch (e: any) {
             console.warn(`Image capture failed for #${elementId}`, e);
           }
         };

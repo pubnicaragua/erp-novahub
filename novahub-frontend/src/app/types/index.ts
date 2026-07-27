@@ -6,7 +6,7 @@
 // ---- Shared / Base ----
 export type EntityStatus = 'active' | 'inactive' | 'archived' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 export type DocumentStatus = 'draft' | 'sent' | 'approved' | 'rejected' | 'cancelled' | 'DRAFT' | 'SENT' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
-export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'refunded' | 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'REFUNDED';
+export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'refunded' | 'cancelled' | 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'REFUNDED' | 'CANCELLED';
 export type PaymentMethod = 'cash' | 'transfer' | 'check' | 'card' | 'other' | 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER';
 export type Currency = 'USD' | 'EUR' | 'GTQ' | 'HNL' | 'NIO' | 'CRC' | 'PAB';
 
@@ -68,6 +68,9 @@ export interface Customer {
   name: string;
   type: 'individual' | 'company';
   taxId?: string;
+  ruc?: string;
+  dv?: string;
+  razonSocial?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -251,6 +254,7 @@ export interface PaymentReceived {
   method: PaymentMethod;
   reference?: string;
   notes?: string;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -496,6 +500,7 @@ export interface PaymentMade {
   method: PaymentMethod;
   reference?: string;
   notes?: string;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -585,6 +590,13 @@ export interface Expense {
   baseAmount?: number;
   category: string;
   categoryCustom?: string;
+  expenseCategoryId?: string;
+  expenseCategory?: {
+    id: string;
+    name: string;
+    code?: string;
+    color?: string;
+  };
   description: string;
   paidTo?: string;
   paymentSource?: 'EFECTIVO' | 'BAC' | 'LAFISE' | 'ATLANTIDA' | 'FICOHSA' | 'BANPRO' | 'BDF' | 'AVANZ';
@@ -639,6 +651,10 @@ export interface JournalEntry {
   description: string;
   status: 'draft' | 'posted' | 'voided';
   lines: JournalEntryLine[];
+  referenceType?: string;
+  referenceId?: string;
+  costCenterId?: string;
+  costCenter?: any;
   createdAt: string;
   updatedAt: string;
 }
@@ -692,6 +708,7 @@ export interface Product {
   taxRate: number;
   stock: number;
   minStock: number;
+  maxStock?: number | null;
   trackSerialNumbers?: boolean;
   itemType?: 'PRODUCT' | 'SERVICE';
   status: EntityStatus;

@@ -13,6 +13,7 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { PurchaseAuditButton } from './PurchaseAuditButton';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; }
 
@@ -345,6 +346,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
           actions={(row) => (
              <div className="flex gap-1">
               <Button title={canPerform('PURCHASES_RETURNS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <PurchaseAuditButton entity="SUPPLIER_CREDIT" entityId={row.id} title="Auditoria del Credito" />
               {canPerform('PURCHASES_RETURNS', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
               )}

@@ -13,7 +13,7 @@ export const contabilidadService = {
   getAccountBalance: (id: string, dateFrom?: string, dateTo?: string) => api.get<any>(`/accounting/accounts/${id}/balance`, { params: { dateFrom, dateTo } }),
 
   // Asientos Contables
-  getJournals: (params?: { status?: string; dateFrom?: string; dateTo?: string; accountId?: string; referenceType?: string }) =>
+  getJournals: (params?: { status?: string; dateFrom?: string; dateTo?: string; accountId?: string; referenceType?: string; referenceId?: string; search?: string; costCenterId?: string }) =>
     api.get<any[]>('/accounting/journals', { params }),
   getJournal: (id: string) => api.get<any>(`/accounting/journals/${id}`),
   createJournal: (data: any) => api.post<any>('/accounting/journals', data),
@@ -28,6 +28,8 @@ export const contabilidadService = {
   autoGenerateFromPaymentMade: (id: string) => api.post<any>(`/accounting/auto-generate/payment-made/${id}`, {}),
   autoGenerateFromExpense: (id: string) => api.post<any>(`/accounting/auto-generate/expense/${id}`, {}),
   autoGenerateFromPayroll: (id: string) => api.post<any>(`/accounting/auto-generate/payroll/${id}`, {}),
+  autoGenerateFromPurchaseReceipt: (id: string) => api.post<any>(`/accounting/auto-generate/purchase-receipt/${id}`, {}),
+  autoGenerateFromCashRegisterSession: (id: string) => api.post<any>(`/accounting/auto-generate/cash-register/${id}`, {}),
 
   // Reportes
   getTrialBalance: (params?: { dateFrom?: string; dateTo?: string }) =>
@@ -85,9 +87,28 @@ export const contabilidadService = {
   updateConfig: (data: any) => api.put<any>('/accounting/config', data),
   seedConfig: () => api.post<any>('/accounting/config/seed', {}),
 
+  // Cuentas sugeridas por tipo de documento
+  getSuggestedAccounts: () => api.get<any>('/accounting/suggested-accounts'),
+
   // Importar catálogo completo por industria con jerarquía
   importDefaultsWithHierarchy: (industry: string) => api.post<any>(`/accounting/import-defaults/${industry}`, {}),
 
   // Test Connections
   testConnections: () => api.get<any>('/accounting/test-connections'),
+
+  // Budget Items
+  getBudgetItems: (period?: string) => api.get<any[]>('/accounting/budget-items', { params: { period } }),
+  getBudgetItem: (id: string) => api.get<any>(`/accounting/budget-items/${id}`),
+  createBudgetItem: (data: any) => api.post<any>('/accounting/budget-items', data),
+  updateBudgetItem: (id: string, data: any) => api.put<any>(`/accounting/budget-items/${id}`, data),
+  deleteBudgetItem: (id: string) => api.delete(`/accounting/budget-items/${id}`),
+  checkBudgetAvailability: (accountId: string, amount: number, period?: string) =>
+    api.get<any[]>('/accounting/budget-items/check/' + accountId, { params: { amount, period } }),
+
+  // Expense Categories
+  getExpenseCategories: (accountType?: string) => api.get<any[]>('/accounting/expense-categories', { params: { accountType } }),
+  getExpenseCategory: (id: string) => api.get<any>(`/accounting/expense-categories/${id}`),
+  createExpenseCategory: (data: any) => api.post<any>('/accounting/expense-categories', data),
+  updateExpenseCategory: (id: string, data: any) => api.put<any>(`/accounting/expense-categories/${id}`, data),
+  deleteExpenseCategory: (id: string) => api.delete(`/accounting/expense-categories/${id}`),
 };

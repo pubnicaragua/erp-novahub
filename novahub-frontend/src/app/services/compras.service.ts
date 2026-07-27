@@ -21,7 +21,9 @@ export const purchaseOrdersService = {
   create: (data: Partial<PurchaseOrder>) => api.post<PurchaseOrder>('/purchases/orders', data),
   update: (id: string, data: Partial<PurchaseOrder>) => api.patch<PurchaseOrder>(`/purchases/orders/${id}`, data),
   approve: (id: string) => api.patch<PurchaseOrder>(`/purchases/orders/${id}/approve`, {}),
-  cancel: (id: string) => api.patch<PurchaseOrder>(`/purchases/orders/${id}/cancel`, {}),
+  checkNumber: (number: string, excludeId?: string) =>
+    api.get<{ exists: boolean; record?: Pick<PurchaseOrder, 'id' | 'number' | 'status'> }>(`/purchases/orders/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
+  cancel: (id: string, reason?: string) => api.post<PurchaseOrder>(`/purchases/orders/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/purchases/orders/${id}`),
   convertToReceipt: (id: string) => api.post<PurchaseReceipt>(`/purchases/orders/${id}/convert-to-receipt`, {}),
 };
@@ -40,6 +42,9 @@ export const supplierInvoicesService = {
   getById: (id: string) => api.get<SupplierInvoice>(`/purchases/invoices/${id}`),
   create: (data: Partial<SupplierInvoice>) => api.post<SupplierInvoice>('/purchases/invoices', data),
   update: (id: string, data: Partial<SupplierInvoice>) => api.patch<SupplierInvoice>(`/purchases/invoices/${id}`, data),
+  checkNumber: (number: string, excludeId?: string) =>
+    api.get<{ exists: boolean; record?: Pick<SupplierInvoice, 'id' | 'number' | 'status'> }>(`/purchases/invoices/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
+  cancel: (id: string, reason?: string) => api.post<SupplierInvoice>(`/purchases/invoices/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/purchases/invoices/${id}`),
 };
 
@@ -56,6 +61,9 @@ export const paymentsMadeService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<PaymentMade>>('/purchases/payments', filters as any),
   create: (data: Partial<PaymentMade>) => api.post<PaymentMade>('/purchases/payments', data),
   update: (id: string, data: Partial<PaymentMade>) => api.patch<PaymentMade>(`/purchases/payments/${id}`, data),
+  checkNumber: (number: string, excludeId?: string) =>
+    api.get<{ exists: boolean; record?: Pick<PaymentMade, 'id' | 'number' | 'isActive'> }>(`/purchases/payments/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
+  cancel: (id: string, reason?: string) => api.post<PaymentMade>(`/purchases/payments/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/purchases/payments/${id}`),
 };
 
@@ -79,6 +87,16 @@ export const recurringExpensesService = {
   create: (data: Partial<RecurringExpense>) => api.post<RecurringExpense>('/purchases/recurring-expenses', data),
   update: (id: string, data: Partial<RecurringExpense>) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}`, data),
   delete: (id: string) => api.delete<void>(`/purchases/recurring-expenses/${id}`),
+};
+
+export const purchasesReportsService = {
+  getAging: (supplierId?: string) => api.get<any>('/purchases/reports/aging', { supplierId }),
+};
+
+export const supplierPricesService = {
+  getAll: (supplierId?: string) => api.get<any[]>('/purchases/supplier-prices', { supplierId }),
+  create: (data: any) => api.post<any>('/purchases/supplier-prices', data),
+  delete: (id: string) => api.delete<void>(`/purchases/supplier-prices/${id}`),
 };
 
 // --- Aliases for better DX ---

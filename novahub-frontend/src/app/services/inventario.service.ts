@@ -72,6 +72,8 @@ export const inventoryService = {
   // ==================== DASHBOARD ====================
   getDashboardStats: () => api.get<any>('/inventory/dashboard/stats'),
   getLowStockProducts: () => api.get<any[]>('/inventory/dashboard/low-stock'),
+  getReplenishmentReport: (period: 'weekly' | 'biweekly' | 'monthly' = 'weekly') =>
+    api.get<any>('/inventory/stock/replenishment-report', { period } as any),
 
   // ==================== BULK IMPORT ====================
   bulkCreateProducts: async (items: Array<Partial<Product> & { initialStock?: number }>, onProgress?: (done: number, total: number) => void) => {

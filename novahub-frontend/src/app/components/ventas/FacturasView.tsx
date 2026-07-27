@@ -59,8 +59,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
@@ -831,19 +832,19 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           }
         }}
         onBulkDelete={async (ids) => {
-            await Promise.all(ids.map(id => invoicesService.delete(id.toString())));
-            toast.success(`${ids.length} Facturas eliminadas`);
+            await Promise.all(ids.map(id => invoicesService.cancel(id.toString(), 'Anulación masiva')));
+            toast.success(`${ids.length} Facturas anuladas`);
             onRefresh();
           }}
           isLoading={loading}
           bulkActions={() => null}
           actions={(row) => (
               <div className="flex items-center gap-1">
-                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'invoice' as any }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
+                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'invoice' as any }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch (e: any) { console.error(e) } }}><FileDown className="size-4" /></Button>
                 <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4" /></Button>
                 <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-                {canPerform('SALES_INVOICES', 'delete') && (
-                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                {canPerform('SALES_INVOICES', 'delete') && row.status !== 'CANCELLED' && (
+                  <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
                 )}
               </div>
           )}
@@ -851,35 +852,43 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       </div>
 
       <ConfirmDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-        title={"¿Eliminar factura?"}
-        description="¿Estás seguro de que deseas eliminar esta factura? Si tiene pagos registrados o notas de crédito, no se podrá eliminar."
-        confirmLabel="Eliminar"
+        open={pendingCancelId !== null}
+        onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
+        title={"¿Anular factura?"}
+        description="La factura quedará cancelada y no afectará reportes financieros. Esta acción no se puede deshacer."
+        confirmLabel="Anular Factura"
         variant="destructive"
-        loading={deleteLoading}
+        loading={cancelLoading}
+        disabled={!cancelReason.trim()}
         onConfirm={async () => {
-          if (!pendingDeleteId) return;
+          if (!pendingCancelId || !cancelReason.trim()) return;
           try {
-            setDeleteLoading(true);
-            await invoicesService.delete(pendingDeleteId);
-            toast.success('Factura eliminada');
+            setCancelLoading(true);
+            await invoicesService.cancel(pendingCancelId, cancelReason.trim());
+            toast.success('Factura anulada');
             setEditingId(null);
             setIsCreating(false);
             onRefresh();
           } catch (error: any) {
-            const msg = error?.response?.data?.message || error?.message || '';
-            if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
-              toast.error('No se puede eliminar: esta factura tiene pagos o notas de crédito vinculadas.');
-            } else {
-              toast.error(`Error al eliminar: ${msg || 'Error desconocido'}`);
-            }
+            toast.error(error?.response?.data?.message || error?.message || 'Error al anular factura');
           } finally {
-            setDeleteLoading(false);
-            setPendingDeleteId(null);
+            setCancelLoading(false);
+            setPendingCancelId(null);
+            setCancelReason('');
           }
         }}
-      />
+      >
+        <div className="mt-4">
+          <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
+          <textarea
+            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+            rows={3}
+            placeholder="Ej: Cliente solicitó cancelación, error en datos fiscales..."
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+          />
+        </div>
+      </ConfirmDialog>
 
       <AuditHistoryModal
         isOpen={!!auditInvoiceId}

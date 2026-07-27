@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, FilePlus, Eye, Trash2, ChevronLeft, MessageCircle
 } from 'lucide-react';
@@ -605,7 +605,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, customers
               }
               toast.success('Elementos eliminados');
               onRefresh();
-            } catch (e) {
+            } catch (e: any) {
               toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           }}

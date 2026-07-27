@@ -85,6 +85,8 @@ export function DiarioView() {
   const [filterDateTo, setFilterDateTo] = useState('');
   const [filterAccountId, setFilterAccountId] = useState('');
   const [filterRefType, setFilterRefType] = useState('');
+  const [filterRefId, setFilterRefId] = useState('');
+  const [filterSearch, setFilterSearch] = useState('');
 
   const [createOpen, setCreateOpen] = useState(false);
   const [viewJournal, setViewJournal] = useState<JournalEntry | null>(null);
@@ -106,6 +108,8 @@ export function DiarioView() {
       if (filterDateTo) params.dateTo = filterDateTo;
       if (filterAccountId) params.accountId = filterAccountId;
       if (filterRefType) params.referenceType = filterRefType;
+      if (filterRefId) params.referenceId = filterRefId;
+      if (filterSearch) params.search = filterSearch;
       const data = await contabilidadService.getJournals(params);
       setJournals(data as JournalEntry[]);
     } catch (err: any) {
@@ -113,7 +117,7 @@ export function DiarioView() {
     } finally {
       setLoading(false);
     }
-  }, [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType]);
+  }, [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, filterSearch]);
 
   const loadAccounts = useCallback(async () => {
     try {
@@ -419,6 +423,17 @@ export function DiarioView() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1 min-w-[180px]">
+              <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                Buscar
+              </Label>
+              <Input
+                placeholder="Descripción, # asiento, referencia..."
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                className="h-8 text-xs"
+              />
+            </div>
             <div className="space-y-1 min-w-[140px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Estado
@@ -481,6 +496,17 @@ export function DiarioView() {
                 emptyMessage="Sin resultados"
               />
             </div>
+            <div className="space-y-1 min-w-[140px]">
+              <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                ID Referencia
+              </Label>
+              <Input
+                placeholder="ID del documento..."
+                value={filterRefId}
+                onChange={(e) => setFilterRefId(e.target.value)}
+                className="h-8 text-xs"
+              />
+            </div>
             <Button
               variant="ghost"
               size="sm"
@@ -491,6 +517,8 @@ export function DiarioView() {
                 setFilterDateTo('');
                 setFilterAccountId('');
                 setFilterRefType('');
+                setFilterRefId('');
+                setFilterSearch('');
               }}
             >
               <RotateCcw className="size-3.5" />
@@ -524,6 +552,7 @@ export function DiarioView() {
                   <TableHead className="w-[120px] text-right">Débitos</TableHead>
                   <TableHead className="w-[120px] text-right">Créditos</TableHead>
                   <TableHead className="w-[110px]">Ref. Tipo</TableHead>
+                  <TableHead className="w-[130px]">Ref. ID</TableHead>
                   <TableHead className="w-[120px] text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -553,6 +582,9 @@ export function DiarioView() {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {(j as any).referenceType || '-'}
+                      </TableCell>
+                      <TableCell className="text-xs font-mono max-w-[130px] truncate" title={j.referenceId || ''}>
+                        {j.referenceId || '-'}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">

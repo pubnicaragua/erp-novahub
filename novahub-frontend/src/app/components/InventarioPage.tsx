@@ -142,7 +142,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       link.download = `inventario_${new Date().toISOString().split('T')[0]}.csv`;
       link.click();
       toast.success('Archivo CSV descargado');
-    } catch (e) {
+    } catch (e: any) {
       toast.error('Error al exportar datos');
     }
   };

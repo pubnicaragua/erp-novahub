@@ -16,6 +16,7 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateSupplierInvoicePDF } from '../../utils/pdfGenerator';
+import { PurchaseAuditButton } from './PurchaseAuditButton';
 
 interface Props {
   data: SupplierInvoice[];
@@ -38,8 +39,9 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -223,22 +225,23 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); }
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!pendingDeleteId) return;
-    setDeleteLoading(true);
+  const handleCancelConfirm = async () => {
+    if (!pendingCancelId || !cancelReason.trim()) return;
+    setCancelLoading(true);
     try {
-      await billsService.delete(pendingDeleteId);
-      toast.success('Factura eliminada correctamente');
-      setPendingDeleteId(null);
-      if (editingId === pendingDeleteId) {
+      await billsService.cancel(pendingCancelId, cancelReason.trim());
+      toast.success('Factura de proveedor anulada');
+      setPendingCancelId(null);
+      setCancelReason('');
+      if (editingId === pendingCancelId) {
         setEditingId(null);
         setLocalDoc(null);
       }
       onRefresh();
-    } catch (e) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar factura');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al anular factura');
     } finally {
-      setDeleteLoading(false);
+      setCancelLoading(false);
     }
   };
 
@@ -385,12 +388,12 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                  <Download className="size-3 mr-2" /> Descargar
                </Button>
              )}
-              {!isNew && canPerform('PURCHASES_INVOICES', 'delete') && (
-                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => setPendingDeleteId(editingId)}>
-                  <Trash2 className="size-3 mr-2" /> Eliminar
-                </Button>
-              )}
+               {!isNew && canPerform('PURCHASES_INVOICES', 'delete') && (
+                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                   onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
+                   <Trash2 className="size-3 mr-2" /> Anular
+                 </Button>
+               )}
               {!isNew && canPerform('PURCHASES_INVOICES', 'create') && onRegisterPaymentFromInvoice && (
                 <Button
                   variant="outline"
@@ -637,12 +640,12 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
-                await billsService.delete(id as string);
+                await billsService.cancel(id as string, 'Anulación masiva');
               }
-              toast.success('Elementos eliminados');
+              toast.success('Facturas anuladas');
               onRefresh();
-            } catch (e) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+            } catch (e: any) {
+              toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
             }
           } : undefined}
           actions={(row) => (
@@ -669,21 +672,35 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   <Banknote className="size-4" />
                 </Button>
               )}
+              <PurchaseAuditButton entity="SUPPLIER_INVOICE" entityId={row.id} title="Auditoria de la Factura" />
               {canPerform('PURCHASES_INVOICES', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
               )}
             </div>
           )}
         />
         <ConfirmDialog
-          open={!!pendingDeleteId}
-          onOpenChange={(open) => !open && setPendingDeleteId(null)}
-          title="Eliminar Factura"
-          description="¿Estás seguro de que deseas eliminar esta factura? Esta acción no se puede deshacer."
-          confirmLabel="Eliminar Factura"
-          onConfirm={handleDeleteConfirm}
-          loading={deleteLoading}
-        />
+          open={!!pendingCancelId}
+          onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
+          title="Anular Factura de Proveedor"
+          description="La factura quedará cancelada y se revertirá su efecto en el saldo del proveedor. Esta acción no se puede deshacer."
+          confirmLabel="Anular Factura"
+          variant="destructive"
+          loading={cancelLoading}
+          disabled={!cancelReason.trim()}
+          onConfirm={handleCancelConfirm}
+        >
+          <div className="mt-4">
+            <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
+            <textarea
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+              rows={3}
+              placeholder="Ej: Factura duplicada, error del proveedor..."
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+          </div>
+        </ConfirmDialog>
       </div>
     </div>
   );

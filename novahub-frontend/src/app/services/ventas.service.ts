@@ -41,6 +41,9 @@ export const invoicesService = {
   getById: (id: string) => api.get<Invoice>(`/sales/invoices/${id}`),
   create: (data: Partial<Invoice>) => api.post<Invoice>('/sales/invoices', data),
   update: (id: string, data: Partial<Invoice>) => api.patch<Invoice>(`/sales/invoices/${id}`, data),
+  checkNumber: (number: string, excludeId?: string) =>
+    api.get<{ exists: boolean; record?: Pick<Invoice, 'id' | 'number' | 'status'> }>(`/sales/invoices/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
+  cancel: (id: string, reason?: string) => api.post<Invoice>(`/sales/invoices/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/sales/invoices/${id}`),
 };
 
@@ -61,6 +64,9 @@ export const paymentsService = {
   getById: (id: string) => api.get<PaymentReceived>(`/sales/payments/${id}`),
   create: (data: Partial<PaymentReceived>) => api.post<PaymentReceived>('/sales/payments', data),
   update: (id: string, data: Partial<PaymentReceived>) => api.patch<PaymentReceived>(`/sales/payments/${id}`, data),
+  checkNumber: (number: string, excludeId?: string) =>
+    api.get<{ exists: boolean; record?: Pick<PaymentReceived, 'id' | 'number'> }>(`/sales/payments/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
+  cancel: (id: string, reason?: string) => api.post<PaymentReceived>(`/sales/payments/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/sales/payments/${id}`),
 };
 
@@ -82,4 +88,9 @@ export const creditNotesService = {
   update: (id: string, data: Partial<CreditNote>) => api.patch<CreditNote>(`/sales/credit-notes/${id}`, data),
   issue: (id: string) => api.patch<CreditNote>(`/sales/credit-notes/${id}/issue`, {}),
   delete: (id: string) => api.delete<void>(`/sales/credit-notes/${id}`),
+};
+
+export const reportsService = {
+  getAging: (customerId?: string) => api.get<any>('/sales/reports/aging', { customerId }),
+  getSalesSummary: () => api.get<any>('/sales/reports/summary'),
 };

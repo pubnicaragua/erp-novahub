@@ -370,7 +370,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             const width = 600; const height = (canvas.height * width) / canvas.width;
             ws.addImage(imgId, { tl: { col: 0, row: currentRow }, ext: { width, height } });
             currentRow += Math.ceil(height / 18) + 2;
-          } catch (e) { console.warn(e); }
+          } catch (e: any) { console.warn(e); }
         };
 
         if (document.getElementById('customers-chart-trend')) await captureAndEmbed('customers-chart-trend');

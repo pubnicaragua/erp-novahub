@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useState } from 'react';
 import { EditableDataTable } from '../ui/EditableDataTable';
 import { Reminder } from '../../types';
 import { Card, CardContent } from '../ui/card';
@@ -150,7 +151,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
           columns={columns} 
           onRowUpdate={canPerform('ACTIVITIES_REMINDERS', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('ACTIVITIES_REMINDERS', 'delete') ? async (id) => { try { await remindersService.delete(id as string); toast.success('Recordatorio eliminado'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar recordatorio'); } } : undefined} 
+          onRowDelete={canPerform('ACTIVITIES_REMINDERS', 'delete') ? async (id) => { try { await remindersService.delete(id as string); toast.success('Recordatorio eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar recordatorio'); } } : undefined} 
         />
       </Card>
 

@@ -100,7 +100,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
         toast.success('Nota de crédito actualizada');
       }
       setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
-    } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar'); }
   };
 
   const handleIssue = async (id: string) => {

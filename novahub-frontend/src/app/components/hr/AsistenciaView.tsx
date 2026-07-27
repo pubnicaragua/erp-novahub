@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useState } from 'react';
 import { Clock, LogIn, LogOut, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';

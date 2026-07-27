@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Headphones, TicketIcon, Users, BookOpen, CircleHelp } from 'lucide-react';
 import { cn } from './ui/utils';

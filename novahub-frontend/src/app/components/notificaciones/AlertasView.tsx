@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { Alert } from '../../types';
 import { Card, CardContent } from '../ui/card';

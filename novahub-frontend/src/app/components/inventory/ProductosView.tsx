@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { Search, Plus, Trash2, X, Check, Copy, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -39,6 +39,7 @@ interface EditingProduct {
   costPrice: number | '';
   unit?: string;
   minStock?: number;
+  maxStock?: number;
   trackSerialNumbers?: boolean;
   itemType?: 'PRODUCT' | 'SERVICE';
   imageUrl?: string;
@@ -51,6 +52,8 @@ interface EditingProduct {
     id: string;
     warehouseId: string;
     quantity: number;
+    minStock?: number;
+    maxStock?: number;
   }>;
   isNew?: boolean;
 }
@@ -81,6 +84,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [importProgress, setImportProgress] = useState(0);
   const [importResults, setImportResults] = useState<{ success: number; skipped: number; failed: number; errors: string[] } | null>(null);
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const [replenishmentPeriod, setReplenishmentPeriod] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly');
+  const [downloadingReport, setDownloadingReport] = useState(false);
+  const [replenishmentData, setReplenishmentData] = useState<any[] | null>(null);
+  const [replenishmentModalOpen, setReplenishmentModalOpen] = useState(false);
   
   const [skuErrors, setSkuErrors] = useState<Map<string, string>>(new Map());
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -97,7 +106,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           else next.delete(productId);
           return next;
         });
-      } catch (e) {
+      } catch (e: any) {
         console.error('Error validating SKU', e);
       }
     }, 1000);
@@ -130,9 +139,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     const pType = (p.itemType || 'PRODUCT').toUpperCase();
     const matchesType = typeFilter === 'all' || pType === typeFilter;
     const stock = Number(p.stock || 0);
+    const pMinStock = Number(p.minStock || 0);
+    const stockThreshold = pMinStock > 0 ? pMinStock : 10;
     const matchesStock = stockFilter === 'all'
-      || (stockFilter === 'available' && pType === 'PRODUCT' && stock >= 10)
-      || (stockFilter === 'low' && pType === 'PRODUCT' && stock > 0 && stock < 10)
+      || (stockFilter === 'available' && pType === 'PRODUCT' && stock > stockThreshold)
+      || (stockFilter === 'available' && pType === 'PRODUCT' && stockThreshold <= 0 && stock > 0)
+      || (stockFilter === 'low' && pType === 'PRODUCT' && stock > 0 && stock <= stockThreshold)
       || (stockFilter === 'out' && pType === 'PRODUCT' && stock <= 0);
     return matchesSearch && matchesCategory && matchesWarehouse && matchesType && matchesStock;
       });
@@ -146,18 +158,51 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
   const inventorySummary = useMemo(() => {
     const stockProducts = products.filter((product: any) => (product.itemType || 'PRODUCT').toUpperCase() === 'PRODUCT');
+    const isLow = (p: any) => {
+      const stock = Number(p.stock || 0);
+      if (stock <= 0) return false;
+      const minStock = Number(p.minStock || 0);
+      return minStock > 0 ? stock <= minStock : stock < 10;
+    };
     return {
       total: stockProducts.length,
-      available: stockProducts.filter((product: any) => Number(product.stock || 0) >= 10).length,
-      low: stockProducts.filter((product: any) => Number(product.stock || 0) > 0 && Number(product.stock || 0) < 10).length,
-      out: stockProducts.filter((product: any) => Number(product.stock || 0) <= 0).length,
+      available: stockProducts.filter((p: any) => {
+        const stock = Number(p.stock || 0);
+        if (stock <= 0) return false;
+        const minStock = Number(p.minStock || 0);
+        return minStock > 0 ? stock > minStock : stock >= 10;
+      }).length,
+      low: stockProducts.filter(isLow).length,
+      out: stockProducts.filter((p: any) => Number(p.stock || 0) <= 0).length,
     };
   }, [products]);
 
-  const getStockStatus = (stock: number) => {
-    if (stock <= 0) return { label: 'Sin Stock', color: 'bg-red-500/10 text-red-500' };
-    if (stock < 10) return { label: 'Bajo', color: 'bg-orange-500/10 text-orange-500' };
-    return { label: 'OK', color: 'bg-green-500/10 text-green-500' };
+  const getStockStatus = (product: any) => {
+    const stock = Number(product.stock || 0);
+    if (stock <= 0) return { label: 'Sin Stock', color: 'bg-red-500/10 text-red-500', icon: 'critical' };
+    const minStock = Number(product.minStock || 0);
+    if (minStock > 0 && stock <= minStock) return { label: 'Bajo', color: 'bg-orange-500/10 text-orange-500', icon: 'low' };
+    if (stock < 10) return { label: 'Bajo', color: 'bg-orange-500/10 text-orange-500', icon: 'low' };
+    return { label: 'OK', color: 'bg-green-500/10 text-green-500', icon: 'ok' };
+  };
+
+  const getProductMaxStock = (product: any) => {
+    const levels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
+    const values = levels
+      .map((level: any) => Number(level.maxStock || 0))
+      .filter((value: number) => value > 0);
+    return values.length > 0 ? Math.max(...values) : Number(product.maxStock || 0);
+  };
+
+  const getStockAlertColor = (product: any) => {
+    const stock = Number(product.stock || 0);
+    if (stock <= 0) return 'text-red-500 font-bold';
+    const minStock = Number(product.minStock || 0);
+    if (minStock > 0 && stock <= minStock) return 'text-orange-500 font-bold';
+    if (stock < 10) return 'text-orange-500';
+    const maxStock = getProductMaxStock(product);
+    if (maxStock > 0 && stock > maxStock) return 'text-blue-500';
+    return 'text-foreground';
   };
 
   const handleAddRow = () => {
@@ -171,11 +216,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       costPrice: '',
       unit: 'unidad',
       minStock: 0,
+      maxStock: 0,
       trackSerialNumbers: false,
       itemType: 'PRODUCT',
       isNew: true,
       initialStock: 0,
-      initialAllocations: warehouses.length > 0 ? [{ id: `alloc-${Date.now()}-0`, warehouseId: warehouses[0]?.id || '', quantity: 0 }] : []
+      initialAllocations: warehouses.length > 0 ? [{ id: `alloc-${Date.now()}-0`, warehouseId: warehouses[0]?.id || '', quantity: 0, minStock: 0, maxStock: 0 }] : []
     };
     setEditingRows(new Map(editingRows).set(tempId, newProduct));
     setTimeout(() => newRowRef.current?.focus(), 100);
@@ -191,6 +237,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       costPrice: Number(product.costPrice) || 0,
       unit: product.unit || 'unidad',
       minStock: Number(product.minStock) || 0,
+      maxStock: getProductMaxStock(product),
       trackSerialNumbers: Boolean(
         product.trackSerialNumbers ||
         product.serialTracking ||
@@ -205,8 +252,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             id: `alloc-edit-${Date.now()}-${idx}`,
             warehouseId: sl.warehouseId,
             quantity: Number(sl.quantity) || 0,
+            minStock: Number(sl.minStock || 0),
+            maxStock: Number(sl.maxStock || 0),
           }))
-        : [{ id: `alloc-edit-${Date.now()}-0`, warehouseId: '', quantity: 0 }]
+        : [{ id: `alloc-edit-${Date.now()}-0`, warehouseId: '', quantity: 0, minStock: Number(product.minStock || 0), maxStock: getProductMaxStock(product) }]
     };
     setEditingRows(new Map(editingRows.set(product.id, editProduct)));
   };
@@ -257,10 +306,17 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           const parsed = Number(value);
           finalValue = Number.isFinite(parsed) ? Math.max(0, parsed) : current[field];
         }
-      } else if (field === 'initialStock' || field === 'minStock') {
+      } else if (field === 'initialStock' || field === 'minStock' || field === 'maxStock') {
         finalValue = Math.max(0, Number(value) || 0);
       }
-      setEditingRows(new Map(editingRows.set(id, { ...current, [field]: finalValue })));
+      const nextProduct = { ...current, [field]: finalValue };
+      if (field === 'minStock' || field === 'maxStock') {
+        nextProduct.initialAllocations = (current.initialAllocations || []).map((item) => ({
+          ...item,
+          [field]: finalValue,
+        }));
+      }
+      setEditingRows(new Map(editingRows.set(id, nextProduct)));
       
       if (field === 'code') {
         validateSkuDebounced(id, finalValue as string, !!current.isNew);
@@ -271,7 +327,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const updateInitialAllocation = (
     productId: string,
     allocationId: string,
-    patch: Partial<{ warehouseId: string; quantity: number }>,
+    patch: Partial<{ warehouseId: string; quantity: number; minStock: number; maxStock: number }>,
   ) => {
     const product = editingRows.get(productId);
     if (!product) return;
@@ -286,7 +342,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     if (!product) return;
     const next = [
       ...(product.initialAllocations || []),
-      { id: `alloc-${Date.now()}-${(product.initialAllocations || []).length}`, warehouseId: '', quantity: 0 },
+      {
+        id: `alloc-${Date.now()}-${(product.initialAllocations || []).length}`,
+        warehouseId: '',
+        quantity: 0,
+        minStock: Number(product.minStock || 0),
+        maxStock: Number(product.maxStock || 0),
+      },
     ];
     setEditingRows(new Map(editingRows.set(productId, { ...product, initialAllocations: next })));
   };
@@ -315,17 +377,26 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     }
 
     const validAllocations = product.isNew
-      ? (product.initialAllocations || []).filter((item) => item.warehouseId && Number(item.quantity || 0) > 0)
+      ? (product.initialAllocations || []).filter((item) =>
+          item.warehouseId
+          && (Number(item.quantity || 0) > 0 || Number(item.minStock || 0) > 0 || Number(item.maxStock || 0) > 0),
+        )
       : [];
-    const initialStock = validAllocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
     const uniqueWarehouses = new Set(validAllocations.map((item) => item.warehouseId));
 
-    if (initialStock > 0 && warehouses.length === 0) {
+    if (validAllocations.length > 0 && warehouses.length === 0) {
       toast.error('No hay bodegas registradas para asignar stock inicial');
       return;
     }
-    if (initialStock > 0 && uniqueWarehouses.size !== validAllocations.length) {
+    if (validAllocations.length > 0 && uniqueWarehouses.size !== validAllocations.length) {
       toast.error('No repitas la misma bodega en la distribución inicial');
+      return;
+    }
+    const invalidMax = (product.initialAllocations || []).some((item) =>
+      Number(item.maxStock || 0) > 0 && Number(item.maxStock || 0) < Number(item.minStock || 0),
+    );
+    if (invalidMax) {
+      toast.error('El máximo de inventario no puede ser menor que el mínimo');
       return;
     }
 
@@ -356,7 +427,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         });
         const created = (createdResponse as any)?.data || createdResponse;
         const createdId = created?.id;
-        if (initialStock > 0 && createdId) {
+        if (validAllocations.length > 0 && createdId) {
           try {
             const productDetailResp = await inventoryService.getProduct(createdId);
             const fullProduct = (productDetailResp as any)?.data || productDetailResp;
@@ -370,17 +441,20 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     warehouseId: item.warehouseId,
                     variantId: variantId,
                     quantity: Number(item.quantity || 0),
-                    minStock: 0,
+                    minStock: Number(item.minStock ?? product.minStock ?? 0),
+                    maxStock: Number(item.maxStock ?? product.maxStock ?? 0) || undefined,
                   });
 
-                  await inventoryService.createMovement({
-                    productId: createdId,
-                    warehouseId: item.warehouseId,
-                    variantId: variantId,
-                    type: 'IN',
-                    quantity: Number(item.quantity || 0),
-                    reference: `STOCK-INICIAL-${created.code || createdId}`,
-                  });
+                  if (Number(item.quantity || 0) > 0) {
+                    await inventoryService.createMovement({
+                      productId: createdId,
+                      warehouseId: item.warehouseId,
+                      variantId: variantId,
+                      type: 'IN',
+                      quantity: Number(item.quantity || 0),
+                      reference: `STOCK-INICIAL-${created.code || createdId}`,
+                    });
+                  }
                 })
               );
             }
@@ -413,23 +487,31 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               const originalAlloc = originalProduct?.stockLevels?.find((sl: any) => sl.warehouseId === item.warehouseId);
               const oldQuantity = Number(originalAlloc?.quantity || 0);
               const newQuantity = Number(item.quantity || 0);
-              if (oldQuantity !== newQuantity) {
+              const oldMinStock = Number(originalAlloc?.minStock || 0);
+              const oldMaxStock = Number(originalAlloc?.maxStock || 0);
+              const newMinStock = Number(item.minStock ?? product.minStock ?? 0);
+              const newMaxStock = Number(item.maxStock ?? product.maxStock ?? 0);
+
+              if (oldQuantity !== newQuantity || oldMinStock !== newMinStock || oldMaxStock !== newMaxStock) {
                 await inventoryService.updateStockLevel({
                   productId: id,
                   warehouseId: item.warehouseId,
                   variantId: variantId,
                   quantity: newQuantity,
-                  minStock: Number(originalAlloc?.minStock || 0),
+                  minStock: newMinStock,
+                  maxStock: newMaxStock || undefined,
                 });
                 const diff = newQuantity - oldQuantity;
-                await inventoryService.createMovement({
-                  productId: id,
-                  warehouseId: item.warehouseId,
-                  variantId: variantId,
-                  type: diff > 0 ? 'IN' : 'OUT',
-                  quantity: Math.abs(diff),
-                  reference: `AJUSTE-EDICION-${product.code || id}`,
-                });
+                if (diff !== 0) {
+                  await inventoryService.createMovement({
+                    productId: id,
+                    warehouseId: item.warehouseId,
+                    variantId: variantId,
+                    type: diff > 0 ? 'IN' : 'OUT',
+                    quantity: Math.abs(diff),
+                    reference: `AJUSTE-EDICION-${product.code || id}`,
+                  });
+                }
               }
             })
           );
@@ -652,6 +734,17 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           />
         </TableCell>
         <TableCell className="align-top pt-3">
+          <Input
+            type="number"
+            min={0}
+            value={product.maxStock ?? 0}
+            onChange={(e) => handleUpdateField(product.id, 'maxStock', Math.max(0, Number(e.target.value) || 0))}
+            onKeyDown={(e) => handleKeyDown(e, product.id)}
+            className="h-8 text-xs text-right min-w-[70px]"
+            disabled={isSaving}
+          />
+        </TableCell>
+        <TableCell className="align-top pt-3">
           {product.itemType === 'SERVICE' ? (
             <span className="text-xs text-muted-foreground/50 italic h-8 flex items-center">N/A</span>
           ) : (() => {
@@ -806,8 +899,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
   const handleBatchDelete = async () => {
     if (selectedIds.size === 0) return;
-    const confirmed = window.confirm(`¿Eliminar ${selectedIds.size} producto(s)?`);
-    if (!confirmed) return;
     try {
       await inventoryService.deleteProducts(Array.from(selectedIds));
       toast.success(`${selectedIds.size} producto(s) eliminado(s)`);
@@ -816,6 +907,49 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
     }
+  };
+
+  const handlePreviewReplenishment = async () => {
+    setDownloadingReport(true);
+    try {
+      const report = await inventoryService.getReplenishmentReport(replenishmentPeriod);
+      const rows = (report.items || []).map((item: any) => ({
+        ...item,
+        averageDailyDemand: Number(item.averageDailyDemand || 0).toFixed(2),
+      }));
+      if (rows.length === 0) {
+        toast.success('No hay productos que requieran reabastecimiento en este periodo');
+        return;
+      }
+      setReplenishmentData(rows);
+      setReplenishmentModalOpen(true);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo generar la solicitud de inventario');
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
+
+  const handleExportReplenishmentExcel = () => {
+    if (!replenishmentData || replenishmentData.length === 0) return;
+    const rows = replenishmentData.map((item: any) => ({
+      Código: item.productCode,
+      Producto: item.productName,
+      Almacén: item.warehouseName,
+      Estado: item.status,
+      'Stock actual': item.currentStock,
+      'Stock mínimo': item.minStock,
+      'Stock máximo': item.maxStock || '',
+      'Salida del periodo': item.periodDemand,
+      'Demanda diaria prom.': item.averageDailyDemand,
+      'Demanda proyectada': item.projectedDemand,
+      'Cantidad sugerida': item.suggestedQuantity,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Solicitud de inventario');
+    XLSX.writeFile(wb, `solicitud-inventario-${replenishmentPeriod}.xlsx`);
+    toast.success(`Excel exportado con ${rows.length} producto(s)`);
   };
 
   // ==================== EXCEL IMPORT ====================
@@ -950,7 +1084,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   }, [importData, categories, onRefresh]);
 
   return (
-    <Card className="p-4 border bg-card rounded-xl">
+    <>
+      <Card className="p-4 border bg-card rounded-xl">
       <div className="mb-5">
         <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -1047,6 +1182,30 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <Plus className="size-4 mr-2" />
             Nueva Categoría
           </Button>
+          <Select value={replenishmentPeriod} onValueChange={(value) => setReplenishmentPeriod(value as 'weekly' | 'biweekly' | 'monthly')}>
+            <SelectTrigger className="h-10 w-[130px] text-xs font-bold">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="weekly">Semanal</SelectItem>
+              <SelectItem value="biweekly">Quincenal</SelectItem>
+              <SelectItem value="monthly">Mensual</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
+            onClick={handlePreviewReplenishment}
+            disabled={downloadingReport}
+          >
+            {downloadingReport ? (
+              <div className="size-4 mr-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Download className="size-4 mr-2" />
+            )}
+            Solicitud
+          </Button>
           {canPerform('INVENTORY_PRODUCTS', 'create') && (
             <Button
               size="sm"
@@ -1063,7 +1222,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               size="sm"
               variant="destructive"
               className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
-              onClick={handleBatchDelete}
+              onClick={() => setBatchDeleteOpen(true)}
             >
               <Trash2 className="size-4 mr-2" />
               Eliminar {selectedIds.size}
@@ -1101,6 +1260,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-24">Tipo</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-20">U.Medida</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-16">Min</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-16">Max</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Almacenes</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Venta</TableHead>
@@ -1118,7 +1278,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             {/* Existing products */}
             {filteredProducts.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={13} className="text-center py-12 text-muted-foreground">
                   <Package className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">{products.length > 0 ? 'No hay coincidencias' : 'No hay productos registrados'}</p>
                   <p className="text-sm">
@@ -1149,7 +1309,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                   return renderEditableRow(editingRows.get(product.id)!);
                 }
                 
-                const status = getStockStatus(product.stock || 0);
+                const status = getStockStatus(product);
                  return (
                    <TableRow 
                       key={product.id} 
@@ -1226,6 +1386,11 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                       <span className="text-xs text-muted-foreground text-right block">{Number(product.minStock || 0)}</span>
                     </TableCell>
                     <TableCell>
+                      <span className="text-xs text-muted-foreground text-right block">
+                        {getProductMaxStock(product) > 0 ? getProductMaxStock(product) : '-'}
+                      </span>
+                    </TableCell>
+                    <TableCell>
                       {(product.itemType || 'PRODUCT').toUpperCase() === 'SERVICE' ? (
                         <span className="text-[10px] text-muted-foreground">-</span>
                       ) : (
@@ -1247,7 +1412,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
+                    <TableCell className={`text-right font-medium tabular-nums ${getStockAlertColor(product)}`}>
                       {(product.itemType || 'PRODUCT').toUpperCase() === 'SERVICE' ? (
                         <span className="text-xs text-muted-foreground/50 italic">N/A</span>
                       ) : (product.stock || 0)}
@@ -1671,6 +1836,74 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         </DialogContent>
       </Dialog>
 
+      <ConfirmDialog
+        open={batchDeleteOpen}
+        onOpenChange={(open) => { if (!open) setBatchDeleteOpen(false); }}
+        title={`Eliminar ${selectedIds.size} producto(s)`}
+        description="Esta acción no se puede deshacer. Los productos se desactivarán pero no se eliminarán físicamente del sistema."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        loading={batchDeleting}
+        onConfirm={async () => {
+          setBatchDeleting(true);
+          await handleBatchDelete();
+          setBatchDeleting(false);
+          setBatchDeleteOpen(false);
+        }}
+      />
+
       </Card>
+
+      <Dialog open={replenishmentModalOpen} onOpenChange={(open) => { if (!open) setReplenishmentModalOpen(false); }}>
+        <DialogContent className="sm:max-w-5xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Solicitud de Reabastecimiento</DialogTitle>
+            <DialogDescription>
+              Periodo: {replenishmentPeriod === 'weekly' ? 'Semanal' : replenishmentPeriod === 'biweekly' ? 'Quincenal' : 'Mensual'} — {replenishmentData?.length || 0} producto(s) sugeridos
+            </DialogDescription>
+          </DialogHeader>
+          {replenishmentData && replenishmentData.length > 0 && (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="font-black text-[10px] uppercase">Producto</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase">Almacén</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase text-right">Stock</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase text-right">Min</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase text-right">Max</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase text-right">Salida periodo</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase text-right">Demanda diaria</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase text-right">Demanda proy.</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase text-right">Sugerido</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {replenishmentData.map((item: any, idx: number) => (
+                    <TableRow key={idx}>
+                      <TableCell className="font-medium text-xs">{item.productName}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{item.warehouseName || '-'}</TableCell>
+                      <TableCell className={`text-right text-xs tabular-nums ${Number(item.currentStock) <= Number(item.minStock) ? 'text-orange-500 font-bold' : ''}`}>{item.currentStock}</TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">{item.minStock}</TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">{item.maxStock || '-'}</TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">{item.periodDemand}</TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">{item.averageDailyDemand}</TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">{item.projectedDemand}</TableCell>
+                      <TableCell className="text-right text-xs font-black tabular-nums text-primary">{item.suggestedQuantity}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setReplenishmentModalOpen(false)} className="rounded-xl font-bold text-xs uppercase tracking-widest">Cerrar</Button>
+            <Button onClick={handleExportReplenishmentExcel} className="rounded-xl font-bold text-xs uppercase tracking-widest" disabled={!replenishmentData || replenishmentData.length === 0}>
+              <Download className="size-4 mr-2" /> Exportar Excel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
     );
 }

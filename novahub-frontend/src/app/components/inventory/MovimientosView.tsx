@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { History, ArrowUpRight, ArrowDownLeft, RefreshCcw, Search, Download } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';

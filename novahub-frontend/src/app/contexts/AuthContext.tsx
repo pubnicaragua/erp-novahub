@@ -34,7 +34,9 @@ export type Module =
   | 'asesoria-legal'
   | 'novachat'
   | 'inventario_productos'
-  | 'contabilidad';
+  | 'contabilidad'
+  | 'dashboard-ventas'
+  | 'dashboard-cxc';
 
 export type SubModule = string;
 

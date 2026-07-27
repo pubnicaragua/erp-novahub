@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -72,7 +72,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
         const response = await inventoryService.checkProductCode(code);
         const exists = response?.exists;
         setSkuError(exists ? 'Código duplicado' : '');
-      } catch (e) {
+      } catch (e: any) {
         console.error('Error validating SKU', e);
       }
     }, 1000);

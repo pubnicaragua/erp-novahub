@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package,
@@ -184,6 +185,7 @@ const menuItems: MenuItem[] = [
     icon: <ShoppingBag className="size-5" />,
     section: 'Operaciones',
     submenu: [
+      { id: 'dashboard-ventas', label: 'Dashboard', icon: <BarChart3 className="size-4" /> },
       { id: 'clientes', label: 'Clientes', icon: <UserCircle className="size-4" /> },
       { id: 'estimaciones', label: 'Estimaciones', icon: <FileSpreadsheet className="size-4" /> },
       { id: 'ordenes-venta', label: 'Ordenes de venta', icon: <ClipboardList className="size-4" />, hasAdd: true },
@@ -354,6 +356,7 @@ const menuItems: MenuItem[] = [
     ]
   },
   { id: 'suscripciones', label: 'Mi Suscripción', icon: <Zap className="size-5" />, section: 'Sistema' },
+  { id: 'dashboard-cxc', label: 'CxC / CxP', icon: <BadgeDollarSign className="size-5" /> },
   { id: 'configuracion', label: 'Configuracion', icon: <Settings className="size-5" /> },
 ];
 

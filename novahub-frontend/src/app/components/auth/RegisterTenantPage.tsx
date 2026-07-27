@@ -342,7 +342,7 @@ export function RegisterTenantPage() {
       }
       setStep1Data(data);
       setStep(1);
-    } catch (e) {
+    } catch (e: any) {
       setFormError('email', { type: 'manual', message: 'Error al verificar el correo' });
     }
   };

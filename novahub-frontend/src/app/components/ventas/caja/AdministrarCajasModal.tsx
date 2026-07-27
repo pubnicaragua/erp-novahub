@@ -47,7 +47,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
     try {
       const res = await cajaService.getRegisters(true);
       setCajasList(Array.isArray(res) ? res : []);
-    } catch (e) {
+    } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al cargar cajas'));
     } finally {
       setCajasLoading(false);
@@ -58,7 +58,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
     try {
       const res: any = await api.get('/sucursales');
       setSucursalesList(Array.isArray(res) ? res : (res?.data || []));
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
     }
   };
@@ -93,7 +93,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
       setAllUsers(res.allUsers || []);
       const assignments = res.assignments || (res.assignedUserIds || []).map(userId => ({ userId, closureMode: 'NORMAL' as CashClosureMode }));
       setAssignedUsers(new Map(assignments.map(assignment => [assignment.userId, assignment.closureMode || 'NORMAL'])));
-    } catch (e) {
+    } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al cargar accesos'));
     } finally {
       setAccessLoading(false);
@@ -107,7 +107,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
       toast.success('Accesos actualizados');
       setIsAccessModalOpen(false);
       onOpenChange(true);
-    } catch (e) {
+    } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al guardar accesos'));
     }
   };
@@ -188,7 +188,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                                   toast.success('Caja eliminada');
                                   fetchCajas();
                                   onRegistersChanged?.();
-                                } catch(e) {
+                                } catch (e: any) {
                                   toast.error(getApiErrorMessage(e, 'Error al eliminar la caja'));
                                 }
                               }
@@ -273,7 +273,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                 onOpenChange(true);
                 fetchCajas();
                 onRegistersChanged?.();
-              } catch (e) {
+              } catch (e: any) {
                 toast.error(getApiErrorMessage(e, 'Error al guardar la caja'));
               }
             }}>Guardar Caja</Button>

@@ -150,7 +150,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
-    } catch (e) {
+    } catch (e: any) {
       return null;
     }
   };
@@ -298,7 +298,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
               }
             }
           }
-        } catch (e) {
+        } catch (e: any) {
           // ignore errors on individual elements
         }
       }
@@ -328,11 +328,11 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
               }
             }
           }
-        } catch (e) {
+        } catch (e: any) {
           // Cross-origin stylesheets will throw, skip them
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       // ignore stylesheet errors
     }
   };
@@ -764,7 +764,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
           const imgHeight = (canvas.height * imgWidthPx) / canvas.width;
           ws.addImage(imgId, { tl: { col: 0, row: currentRow }, ext: { width: imgWidthPx, height: imgHeight } });
           currentRow += Math.ceil(imgHeight / 18) + 2;
-        } catch (e) {
+        } catch (e: any) {
           console.warn(`Image capture failed for #${elementId}`, e);
         }
       };

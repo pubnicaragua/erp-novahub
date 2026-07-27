@@ -586,7 +586,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               }
               toast.success('Elementos eliminados');
               onRefresh();
-            } catch (e) {
+            } catch (e: any) {
               toast.error('Error al eliminar');
             }
           }}
@@ -607,7 +607,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   </Button>
                 )}
                 <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch(e) { console.error(e) } }}><FileDown className="size-4" /></Button>
+                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch (e: any) { console.error(e) } }}><FileDown className="size-4" /></Button>
                 {canPerform('SALES_ORDERS', 'delete') && (
                   <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                 )}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'motion/react';
 import { Eye, EyeOff, LogIn, Loader2 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';

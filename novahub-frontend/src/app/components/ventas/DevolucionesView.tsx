@@ -104,7 +104,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         toast.success('Devolución actualizada');
       }
       setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
-    } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar'); }
   };
 
   const handleExportPDF = async (row: SalesReturn) => {

@@ -226,7 +226,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         } as any);
       }
       setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
-    } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar'); }
   };
 
   const formatDateSafe = (dateStr: string) => {
@@ -317,7 +317,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             {canPerform('SALES_RECURRING', 'edit') && (
               <>
                 {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => { try { await recurringInvoicesService.delete(localDoc.id); setEditingId(null); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
+                  onClick={async () => { try { await recurringInvoicesService.delete(localDoc.id); setEditingId(null); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   Guardar Factura Recurrente
                 </Button>
@@ -483,7 +483,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           </div>
         </div>
         <EditableDataTable data={filtered}
-          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}
+          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">

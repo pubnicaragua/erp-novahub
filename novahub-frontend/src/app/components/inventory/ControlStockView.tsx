@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Scale, Plus, Check, X, CheckCircle, Receipt, Trash2, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';

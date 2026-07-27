@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { ScrollArea } from '../../ui/scroll-area';

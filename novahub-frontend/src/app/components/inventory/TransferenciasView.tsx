@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Truck, ArrowRight, Search, Plus, Check, X, Package, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';

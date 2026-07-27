@@ -35,7 +35,7 @@ export function useNotifications() {
                     console.warn("Autoplay audio blocked by browser.", error);
                 });
             }
-        } catch (e) {
+        } catch (e: any) {
             console.warn("Failed to play notification sound");
         }
     };
