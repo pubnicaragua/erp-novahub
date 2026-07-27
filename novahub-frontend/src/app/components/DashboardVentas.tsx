@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion, Variants } from 'motion/react';
 import {
   DollarSign, CalendarDays, TrendingUp, Clock,
-  Loader2, AlertTriangle, Receipt, BarChart3, PieChart as PieChartIcon, Package,
+  Loader2, AlertTriangle, BarChart3, PieChart as PieChartIcon, Package,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -27,19 +27,23 @@ const itemVariants: Variants = {
 };
 
 const statusColors: Record<string, string> = {
-  PENDIENTE: '#f59e0b',
-  PAGADA: '#10b981',
-  CANCELADA: '#ef4444',
-  ANULADA: '#6b7280',
-  VENCIDA: '#f97316',
+  PENDING: '#f59e0b',
+  PAID: '#10b981',
+  PARTIAL: '#3b82f6',
+  OVERDUE: '#f97316',
+  CANCELLED: '#6b7280',
+  DRAFT: '#9ca3af',
+  REFUNDED: '#8b5cf6',
 };
 
 const statusLabels: Record<string, string> = {
-  PENDIENTE: 'Pendiente',
-  PAGADA: 'Pagada',
-  CANCELADA: 'Cancelada',
-  ANULADA: 'Anulada',
-  VENCIDA: 'Vencida',
+  PENDING: 'Pendiente',
+  PAID: 'Pagada',
+  PARTIAL: 'Parcial',
+  OVERDUE: 'Vencida',
+  CANCELLED: 'Anulada',
+  DRAFT: 'Borrador',
+  REFUNDED: 'Reembolsada',
 };
 
 const fmt = (amount: number) =>
@@ -61,14 +65,12 @@ interface SalesSummary {
   topProducts: { name: string; qty: number; total: number }[];
 }
 
-export function DashboardVentas() {
+function DashboardVentas() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<SalesSummary | null>(null);
   const [error, setError] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -128,7 +130,6 @@ export function DashboardVentas() {
         </div>
       </div>
 
-      {/* KPIs */}
       <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {kpiCards.map((kpi) => {
           const Icon = kpi.icon;
@@ -152,9 +153,7 @@ export function DashboardVentas() {
         })}
       </motion.div>
 
-      {/* Charts Row */}
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* BarChart - Ventas Diarias */}
         <Card className="rounded-2xl border-border/40 bg-card/80 backdrop-blur-sm shadow-sm">
           <CardHeader className="pb-2 px-5 pt-4">
             <div className="flex items-center gap-2">
@@ -166,42 +165,15 @@ export function DashboardVentas() {
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={data.salesByDay}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                  tickFormatter={(v) => {
-                    const d = new Date(v);
-                    return `${d.getDate()}/${d.getMonth() + 1}`;
-                  }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) => `C$${(v / 1000).toFixed(0)}k`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                  formatter={(value: number) => [fmt(value), 'Total']}
-                  labelFormatter={(label) => {
-                    const d = new Date(label);
-                    return d.toLocaleDateString('es-NI', { weekday: 'long', day: 'numeric', month: 'long' });
-                  }}
-                />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v) => { const d = new Date(v); return `${d.getDate()}/${d.getMonth() + 1}`; }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={(v) => `C$${(v / 1000).toFixed(0)}k`} />
+                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} formatter={(value: number) => [fmt(value), 'Total']} labelFormatter={(label) => { const d = new Date(label); return d.toLocaleDateString('es-NI', { weekday: 'long', day: 'numeric', month: 'long' }); }} />
                 <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={32} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* PieChart - Estado de Facturas */}
         <Card className="rounded-2xl border-border/40 bg-card/80 backdrop-blur-sm shadow-sm">
           <CardHeader className="pb-2 px-5 pt-4">
             <div className="flex items-center gap-2">
@@ -212,41 +184,19 @@ export function DashboardVentas() {
           <CardContent className="pb-4">
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
-                <Pie
-                  data={data.statusBreakdown}
-                  dataKey="total"
-                  nameKey="status"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={3}
-                >
+                <Pie data={data.statusBreakdown} dataKey="total" nameKey="status" cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3}>
                   {data.statusBreakdown.map((entry) => (
                     <Cell key={entry.status} fill={statusColors[entry.status] || '#6b7280'} />
                   ))}
                 </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                  formatter={(value: number, name: string) => [value, statusLabels[name] || name]}
-                />
-                <Legend
-                  formatter={(value: string) => (
-                    <span className="text-xs font-medium text-muted-foreground">{statusLabels[value] || value}</span>
-                  )}
-                />
+                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} formatter={(value: number, name: string) => [value, statusLabels[name] || name]} />
+                <Legend formatter={(value: string) => (<span className="text-xs font-medium text-muted-foreground">{statusLabels[value] || value}</span>)} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
 
-      {/* Top 10 Productos */}
       <Card className="rounded-2xl bg-card/80 backdrop-blur-sm border-border/40 shadow-sm overflow-hidden">
         <CardHeader className="pb-2 px-5 pt-4">
           <div className="flex items-center gap-2">
@@ -279,9 +229,7 @@ export function DashboardVentas() {
                 ))}
                 {data.topProducts.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-xs text-muted-foreground/40 italic font-medium">
-                      Sin ventas registradas
-                    </TableCell>
+                    <TableCell colSpan={4} className="text-center py-8 text-xs text-muted-foreground/40 italic font-medium">Sin ventas registradas</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -292,3 +240,6 @@ export function DashboardVentas() {
     </div>
   );
 }
+
+export default DashboardVentas;
+export { DashboardVentas };

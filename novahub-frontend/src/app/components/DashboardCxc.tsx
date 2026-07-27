@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion, Variants } from 'motion/react';
 import {
   DollarSign, Clock, AlertTriangle, Loader2, Users, Truck,
-  CheckCircle2, XCircle, FileText, ArrowUpDown,
+  CheckCircle2, XCircle, FileText,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -10,7 +10,7 @@ import { cn } from './ui/utils';
 import { reportsService } from '../services/ventas.service';
 import { purchasesReportsService } from '../services/compras.service';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 
 const containerVariants: Variants = {
@@ -59,7 +59,7 @@ const defaultChecklist: ChecklistItem[] = [
   { id: '8', label: 'Balance general verificado', done: false },
 ];
 
-export function DashboardCxc() {
+function DashboardCxc() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [ar, setAr] = useState<AgingData | null>(null);
@@ -215,11 +215,7 @@ export function DashboardCxc() {
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={(v) => `C$${(v / 1000).toFixed(0)}k`} />
                 <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} formatter={(value: number) => [fmt(value), 'Saldo']} />
-                <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={48}>
-                  {buildBucketData(ar.summary).map((_, i) => (
-                    <rect key={i} />
-                  ))}
-                </Bar>
+                <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={48} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -315,3 +311,6 @@ export function DashboardCxc() {
     </div>
   );
 }
+
+export default DashboardCxc;
+export { DashboardCxc };
