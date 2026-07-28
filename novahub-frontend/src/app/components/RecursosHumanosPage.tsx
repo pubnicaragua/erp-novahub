@@ -23,6 +23,8 @@ import { EmpleadosView } from './hr/EmpleadosView';
 import { NominasView } from './hr/NominasView';
 import { AsistenciaView } from './hr/AsistenciaView';
 import { AusenciasView } from './hr/AusenciasView';
+import { AusenciasConfigView } from './hr/AusenciasConfigView';
+import { KpiView } from './hr/KpiView';
 import { EvaluacionesView } from './hr/EvaluacionesView';
 import { CapacitacionesView } from './hr/CapacitacionesView';
 import { BeneficiosView } from './hr/BeneficiosView';
@@ -47,7 +49,9 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     'config-nomina': 'config-nomina',
     'asistencia': 'asistencia',
     'ausencias': 'ausencias',
+    'ausencias-config': 'ausencias-config',
     'evaluaciones': 'evaluaciones',
+    'kpi': 'kpi',
     'capacitaciones': 'capacitaciones',
     'beneficios': 'beneficios',
   };
@@ -176,7 +180,9 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             { id: 'nominas', label: 'Nóminas', icon: DollarSign, module: 'HR_PAYROLL' },
             { id: 'asistencia', label: 'Asistencia', icon: UserCheck, module: 'HR_ATTENDANCE' },
             { id: 'ausencias', label: 'Vacaciones', icon: Calendar, module: 'HR_LEAVES' },
+            { id: 'ausencias-config', label: 'Tipos Ausencia', icon: Calendar, module: 'HR_LEAVES' },
             { id: 'evaluaciones', label: 'Desempeño', icon: Award, module: 'HR_PERFORMANCE' },
+            { id: 'kpi', label: 'KPI', icon: BarChart3, module: 'HR_PERFORMANCE' },
             { id: 'capacitaciones', label: 'Formación', icon: GraduationCap, module: 'HR_TRAINING' },
             { id: 'beneficios', label: 'Beneficios', icon: HandHeart, module: 'HR_BENEFITS' },
             { id: 'config-nomina', label: 'Config', icon: Settings2, module: 'HR_PAYROLL_CONFIG' }
@@ -260,9 +266,20 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
                 />
               </TabsContent>
 
+              <TabsContent value="ausencias-config" className="m-0">
+                <AusenciasConfigView onRefresh={() => fetchData(true)} />
+              </TabsContent>
+
               <TabsContent value="evaluaciones" className="m-0">
                 <EvaluacionesView
                   reviews={data.reviews}
+                  employees={data.employees}
+                  onRefresh={() => fetchData(true)}
+                />
+              </TabsContent>
+
+              <TabsContent value="kpi" className="m-0">
+                <KpiView
                   employees={data.employees}
                   onRefresh={() => fetchData(true)}
                 />
