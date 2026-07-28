@@ -857,18 +857,29 @@ export interface Employee {
   phone?: string;
   position: string;
   department: string;
+  departmentId?: string;
+  positionId?: string;
+  managerId?: string;
   hireDate: string;
   terminationDate?: string;
+  probationEndDate?: string;
   salary: number;
   salaryType: 'monthly' | 'biweekly' | 'hourly';
   currency: Currency;
   bankAccount?: string;
   taxId?: string;
+  nationalId?: string;
+  socialSecurityNumber?: string;
   address?: string;
   emergencyContact?: string;
   emergencyPhone?: string;
   status: 'active' | 'on_leave' | 'terminated';
   employmentStatus?: string;
+  approvalStatus?: string;
+  rejectionReason?: string;
+  contractType?: string;
+  payFrequency?: string;
+  notes?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -1179,4 +1190,68 @@ export interface PurchaseManagement {
   items: PurchaseManagementItem[];
   createdAt: string;
   updatedAt: string;
+}
+
+// ---- HR Extensions ----
+export interface EmployeeChangeLog {
+  id: string;
+  employeeId: string;
+  field: string;
+  oldValue?: string;
+  newValue?: string;
+  changedById: string;
+  effectiveDate: string;
+  createdAt: string;
+}
+
+export interface VacationBalance {
+  id: string;
+  employeeId: string;
+  year: number;
+  totalDays: number;
+  usedDays: number;
+  pendingDays: number;
+  remainingDays: number;
+  employee?: { id: string; firstName: string; lastName: string; employeeNumber: string };
+}
+
+export interface AbsenceType {
+  id: string;
+  code: string;
+  name: string;
+  paidByCompanyPct: number;
+  paidByThirdPartyPct: number;
+  maxDays?: number;
+  cap?: number;
+  salaryBase: string;
+  requiresDoc: boolean;
+  isActive: boolean;
+}
+
+export interface KpiDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  target?: number;
+  weight: number;
+  periodType: string;
+  assignToType: string;
+  assignToId?: string;
+  isActive: boolean;
+}
+
+export interface KpiResult {
+  id: string;
+  employeeId: string;
+  employee?: { id: string; firstName: string; lastName: string };
+  kpiDefinitionId: string;
+  kpiDefinition?: KpiDefinition;
+  periodStart: string;
+  periodEnd: string;
+  target?: number;
+  actual: number;
+  weight: number;
+  evaluatorId?: string;
+  comment?: string;
+  createdAt: string;
 }

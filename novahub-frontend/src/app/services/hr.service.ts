@@ -86,4 +86,27 @@ export const hrService = {
   getActivePayrollConfig: () => api.get('/hr/payroll-config/active'),
   createPayrollConfig: (data: any) => api.post('/hr/payroll-config', data),
   updatePayrollConfig: (id: string, data: any) => api.patch(`/hr/payroll-config/${id}`, data),
+
+  // ─── EMPLOYEE AUTHORIZATION ──────────────────────────────────────────
+  submitEmployee: (id: string) => api.post(`/hr/employees/${id}/submit`, {}),
+  approveEmployee: (id: string) => api.post(`/hr/employees/${id}/approve`, {}),
+  rejectEmployee: (id: string, reason: string) => api.post(`/hr/employees/${id}/reject`, { reason }),
+  getEmployeeChangeLog: (id: string) => api.get(`/hr/employees/${id}/changelog`),
+
+  // ─── VACATION BALANCE ────────────────────────────────────────────────
+  getVacationBalance: (employeeId: string, year?: number) => api.get(`/hr/vacation-balance/${employeeId}`, { params: { year } }),
+  getVacationBalances: (year?: number) => api.get('/hr/vacation-balance', { params: { year } }),
+  recalcVacationBalance: (employeeId: string, year?: number) => api.post(`/hr/vacation-balance/${employeeId}/recalc`, {}, { params: { year } }),
+
+  // ─── ABSENCE TYPE ────────────────────────────────────────────────────
+  createAbsenceType: (data: any) => api.post('/hr/absence-types', data),
+  getAbsenceTypes: () => api.get('/hr/absence-types'),
+  updateAbsenceType: (id: string, data: any) => api.patch(`/hr/absence-types/${id}`, data),
+
+  // ─── KPI ─────────────────────────────────────────────────────────────
+  createKpiDefinition: (data: any) => api.post('/hr/kpi-definitions', data),
+  getKpiDefinitions: (assignToType?: string) => api.get('/hr/kpi-definitions', { params: { assignToType } }),
+  updateKpiDefinition: (id: string, data: any) => api.patch(`/hr/kpi-definitions/${id}`, data),
+  createKpiResult: (data: any) => api.post('/hr/kpi-results', data),
+  getKpiResults: (employeeId?: string, kpiDefinitionId?: string) => api.get('/hr/kpi-results', { params: { employeeId, kpiDefinitionId } }),
 };
