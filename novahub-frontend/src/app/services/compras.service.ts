@@ -2,7 +2,7 @@ import { api } from './api';
 import type {
   Supplier, PurchaseOrder, PurchaseReceipt, SupplierInvoice,
   RecurringSupplierInvoice, PaymentMade, SupplierCredit,
-  Expense, RecurringExpense,
+  Expense, RecurringExpense, PurchaseRequest, PurchaseManagement,
   PaginatedResponse, ApiFilters,
 } from '../types';
 
@@ -33,6 +33,7 @@ export const purchaseReceiptsService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<PurchaseReceipt>>('/purchases/receipts', filters as any),
   getById: (id: string) => api.get<PurchaseReceipt>(`/purchases/receipts/${id}`),
   create: (data: Partial<PurchaseReceipt>) => api.post<PurchaseReceipt>('/purchases/receipts', data),
+  update: (id: string, data: Partial<PurchaseReceipt>) => api.patch<PurchaseReceipt>(`/purchases/receipts/${id}`, data),
   delete: (id: string) => api.delete<void>(`/purchases/receipts/${id}`),
   convertToInvoice: (id: string) => api.post<SupplierInvoice>(`/purchases/receipts/${id}/convert-to-invoice`, {}),
 };
@@ -97,6 +98,28 @@ export const supplierPricesService = {
   getAll: (supplierId?: string) => api.get<any[]>('/purchases/supplier-prices', { supplierId }),
   create: (data: any) => api.post<any>('/purchases/supplier-prices', data),
   delete: (id: string) => api.delete<void>(`/purchases/supplier-prices/${id}`),
+};
+
+// ─── SOLICITUDES DE COMPRA ──────────────────────────────────────────────────
+export const purchaseRequestsService = {
+  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<PurchaseRequest>>('/purchases/requests', filters as any),
+  getById: (id: string) => api.get<PurchaseRequest>(`/purchases/requests/${id}`),
+  create: (data: Partial<PurchaseRequest>) => api.post<PurchaseRequest>('/purchases/requests', data),
+  update: (id: string, data: Partial<PurchaseRequest>) => api.patch<PurchaseRequest>(`/purchases/requests/${id}`, data),
+  delete: (id: string) => api.delete<void>(`/purchases/requests/${id}`),
+  changeStatus: (id: string, status: string, reason?: string) => api.post<PurchaseRequest>(`/purchases/requests/${id}/status`, { status, reason }),
+};
+
+// ─── GESTIÓN DE COMPRA ──────────────────────────────────────────────────────
+export const purchaseManagementService = {
+  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<PurchaseManagement>>('/purchases/management', filters as any),
+  getById: (id: string) => api.get<PurchaseManagement>(`/purchases/management/${id}`),
+  create: (data: Partial<PurchaseManagement>) => api.post<PurchaseManagement>('/purchases/management', data),
+  update: (id: string, data: Partial<PurchaseManagement>) => api.patch<PurchaseManagement>(`/purchases/management/${id}`, data),
+  delete: (id: string) => api.delete<void>(`/purchases/management/${id}`),
+  approve: (id: string) => api.post<PurchaseManagement>(`/purchases/management/${id}/approve`, {}),
+  reject: (id: string, reason?: string) => api.post<PurchaseManagement>(`/purchases/management/${id}/reject`, { reason }),
+  convertToOrder: (id: string) => api.post<PurchaseOrder>(`/purchases/management/${id}/convert-to-order`, {}),
 };
 
 // --- Aliases for better DX ---

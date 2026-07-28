@@ -369,6 +369,8 @@ export interface PurchaseOrder {
   expectedDelivery?: string;
   subtotal: number;
   taxAmount: number;
+  withholdingTotal?: number;
+  withholdingBase?: number;
   total: number;
   currency: Currency;
   exchangeRate?: number;
@@ -376,6 +378,7 @@ export interface PurchaseOrder {
   status: PurchaseOrderStatus;
   requestedBy: string;
   address?: string;
+  purchaseType?: string;
   includeTax?: boolean;
   taxRate?: number;
   withholdingRate?: number;
@@ -406,6 +409,14 @@ export interface PurchaseOrderItem {
   quantity: number;
   unitPrice: number;
   taxRate?: number;
+  taxType?: string;
+  taxBase?: number;
+  taxAmount?: number;
+  withholdingType?: string;
+  withholdingRate?: number;
+  withholdingBase?: number;
+  accountId?: string;
+  costCenterId?: string;
   total: number;
 }
 
@@ -419,9 +430,10 @@ export interface PurchaseReceipt {
   supplierId: string;
   supplier?: Supplier;
   date: string;
-  status: 'pending' | 'received' | 'partial' | 'rejected';
+  status: 'pending' | 'received' | 'partial' | 'rejected' | 'with_incidents';
   notes?: string;
   items: PurchaseReceiptItem[];
+  supplierInvoices?: SupplierInvoice[];
   createdAt: string;
   updatedAt: string;
 }
@@ -434,6 +446,16 @@ export interface PurchaseReceiptItem {
   description: string;
   quantityOrdered: number;
   quantityReceived: number;
+  quantityRejected?: number;
+  unitPrice?: number;
+  taxType?: string;
+  taxBase?: number;
+  taxAmount?: number;
+  withholdingType?: string;
+  withholdingRate?: number;
+  withholdingBase?: number;
+  accountId?: string;
+  costCenterId?: string;
 }
 
 // ---- Supplier Invoices ----
@@ -444,10 +466,13 @@ export interface SupplierInvoice {
   supplierId: string;
   supplier?: Supplier;
   purchaseOrderId?: string;
+  purchaseReceiptId?: string;
   date: string;
   dueDate: string;
   subtotal: number;
   taxAmount: number;
+  withholdingTotal?: number;
+  withholdingBase?: number;
   total: number;
   amountPaid: number;
   balance: number;
@@ -468,6 +493,14 @@ export interface SupplierInvoiceItem {
   quantity: number;
   unitPrice: number;
   taxRate: number;
+  taxType?: string;
+  taxBase?: number;
+  taxAmount?: number;
+  withholdingType?: string;
+  withholdingRate?: number;
+  withholdingBase?: number;
+  accountId?: string;
+  costCenterId?: string;
   total: number;
 }
 
@@ -721,6 +754,7 @@ export interface Product {
   cost: number;
   salePrice: number;
   costPrice: number;
+  lastPurchasePrice?: number;
   taxRate: number;
   stock: number;
   minStock: number;
@@ -730,6 +764,26 @@ export interface Product {
   status: EntityStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CostHistory {
+  id: string;
+  clientTenantId: string;
+  productId: string;
+  warehouseId?: string | null;
+  date: string;
+  documentType: 'PURCHASE_ORDER' | 'PURCHASE_RECEIPT' | 'SUPPLIER_INVOICE' | 'ADJUSTMENT' | string;
+  documentId: string;
+  documentNumber?: string | null;
+  previousCost: number;
+  previousQty: number;
+  orderPrice: number;
+  receivedCost: number;
+  invoicedCost: number;
+  quantityChange: number;
+  newQuantity: number;
+  newAverageCost: number;
+  product?: Product;
 }
 
 export interface Warehouse {
@@ -1003,3 +1057,103 @@ export interface Message {
   messages: ChatMessage[];
 }
 export interface PushNotification { id: string; title: string; content: string; type: string; sent?: boolean; isRead: boolean; createdAt: string; deviceId?: string; }
+
+// ============================================================
+// SOLICITUDES DE COMPRA
+// ============================================================
+export type PurchasePriority = 'NORMAL' | 'URGENT' | 'CRITICAL';
+export type PurchaseRequestStatus = 'DRAFT' | 'SUBMITTED' | 'RECEIVED' | 'IN_REVIEW' | 'IN_QUOTATION' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'RETURNED_FOR_CORRECTION' | 'CONVERTED_TO_ORDER' | 'CLOSED' | 'CANCELLED';
+
+export interface PurchaseRequestItem {
+  id: string;
+  purchaseRequestId: string;
+  productId?: string;
+  description: string;
+  quantity: number;
+  currentStock: number;
+  minStock: number;
+  warehouseId: string;
+  observations?: string;
+  product?: Product;
+}
+
+export interface PurchaseRequest {
+  id: string;
+  number: string;
+  clientTenantId: string;
+  warehouseId: string;
+  warehouse?: Warehouse;
+  branchId?: string;
+  branch?: any;
+  requestedById: string;
+  requestedBy?: { id: string; firstName: string; lastName: string; employeeNumber?: string };
+  userId?: string;
+  date: string;
+  requiredDate?: string;
+  priority: PurchasePriority;
+  status: PurchaseRequestStatus;
+  justification?: string;
+  notes?: string;
+  items: PurchaseRequestItem[];
+  management?: PurchaseManagement[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================
+// GESTIÓN DE COMPRA
+// ============================================================
+export type PurchaseManagementStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'RETURNED_FOR_CORRECTION' | 'CONVERTED_TO_ORDER' | 'CANCELLED';
+
+export interface PurchaseManagementItem {
+  id: string;
+  purchaseManagementId: string;
+  productId?: string;
+  description: string;
+  quantityRequested: number;
+  quantityProposed: number;
+  unitPrice: number;
+  discount: number;
+  taxType: string;
+  taxRate: number;
+  taxBase: number;
+  taxAmount: number;
+  subtotal: number;
+  total: number;
+  accountId?: string;
+  product?: Product;
+}
+
+export interface PurchaseManagement {
+  id: string;
+  number: string;
+  purchaseRequestId?: string;
+  purchaseRequest?: PurchaseRequest;
+  clientTenantId: string;
+  date: string;
+  status: PurchaseManagementStatus;
+  currency: string;
+  exchangeRate: number;
+  baseTotal?: number;
+  supplierId?: string;
+  supplier?: Supplier;
+  quotationNumber?: string;
+  quotationDate?: string;
+  quotationValidity?: string;
+  supplierContact?: string;
+  paymentTerms?: string;
+  creditDays?: number;
+  advancePayment: number;
+  expectedDelivery?: string;
+  shippingCost: number;
+  total: number;
+  internalNotes?: string;
+  notes?: string;
+  approvedById?: string;
+  approvedBy?: { id: string; name: string };
+  approvedAt?: string;
+  rejectionReason?: string;
+  items: PurchaseManagementItem[];
+  createdAt: string;
+  updatedAt: string;
+}
