@@ -10,7 +10,7 @@ import { creditNotesService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
-import type { CreditNote, Customer } from '../../types';
+import type { CreditNote, Customer, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -23,6 +23,8 @@ interface NotasCreditoViewProps {
   loading: boolean;
   onRefresh: () => void;
   customers?: Customer[];
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
 }
 
 const statusOptions = [
@@ -32,7 +34,7 @@ const statusOptions = [
   { label: 'Anulada',  value: 'VOIDED',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: NotasCreditoViewProps) {
+export function NotasCreditoView({ data, loading, onRefresh, customers = [], pagination, onSearchChange }: NotasCreditoViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -244,7 +246,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Items de la Nota de Crédito</p>
-              <Button variant="outline" size="sm" onClick={() => {
+              <Button type="button" variant="outline" size="sm" onClick={() => {
                 const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0 }];
                 setLocalDoc({ ...localDoc, items: newItems });
               }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar Item</Button>
@@ -296,7 +298,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Registros de crédito emitidos a clientes.</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input placeholder="Buscar nota..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+              <Input placeholder="Buscar nota..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('SALES_CREDIT_NOTES', 'create') && (
               <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva NC</Button>
@@ -304,6 +306,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [] }: N
           </div>
         </div>
         <EditableDataTable data={filtered}
+          pagination={pagination}
           onBulkDelete={async (ids) => { try { for (const id of ids) { await creditNotesService.delete(id as string); } toast.success('Eliminadas'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error'); } }}
           columns={columns} onRowUpdate={async () => {}} isLoading={loading}
           actions={(row) => (

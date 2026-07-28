@@ -40,6 +40,7 @@ export function Combobox({
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
+  const pointerSelection = React.useRef<string | null>(null)
 
   const visibleOptions = React.useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -52,6 +53,11 @@ export function Combobox({
   React.useEffect(() => {
     if (!open) setSearch('')
   }, [open])
+
+  const commitSelection = React.useCallback((nextValue: string) => {
+    onChange(nextValue === value ? "" : nextValue)
+    setOpen(false)
+  }, [onChange, value])
 
   return (
     <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
@@ -83,9 +89,20 @@ export function Combobox({
                 <CommandItem
                   key={option.value}
                   value={`${option.label} ${option.description || ''}`}
+                  onPointerDown={(event) => {
+                    if (event.button === 2) return
+                    pointerSelection.current = option.value
+                    commitSelection(option.value)
+                    window.setTimeout(() => {
+                      if (pointerSelection.current === option.value) pointerSelection.current = null
+                    }, 250)
+                  }}
                   onSelect={() => {
-                    onChange(option.value === value ? "" : option.value)
-                    setOpen(false)
+                    if (pointerSelection.current === option.value) {
+                      pointerSelection.current = null
+                      return
+                    }
+                    commitSelection(option.value)
                   }}
                   className="text-xs"
                 >

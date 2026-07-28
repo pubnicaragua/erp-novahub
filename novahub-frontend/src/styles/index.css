@@ -35,13 +35,30 @@
   overflow-wrap: anywhere;
 }
 
-/* Action controls are a single compact group, never a wrapped header/cell. */
-.sales-module [data-actions-column="true"] {
-  width: 12rem !important;
-  min-width: 12rem !important;
-  max-width: 12rem !important;
+/* Action controls keep their own space instead of being squeezed into the
+   previous column when a table gets narrow. */
+[data-actions-column="true"],
+.sales-module [data-actions-column="true"],
+.purchases-module [data-actions-column="true"] {
+  width: 15rem !important;
+  min-width: 15rem !important;
+  max-width: 15rem !important;
   white-space: nowrap !important;
   overflow: visible;
+}
+
+[data-actions-column="compact"] {
+  width: 8rem !important;
+  min-width: 8rem !important;
+  max-width: 8rem !important;
+  white-space: nowrap !important;
+}
+
+[data-actions-column="true"] > *,
+[data-actions-column="compact"] > * {
+  min-width: max-content;
+  max-width: none;
+  white-space: nowrap;
 }
 
 .sales-module [data-slot="table-cell"] > *,
@@ -86,7 +103,9 @@
 .sales-responsive-table {
   width: 100%;
   max-width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
 }
 
 .responsive-data-table {
@@ -122,8 +141,9 @@
 
 .sales-responsive-table table {
   width: 100%;
-  max-width: 100%;
-  table-layout: fixed;
+  min-width: 100%;
+  max-width: none;
+  table-layout: auto;
 }
 
 .sales-responsive-table th,
@@ -132,6 +152,14 @@
   max-width: 100%;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* Native sales tables need to be allowed to grow horizontally when their
+   action column cannot fit. This preserves every control and lets the user
+   scroll the table instead of overlapping Estado/Acciones. */
+.sales-module table:not([data-slot]),
+.purchases-module table:not([data-slot]) {
+  table-layout: auto;
 }
 
 @media (max-width: 639px) {

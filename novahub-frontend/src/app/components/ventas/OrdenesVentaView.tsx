@@ -10,7 +10,7 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { salesOrdersService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
-import type { SalesOrder, Customer, Product, Employee } from '../../types';
+import type { SalesOrder, Customer, Product, Employee, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -31,6 +31,8 @@ interface OrdenesVentaViewProps {
   customers?: Customer[];
   products?: Product[];
   employees?: Employee[];
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
 }
 
 const statusOptions = [
@@ -43,7 +45,7 @@ const statusOptions = [
   { label: 'Cancelada',      value: 'CANCELLED',   color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], employees = [] }: OrdenesVentaViewProps) {
+export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], employees = [], pagination, onSearchChange }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -61,20 +63,27 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       return;
     }
     if (invoicingOrderId) return;
-    const customer = order.customer || customers.find((item) => item.id === order.customerId);
+    const orderForConversion = localDoc?.id === order.id
+      ? {
+          ...order,
+          accountId: localDoc.accountId,
+          sellerEmployeeId: localDoc.sellerEmployeeId,
+        }
+      : order;
+    const customer = orderForConversion.customer || customers.find((item) => item.id === orderForConversion.customerId);
     if (!customer || String(customer.status || '').toUpperCase() !== 'ACTIVE') {
       toast.error('El cliente de la orden no está activo');
       return;
     }
-    if (!order.items?.length) {
+    if (!orderForConversion.items?.length) {
       toast.error('La orden debe contener al menos un producto o servicio');
       return;
     }
-    if (!order.accountId) {
+    if (!orderForConversion.accountId) {
       toast.error('Asigna la cuenta contable de la venta antes de facturar la orden');
       return;
     }
-    for (const item of order.items) {
+    for (const item of orderForConversion.items) {
       if (!item.description?.trim() || Number(item.quantity) <= 0 || Number(item.unitPrice) < 0) {
         toast.error('La orden contiene productos o servicios con datos inválidos');
         return;
@@ -91,13 +100,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         }
       }
     }
-    if (order.invoiceId || order.invoiceNumber) {
-      toast.info(`La orden ya está facturada${order.invoiceNumber ? ` con ${order.invoiceNumber}` : ''}`);
+    if (orderForConversion.invoiceId || orderForConversion.invoiceNumber) {
+      toast.info(`La orden ya está facturada${orderForConversion.invoiceNumber ? ` con ${orderForConversion.invoiceNumber}` : ''}`);
       return;
     }
     setInvoicingOrderId(order.id);
     try {
-      await onGenerateInvoice(order);
+      await onGenerateInvoice(orderForConversion);
       await onRefresh();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo abrir la factura');
@@ -208,7 +217,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         currency: displayCurrency as any,
         exchangeRate: globalRate,
         status: 'DRAFT' as any,
-        sellerEmployeeId: user?.id,
         items: [],
         number: `ORD-${Date.now().toString().slice(-6)}`
       });
@@ -357,14 +365,56 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Vendedor</p>
                   <Combobox
-                    options={[
-                      ...(user?.id ? [{ label: `${user.name || user.email || 'Usuario actual'} (Tú)`, value: user.id }] : []),
-                      ...employees.filter((employee) => employee.id !== user?.id).map((employee) => ({ label: `${employee.firstName} ${employee.lastName}`, value: employee.id }))
-                    ]}
-                    value={localDoc?.sellerEmployeeId || user?.id || ''}
+                    options={employees.map((employee) => ({ label: `${employee.firstName} ${employee.lastName}`, value: employee.id }))}
+                    value={localDoc?.sellerEmployeeId || ''}
                     onChange={(val) => { setLocalDoc({ ...localDoc, sellerEmployeeId: val }); void handleUpdate(localDoc!.id, { sellerEmployeeId: val }); }}
                     placeholder="Seleccionar vendedor"
                   />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Tipo de comisión</p>
+                  <Select
+                    value={localDoc?.commissionType || 'PERCENTAGE'}
+                    disabled={!localDoc?.sellerEmployeeId}
+                    onValueChange={(commissionType) => {
+                      const nextType = commissionType as 'PERCENTAGE' | 'FIXED';
+                      const updates = nextType === 'FIXED'
+                        ? { commissionType: nextType, commissionRate: 0 }
+                        : { commissionType: nextType, commissionAmount: 0 };
+                      setLocalDoc({ ...localDoc, ...updates } as any);
+                      void handleUpdate(localDoc!.id, updates as any);
+                    }}
+                  >
+                    <SelectTrigger className={cn("h-8 text-xs", !localDoc?.sellerEmployeeId && "opacity-50 cursor-not-allowed bg-muted/20")}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PERCENTAGE">Porcentaje</SelectItem>
+                      <SelectItem value="FIXED">Monto fijo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">{localDoc?.commissionType === 'FIXED' ? 'Monto de comisión' : '% Comisión'}</p>
+                  <Input
+                    type="number"
+                    min="0"
+                    max={localDoc?.commissionType === 'FIXED' ? undefined : 100}
+                    value={localDoc?.commissionType === 'FIXED' ? (localDoc?.commissionAmount || '') : (localDoc?.commissionRate || '')}
+                    placeholder="0"
+                    disabled={!localDoc?.sellerEmployeeId}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      setLocalDoc({ ...localDoc, ...(localDoc?.commissionType === 'FIXED' ? { commissionAmount: value } : { commissionRate: value }) } as any);
+                    }}
+                    onBlur={() => {
+                      if (!localDoc?.sellerEmployeeId) return;
+                      const updates = localDoc.commissionType === 'FIXED'
+                        ? { commissionAmount: Number(localDoc.commissionAmount || 0), commissionRate: 0 }
+                        : { commissionRate: Number(localDoc.commissionRate || 0), commissionAmount: 0 };
+                      void handleUpdate(localDoc.id, updates as any);
+                    }}
+                    className={cn("h-8 text-xs", !localDoc?.sellerEmployeeId && "opacity-50 cursor-not-allowed bg-muted/20")}
+                  />
+                  {!localDoc?.sellerEmployeeId && <p className="text-[9px] text-muted-foreground/60 mt-0.5 italic">Selecciona un empleado primero</p>}
                 </div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span>
@@ -531,7 +581,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => {
+                <Button type="button" variant="outline" size="sm" onClick={() => {
                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   setLocalDoc({ ...localDoc, items: newItems } as any);
                   handleUpdate(localDoc!.id, { items: newItems });
@@ -759,7 +809,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 placeholder="Buscar orden..." 
                 className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
             </div>
             {canPerform('SALES_ORDERS', 'create') && (
@@ -772,6 +822,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
         <EditableDataTable 
           data={filtered}
+          pagination={pagination}
           onBulkDelete={async (ids) => {
             try {
               for (const id of ids) {

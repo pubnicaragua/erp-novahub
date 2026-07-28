@@ -31,6 +31,17 @@ export interface ApiFilters {
   sortOrder?: 'asc' | 'desc';
 }
 
+export type SalesPageSize = 50 | 100 | 200;
+
+export interface SalesPaginationControls {
+  page: number;
+  pageSize: SalesPageSize;
+  total: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: SalesPageSize) => void;
+}
+
 // ---- Tenants ----
 export interface Tenant {
   id: string;
@@ -154,6 +165,9 @@ export interface SalesOrder {
   invoicedBy?: { id?: string; name?: string };
   sellerEmployeeId?: string;
   sellerEmployee?: { id?: string; firstName?: string; lastName?: string };
+  commissionType?: 'PERCENTAGE' | 'FIXED';
+  commissionRate?: number;
+  commissionAmount?: number;
 }
 
 export interface SalesOrderItem {
@@ -193,6 +207,8 @@ export interface Invoice {
   notes?: string;
   sellerEmployeeId?: string | null;
   commissionRate?: number | null;
+  commissionType?: 'PERCENTAGE' | 'FIXED' | null;
+  commissionAmount?: number | null;
   items: InvoiceItem[];
   createdAt: string;
   updatedAt: string;
@@ -827,6 +843,7 @@ export interface Permission {
 // ---- Employees ----
 export interface Employee {
   id: string;
+  userId?: string;
   tenantId: string;
   code: string;
   firstName: string;
@@ -846,6 +863,7 @@ export interface Employee {
   emergencyContact?: string;
   emergencyPhone?: string;
   status: 'active' | 'on_leave' | 'terminated';
+  employmentStatus?: string;
   createdAt: string;
   updatedAt: string;
 }

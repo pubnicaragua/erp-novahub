@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { cn } from './ui/utils';
 import {
   Users, FileSpreadsheet, ClipboardList, FileText,
@@ -26,6 +27,7 @@ import type {
   PaymentReceived, RecurringInvoice, SalesReturn,
   CreditNote, Product
 } from '../types';
+import type { SalesPageSize, SalesPaginationControls } from '../types';
 import { inventoryService } from '../services/inventario.service';
 import { hrService } from '../services/hr.service';
 
@@ -62,11 +64,14 @@ interface VentasPageProps {
 
 export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: VentasPageProps) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
   const [targetInvoiceId, setTargetInvoiceId] = useState<string | null>(null);
   const [targetOrderId, setTargetOrderId] = useState<string | null>(null);
   const [controlCajaTargetParams, setControlCajaTargetParams] = useState<{registerId?: string, section?: 'dashboard' | 'session' | 'history'} | null>(null);
+  const [searchState, setSearchState] = useState<Record<string, string>>({});
+  const [debouncedSearchState, setDebouncedSearchState] = useState<Record<string, string>>({});
   const tabsRef = useRef<HTMLDivElement>(null);
 
   // Sync section with Sidebar prop
@@ -91,89 +96,196 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     return () => cancelAnimationFrame(frame);
   }, [activeSection, isSidebarCollapsed]);
   
-  // Data State
-  const [data, setData] = useState({
-    clientes: [] as Customer[],
-    estimaciones: [] as Estimate[],
-    ordenes: [] as SalesOrder[],
-    facturas: [] as Invoice[],
-    recurrentes: [] as RecurringInvoice[],
-    pagos: [] as PaymentReceived[],
-    devoluciones: [] as SalesReturn[],
-    notasCredito: [] as CreditNote[],
-    productos: [] as Product[],
-    series: [] as any[],
-    warehouses: [] as any[],
-    employees: [] as any[],
-  });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchData();
-  }, [activeSection]);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const results = await Promise.allSettled([
-        customersService.getAll(),
-        estimatesService.getAll(),
-        salesOrdersService.getAll(),
-        invoicesService.getAll(),
-        paymentsService.getAll(),
-        recurringInvoicesService.getAll(),
-        salesReturnsService.getAll(),
-        creditNotesService.getAll(),
-        inventoryService.getProducts(),
-        inventoryService.getSeries(),
-        inventoryService.getWarehouses(),
-        hrService.getEmployees(),
-      ]);
-      
-      const toArr = (r: any) => Array.isArray(r) ? r : (r?.data || []);
-      const val = (i: number) => results[i].status === 'fulfilled' ? toArr((results[i] as any).value) : [];
-      
-      setData({
-        clientes: val(0),
-        estimaciones: val(1),
-        ordenes: val(2),
-        facturas: val(3),
-        recurrentes: val(5),
-        pagos: val(4),
-        devoluciones: val(6),
-        notasCredito: val(7),
-        productos: val(8),
-        series: val(9),
-        warehouses: val(10),
-        employees: val(11),
-      });
-    } catch (error) {
-      console.error('Error fetching sales data:', error);
-      toast.error('Error al cargar datos del módulo de Ventas');
-    } finally {
-      setLoading(false);
-    }
+  const tenantKey = user?.tenantId || 'anonymous';
+  const toArray = (response: any) => Array.isArray(response) ? response : (response?.data || []);
+  const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
+  const pageFor = (section: string) => paginationState[section] || { page: 1, pageSize: 50 as SalesPageSize };
+  const updatePage = (section: string, page: number) => setPaginationState((current) => ({
+    ...current,
+    [section]: { ...pageFor(section), page: Math.max(1, page) },
+  }));
+  const updatePageSize = (section: string, pageSize: SalesPageSize) => setPaginationState((current) => ({
+    ...current,
+    [section]: { page: 1, pageSize },
+  }));
+  const updateSearch = (section: string, value: string) => {
+    setSearchState((current) => ({ ...current, [section]: value }));
+    updatePage(section, 1);
   };
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearchState(searchState), 350);
+    return () => window.clearTimeout(timer);
+  }, [searchState]);
+  const searchFor = (section: string) => debouncedSearchState[section]?.trim() || undefined;
+  const isListSection = !['facturacion-caja', 'control-caja'].includes(activeSection);
+  const needsCatalogs = isListSection && activeSection !== 'clientes';
+  const needsProducts = ['estimaciones', 'ordenes-venta', 'facturas', 'devoluciones-venta'].includes(activeSection);
+  const needsInvoices = ['ordenes-venta', 'facturas', 'pagos-recibidos', 'devoluciones-venta'].includes(activeSection);
+  const customersPage = pageFor('clientes');
+  const estimatesPage = pageFor('estimaciones');
+  const ordersPage = pageFor('ordenes-venta');
+  const invoicesPage = pageFor('facturas');
+  const paymentsPage = pageFor('pagos-recibidos');
+  const recurringPage = pageFor('facturas-recurrentes');
+  const returnsPage = pageFor('devoluciones-venta');
+  const creditNotesPage = pageFor('notas-credito');
+
+  // TanStack Query keeps the active tab fast and prevents duplicate requests.
+  // Catalogs use the maximum allowed page so existing comboboxes keep all their
+  // current options while the transactional tables use the default page of 50.
+  const customersListQuery = useQuery({
+    queryKey: ['sales', 'customers', tenantKey, customersPage.page, customersPage.pageSize, searchFor('clientes')],
+    queryFn: () => customersService.getAll({ page: customersPage.page, pageSize: customersPage.pageSize, search: searchFor('clientes') }),
+    enabled: activeSection === 'clientes',
+    placeholderData: keepPreviousData,
+  });
+  const customersCatalogQuery = useQuery({
+    queryKey: ['sales', 'customers-catalog', tenantKey, 1, 200],
+    queryFn: () => customersService.getAll({ page: 1, pageSize: 200, status: 'ACTIVE' }),
+    enabled: needsCatalogs,
+    placeholderData: keepPreviousData,
+  });
+  const estimatesQuery = useQuery({
+    queryKey: ['sales', 'estimates', tenantKey, estimatesPage.page, estimatesPage.pageSize, searchFor('estimaciones')],
+    queryFn: () => estimatesService.getAll({ page: estimatesPage.page, pageSize: estimatesPage.pageSize, search: searchFor('estimaciones') }),
+    enabled: activeSection === 'estimaciones',
+    placeholderData: keepPreviousData,
+  });
+  const ordersQuery = useQuery({
+    queryKey: ['sales', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes-venta')],
+    queryFn: () => salesOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes-venta') }),
+    enabled: activeSection === 'ordenes-venta',
+    placeholderData: keepPreviousData,
+  });
+  const invoicesQuery = useQuery({
+    queryKey: ['sales', 'invoices', tenantKey, invoicesPage.page, invoicesPage.pageSize, searchFor('facturas')],
+    queryFn: () => invoicesService.getAll({ page: invoicesPage.page, pageSize: invoicesPage.pageSize, search: searchFor('facturas') }),
+    enabled: needsInvoices,
+    placeholderData: keepPreviousData,
+  });
+  const paymentsQuery = useQuery({
+    queryKey: ['sales', 'payments', tenantKey, paymentsPage.page, paymentsPage.pageSize, searchFor('pagos-recibidos')],
+    queryFn: () => paymentsService.getAll({ page: paymentsPage.page, pageSize: paymentsPage.pageSize, search: searchFor('pagos-recibidos') }),
+    enabled: activeSection === 'pagos-recibidos',
+    placeholderData: keepPreviousData,
+  });
+  const recurringQuery = useQuery({
+    queryKey: ['sales', 'recurring-invoices', tenantKey, recurringPage.page, recurringPage.pageSize, searchFor('facturas-recurrentes')],
+    queryFn: () => recurringInvoicesService.getAll({ page: recurringPage.page, pageSize: recurringPage.pageSize, search: searchFor('facturas-recurrentes') }),
+    enabled: activeSection === 'facturas-recurrentes',
+    placeholderData: keepPreviousData,
+  });
+  const returnsQuery = useQuery({
+    queryKey: ['sales', 'returns', tenantKey, returnsPage.page, returnsPage.pageSize, searchFor('devoluciones-venta')],
+    queryFn: () => salesReturnsService.getAll({ page: returnsPage.page, pageSize: returnsPage.pageSize, search: searchFor('devoluciones-venta') }),
+    enabled: activeSection === 'devoluciones-venta',
+    placeholderData: keepPreviousData,
+  });
+  const creditNotesQuery = useQuery({
+    queryKey: ['sales', 'credit-notes', tenantKey, creditNotesPage.page, creditNotesPage.pageSize, searchFor('notas-credito')],
+    queryFn: () => creditNotesService.getAll({ page: creditNotesPage.page, pageSize: creditNotesPage.pageSize, search: searchFor('notas-credito') }),
+    enabled: activeSection === 'notas-credito',
+    placeholderData: keepPreviousData,
+  });
+  const productsQuery = useQuery({
+    queryKey: ['sales', 'products-catalog', tenantKey, 1, 200],
+    queryFn: () => inventoryService.getProducts({ page: 1, pageSize: 200 }),
+    enabled: needsProducts,
+    placeholderData: keepPreviousData,
+  });
+  const seriesQuery = useQuery({
+    queryKey: ['sales', 'series', tenantKey],
+    queryFn: () => inventoryService.getSeries(),
+    enabled: activeSection === 'facturas',
+    placeholderData: keepPreviousData,
+  });
+  const warehousesQuery = useQuery({
+    queryKey: ['sales', 'warehouses', tenantKey],
+    queryFn: () => inventoryService.getWarehouses(),
+    enabled: activeSection === 'facturas',
+    placeholderData: keepPreviousData,
+  });
+  const employeesQuery = useQuery({
+    queryKey: ['sales', 'employees', tenantKey],
+    queryFn: () => hrService.getEmployees(),
+    enabled: ['ordenes-venta', 'facturas'].includes(activeSection),
+    placeholderData: keepPreviousData,
+  });
+
+  const data = {
+    clientes: toArray(activeSection === 'clientes' ? customersListQuery.data : customersCatalogQuery.data) as Customer[],
+    estimaciones: toArray(estimatesQuery.data) as Estimate[],
+    ordenes: toArray(ordersQuery.data) as SalesOrder[],
+    facturas: toArray(invoicesQuery.data) as Invoice[],
+    recurrentes: toArray(recurringQuery.data) as RecurringInvoice[],
+    pagos: toArray(paymentsQuery.data) as PaymentReceived[],
+    devoluciones: toArray(returnsQuery.data) as SalesReturn[],
+    notasCredito: toArray(creditNotesQuery.data) as CreditNote[],
+    productos: toArray(productsQuery.data) as Product[],
+    series: toArray(seriesQuery.data),
+    warehouses: toArray(warehousesQuery.data),
+    employees: toArray(employeesQuery.data),
+  };
+
+  const activeQuery = activeSection === 'clientes' ? customersListQuery
+    : activeSection === 'estimaciones' ? estimatesQuery
+      : activeSection === 'ordenes-venta' ? ordersQuery
+        : activeSection === 'facturas' ? invoicesQuery
+          : activeSection === 'facturas-recurrentes' ? recurringQuery
+            : activeSection === 'pagos-recibidos' ? paymentsQuery
+              : activeSection === 'devoluciones-venta' ? returnsQuery
+                : activeSection === 'notas-credito' ? creditNotesQuery
+                  : undefined;
+  const loading = Boolean(activeQuery?.isPending || (needsCatalogs && customersCatalogQuery.isPending) || (needsProducts && productsQuery.isPending));
+
+  const makePagination = (section: string, query: any): SalesPaginationControls => {
+    const state = pageFor(section);
+    const meta = query.data?.meta;
+    return {
+      ...state,
+      total: Number(meta?.total || 0),
+      totalPages: Number(meta?.totalPages || 1),
+      onPageChange: (page) => updatePage(section, page),
+      onPageSizeChange: (pageSize) => updatePageSize(section, pageSize),
+    };
+  };
+  const pagination = {
+    clientes: makePagination('clientes', customersListQuery),
+    estimaciones: makePagination('estimaciones', estimatesQuery),
+    ordenes: makePagination('ordenes-venta', ordersQuery),
+    facturas: makePagination('facturas', invoicesQuery),
+    recurrentes: makePagination('facturas-recurrentes', recurringQuery),
+    pagos: makePagination('pagos-recibidos', paymentsQuery),
+    devoluciones: makePagination('devoluciones-venta', returnsQuery),
+    notasCredito: makePagination('notas-credito', creditNotesQuery),
+  };
+
+  const fetchData = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ['sales'] });
+  }, [queryClient]);
 
   const handleGenerateInvoice = async (order: SalesOrder) => {
     const existingInvoice = data.facturas.find((invoice) => invoice.salesOrderId === order.id);
     if (existingInvoice) {
-      toast.info(`La orden ya está facturada${existingInvoice.number ? ` con ${existingInvoice.number}` : ''}`);
-    setTargetInvoiceId(existingInvoice.id);
-      setActiveSection('facturas');
-      return;
+      toast.info(`La orden ya está facturada${existingInvoice.number ? ` con ${existingInvoice.number}` : ''}; verificando sus datos`);
+    } else {
+      toast.info('Enviando orden a Facturación...');
     }
-    toast.info('Enviando orden a Facturación...');
-    const invoice = await salesOrdersService.convertToInvoice(order.id);
+    const invoice = await salesOrdersService.convertToInvoice(order.id, {
+      ...(order.accountId ? { accountId: order.accountId } : {}),
+      ...(order.sellerEmployeeId ? { sellerEmployeeId: order.sellerEmployeeId } : {}),
+    });
     setInvoiceDraft(null);
     setTargetInvoiceId(invoice.id);
     setActiveSection('facturas');
+    onSubModuleChange?.('facturas');
     await fetchData();
   };
 
   const handleConvertedQuoteToOrder = (orderId: string) => {
     setTargetOrderId(orderId);
     setActiveSection('ordenes-venta');
+    onSubModuleChange?.('ordenes-venta');
   };
 
 
@@ -193,7 +305,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 </h1>
                 <div className="flex items-center gap-2 mt-2">
                   <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                    {data.clientes.length} clientes · {data.facturas.length} facturas
+                    {customersListQuery.data?.meta?.total ?? data.clientes.length} clientes · {invoicesQuery.data?.meta?.total ?? data.facturas.length} facturas
                   </Badge>
                 </div>
               </div>
@@ -235,13 +347,13 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
               transition={{ duration: 0.2 }}
             >
               {activeSection === 'clientes' && (
-                <ClientesView data={data.clientes} loading={loading} onRefresh={fetchData} />
+                <ClientesView data={data.clientes} loading={loading} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} />
               )}
               {activeSection === 'estimaciones' && (
-                <EstimacionesView data={data.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={data.clientes} products={data.productos} />
+                <EstimacionesView data={data.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={data.clientes} products={data.productos} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} />
               )}
               {activeSection === 'ordenes-venta' && (
-                <OrdenesVentaView data={data.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} targetOrderId={targetOrderId} onClearTargetOrderId={() => setTargetOrderId(null)} customers={data.clientes} products={data.productos} employees={data.employees} />
+                <OrdenesVentaView data={data.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} targetOrderId={targetOrderId} onClearTargetOrderId={() => setTargetOrderId(null)} customers={data.clientes} products={data.productos} employees={data.employees} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes-venta', value)} />
               )}
               {activeSection === 'facturas' && (
                 <FacturasView 
@@ -257,19 +369,21 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                   onClearInvoiceDraft={() => setInvoiceDraft(null)}
                   targetInvoiceId={targetInvoiceId}
                   onClearTargetInvoiceId={() => setTargetInvoiceId(null)}
+                  pagination={pagination.facturas}
+                  onSearchChange={(value) => updateSearch('facturas', value)}
                 />
               )}
               {activeSection === 'facturas-recurrentes' && (
-                <FacturasRecurrentesView data={data.recurrentes} loading={loading} onRefresh={fetchData} customers={data.clientes} products={data.productos} />
+                <FacturasRecurrentesView data={data.recurrentes} loading={loading} onRefresh={fetchData} customers={data.clientes} products={data.productos} pagination={pagination.recurrentes} onSearchChange={(value) => updateSearch('facturas-recurrentes', value)} />
               )}
               {activeSection === 'pagos-recibidos' && (
-                <PagosRecibidosView data={data.pagos} loading={loading} onRefresh={fetchData} customers={data.clientes} invoices={data.facturas} />
+                <PagosRecibidosView data={data.pagos} loading={loading} onRefresh={fetchData} customers={data.clientes} invoices={data.facturas} pagination={pagination.pagos} onSearchChange={(value) => updateSearch('pagos-recibidos', value)} />
               )}
               {activeSection === 'devoluciones-venta' && (
-                <DevolucionesView data={data.devoluciones} loading={loading} onRefresh={fetchData} customers={data.clientes} invoices={data.facturas} products={data.productos} />
+                <DevolucionesView data={data.devoluciones} loading={loading} onRefresh={fetchData} customers={data.clientes} invoices={data.facturas} products={data.productos} pagination={pagination.devoluciones} onSearchChange={(value) => updateSearch('devoluciones-venta', value)} />
               )}
               {activeSection === 'notas-credito' && (
-                <NotasCreditoView data={data.notasCredito} loading={loading} onRefresh={fetchData} customers={data.clientes} />
+                <NotasCreditoView data={data.notasCredito} loading={loading} onRefresh={fetchData} customers={data.clientes} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} />
               )}
               {activeSection === 'facturacion-caja' && (
                 <FacturacionCajaView 

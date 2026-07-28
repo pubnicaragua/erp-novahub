@@ -11,7 +11,7 @@ import { estimatesService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
-import type { Estimate, Customer, Product } from '../../types';
+import type { Estimate, Customer, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -27,6 +27,8 @@ interface EstimacionesViewProps {
   onConvertedToOrder?: (orderId: string) => void;
   customers?: Customer[];
   products?: Product[];
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
 }
 
 const statusOptions = [
@@ -38,7 +40,7 @@ const statusOptions = [
 ];
 const editableStatusOptions = statusOptions.filter((status) => status.value !== 'APPROVED');
 
-export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [] }: EstimacionesViewProps) {
+export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], pagination, onSearchChange }: EstimacionesViewProps) {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
@@ -67,8 +69,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     try {
       const order = await estimatesService.convertToOrder(estimate.id);
       toast.success('Cotización enviada a Orden de Venta');
-      await onRefresh();
       onConvertedToOrder?.(order.id);
+      await onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo enviar la cotización');
     } finally {
@@ -475,7 +477,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => {
+                <Button type="button" variant="outline" size="sm" onClick={() => {
                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   setLocalDoc({ ...localDoc, items: newItems } as any);
                   handleUpdate(localDoc!.id, { items: newItems });
@@ -653,7 +655,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 placeholder="Buscar cotización..." 
                 className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
             </div>
             {canPerform('SALES_QUOTES', 'create') && (
@@ -666,6 +668,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
 
         <EditableDataTable 
           data={filtered}
+          pagination={pagination}
           columns={columns}
           onRowUpdate={handleUpdate}
           actions={(row) => (

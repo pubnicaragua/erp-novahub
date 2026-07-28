@@ -10,7 +10,7 @@ import { paymentsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
-import type { PaymentReceived, Customer, Invoice } from '../../types';
+import type { PaymentReceived, Customer, Invoice, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
@@ -24,6 +24,8 @@ interface PagosRecibidosViewProps {
   onRefresh: () => void;
   customers?: Customer[];
   invoices?: Invoice[];
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
 }
 
 const methodOptions = [
@@ -33,7 +35,7 @@ const methodOptions = [
   { label: 'Cheque', value: 'CHECK', color: 'bg-amber-500/10 text-amber-500' },
 ];
 
-export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [] }: PagosRecibidosViewProps) {
+export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [], pagination, onSearchChange }: PagosRecibidosViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -274,7 +276,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Historial de cobranza y conciliación de ingresos.</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input placeholder="Buscar pago..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+              <Input placeholder="Buscar pago..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('SALES_PAYMENTS', 'create') && (
               <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Registrar Pago</Button>
@@ -282,6 +284,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           </div>
         </div>
         <EditableDataTable data={filtered}
+          pagination={pagination}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.cancel(id as string, 'Anulación masiva'); } toast.success('Pagos anulados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular'); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (

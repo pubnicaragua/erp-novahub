@@ -9,13 +9,15 @@ import {
 } from './table';
 import { Input } from './input';
 import { cn } from './utils';
-import { Pencil, Trash2, Copy, Eraser, MoreHorizontal } from 'lucide-react';
+import { Pencil, Trash2, Copy, Eraser, MoreHorizontal, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './dialog';
+import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
+import type { SalesPaginationControls } from '../../types';
 
 export interface ColumnDef<T> {
   key: keyof T | string;
@@ -41,6 +43,7 @@ interface EditableDataTableProps<T> {
   showSelection?: boolean;
   bulkActions?: (selectedIds: (string | number)[]) => React.ReactNode;
   onAddRow?: () => void;
+  pagination?: SalesPaginationControls;
 }
 
 export function EditableDataTable<T extends { [key: string]: any }>({
@@ -56,6 +59,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   showSelection = true,
   bulkActions,
   onAddRow,
+  pagination,
 }: EditableDataTableProps<T>) {
   const [data, setData] = useState<T[]>(initialData);
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
@@ -214,6 +218,21 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   };
 
   return (
+    <BoneyardSkeleton
+      name="sales-data-table"
+      loading={Boolean(isLoading)}
+      select="viewport"
+      animate="shimmer"
+      transition={180}
+      fallback={(
+        <div className="w-full space-y-3 rounded-2xl border border-border/50 bg-card/30 p-4" aria-label="Cargando tabla">
+          <div className="h-10 w-full animate-pulse rounded-xl bg-muted/40" />
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="h-14 w-full animate-pulse rounded-xl bg-muted/30" />
+          ))}
+        </div>
+      )}
+    >
     <div className="sales-data-table w-full min-w-0 max-w-full space-y-4" onPaste={handlePaste}>
       {/* Bulk Actions Toolbar */}
       <AnimatePresence>
@@ -281,7 +300,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   {col.header}
                 </TableHead>
               ))}
-              <TableHead data-actions-column="true" className="h-12 w-36 whitespace-nowrap pr-6 text-right text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+              <TableHead data-actions-column="true" className="h-12 w-60 whitespace-nowrap pr-6 text-right text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
                 Acciones
               </TableHead>
             </TableRow>
@@ -372,7 +391,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       </TableCell>
                     );
                   })}
-                  <TableCell data-actions-column="true" className="relative z-20 h-14 !w-48 !min-w-48 overflow-visible whitespace-nowrap pr-6 text-right pointer-events-auto">
+                  <TableCell data-actions-column="true" className="relative z-20 h-14 w-60 overflow-visible whitespace-nowrap pr-6 text-right pointer-events-auto">
                     <div className="relative z-30 flex min-w-max flex-nowrap items-center justify-end gap-1 overflow-visible whitespace-nowrap transition-all pointer-events-auto">
                       {actions ? actions(row) : (
                         onRowDelete && (
@@ -477,6 +496,33 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         )}
       </div>
 
+      {pagination && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span>Mostrar</span>
+            <select
+              value={pagination.pageSize}
+              onChange={(event) => pagination.onPageSizeChange(Number(event.target.value) as SalesPaginationControls['pageSize'])}
+              className="h-8 rounded-lg border border-border/50 bg-background px-2 font-bold text-foreground outline-none"
+              aria-label="Registros por página"
+            >
+              {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
+            </select>
+            <span>por página</span>
+            <span className="ml-2 rounded-lg border border-border/40 px-2 py-1">
+              {pagination.total === 0 ? 0 : `${(pagination.page - 1) * pagination.pageSize + 1}-${Math.min(pagination.page * pagination.pageSize, pagination.total)}`} de {pagination.total}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination.onPageChange(1)} disabled={pagination.page <= 1} aria-label="Primera página"><ChevronsLeft className="size-4" /></button>
+            <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination.onPageChange(pagination.page - 1)} disabled={pagination.page <= 1} aria-label="Página anterior"><ChevronLeft className="size-4" /></button>
+            <span className="min-w-24 text-center font-bold text-foreground">Pág. {pagination.page} / {Math.max(1, pagination.totalPages)}</span>
+            <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination.onPageChange(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages} aria-label="Página siguiente"><ChevronRight className="size-4" /></button>
+            <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination.onPageChange(pagination.totalPages)} disabled={pagination.page >= pagination.totalPages} aria-label="Última página"><ChevronsRight className="size-4" /></button>
+          </div>
+        </div>
+      )}
+
       <Dialog open={mobileActionsRow !== null} onOpenChange={(open) => !open && setMobileActionsRow(null)}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-3xl p-0">
           <DialogHeader className="border-b border-border/40 px-5 py-4">
@@ -539,5 +585,6 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         }}
       />
     </div>
+    </BoneyardSkeleton>
   );
 }

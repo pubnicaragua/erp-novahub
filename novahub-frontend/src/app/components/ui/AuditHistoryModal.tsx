@@ -21,6 +21,8 @@ const actionColors: Record<string, string> = {
   UPDATE: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
   DELETE: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
   STATUS_CHANGE: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+  PAYMENT: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20',
+  DUPLICATE_OVERRIDE: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
 };
 
 const actionLabels: Record<string, string> = {
@@ -28,6 +30,38 @@ const actionLabels: Record<string, string> = {
   UPDATE: 'Actualización',
   DELETE: 'Eliminación',
   STATUS_CHANGE: 'Cambio de Estado',
+  PAYMENT: 'Pago',
+  DUPLICATE_OVERRIDE: 'Continuación tras advertencia de duplicado',
+};
+
+const detailKeyLabels: Record<string, string> = {
+  fromOrder: 'Orden de venta de origen',
+  fromEstimate: 'Cotización de origen',
+  number: 'Número',
+  status: 'Estado',
+  reason: 'Motivo',
+  amount: 'Monto',
+  name: 'Nombre',
+  fields_updated: 'Campos actualizados',
+  confirmedCandidateIds: 'Ventas similares confirmadas',
+  similarSales: 'Ventas similares detectadas',
+  matchedCriteria: 'Criterios coincidentes',
+  candidateIds: 'Ventas similares',
+};
+
+const detailValueLabels: Record<string, string> = {
+  CREATE: 'Creación',
+  UPDATE: 'Actualización',
+  DELETE: 'Eliminación',
+  PENDING: 'Pendiente',
+  PAID: 'Pagada',
+  PARTIAL: 'Parcial',
+  CANCELLED: 'Anulada',
+  DRAFT: 'Borrador',
+  CONFIRMED: 'Confirmada',
+  SHIPPED: 'Enviada',
+  OVERDUE: 'Vencida',
+  EARNED: 'Devengada',
 };
 
 export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = 'Historial de Cambios' }: AuditHistoryModalProps) {
@@ -59,6 +93,19 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
     } catch {
       return details;
     }
+  };
+
+  const translateKey = (key: string) => detailKeyLabels[key] || key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
+
+  const translateValue = (value: unknown): string => {
+    if (value === null || value === undefined || value === '') return '—';
+    if (Array.isArray(value)) return value.map(translateValue).join(', ');
+    if (typeof value === 'object') {
+      return Object.entries(value as Record<string, unknown>)
+        .map(([key, nestedValue]) => `${translateKey(key)}: ${translateValue(nestedValue)}`)
+        .join(' · ');
+    }
+    return detailValueLabels[String(value)] || String(value);
   };
 
   return (
@@ -129,7 +176,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
                                   <ul className="list-disc list-inside space-y-1">
                                     {Object.entries(detailsObj).map(([key, value]) => (
                                       <li key={key}>
-                                        <span className="font-bold text-foreground">{key}:</span> {String(value)}
+                                        <span className="font-bold text-foreground">{translateKey(key)}:</span> {translateValue(value)}
                                       </li>
                                     ))}
                                   </ul>

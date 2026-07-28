@@ -9,6 +9,7 @@ type AccountingAccountSelectProps = {
   placeholder?: string;
   required?: boolean;
   assetOnly?: boolean;
+  incomeOnly?: boolean;
   disabled?: boolean;
 };
 
@@ -19,6 +20,7 @@ export function AccountingAccountSelect({
   placeholder = 'Seleccionar cuenta contable',
   required = true,
   assetOnly = false,
+  incomeOnly = false,
   disabled = false,
 }: AccountingAccountSelectProps) {
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -31,12 +33,13 @@ export function AccountingAccountSelect({
       const normalized = Array.isArray(items) ? items : [];
       setAccounts(normalized.filter((account) => {
         if (!account.isActive || account.acceptsPostings === false) return false;
-        if (!assetOnly) return true;
-        return String(account.type || '').toUpperCase() === 'ASSET';
+        if (assetOnly) return String(account.type || '').toUpperCase() === 'ASSET';
+        if (incomeOnly) return String(account.type || '').toUpperCase() === 'INCOME';
+        return true;
       }));
     }).catch(() => { if (active) setAccounts([]); });
     return () => { active = false; };
-  }, [assetOnly]);
+  }, [assetOnly, incomeOnly]);
 
   return (
     <div>

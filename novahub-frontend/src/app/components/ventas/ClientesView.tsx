@@ -10,7 +10,7 @@ import { customersService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
-import type { Customer } from '../../types';
+import type { Customer, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -21,9 +21,11 @@ interface ClientesViewProps {
   data: Customer[];
   loading: boolean;
   onRefresh: () => void;
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
 }
 
-export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
+export function ClientesView({ data, loading, onRefresh, pagination, onSearchChange }: ClientesViewProps) {
   const { formatConvertedAmount } = useCurrency();
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -360,7 +362,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
                 placeholder="Buscar cliente..." 
                 className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
             </div>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')} aria-label="Filtrar clientes por estado" className="h-10 min-w-0 max-w-full rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary">
@@ -393,6 +395,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
           columns={columns}
           onRowUpdate={handleUpdate}
           isLoading={loading}
+          pagination={pagination}
           actions={(row) => (
             <div className="flex items-center gap-1">
                <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomerDetail(row)}><Eye className="size-4" /></Button>

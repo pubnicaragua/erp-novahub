@@ -145,7 +145,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                       <th className="px-4 py-3 text-left font-semibold">Sucursal</th>
                       <th className="px-4 py-3 text-left font-semibold">Ubicación</th>
                       <th className="px-4 py-3 text-left font-semibold">Estado</th>
-                      <th className="px-4 py-3 text-right font-semibold">Acciones</th>
+                      <th data-actions-column="compact" className="px-4 py-3 text-right font-semibold">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
@@ -162,7 +162,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                             {caja.isActive ? 'Activa' : 'Inactiva'}
                           </Badge>
                         </td>
-                        <td className="px-4 py-3 text-right">
+                         <td data-actions-column="compact" className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <Button variant="ghost" size="icon" onClick={() => handleManageAccess(caja)}>
                               <Users className="size-4" />

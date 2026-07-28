@@ -21,8 +21,8 @@ export const inventoryService = {
 
   // ==================== CATEGORIES ====================
   getCategories: () => api.get<any[]>('/inventory/categories'),
-  createCategory: (data: { name: string; description?: string }) => api.post<any>('/inventory/categories', data),
-  updateCategory: (id: string, data: { name: string; description?: string }) => api.patch<any>(`/inventory/categories/${id}`, data),
+  createCategory: (data: { name: string; description?: string; type?: 'PRODUCT' | 'SERVICE' }) => api.post<any>('/inventory/categories', data),
+  updateCategory: (id: string, data: { name: string; description?: string; type?: 'PRODUCT' | 'SERVICE' }) => api.patch<any>(`/inventory/categories/${id}`, data),
   deleteCategory: (id: string) => api.delete(`/inventory/categories/${id}`),
 
   // ==================== WAREHOUSES ====================

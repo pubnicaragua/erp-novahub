@@ -4,7 +4,7 @@ import { cajaService, CashRegister } from '../../services/caja.service';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
-import { Loader2, Coins, Settings2, Eye } from 'lucide-react';
+import { Coins, Settings2, Eye } from 'lucide-react';
 import { DashboardCajaView } from './DashboardCajaView';
 import { AperturaCajaStep } from './caja/AperturaCajaStep';
 import { SesionActivaStep } from './caja/SesionActivaStep';
@@ -18,6 +18,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { CajaSetupGuide } from './caja/CajaSetupGuide';
 import { getApiErrorMessage } from '../../services/api';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
+import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 
 type SectionType = 'dashboard' | 'session' | 'history';
 
@@ -112,7 +113,17 @@ export function ControlDashboardCajaView({
   };
 
   if (loading && (!registers || registers.length === 0)) {
-    return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-primary size-8" /></div>;
+    return (
+      <BoneyardSkeleton
+        name="sales-cash-control"
+        loading
+        select="viewport"
+        animate="shimmer"
+        fallback={<div className="space-y-4 rounded-2xl border border-border/40 p-6"><div className="h-12 w-full animate-pulse rounded-xl bg-muted/40" /><div className="h-64 w-full animate-pulse rounded-2xl bg-muted/30" /></div>}
+      >
+        <div />
+      </BoneyardSkeleton>
+    );
   }
 
   return (

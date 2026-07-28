@@ -26,11 +26,15 @@ import {
   type PosInvoiceItem,
   type PosPaymentLine,
   type CashRegisterSession,
+  type PotentialDuplicateSale,
 } from '../../services/caja.service';
 import { accountsService } from '../../services/finanzas.service';
 import type { Account } from '../../types';
 import { QuickAddCustomerModal } from './QuickAddCustomerModal';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { brandingService } from '../../services/branding.service';
+import { createIdempotencyKey } from '../../services/api';
+import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -233,6 +237,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const [recentInvoices, setRecentInvoices] = useState<PosInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const checkoutIdempotencyKey = useRef<string | null>(null);
 
   const [selectedRegisterId, setSelectedRegisterId] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(undefined);
@@ -254,6 +260,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const [createdPaymentLines, setCreatedPaymentLines] = useState<PosPaymentLine[]>([]);
   const [createdExchangeRate, setCreatedExchangeRate] = useState(1);
   const [companyName, setCompanyName] = useState('Empresa');
+  const [duplicateMatches, setDuplicateMatches] = useState<PotentialDuplicateSale[]>([]);
 
   const [showAddCustomer, setShowAddCustomer] = useState(false);
 
@@ -517,10 +524,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     setCreatedInvoice(null);
     setCreatedTicketCart([...cart]);
     setCreatedPaymentLines([]);
+    checkoutIdempotencyKey.current = null;
     setShowPayment(true);
   };
 
-  const submitPayment = async () => {
+  const submitPayment = async (confirmedDuplicate = false) => {
+    if (submittingRef.current) return;
     if (!activeSession) return;
     const totalInPaymentCurrency = paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total;
     const received = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
@@ -536,9 +545,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       toast.error('La transferencia requiere una referencia');
       return;
     }
+    submittingRef.current = true;
     setSubmitting(true);
     try {
-      const createdResponse = await cajaService.createInvoice({
+      const checkoutPayload = {
         registerId: selectedRegisterId,
         sessionId: activeSession.id,
         customerId: selectedCustomerId,
@@ -550,7 +560,23 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         currency: paymentCurrency,
         exchangeRate: Number(activeSession.exchangeRateUSD),
         payments,
-      });
+        ...(confirmedDuplicate && duplicateMatches.length > 0
+          ? { duplicateConfirmation: { candidateIds: duplicateMatches.map((match) => match.id) } }
+          : {}),
+      };
+
+      if (!confirmedDuplicate) {
+        const duplicateCheck = await cajaService.checkPotentialDuplicates(checkoutPayload);
+        if (duplicateCheck.matches?.length) {
+          setDuplicateMatches(duplicateCheck.matches);
+          checkoutIdempotencyKey.current = null;
+          return;
+        }
+      }
+
+      const idempotencyKey = checkoutIdempotencyKey.current || createIdempotencyKey('checkout');
+      checkoutIdempotencyKey.current = idempotencyKey;
+      const createdResponse = await cajaService.createInvoice(checkoutPayload, idempotencyKey);
       const created = (createdResponse as any)?.data || createdResponse;
 
       toast.success('Factura emitida exitosamente');
@@ -558,6 +584,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       setCreatedPaymentLines([...payments]);
       setCreatedExchangeRate(Number(activeSession.exchangeRateUSD));
       setShowPayment(false);
+      setDuplicateMatches([]);
+      checkoutIdempotencyKey.current = null;
 
       // Limpiar datos en memoria de esta caja
       setCart([]);
@@ -575,8 +603,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         handleRegisterChange(pendingSessionEntry[0], true); // skipSave = true
       }
     } catch (error: unknown) {
+      if ((error as any)?.status) checkoutIdempotencyKey.current = null;
+      const errorData = (error as any)?.data;
+      if ((error as any)?.code === 'POTENTIAL_DUPLICATE_SALE' && Array.isArray(errorData?.matches)) {
+        setDuplicateMatches(errorData.matches);
+        checkoutIdempotencyKey.current = null;
+        return;
+      }
       toast.error(getErrorMessage(error, 'Error al emitir factura'));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -597,6 +633,19 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const isRegisterDisabled = selectedRegister ? !selectedRegister.hasActiveSession : false;
 
   if (registers.length === 0) {
+    if (loading) {
+      return (
+        <BoneyardSkeleton
+          name="sales-pos-shell"
+          loading
+          select="viewport"
+          animate="shimmer"
+          fallback={<div className="space-y-4 rounded-2xl border border-border/40 p-6"><div className="h-14 w-full animate-pulse rounded-xl bg-muted/40" /><div className="h-72 w-full animate-pulse rounded-2xl bg-muted/30" /></div>}
+        >
+          <div />
+        </BoneyardSkeleton>
+      );
+    }
     return (
       <>
         <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
@@ -783,7 +832,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                             <th className="px-2 sm:px-3 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Código</th>
                             <th className="px-2 sm:px-3 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground">Descripción</th>
                             <th className="px-2 sm:px-3 py-2.5 text-right text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Precio unit.</th>
-                            <th className="px-2 sm:px-3 py-2.5 text-center text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Acción</th>
+                            <th data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Acción</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border/20">
@@ -802,7 +851,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                                 {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
                               </td>
                               <td className="px-2 sm:px-3 py-2.5 text-right font-mono whitespace-nowrap">{formatCurrency(prod.salePrice)}</td>
-                              <td className="px-2 sm:px-3 py-2.5 text-center">
+                              <td data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center">
                                 <Button size="sm" variant="ghost" onClick={() => addItem(prod)}
                                   disabled={isRegisterDisabled || (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
                                   className="h-7 max-w-full whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
@@ -892,14 +941,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                           <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Cant</th>
                           <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Precio Unit.</th>
                           <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Subtotal</th>
-                          <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Acción</th>
+                          <th data-actions-column="compact" className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Acción</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/20">
                         {cart.map((item) => (
                           <tr key={item.productId} className="hover:bg-muted/20 transition-colors">
                             <td className="px-3 py-2 font-bold">{item.description}</td>
-                            <td className="px-3 py-2 text-center">
+                            <td data-actions-column="compact" className="px-3 py-2 text-center">
                               <Input
                                 type="number"
                                 value={item.quantity}
@@ -1160,11 +1209,40 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                 </>
               );
             })()}
-            <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setShowPayment(false)}>Cancelar</Button><Button onClick={submitPayment} disabled={submitting}>{submitting ? <Loader2 className="size-4 animate-spin" /> : 'Confirmar y emitir'}</Button></div>
+            <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setShowPayment(false)}>Cancelar</Button><Button onClick={() => void submitPayment()} disabled={submitting}>{submitting ? <Loader2 className="size-4 animate-spin" /> : 'Confirmar y emitir'}</Button></div>
           </div>
         </div>
       )}
       {showTutorial && <GuidedTour steps={POS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Facturación por Caja" />}
+      <ConfirmDialog
+        open={duplicateMatches.length > 0}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDuplicateMatches([]);
+            checkoutIdempotencyKey.current = null;
+          }
+        }}
+        title="Posible venta duplicada"
+        description="Encontramos ventas recientes con características similares. Revisa la información antes de continuar."
+        confirmLabel="Continuar venta"
+        cancelLabel="Revisar"
+        variant="warning"
+        loading={submitting}
+        onConfirm={() => submitPayment(true)}
+      >
+        <div className="mt-3 max-h-52 space-y-2 overflow-y-auto text-left">
+          {duplicateMatches.map((match) => (
+            <div key={match.id} className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs">
+              <div className="flex items-center justify-between gap-2 font-bold">
+                <span>{match.number}</span>
+                <span>{match.currency === 'USD' ? '$' : 'C$'} {Number(match.total).toFixed(2)}</span>
+              </div>
+              <p className="mt-1 text-muted-foreground">{match.customerName} · {match.registerName}</p>
+              <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-300">Coincidencias: {match.matchedCriteria.join(', ')}</p>
+            </div>
+          ))}
+        </div>
+      </ConfirmDialog>
       <QuickAddCustomerModal
         open={showAddCustomer}
         onOpenChange={setShowAddCustomer}

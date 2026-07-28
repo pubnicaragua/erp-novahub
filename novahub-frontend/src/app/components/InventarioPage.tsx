@@ -1,5 +1,6 @@
 import { cn } from './ui/utils';
 import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Package,
   Warehouse,
@@ -8,6 +9,7 @@ import {
   History,
   Download,
   RefreshCw,
+  BriefcaseBusiness,
   AlertTriangle
 } from 'lucide-react';
 import { Button } from './ui/button';
@@ -17,6 +19,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
 import { ProductosView } from './inventory/ProductosView';
+import { ServiciosView } from './inventory/ServiciosView';
 import { AlmacenesView } from './inventory/AlmacenesView';
 import { TransferenciasView } from './inventory/TransferenciasView';
 import { ControlStockView } from './inventory/ControlStockView';
@@ -26,10 +29,12 @@ import { useCurrency } from '../contexts/CurrencyContext';
 
 import { inventoryService } from '../services/inventario.service';
 import { motion } from 'motion/react';
+import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 
 const INVENTORY_SECTIONS = [
   { id: 'dashboard',       label: 'Resumen',         icon: Package,   requiredModules: ['INVENTORY_DASHBOARD'] },
-  { id: 'productos',       label: 'Existencias',     icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
+  { id: 'productos',       label: 'Productos',       icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
+  { id: 'servicios',       label: 'Servicios',       icon: BriefcaseBusiness, requiredModules: ['INVENTORY_PRODUCTS'] },
   { id: 'almacenes',       label: 'Almacenes',       icon: Warehouse, requiredModules: ['INVENTORY_WAREHOUSES'] },
   { id: 'transferencias',  label: 'Transferencias',  icon: Truck,     requiredModules: ['INVENTORY_TRANSFERS'] },
   { id: 'ajustes',         label: 'Ajustes',         icon: Scale,     requiredModules: ['INVENTORY_ADJUSTMENTS'] },
@@ -45,76 +50,106 @@ interface InventarioPageProps {
 export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: InventarioPageProps) {
   const { user } = useAuth();
   const { formatAmount } = useCurrency();
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loadError, setLoadError] = useState('');
-  const [data, setData] = useState<any>({
-    products: [],
-    warehouses: [],
-    categories: [],
-    transfers: [],
-    adjustments: [],
-    lots: [],
-    series: [],
-    movements: [],
-    dashboardStats: null,
-  });
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState(activeSubModule || 'productos');
+  const tenantKey = user?.tenantId || 'anonymous';
 
-  const fetchData = useCallback(async (showRefresh = false) => {
-    try {
-      setLoadError('');
-      if (showRefresh) setRefreshing(true);
-      else setLoading(true);
-      
-      const results = await Promise.allSettled([
-        inventoryService.getProducts(),
-        inventoryService.getWarehouses(),
-        inventoryService.getCategories(),
-        inventoryService.getTransfers(),
-        inventoryService.getAdjustments(),
-        inventoryService.getLots(),
-        inventoryService.getSeries(),
-        inventoryService.getMovements(),
-        inventoryService.getDashboardStats(),
-      ]);
+  const toList = (value: any) => value?.data || (Array.isArray(value) ? value : []);
+  const commonQueryOptions = {
+    enabled: Boolean(user),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    placeholderData: keepPreviousData,
+  } as const;
+  const productsQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'products', tenantKey],
+    queryFn: () => inventoryService.getProducts(),
+    enabled: Boolean(user) && ['dashboard', 'productos', 'servicios', 'transferencias', 'ajustes'].includes(activeTab),
+  });
+  const warehousesQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'warehouses', tenantKey],
+    queryFn: inventoryService.getWarehouses,
+    enabled: Boolean(user) && activeTab !== 'dashboard',
+  });
+  const categoriesQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'categories', tenantKey],
+    queryFn: inventoryService.getCategories,
+    enabled: Boolean(user) && ['productos', 'servicios'].includes(activeTab),
+  });
+  const transfersQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'transfers', tenantKey],
+    queryFn: inventoryService.getTransfers,
+    enabled: Boolean(user) && activeTab === 'transferencias',
+  });
+  const adjustmentsQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'adjustments', tenantKey],
+    queryFn: inventoryService.getAdjustments,
+    enabled: Boolean(user) && activeTab === 'ajustes',
+  });
+  const seriesQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'series', tenantKey],
+    queryFn: inventoryService.getSeries,
+    enabled: Boolean(user) && ['productos', 'servicios', 'transferencias', 'ajustes'].includes(activeTab),
+  });
+  const movementsQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'movements', tenantKey],
+    queryFn: inventoryService.getMovements,
+    enabled: Boolean(user) && ['productos', 'servicios', 'transferencias', 'ajustes', 'movimientos'].includes(activeTab),
+  });
+  const dashboardQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'dashboard', tenantKey],
+    queryFn: inventoryService.getDashboardStats,
+    enabled: Boolean(user) && activeTab === 'dashboard',
+  });
+  const categories = toList(categoriesQuery.data).map((category: any) => ({
+    ...category,
+    type: String(category.type || 'PRODUCT').toUpperCase(),
+  }));
+  const data = {
+    products: toList(productsQuery.data).map((product: any) => ({
+      ...product,
+      itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
+    })),
+    warehouses: toList(warehousesQuery.data),
+    categories: categories.filter((category: any) => category.type === 'PRODUCT'),
+    serviceCategories: categories.filter((category: any) => category.type === 'SERVICE'),
+    transfers: toList(transfersQuery.data),
+    adjustments: toList(adjustmentsQuery.data),
+    lots: [],
+    series: toList(seriesQuery.data),
+    movements: toList(movementsQuery.data),
+    dashboardStats: dashboardQuery.data?.data || dashboardQuery.data || null,
+  };
+  const activeQueries = [
+    ...(productsQuery.isEnabled ? [productsQuery] : []),
+    ...(warehousesQuery.isEnabled ? [warehousesQuery] : []),
+    ...(categoriesQuery.isEnabled ? [categoriesQuery] : []),
+    ...(transfersQuery.isEnabled ? [transfersQuery] : []),
+    ...(adjustmentsQuery.isEnabled ? [adjustmentsQuery] : []),
+    ...(seriesQuery.isEnabled ? [seriesQuery] : []),
+    ...(movementsQuery.isEnabled ? [movementsQuery] : []),
+    ...(dashboardQuery.isEnabled ? [dashboardQuery] : []),
+  ];
+  const loading = activeQueries.some((query) => query.isPending && !query.data);
+  const refreshing = activeQueries.some((query) => query.isFetching) && !loading;
+  const firstError = activeQueries.find((query) => query.error)?.error;
+  const loadError = firstError ? (firstError as Error).message : '';
+  const fetchData = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+  }, [queryClient, tenantKey]);
 
-      const safeVal = (i: number) => {
-        const r = results[i];
-        if (r.status !== 'fulfilled') return [];
-        const v = (r as any).value;
-        return v?.data || (Array.isArray(v) ? v : []);
-      };
-      if (results[0].status === 'rejected') {
-        setLoadError('No pudimos cargar las existencias. Revisa la conexion e intenta nuevamente.');
-      }
-      const statsResult = results[8];
-      const dashboardStats = statsResult.status === 'fulfilled'
-        ? ((statsResult as any).value?.data || (statsResult as any).value || null)
-        : null;
-      setData({
-        products: safeVal(0),
-        warehouses: safeVal(1),
-        categories: safeVal(2),
-        transfers: safeVal(3),
-        adjustments: safeVal(4),
-        lots: safeVal(5),
-        series: safeVal(6),
-        movements: safeVal(7),
-        dashboardStats,
-      });
-    } catch (error) {
-      console.error('Error fetching inventory data:', error);
-      toast.error('Error al cargar datos de inventario');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const productItems = data.products.filter((product: any) => product.itemType !== 'SERVICE');
+  const serviceItems = data.products.filter((product: any) => product.itemType === 'SERVICE');
 
   useEffect(() => {
     if (!activeSubModule) return;
@@ -126,7 +161,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     try {
       const csvContent = [
         ['Código', 'Nombre', 'Categoría', 'Stock', 'Precio Venta', 'Precio Costo'].join(','),
-        ...data.products.map((p: any) => [
+        ...productItems.map((p: any) => [
           p.code,
           `"${p.name}"`,
           p.category?.name || '',
@@ -148,7 +183,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1700px] space-y-4 p-4 pb-20 sm:p-6 md:p-10">
+    <div className="mx-auto min-w-0 w-full max-w-[1700px] space-y-4 overflow-x-hidden p-4 pb-20 sm:p-6 md:p-10">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
@@ -162,7 +197,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             <p className="mt-2 text-sm text-muted-foreground">Gestiona existencias, precios, almacenes y movimientos en un solo lugar.</p>
             <div className="flex items-center gap-2 mt-2">
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                {data.products.filter((p: any) => (p.itemType || 'PRODUCT').toUpperCase() !== 'SERVICE').length} productos · {data.products.filter((p: any) => (p.itemType || '').toUpperCase() === 'SERVICE').length} servicios · {data.warehouses.length} almacenes
+                {productItems.length} productos · {serviceItems.length} servicios · {data.warehouses.length} almacenes
               </Badge>
             </div>
           </div>
@@ -172,7 +207,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           <Button
             variant="outline"
             size="sm"
-            onClick={() => fetchData(true)}
+            onClick={() => fetchData()}
             disabled={refreshing}
             className="rounded-xl font-bold"
           >
@@ -236,12 +271,20 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
               </div>
             </div>
           ) : loading ? (
-            <div className="space-y-4" aria-label="Cargando inventario">
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                {[0, 1, 2, 3].map((item) => <div key={item} className="h-24 animate-pulse rounded-2xl bg-muted/60" />)}
-              </div>
-              <div className="h-96 animate-pulse rounded-2xl bg-muted/40" />
-            </div>
+            <BoneyardSkeleton
+              name="inventory-workspace"
+              loading
+              select="viewport"
+              animate="shimmer"
+              fallback={<div className="space-y-4" aria-label="Cargando inventario">
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  {[0, 1, 2, 3].map((item) => <div key={item} className="h-24 animate-pulse rounded-2xl bg-muted/60" />)}
+                </div>
+                <div className="h-96 w-full rounded-2xl bg-muted/40" />
+              </div>}
+            >
+              <div />
+            </BoneyardSkeleton>
           ) : (
             <>
               <TabsContent value="dashboard" className="m-0" asChild>
@@ -255,7 +298,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                       <Card className="rounded-2xl border-border/40 shadow-sm">
                         <CardContent className="p-4">
                           <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Productos</p>
-                          <p className="text-2xl font-black mt-1">{data.products.length}</p>
+                          <p className="text-2xl font-black mt-1">{productItems.length}</p>
                         </CardContent>
                       </Card>
                       <Card className="rounded-2xl border-border/40 shadow-sm">
@@ -267,13 +310,13 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                       <Card className="rounded-2xl border-border/40 shadow-sm">
                         <CardContent className="p-4">
                           <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Valor Inventario</p>
-                          <p className="text-2xl font-black mt-1">{formatAmount(data.products.reduce((acc: number, p: any) => acc + Number(p.stock || 0) * Number(p.costPrice || 0), 0))}</p>
+                          <p className="text-2xl font-black mt-1">{formatAmount(productItems.reduce((acc: number, p: any) => acc + Number(p.stock || 0) * Number(p.costPrice || 0), 0))}</p>
                         </CardContent>
                       </Card>
                       <Card className="rounded-2xl border-border/40 shadow-sm">
                         <CardContent className="p-4">
                           <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Stock Bajo</p>
-                          <p className="text-2xl font-black mt-1 text-amber-500">{data.products.filter((p: any) => Number(p.stock || 0) > 0 && Number(p.stock || 0) < 10).length}</p>
+                          <p className="text-2xl font-black mt-1 text-amber-500">{productItems.filter((p: any) => Number(p.stock || 0) > 0 && Number(p.stock || 0) < 10).length}</p>
                         </CardContent>
                       </Card>
                     </div>
@@ -299,12 +342,28 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                 >
                   <ProductosView 
-                    products={data.products} 
+                    products={productItems}
                     categories={data.categories}
                     warehouses={data.warehouses}
                     series={data.series}
                     movements={data.movements}
-                    onRefresh={() => fetchData(true)}
+                    onRefresh={() => fetchData()}
+                  />
+                </motion.div>
+              </TabsContent>
+              <TabsContent value="servicios" className="m-0" asChild>
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <ServiciosView
+                    products={serviceItems}
+                    categories={data.serviceCategories}
+                    warehouses={data.warehouses}
+                    series={data.series}
+                    movements={data.movements}
+                    onRefresh={() => fetchData()}
                   />
                 </motion.div>
               </TabsContent>
@@ -316,7 +375,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                 >
                   <AlmacenesView 
                     warehouses={data.warehouses}
-                    onRefresh={() => fetchData(true)}
+                    onRefresh={() => fetchData()}
                   />
                 </motion.div>
               </TabsContent>
@@ -329,9 +388,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   <TransferenciasView 
                     transfers={data.transfers}
                     warehouses={data.warehouses}
-                    products={data.products}
+                    products={productItems}
                     series={data.series}
-                    onRefresh={() => fetchData(true)}
+                    onRefresh={() => fetchData()}
                   />
                 </motion.div>
               </TabsContent>
@@ -344,9 +403,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   <ControlStockView 
                     adjustments={data.adjustments}
                     warehouses={data.warehouses}
-                    products={data.products}
+                    products={productItems}
                     series={data.series}
-                    onRefresh={() => fetchData(true)}
+                    onRefresh={() => fetchData()}
                   />
                 </motion.div>
               </TabsContent>

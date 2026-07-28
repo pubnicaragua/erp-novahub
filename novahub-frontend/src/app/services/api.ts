@@ -12,11 +12,27 @@ interface RequestOptions {
   headers?: Record<string, string>;
 }
 
+const idempotentInFlight = new Map<string, Promise<unknown>>();
+
+export function createIdempotencyKey(prefix = 'nh'): string {
+  const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}-${random}`;
+}
+
+function stableRequestKey(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableRequestKey).join(',')}]`;
+  return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stableRequestKey((value as any)[key])}`).join(',')}}`;
+}
+
 interface ApiErrorBody {
   message?: string | string[];
   error?: string;
   details?: string | string[];
   code?: string;
+  matches?: unknown[];
 }
 
 export class ApiRequestError extends Error {
@@ -25,7 +41,8 @@ export class ApiRequestError extends Error {
     public readonly status?: number,
     public readonly path?: string,
     public readonly code?: string,
-    public readonly details?: string[]
+    public readonly details?: string[],
+    public readonly data?: unknown,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -141,8 +158,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const context = describeRequest(path, method);
 
   let response: Response;
-  try {
-    response = await fetch(buildUrl(path, params), {
+  const requestInit: RequestInit = {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -150,9 +166,21 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         ...headers,
       },
       body: body ? JSON.stringify(body) : undefined,
-    });
+  };
+  try {
+    response = await fetch(buildUrl(path, params), requestInit);
   } catch (error: any) {
-    throw new ApiRequestError(normalizeErrorMessage(error?.message, undefined, context), undefined, path);
+    // A lost connection can happen after the server committed the operation.
+    // Retrying with the same key safely replays the original response.
+    if (headers['Idempotency-Key']) {
+      try {
+        response = await fetch(buildUrl(path, params), requestInit);
+      } catch {
+        throw new ApiRequestError(normalizeErrorMessage(error?.message, undefined, context), undefined, path);
+      }
+    } else {
+      throw new ApiRequestError(normalizeErrorMessage(error?.message, undefined, context), undefined, path);
+    }
   }
 
   if (!response.ok) {
@@ -173,7 +201,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       response.status,
       path,
       errorBody?.code,
-      messages
+      messages,
+      errorBody
     );
   }
 
@@ -194,11 +223,39 @@ export const api = {
   post: <T>(path: string, body: unknown) =>
     apiRequest<T>(path, { method: 'POST', body }),
 
+  idempotentPost: <T>(path: string, body: unknown, key?: string) => {
+    const requestKey = key || createIdempotencyKey('post');
+    const fingerprint = `POST:${path}:${stableRequestKey(body)}`;
+    const previous = idempotentInFlight.get(fingerprint) as Promise<T> | undefined;
+    if (previous) return previous;
+    const request = apiRequest<T>(path, {
+      method: 'POST',
+      body,
+      headers: { 'Idempotency-Key': requestKey },
+    }).finally(() => idempotentInFlight.delete(fingerprint));
+    idempotentInFlight.set(fingerprint, request);
+    return request;
+  },
+
   put: <T>(path: string, body: unknown) =>
     apiRequest<T>(path, { method: 'PUT', body }),
 
   patch: <T>(path: string, body: unknown) =>
     apiRequest<T>(path, { method: 'PATCH', body }),
+
+  idempotentPatch: <T>(path: string, body: unknown, key?: string) => {
+    const requestKey = key || createIdempotencyKey('patch');
+    const fingerprint = `PATCH:${path}:${stableRequestKey(body)}`;
+    const previous = idempotentInFlight.get(fingerprint) as Promise<T> | undefined;
+    if (previous) return previous;
+    const request = apiRequest<T>(path, {
+      method: 'PATCH',
+      body,
+      headers: { 'Idempotency-Key': requestKey },
+    }).finally(() => idempotentInFlight.delete(fingerprint));
+    idempotentInFlight.set(fingerprint, request);
+    return request;
+  },
 
   delete: <T>(path: string) =>
     apiRequest<T>(path, { method: 'DELETE' }),
