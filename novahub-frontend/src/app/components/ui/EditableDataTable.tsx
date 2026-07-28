@@ -42,6 +42,7 @@ interface EditableDataTableProps<T> {
   actions?: (row: T) => React.ReactNode;
   showSelection?: boolean;
   bulkActions?: (selectedIds: (string | number)[]) => React.ReactNode;
+  showClearSelection?: boolean;
   onAddRow?: () => void;
   pagination?: SalesPaginationControls;
 }
@@ -58,6 +59,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   actions,
   showSelection = true,
   bulkActions,
+  showClearSelection = true,
   onAddRow,
   pagination,
 }: EditableDataTableProps<T>) {
@@ -247,9 +249,11 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               <span className="text-xs font-black uppercase tracking-widest text-primary/60">
                 {selectedIds.size} Seleccionados
               </span>
-              <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider" onClick={() => setSelectedIds(new Set())}>
-                <Eraser className="size-3 mr-2" /> Despejar
-              </Button>
+              {showClearSelection && (
+                <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider" onClick={() => setSelectedIds(new Set())}>
+                  <Eraser className="size-3 mr-2" /> Despejar
+                </Button>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
                {bulkActions && bulkActions(Array.from(selectedIds))}

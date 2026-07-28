@@ -54,6 +54,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<SalesOrder | null>(null);
+  const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
+  const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
+  const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
   const [invoicingOrderId, setInvoicingOrderId] = useState<string | null>(null);
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
 
@@ -496,7 +499,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>
               <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-muted/10 p-2 text-[10px] font-black uppercase tracking-widest">
                 <span className="text-muted-foreground">Aplicar impuestos/descuentos:</span>
-                <Button type="button" size="sm" variant={pricingMode === 'global' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { setPricingMode('global'); setLocalDoc({ ...localDoc, items: (localDoc.items || []).map((line: any) => ({ ...line, taxRate: 0, discount: 0 })) } as any); }}>Global</Button>
+                <Button type="button" size="sm" variant={pricingMode === 'global' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { const items = (localDoc.items || []).map((line: any) => ({ ...line, taxRate: 0, discount: 0 })); setPricingMode('global'); setLocalDoc({ ...localDoc, items } as any); void handleUpdate(localDoc!.id, { items } as any); }}>Global</Button>
                 <Button type="button" size="sm" variant={pricingMode === 'individual' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { setPricingMode('individual'); setLocalRates({ dRate: 0, tRate: 0 }); }}>Por producto</Button>
               </div>
               <div className="space-y-3">
@@ -580,14 +583,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
+              <div className="flex flex-wrap gap-2">
+                {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" onClick={() => {
+                  const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   setLocalDoc({ ...localDoc, items: newItems } as any);
-                  handleUpdate(localDoc!.id, { items: newItems });
-                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                  <Plus className="size-3 mr-2" /> Agregar Item
-                </Button>
+                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
               </div>
             </div>
             <div className="space-y-2">
@@ -602,11 +602,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 <div key={item.id || idx} data-item-layout="standard" className={cn('sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0', pricingMode === 'individual' && 'pricing-individual')}>
                   <div className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
                     <Combobox 
-                      options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))}
+                      options={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).map(p => ({ label: `${resolveItemType(item) === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code} - ${p.name}`, value: p.id }))}
                       value={item.productId || ''}
                       onChange={(val) => {
                         const newItems = [...(localDoc.items || [])] as any[];
-                        const selectedProd = products.find(p => p.id === val);
+                        const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
                         newItems[idx].productId = val;
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
@@ -624,9 +624,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const tAmount = base * (localRates.tRate / 100);
                         const newTotal = base + tAmount;
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                        handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
+                        void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                       }}
-                      placeholder="Seleccionar Producto..."
+                      placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                     />
                     {item.productId && (
                       <div className="mt-1 flex min-h-4 flex-wrap items-center gap-x-2 gap-y-1 px-1">
@@ -664,6 +664,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                               nextItems[idx] = { ...nextItems[idx], taxRate: event.target.checked ? 15 : 0 };
                               const next = recalculateIndividualPricing(nextItems);
                               setLocalDoc({ ...localDoc, ...next } as any);
+                              void handleUpdate(localDoc!.id, next as any);
                             }}
                           />
                           <span className="text-xs">Aplicar</span>
@@ -681,6 +682,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                             nextItems[idx] = { ...nextItems[idx], discount: Number(event.target.value) || 0 };
                             const next = recalculateIndividualPricing(nextItems);
                             setLocalDoc({ ...localDoc, ...next } as any);
+                            void handleUpdate(localDoc!.id, next as any);
                           }}
                           className="h-8 w-full rounded-md bg-muted/30 text-right text-xs"
                         />
@@ -710,6 +712,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const tAmount = base * (localRates.tRate / 100);
                         const newTotal = base + tAmount;
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
+                        void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                       }}
                       onBlur={() => {
                         handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total });
@@ -751,7 +754,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const tAmount = base * (localRates.tRate / 100);
                         const newTotal = base + tAmount;
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                        handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
+                        void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                     }}>
                       <Trash2 className="size-3" />
                     </Button>

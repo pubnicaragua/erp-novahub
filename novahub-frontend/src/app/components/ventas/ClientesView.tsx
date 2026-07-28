@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { 
-  Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Upload, FileDown, Info, Power
+  Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Upload, FileDown, Info, CircleX
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -33,6 +33,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [pendingStatusChange, setPendingStatusChange] = useState<Customer | null>(null);
   const [statusChanging, setStatusChanging] = useState(false);
+  const [pendingBulkDeactivateIds, setPendingBulkDeactivateIds] = useState<(string | number)[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
@@ -255,14 +256,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       key: 'name', 
       header: 'Nombre del Cliente', 
       editable: canPerform('SALES_CLIENTS', 'edit'),
-      render: (val) => (
-        <div className="flex items-center gap-3">
-          <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center font-black text-primary text-xs border border-primary/20">
-            {String(val || '?').charAt(0)}
-          </div>
-          <span className="text-[13px] font-bold text-foreground">{val || 'Sin nombre'}</span>
-        </div>
-      )
+      render: (val) => <span className="text-[13px] font-bold text-foreground">{val || 'Sin nombre'}</span>
     },
     { key: 'contactName', header: 'Contacto', editable: canPerform('SALES_CLIENTS', 'edit') },
     { 
@@ -396,13 +390,24 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
           onRowUpdate={handleUpdate}
           isLoading={loading}
           pagination={pagination}
+          showClearSelection={false}
           actions={(row) => (
             <div className="flex items-center gap-1">
                <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomerDetail(row)}><Eye className="size-4" /></Button>
                {canPerform('SALES_CLIENTS', 'edit') && (
-                 <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Inactivar cliente'} className={cn('size-8 rounded-lg transition-colors', String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'hover:bg-emerald-500/10 hover:text-emerald-500' : 'hover:bg-amber-500/10 hover:text-amber-500')} onClick={() => setPendingStatusChange(row)}><Power className="size-4" /></Button>
+                 <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Anular cliente'} className={cn('size-8 rounded-lg transition-colors', String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'hover:bg-emerald-500/10 hover:text-emerald-500' : 'hover:bg-amber-500/10 hover:text-amber-500')} onClick={() => setPendingStatusChange(row)}><CircleX className="size-4" /></Button>
                )}
             </div>
+          )}
+          bulkActions={(selectedIds) => (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-[10px] font-black uppercase tracking-wider text-amber-600 hover:bg-amber-500/10"
+              onClick={() => setPendingBulkDeactivateIds(selectedIds)}
+            >
+              <CircleX className="mr-2 size-3" /> Desactivar clientes
+            </Button>
           )}
         />
       </div>
@@ -424,6 +429,26 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
             setStatusChanging(true);
             await handleUpdate(pendingStatusChange.id, { status: nextStatus } as Partial<Customer>);
             setPendingStatusChange(null);
+          } finally {
+            setStatusChanging(false);
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingBulkDeactivateIds.length > 0}
+        onOpenChange={(open) => { if (!open && !statusChanging) setPendingBulkDeactivateIds([]); }}
+        title="¿Desactivar clientes seleccionados?"
+        description={`Se desactivarán ${pendingBulkDeactivateIds.length} clientes y no estarán disponibles para nuevas operaciones.`}
+        confirmLabel="Desactivar clientes"
+        variant="destructive"
+        loading={statusChanging}
+        onConfirm={async () => {
+          if (pendingBulkDeactivateIds.length === 0) return;
+          try {
+            setStatusChanging(true);
+            await Promise.all(pendingBulkDeactivateIds.map((id) => handleUpdate(id, { status: 'INACTIVE' } as Partial<Customer>)));
+            setPendingBulkDeactivateIds([]);
           } finally {
             setStatusChanging(false);
           }

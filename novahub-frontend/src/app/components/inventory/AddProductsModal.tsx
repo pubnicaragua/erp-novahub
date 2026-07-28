@@ -225,7 +225,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
             }
           } catch (err) {
             console.error('Error allocating initial stock', err);
-            toast.error(`Error al asignar stock al producto ${product.name}`);
+            toast.error(`Error al asignar stock al ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'} ${product.name}`);
           }
         }
         successCount++;
@@ -241,7 +241,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       onOpenChange(false);
       onRefresh();
     } catch (error: any) {
-      toast.error(`Hubo un error guardando. Solo se guardaron ${successCount} productos.`);
+            toast.error(`Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
     } finally {
       setIsSaving(false);
     }
@@ -290,7 +290,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   value={draftProduct.name} 
                   onChange={e => handleUpdateDraft('name', e.target.value)} 
                   className="h-8 text-xs mt-1" 
-                  placeholder="Nombre del producto" 
+                    placeholder={`Nombre del ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
                 />
               </div>
               <div className="col-span-2">
@@ -469,7 +469,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
             disabled={isSaving || (productsList.length === 0 && (!!skuError || !draftProduct.code.trim() || !draftProduct.name.trim()))}
             className="font-bold bg-primary text-primary-foreground"
           >
-            {isSaving ? 'Guardando...' : (productsList.length > 0 ? `Guardar ${productsList.length} producto(s)` : 'Guardar producto')}
+            {isSaving ? 'Guardando...' : (productsList.length > 0 ? `Guardar ${productsList.length} ${catalogItemType === 'SERVICE' ? 'servicio(s)' : 'producto(s)'}` : `Guardar ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`)}
           </Button>
         </DialogFooter>
       </DialogContent>

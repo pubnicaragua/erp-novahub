@@ -85,7 +85,9 @@ export interface PosProduct {
   description?: string;
   imageUrl?: string | null;
   imageUrlStorageUri?: string;
+  itemType?: 'PRODUCT' | 'SERVICE';
   trackInventory: boolean;
+  costPrice?: number;
   currentStock?: number | null;
 }
 

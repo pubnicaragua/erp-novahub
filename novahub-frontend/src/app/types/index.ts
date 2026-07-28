@@ -238,6 +238,7 @@ export interface RecurringInvoice {
   nextInvoiceDate: string;
   subtotal: number;
   taxAmount: number;
+  discountAmount?: number;
   total: number;
   currency: Currency;
   exchangeRate?: number;
@@ -263,6 +264,7 @@ export interface RecurringInvoiceItem {
   quantity: number;
   unitPrice: number;
   taxRate: number;
+  discount?: number;
   total: number;
 }
 
@@ -769,6 +771,9 @@ export interface Product {
   price: number;
   cost: number;
   salePrice: number;
+  priceCurrency?: string;
+  priceExchangeRate?: number;
+  salePriceOriginal?: number;
   costPrice: number;
   lastPurchasePrice?: number;
   taxRate: number;

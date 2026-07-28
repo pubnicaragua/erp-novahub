@@ -50,6 +50,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Estimate | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
+  const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
+  const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
+  const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
 
   const handleConvertToOrder = async (estimate: Estimate) => {
     if (!canPerform('SALES_ORDERS', 'create')) {
@@ -215,6 +218,13 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       return sum + (gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100;
     }, 0);
     return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount };
+  };
+  const recalcGlobalTotals = (items: any[], dRate: number, tRate: number) => {
+    const subtotal = items.reduce((sum: number, line: any) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
+    const discountAmount = subtotal * Math.max(0, Math.min(100, Number(dRate || 0))) / 100;
+    const base = subtotal - discountAmount;
+    const taxAmount = base * Math.max(0, Number(tRate || 0)) / 100;
+    return { items, subtotal, discountAmount, taxAmount, total: base + taxAmount };
   };
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0 });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
@@ -385,8 +395,17 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                     <p className="text-[10px] text-muted-foreground mb-1">Moneda de la transacción</p>
                     <Select value={localDoc?.currency || 'NIO'} onValueChange={(currency) => {
                       const exchangeRate = currency === 'NIO' ? 1 : Number(globalRate || 1);
-                      setLocalDoc({ ...localDoc, currency, exchangeRate } as any);
-                      void handleUpdate(localDoc!.id, { currency, exchangeRate } as any);
+                      const previousCurrency = localDoc?.currency || 'NIO';
+                      const previousRate = previousCurrency === 'NIO' ? 1 : Number(localDoc?.exchangeRate || globalRate || 1);
+                      const convertedItems = (localDoc?.items || []).map((item: any) => {
+                        const basePrice = previousCurrency === 'USD' ? Number(item.unitPrice || 0) * previousRate : Number(item.unitPrice || 0);
+                        return { ...item, unitPrice: currency === 'USD' ? basePrice / exchangeRate : basePrice };
+                      });
+                      const recalculated = pricingMode === 'individual'
+                        ? recalcIndividualTotals(convertedItems)
+                        : recalcGlobalTotals(convertedItems, localRates.dRate, localRates.tRate);
+                      setLocalDoc({ ...localDoc, currency, exchangeRate, ...recalculated } as any);
+                      void handleUpdate(localDoc!.id, { currency, exchangeRate, ...recalculated } as any);
                     }}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger>
                       <SelectContent><SelectItem value="NIO">Córdobas (C$)</SelectItem><SelectItem value="USD">Dólares (US$)</SelectItem></SelectContent>
@@ -442,6 +461,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         const tAmount = base * (newRate / 100);
                         setLocalRates(prev => ({ ...prev, tRate: newRate }));
                         setLocalDoc({ ...localDoc, discountAmount: dAmount, taxAmount: tAmount, total: base + tAmount } as any);
+                        void handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: base + tAmount } as any);
                       }} /> Aplicar
                     </label>}
                     {localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.taxAmount || 0).toFixed(2)}
@@ -476,14 +496,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
+              <div className="flex flex-wrap gap-2">
+                {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" onClick={() => {
+                  const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   setLocalDoc({ ...localDoc, items: newItems } as any);
-                  handleUpdate(localDoc!.id, { items: newItems });
-                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                  <Plus className="size-3 mr-2" /> Agregar Item
-                </Button>
+                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
               </div>
             </div>
             <div className="space-y-2">
@@ -497,11 +514,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 <div key={item.id || idx} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
                     <Combobox 
-                      options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))}
+                      options={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).map(p => ({ label: `${resolveItemType(item) === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code} - ${p.name}`, value: p.id }))}
                       value={item.productId || ''}
                       onChange={(val) => {
                         const newItems = [...(localDoc.items || [])] as any[];
-                        const selectedProd = products.find(p => p.id === val);
+                        const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
                         newItems[idx].productId = val;
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
@@ -518,10 +535,17 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         const base = newSubtotal - dAmount;
                         const tAmount = base * (localRates.tRate / 100);
                         const newTotal = base + tAmount;
-                        setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                        handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
+                        const nextDoc = { ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any;
+                        setLocalDoc(nextDoc);
+                        void handleUpdate(localDoc!.id, {
+                          items: newItems,
+                          subtotal: newSubtotal,
+                          discountAmount: dAmount,
+                          taxAmount: tAmount,
+                          total: newTotal,
+                        } as any);
                       }}
-                      placeholder="Seleccionar Producto..."
+                      placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                     />
                   </div>
                   {pricingMode === 'individual' && (
@@ -532,7 +556,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                           <input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
                             const nextItems = [...(localDoc.items || [])];
                             nextItems[idx] = { ...nextItems[idx], taxRate: event.target.checked ? 15 : 0 };
-                            setLocalDoc({ ...localDoc, ...recalcIndividualTotals(nextItems) });
+                            const recalculated = recalcIndividualTotals(nextItems);
+                            setLocalDoc({ ...localDoc, ...recalculated });
+                            void handleUpdate(localDoc!.id, recalculated as any);
                           }} />
                           <span className="text-xs">Aplicar</span>
                         </span>
@@ -542,7 +568,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         <Input type="number" min="0" max="100" value={item.discount || ''} onChange={(event) => {
                           const nextItems = [...(localDoc.items || [])];
                           nextItems[idx] = { ...nextItems[idx], discount: Number(event.target.value) || 0 };
-                          setLocalDoc({ ...localDoc, ...recalcIndividualTotals(nextItems) });
+                          const recalculated = recalcIndividualTotals(nextItems);
+                          setLocalDoc({ ...localDoc, ...recalculated });
+                          void handleUpdate(localDoc!.id, recalculated as any);
                         }} className="h-8 w-full rounded-md bg-muted/30 text-right text-xs" />
                       </label>
                     </div>
@@ -597,7 +625,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
                         const newTotal = newSubtotal + Number(localDoc.taxAmount || 0) - Number(localDoc.discountAmount || 0);
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, total: newTotal } as any);
-                        handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, total: newTotal });
                     }}>
                       <Trash2 className="size-3" />
                     </Button>

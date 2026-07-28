@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ProductImagePicker, ProductThumbnail } from '../ui/ProductImage';
 import { storageService } from '../../services/storage.service';
 import { AddProductsModal } from './AddProductsModal';
+import { EditProductModal } from './EditProductModal';
 
 
 interface ProductosViewProps {
@@ -38,6 +39,8 @@ interface EditingProduct {
   name: string;
   categoryId: string;
   salePrice: number | '';
+  priceCurrency?: string;
+  priceExchangeRate?: number;
   costPrice: number | '';
   unit?: string;
   minStock?: number;
@@ -62,10 +65,12 @@ interface EditingProduct {
 }
 
 export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, itemType }: ProductosViewProps) {
-  const { formatAmount, baseCurrency } = useCurrency();
+  const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { canPerform } = useAuth();
   const catalogItemType = itemType || 'PRODUCT';
   const isServiceView = catalogItemType === 'SERVICE';
+  const entityLabel = isServiceView ? 'servicio' : 'producto';
+  const entityLabelCap = isServiceView ? 'Servicio' : 'Producto';
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
   const [warehouseFilters, setWarehouseFilters] = useState<string[]>([]);
@@ -96,6 +101,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [replenishmentData, setReplenishmentData] = useState<any[] | null>(null);
   const [replenishmentModalOpen, setReplenishmentModalOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [modalProduct, setModalProduct] = useState<any | null>(null);
   
   const [skuErrors, setSkuErrors] = useState<Map<string, string>>(new Map());
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -140,9 +146,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       p.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.category?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilters.length === 0 || categoryFilters.includes(p.categoryId);
+    const productWarehouseIds = [
+      ...(Array.isArray(p.warehouseCatalogs) ? p.warehouseCatalogs.map((catalog: any) => catalog.warehouseId || catalog.warehouse?.id) : []),
+      ...(Array.isArray(p.stockLevels) ? p.stockLevels.map((level: any) => level.warehouseId || level.warehouse?.id) : []),
+      ...(Array.isArray(p.allocations) ? p.allocations.map((allocation: any) => allocation.warehouseId || allocation.warehouse?.id) : []),
+    ].filter(Boolean);
     const matchesWarehouse = warehouseFilters.length === 0
-      || (Array.isArray(p.stockByWarehouse) && warehouseFilters.some((wId) => Number(p.stockByWarehouse?.[wId] || 0) > 0))
-      || (isServiceView && Array.isArray(p.warehouseCatalogs) && warehouseFilters.some((wId) => p.warehouseCatalogs.some((catalog: any) => catalog.warehouseId === wId)));
+      || warehouseFilters.some((warehouseId) => productWarehouseIds.includes(warehouseId));
     const pType = String(p.itemType || p.type || 'PRODUCT').toUpperCase();
     const matchesType = pType === catalogItemType && (itemType ? true : typeFilter === 'all' || pType === typeFilter);
     const stock = Number(p.stock || 0);
@@ -185,6 +195,23 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     };
   }, [products, catalogItemType]);
 
+  const serviceSummary = useMemo(() => {
+    const services = products.filter((product: any) => String(product.itemType || product.type || '').toUpperCase() === 'SERVICE');
+    const categories = new Set(services.map((service: any) => service.categoryId || service.category?.id).filter(Boolean));
+    const now = Date.now();
+    const twelveWeeksAgo = now - (12 * 7 * 24 * 60 * 60 * 1000);
+    const prices = services.map((service: any) => Number(service.salePrice ?? service.price ?? 0)).filter((price) => Number.isFinite(price));
+    const createdInLastTwelveWeeks = services.filter((service: any) => {
+      const createdAt = new Date(service.createdAt || service.createdDate || service.created_on || '').getTime();
+      return Number.isFinite(createdAt) && createdAt >= twelveWeeksAgo && createdAt <= now;
+    }).length;
+    return {
+      categories: categories.size,
+      weeklyAverage: createdInLastTwelveWeeks / 12,
+      averagePrice: prices.length ? prices.reduce((sum, price) => sum + price, 0) / prices.length : 0,
+    };
+  }, [products]);
+
   const getStockStatus = (product: any) => {
     const stock = Number(product.stock || 0);
     if (stock <= 0) return { label: 'Sin Stock', color: 'bg-red-500/10 text-red-500', icon: 'critical' };
@@ -221,6 +248,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       name: '',
       categoryId: categories[0]?.id || '',
       salePrice: '',
+      priceCurrency: baseCurrency,
+      priceExchangeRate: baseCurrency === 'NIO' ? 1 : 1,
       costPrice: '',
       unit: 'unidad',
       minStock: 0,
@@ -242,6 +271,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       name: product.name,
       categoryId: product.categoryId || '',
       salePrice: Number(product.salePrice) || 0,
+      priceCurrency: product.priceCurrency || baseCurrency,
+      priceExchangeRate: Number(product.priceExchangeRate || 1),
       costPrice: Number(product.costPrice) || 0,
       unit: product.unit || 'unidad',
       minStock: Number(product.minStock) || 0,
@@ -432,7 +463,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           code: product.code,
           name: product.name,
           categoryId: product.categoryId,
-          salePrice: Number(product.salePrice || 0),
+          salePrice: Number(product.salePrice || 0) * (product.priceCurrency === baseCurrency ? 1 : product.priceCurrency === 'USD' ? 1 / exchangeRate : exchangeRate),
+          salePriceOriginal: Number(product.salePrice || 0),
+          priceCurrency: product.priceCurrency || baseCurrency,
+          priceExchangeRate: Number(product.priceExchangeRate || 1),
           costPrice: Number(product.costPrice || 0),
           unit: product.unit || 'unidad',
           minStock: Number(product.minStock || 0),
@@ -478,16 +512,19 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             }
           } catch (err: any) {
             console.error('Error allocating initial stock', err);
-            toast.error(err?.response?.data?.message || err?.message || 'Producto creado, pero hubo un error al asignar el stock');
+            toast.error(err?.response?.data?.message || err?.message || `${entityLabelCap} creado, pero hubo un error al asignar el stock`);
           }
         }
-        toast.success('Producto creado');
+        toast.success(`${entityLabelCap} creado`);
       } else {
         await inventoryService.updateProduct(id, {
           code: product.code,
           name: product.name,
           categoryId: product.categoryId,
-          salePrice: Number(product.salePrice || 0),
+          salePrice: Number(product.salePrice || 0) * (product.priceCurrency === baseCurrency ? 1 : product.priceCurrency === 'USD' ? 1 / exchangeRate : exchangeRate),
+          salePriceOriginal: Number(product.salePrice || 0),
+          priceCurrency: product.priceCurrency || baseCurrency,
+          priceExchangeRate: Number(product.priceExchangeRate || 1),
           costPrice: Number(product.costPrice || 0),
           unit: product.unit || 'unidad',
           minStock: Number(product.minStock || 0),
@@ -537,7 +574,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           );
         }
 
-        toast.success('Producto actualizado');
+        toast.success(`${entityLabelCap} actualizado`);
       }
       if (!product.isNew && product.imageStorageUri && product.imageStorageUri !== uploadedImageUri && (uploadedImageUri || product.removeImage)) {
         storageService.deleteFile(product.imageStorageUri).catch((error) => {
@@ -584,7 +621,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     setDeleteLoading(true);
     try {
       await inventoryService.deleteProduct(pendingDeleteId);
-      toast.success('Producto eliminado');
+      toast.success(`${entityLabelCap} eliminado`);
       setPendingDeleteId(null);
       onRefresh();
     } catch (e: any) {
@@ -607,12 +644,24 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       setCategoryModalOpen(false);
       setNewCategoryName('');
       setNewCategoryDescription('');
+      toast.success('Categoría creada');
+      setCategoryModalOpen(false);
+      setNewCategoryName('');
+      setNewCategoryDescription('');
       onRefresh();
     } catch (error: any) {
       toast.error(error?.message || 'Error al crear categoría');
     } finally {
       setCreatingCategory(false);
     }
+  };
+
+  const handlePriceCurrencyChange = (id: string, currency: string) => {
+    const current = editingRows.get(id);
+    if (!current) return;
+    const next = new Map(editingRows);
+    next.set(id, { ...current, priceCurrency: currency, priceExchangeRate: currency === baseCurrency ? 1 : Number(exchangeRate || 1) });
+    setEditingRows(next);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, id: string) => {
@@ -628,6 +677,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     const isSaving = savingIds.has(product.id);
     return (
       <TableRow key={product.id} className="bg-blue-500/5">
+        <TableCell className="w-10 align-top pt-4">
+          <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(product.id); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60">
+            {selectedIds.has(product.id)
+              ? <SquareCheckBig className="size-4 text-primary" />
+              : <Square className="size-4 text-muted-foreground" />
+            }
+          </button>
+        </TableCell>
         <TableCell className="align-top pt-3">
           <div className="flex flex-col gap-1 w-full min-w-[90px]">
             <Input
@@ -644,28 +701,29 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           </div>
         </TableCell>
         <TableCell className="align-top pt-3">
-          <div className="flex min-w-[200px] items-start gap-3">
+          <div className="flex min-w-0 w-full items-start gap-2">
             <ProductImagePicker
+              size="sm"
               src={product.imagePreviewUrl || product.imageUrl}
               productName={product.name}
               disabled={isSaving}
               onSelect={(file) => handleImageSelected(product.id, file)}
               onRemove={() => handleImageRemoved(product.id)}
             />
-            <div className="min-w-0 flex-1 space-y-2 mt-0.5">
+            <div className="min-w-0 flex-1 space-y-1.5 mt-0.5">
               <Input
                 value={product.name}
                 onChange={(e) => handleUpdateField(product.id, 'name', e.target.value)}
                 onKeyDown={(e) => handleKeyDown(e, product.id)}
                 placeholder="Nombre"
-                className="h-8 text-xs w-full min-w-[200px]"
+                className="h-8 w-full min-w-0 text-xs"
                 disabled={isSaving}
               />
               {!isServiceView && <Button
                 type="button"
                 variant={product.trackSerialNumbers ? 'default' : 'outline'}
                 size="sm"
-                className={`h-6 text-[9px] uppercase tracking-wider px-2 w-full ${product.trackSerialNumbers ? 'bg-primary text-primary-foreground' : ''}`}
+                className={`h-5 text-[8px] uppercase tracking-wider px-1.5 w-full ${product.trackSerialNumbers ? 'bg-primary text-primary-foreground' : ''}`}
                 onClick={() => handleUpdateField(product.id, 'trackSerialNumbers', !product.trackSerialNumbers)}
                 disabled={isSaving}
               >
@@ -675,13 +733,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           </div>
         </TableCell>
         <TableCell className="align-top pt-3">
-          <div className="space-y-1.5 min-w-[120px]">
+          <div className="space-y-1.5 min-w-0">
             <Select 
               value={product.categoryId} 
               onValueChange={(v) => handleUpdateField(product.id, 'categoryId', v)}
               disabled={isSaving}
             >
-              <SelectTrigger className="h-8 text-xs w-full min-w-[120px]">
+              <SelectTrigger className="h-8 w-full min-w-0 text-xs">
                 <SelectValue placeholder="Categoría" />
               </SelectTrigger>
               <SelectContent>
@@ -711,7 +769,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             onValueChange={(v) => handleUpdateField(product.id, 'unit', v)}
             disabled={isSaving}
           >
-            <SelectTrigger className="h-8 text-xs w-full min-w-[100px]">
+            <SelectTrigger className="h-8 w-full min-w-0 text-xs">
               <SelectValue placeholder="Unidad" />
             </SelectTrigger>
             <SelectContent>
@@ -735,7 +793,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             value={product.minStock ?? 0}
             onChange={(e) => handleUpdateField(product.id, 'minStock', Math.max(0, Number(e.target.value) || 0))}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
-            className="h-8 text-xs text-right min-w-[70px]"
+            className="h-8 min-w-0 w-full text-right text-xs"
             disabled={isSaving}
           />
         </TableCell>}
@@ -746,23 +804,15 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             value={product.maxStock ?? 0}
             onChange={(e) => handleUpdateField(product.id, 'maxStock', Math.max(0, Number(e.target.value) || 0))}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
-            className="h-8 text-xs text-right min-w-[70px]"
+            className="h-8 min-w-0 w-full text-right text-xs"
             disabled={isSaving}
           />
         </TableCell>}
         <TableCell className="align-top pt-3">
-          {product.itemType === 'SERVICE' ? (() => {
-            const allocation = product.initialAllocations?.[0];
-            return <Select value={allocation?.warehouseId || ''} onValueChange={(v) => {
-              if (allocation) updateInitialAllocation(product.id, allocation.id, { warehouseId: v });
-            }} disabled={isSaving}>
-              <SelectTrigger className="h-8 text-xs w-full min-w-[120px] bg-muted/30"><SelectValue placeholder="Almacén..." /></SelectTrigger>
-              <SelectContent>{warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
-            </Select>;
-          })() : (() => {
+          {(() => {
             const allocations = product.initialAllocations || [];
             return (
-              <div className="space-y-1.5 min-w-[120px]">
+              <div className="space-y-1.5 min-w-0">
                 {allocations.map((alloc) => (
                   <div key={alloc.id} className="h-8 flex items-center">
                     <Select
@@ -770,7 +820,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                       onValueChange={(v) => updateInitialAllocation(product.id, alloc.id, { warehouseId: v })}
                       disabled={isSaving}
                     >
-                      <SelectTrigger className="h-8 text-xs w-full min-w-[120px] bg-muted/30">
+                      <SelectTrigger className="h-8 w-full min-w-0 bg-muted/30 text-xs px-2 truncate [&>span]:truncate">
                         <SelectValue placeholder="Bodega..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -781,19 +831,21 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     </Select>
                   </div>
                 ))}
-                <div className="pt-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-[9px] uppercase tracking-wider text-muted-foreground hover:text-primary px-2"
-                    onClick={() => addInitialAllocation(product.id)}
-                    disabled={isSaving}
-                  >
-                    <Plus className="size-3 mr-1" />
-                    Bodega
-                  </Button>
-                </div>
+                {product.itemType !== 'SERVICE' && (
+                  <div className="pt-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[9px] uppercase tracking-wider text-muted-foreground hover:text-primary px-2"
+                      onClick={() => addInitialAllocation(product.id)}
+                      disabled={isSaving}
+                    >
+                      <Plus className="size-3 mr-1" />
+                      Bodega
+                    </Button>
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -803,28 +855,18 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             const allocations = product.initialAllocations || [];
             const totalAllocated = allocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
             return (
-              <div className="space-y-1.5 min-w-[90px]">
+              <div className="space-y-1.5 min-w-0">
                 {allocations.map((alloc) => (
-                  <div key={alloc.id} className="h-8 flex items-center justify-end gap-1 bg-muted/30 rounded-lg px-1">
+                  <div key={alloc.id} className="h-8 flex items-center justify-end bg-muted/30 rounded-lg px-2">
                     <Input
                       type="number"
                       min={0}
                       value={alloc.quantity}
                       onChange={(e) => updateInitialAllocation(product.id, alloc.id, { quantity: Math.max(0, parseInt(e.target.value) || 0) })}
-                      className="h-7 text-xs text-right w-16 border-none bg-transparent shadow-none"
+                      className="h-7 text-xs text-right w-full border-none bg-transparent shadow-none"
                       placeholder="0"
                       disabled={isSaving}
                     />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-6 text-red-500/60 hover:text-red-500 hover:bg-red-500/10 rounded-md"
-                      onClick={() => removeInitialAllocation(product.id, alloc.id)}
-                      disabled={isSaving || allocations.length <= 1}
-                    >
-                      <Trash2 className="size-3" />
-                    </Button>
                   </div>
                 ))}
                 <div className="pt-1 flex justify-end">
@@ -837,16 +879,25 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           })()}
         </TableCell>}
         <TableCell className="align-top pt-3">
-          <Input
-            type="number"
-            min={0}
-            step="any"
-            value={product.salePrice}
-            onChange={(e) => handleUpdateField(product.id, 'salePrice', e.target.value)}
-            onKeyDown={(e) => handleKeyDown(e, product.id)}
-            className="h-8 text-xs text-right min-w-[90px]"
-            disabled={isSaving}
-          />
+          <div className="space-y-1">
+            <div className="flex gap-1">
+              <Select value={product.priceCurrency || baseCurrency} onValueChange={(value) => handlePriceCurrencyChange(product.id, value)} disabled={isSaving}>
+                <SelectTrigger className="h-8 w-20 min-w-0 px-2 text-[10px]"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent>
+              </Select>
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                value={product.salePrice}
+                onChange={(e) => handleUpdateField(product.id, 'salePrice', e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, product.id)}
+                className="h-8 min-w-0 flex-1 text-right text-xs"
+                disabled={isSaving}
+              />
+            </div>
+            <span className="block text-[9px] text-muted-foreground">Tasa: {product.priceCurrency === baseCurrency ? '1.00' : Number(exchangeRate || 1).toFixed(4)}</span>
+          </div>
         </TableCell>
         {!isServiceView && <TableCell className="align-top pt-3">
           <Input
@@ -856,7 +907,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             value={product.costPrice}
             onChange={(e) => handleUpdateField(product.id, 'costPrice', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
-            className="h-8 text-xs text-right min-w-[90px]"
+            className="h-8 min-w-0 w-full text-right text-xs"
             disabled={isSaving}
           />
         </TableCell>}
@@ -911,7 +962,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     if (selectedIds.size === 0) return;
     try {
       await inventoryService.deleteProducts(Array.from(selectedIds));
-      toast.success(`${selectedIds.size} producto(s) eliminado(s)`);
+      toast.success(`${selectedIds.size} ${entityLabel}(s) eliminado(s)`);
       setSelectedIds(new Set());
       onRefresh();
     } catch (e: any) {
@@ -1105,23 +1156,27 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           {[
             { id: 'all', label: isServiceView ? 'Servicios' : 'Productos', value: inventorySummary.total, tone: 'text-foreground' },
-            ...(!isServiceView ? [
+            ...(isServiceView ? [
+              { id: 'service-categories', label: 'Categorías', value: serviceSummary.categories, tone: 'text-blue-600' },
+              { id: 'service-weekly-average', label: 'Promedio de servicios por semana', value: serviceSummary.weeklyAverage, tone: 'text-emerald-600', decimals: 1 },
+              { id: 'service-average', label: 'Precio promedio', value: serviceSummary.averagePrice, tone: 'text-amber-600', isCurrency: true },
+            ] : [
               { id: 'available', label: 'Disponibles', value: inventorySummary.available, tone: 'text-emerald-600' },
               { id: 'low', label: 'Stock bajo', value: inventorySummary.low, tone: 'text-amber-600' },
               { id: 'out', label: 'Sin stock', value: inventorySummary.out, tone: 'text-rose-600' },
-            ] : []),
+            ]),
           ].map((item) => (
             <button
               key={item.id}
               type="button"
-              aria-pressed={stockFilter === item.id}
-              onClick={() => setStockFilter(item.id as typeof stockFilter)}
+              aria-pressed={['all', 'available', 'low', 'out'].includes(item.id) && stockFilter === item.id}
+              onClick={() => ['all', 'available', 'low', 'out'].includes(item.id) && setStockFilter(item.id as typeof stockFilter)}
               className={`rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 stockFilter === item.id ? 'border-primary bg-primary/5' : 'border-border/70 bg-muted/20 hover:bg-muted/50'
               }`}
             >
               <span className="block text-xs font-semibold text-muted-foreground">{item.label}</span>
-              <span className={`mt-1 block text-2xl font-black tabular-nums ${item.tone}`}>{item.value}</span>
+              <span className={`mt-1 block text-2xl font-black tabular-nums ${item.tone}`}>{'isCurrency' in item && item.isCurrency ? formatAmount(item.value) : 'decimals' in item && item.decimals !== undefined ? item.value.toFixed(item.decimals) : item.value}</span>
             </button>
           ))}
         </div>
@@ -1211,14 +1266,22 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             Solicitud
           </Button>}
           {isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button
-              size="sm"
-              className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
-              onClick={() => setCreateModalOpen(true)}
-            >
-              <Plus className="size-4" />
-              Agregar servicio
-            </Button>
+            <>
+              <Button
+                size="sm"
+                className="hidden 2xl:flex bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
+                onClick={handleAddRow}
+              >
+                <Plus className="size-4" /> Agregar servicio
+              </Button>
+              <Button
+                size="sm"
+                className="flex 2xl:hidden bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
+                onClick={() => setCreateModalOpen(true)}
+              >
+                <Plus className="size-4" /> Agregar servicio
+              </Button>
+            </>
           )}
           {selectedIds.size > 0 && (
             <Button
@@ -1235,7 +1298,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       </div>
 
       {/* Mobile cards: the desktop table stays available at md+ without forcing page overflow. */}
-      <div className="space-y-3 md:hidden">
+      <div className="space-y-3 2xl:hidden">
         {paginatedProducts.length === 0 ? (
           <Card className="rounded-2xl border-border/40 p-6 text-center">
             <Package className="mx-auto mb-2 size-9 opacity-20" />
@@ -1248,7 +1311,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           const status = getStockStatus(product);
           const warehousesForProduct = isServiceView
             ? (product.warehouseCatalogs || []).map((catalog: any) => catalog.warehouse?.name).filter(Boolean)
-            : (product.stockLevels || []).filter((level: any) => Number(level.quantity) > 0).map((level: any) => level.warehouse?.name).filter(Boolean);
+            : (product.stockLevels || []).map((level: any) => level.warehouse?.name).filter(Boolean);
+          const salePrice = Number(product.salePrice || 0);
+          const costPrice = Number(product.costPrice || 0);
+          const maxStock = getProductMaxStock(product);
           return (
             <Card key={product.id} className="min-w-0 overflow-hidden rounded-2xl border-border/40 p-4 shadow-sm" onClick={() => setProductDetail(product)}>
               <div className="flex min-w-0 items-start gap-3">
@@ -1262,7 +1328,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase">{isServiceView ? 'Servicio' : 'Producto'}</Badge>
                   </div>
                   <p className="mt-2 truncate text-xs text-muted-foreground">{product.category?.name || 'Sin categoría'}</p>
-                  <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                  <div className="mt-3 grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-3 xl:grid-cols-4">
                     <div>
                       <span className="text-muted-foreground">{isServiceView ? 'Precio' : 'Precio venta'}</span>
                       <p className="font-bold tabular-nums">{formatAmount(product.salePrice || 0, baseCurrency)}</p>
@@ -1271,7 +1337,18 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                       <span className="text-muted-foreground">Existencias</span>
                       <p className={`font-bold tabular-nums ${getStockAlertColor(product)}`}>{product.stock || 0}</p>
                     </div>}
+                    {!isServiceView && <>
+                      <div className="min-w-0"><span className="text-muted-foreground">U. medida</span><p className="truncate font-medium">{product.unit || 'unidad'}</p></div>
+                      <div><span className="text-muted-foreground">Mínimo</span><p className="font-bold tabular-nums">{product.minStock || 0}</p></div>
+                      <div><span className="text-muted-foreground">Máximo</span><p className="font-bold tabular-nums">{maxStock}</p></div>
+                      <div><span className="text-muted-foreground">Precio costo</span><p className="font-medium tabular-nums">{formatAmount(costPrice, baseCurrency)}</p></div>
+                      <div><span className="text-muted-foreground">Beneficio</span><p className={`font-bold tabular-nums ${salePrice - costPrice >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatAmount(salePrice - costPrice, baseCurrency)}</p></div>
+                    </>}
                   </div>
+                  {!isServiceView && <div className="mt-3 flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <span className="font-bold uppercase tracking-wider">IMEI</span>
+                    <Badge variant="secondary" className="text-[9px]">{product.trackSerialNumbers ? 'Activo' : 'Inactivo'}</Badge>
+                  </div>}
                   <div className="mt-3 flex min-w-0 items-center gap-2">
                     <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Almacenes</span>
                     <div className="flex min-w-0 flex-wrap gap-1">
@@ -1287,7 +1364,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 {canPerform('INVENTORY_PRODUCTS', 'edit') && <Button variant="ghost" size="icon" className="size-8" title="Duplicar" onClick={(e) => { e.stopPropagation(); handleDuplicateProduct(product); }} disabled={duplicatingIds.has(product.id)}>
                   {duplicatingIds.has(product.id) ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Copy className="size-3.5" />}
                 </Button>}
-                {canPerform('INVENTORY_PRODUCTS', 'edit') && <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={(e) => { e.stopPropagation(); handleEditRow(product); }}><Pencil className="size-3.5" /></Button>}
+                {canPerform('INVENTORY_PRODUCTS', 'edit') && <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={(e) => { e.stopPropagation(); setModalProduct(product); }}><Pencil className="size-3.5" /></Button>}
                 {canPerform('INVENTORY_PRODUCTS', 'delete') && <Button variant="ghost" size="icon" className="size-8 text-red-600 hover:bg-red-500 hover:text-white" title="Eliminar" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}><Trash2 className="size-3.5" /></Button>}
               </div>
             </Card>
@@ -1296,8 +1373,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       </div>
 
       {/* Desktop table */}
-      <div className="hidden max-w-full overflow-x-auto rounded-lg border md:block">
-        <Table>
+      <div className="hidden max-w-full overflow-x-auto rounded-lg border 2xl:block">
+        <Table className="w-full table-fixed">
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
               <TableHead className="w-10">
@@ -1309,13 +1386,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 </button>
               </TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Código</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest">{isServiceView ? 'Servicio' : 'Producto'}</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-48">{isServiceView ? 'Servicio' : 'Nombre'}</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Categoría</TableHead>
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest w-20">U.Medida</TableHead>}
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-16">Min</TableHead>}
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-16">Max</TableHead>}
-              <TableHead className="font-black text-[10px] uppercase tracking-widest">Almacenes</TableHead>
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>}
+              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">U.Medida</TableHead>}
+              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Min</TableHead>}
+              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Max</TableHead>}
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Almacenes</TableHead>
+              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Stock</TableHead>}
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">{isServiceView ? 'Precio' : 'Precio Venta'}</TableHead>
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Costo</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-32">Beneficio</TableHead>}
@@ -1529,82 +1606,33 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       </div>
 
       {/* Pagination Footer */}
-      <div className="flex flex-col gap-3 mt-4 px-1 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-muted-foreground">
-          {filteredProducts.length === 0
-            ? 'Sin resultados'
-            : <>Mostrando <span className="font-semibold text-foreground">{((page - 1) * pageSize) + 1}-{Math.min(page * pageSize, filteredProducts.length)}</span> de <span className="font-semibold text-foreground">{filteredProducts.length}</span> {isServiceView ? 'servicios' : 'productos'}</>}
-        </p>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
-            <SelectTrigger className="h-8 w-[120px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="50">50 / página</SelectItem>
-              <SelectItem value="100">100 / página</SelectItem>
-              <SelectItem value="200">200 / página</SelectItem>
-            </SelectContent>
-          </Select>
-          <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  onClick={() => setPage(1)}
-                  disabled={page === 1}
-                  aria-label="Primera página"
-                >
-                  <ChevronsLeft className="size-4" />
-                </Button>
-              </PaginationItem>
-              <PaginationItem>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  aria-label="Página anterior"
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-              </PaginationItem>
-              <PaginationItem>
-                <span className="text-xs font-medium px-3 tabular-nums whitespace-nowrap">
-                  Página {page} de {totalPages}
-                </span>
-              </PaginationItem>
-              <PaginationItem>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  aria-label="Página siguiente"
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
-              </PaginationItem>
-              <PaginationItem>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  onClick={() => setPage(totalPages)}
-                  disabled={page === totalPages}
-                  aria-label="Última página"
-                >
-                  <ChevronsRight className="size-4" />
-                </Button>
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <span>Mostrar</span>
+          <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }} className="h-8 rounded-lg border border-border/50 bg-background px-2 font-bold text-foreground outline-none" aria-label="Registros por página">
+            {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
+          </select>
+          <span>por página</span>
+          <span className="ml-2 rounded-lg border border-border/40 px-2 py-1">
+            {filteredProducts.length === 0 ? 0 : `${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, filteredProducts.length)}`} de {filteredProducts.length}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage(1)} disabled={page <= 1} aria-label="Primera página"><ChevronsLeft className="size-4" /></button>
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} aria-label="Página anterior"><ChevronLeft className="size-4" /></button>
+          <span className="min-w-24 text-center font-bold text-foreground">Pág. {page} / {Math.max(1, totalPages)}</span>
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} aria-label="Página siguiente"><ChevronRight className="size-4" /></button>
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage(totalPages)} disabled={page >= totalPages} aria-label="Última página"><ChevronsRight className="size-4" /></button>
         </div>
       </div>
+      <EditProductModal
+        product={modalProduct}
+        categories={categories}
+        warehouses={warehouses}
+        itemType={catalogItemType}
+        onClose={() => setModalProduct(null)}
+        onRefresh={onRefresh}
+      />
       <ConfirmDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => !open && setPendingDeleteId(null)}

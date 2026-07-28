@@ -67,6 +67,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
+  const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
+  const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
+  const getItemCatalog = (item: any) => {
+    const catalog = resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog;
+    if (!item?.productId || catalog.some((product) => product.id === item.productId)) return catalog;
+    const linkedProduct = products.find((product) => product.id === item.productId);
+    return [...catalog, linkedProduct || { id: item.productId, code: '', name: item.description || 'Artículo vinculado', itemType: item.itemType || 'PRODUCT' }];
+  };
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
   const [isCreating, setIsCreating] = useState(false);
@@ -741,13 +750,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             <CardContent className="min-w-0 p-4 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
-              <div className="flex gap-2">
-                 <Button type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: '', serialNumbers: [] }];
+              <div className="flex flex-wrap gap-2">
+                {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => {
+                  const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: '', serialNumbers: [] }];
                   setLocalDoc({ ...localDoc, items: newItems });
-                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                  <Plus className="size-3 mr-2" /> Agregar Item
-                </Button>
+                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
               </div>
             </div>
             <div className="space-y-2">
@@ -762,11 +769,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 <div key={item.id || idx} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
                     <Combobox
-                      options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))}
+                      options={getItemCatalog(item).map(p => ({ label: `${String(p.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code || ''} - ${p.name}`, value: p.id }))}
                       value={item.productId || ''}
                       onChange={(val) => {
                         const newItems = [...(localDoc.items || [])];
-                        const selectedProd = products.find(p => p.id === val);
+                        const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
                         newItems[idx] = { ...newItems[idx], productId: val, warehouseId: '', serialNumbers: [] };
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
@@ -780,7 +787,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           handleUpdate(localDoc!.id, { items: newItems, ...calc });
                         }
                       }}
-                       placeholder="Seleccionar Producto..."
+                       placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                        disabled={isInvoiceLocked}
                     />
                     {item.productId && (
@@ -863,7 +870,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           <input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
                             const nextItems = [...(localDoc.items || [])];
                             nextItems[idx] = { ...nextItems[idx], taxRate: event.target.checked ? 15 : 0 };
-                            setLocalDoc({ ...localDoc, ...recalcTotals(nextItems, 0, 0) });
+                            const recalculated = recalcTotals(nextItems, 0, 0);
+                            setLocalDoc({ ...localDoc, ...recalculated });
+                            if (!isCreating) void handleUpdate(localDoc!.id, recalculated as any);
                        }} disabled={isInvoiceLocked} />
                           <span className="text-xs">Aplicar</span>
                         </span>
@@ -873,7 +882,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         <Input type="number" min="0" max="100" value={item.discount || ''} onChange={(event) => {
                           const nextItems = [...(localDoc.items || [])];
                           nextItems[idx] = { ...nextItems[idx], discount: Number(event.target.value) || 0 };
-                          setLocalDoc({ ...localDoc, ...recalcTotals(nextItems, 0, 0) });
+                          const recalculated = recalcTotals(nextItems, 0, 0);
+                          setLocalDoc({ ...localDoc, ...recalculated });
+                          if (!isCreating) void handleUpdate(localDoc!.id, recalculated as any);
                          }} className="h-8 w-full rounded-md bg-muted/30 text-right text-xs" disabled={isInvoiceLocked} />
                       </label>
                     </div>

@@ -145,10 +145,13 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     },
   ];
 
-  const mainMethod = data.length > 0
+  const rawMainMethod = data.length > 0
     ? Object.entries(data.reduce((acc, p) => { const m = (p.method || 'TRANSFER').toUpperCase(); acc[m] = (acc[m] || 0) + 1; return acc; }, {} as Record<string, number>))
       .sort(([, a], [, b]) => b - a)[0]?.[0] || 'N/A'
     : 'N/A';
+  
+  const mainMethodMap: Record<string, string> = { TRANSFER: 'Transferencia', CASH: 'Efectivo', CARD: 'Tarjeta', CHECK: 'Cheque', 'N/A': 'N/A' };
+  const mainMethod = mainMethodMap[rawMainMethod] || rawMainMethod;
 
   const totalCollectedInDisplayCurrency = data.reduce(
     (acc, payment) => acc + convertAmount(payment.amount || 0, payment.currency, payment.exchangeRate),
