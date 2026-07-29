@@ -16,7 +16,7 @@ import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { toast } from 'sonner'
 import { contabilidadService } from '../../services/contabilidad.service'
-import { downloadCsv, templateRows } from '../../utils/chartOfAccountsCsv'
+import { CHART_ACCOUNT_CSV_HEADERS, csvRowsToText, downloadCsv, templateRows } from '../../utils/chartOfAccountsCsv'
 
 const INDUSTRIES = [
   { value: 'RETAIL', label: 'Comercio Minorista' },
@@ -786,19 +786,11 @@ export function ConfiguracionContableView() {
         </CardHeader>
         <CardContent className="px-5 pb-4 space-y-4">
           <p className="text-xs text-muted-foreground">
-            Formato CSV esperado para importar cuentas (UTF-8):
+            Formato CSV esperado para importar cuentas (UTF-8). Columnas: {CHART_ACCOUNT_CSV_HEADERS.join(', ')}.
+            Los campos <code>permite_manual</code> y <code>activa</code> usan 1/0.
           </p>
           <div className="bg-muted/20 rounded-xl p-3 font-mono text-[10px] overflow-x-auto">
-            <pre className="text-muted-foreground">
-code,name,type,currency,parentCode{'\n'}
-"1000","Caja General","ASSET","NIO",{'\n'}
-"1100","Clientes","ASSET","NIO",{'\n'}
-"1101","Cliente Corp.","ASSET","NIO","1100"{'\n'}
-"2000","Proveedores","LIABILITY","NIO",{'\n'}
-"3000","Capital Social","EQUITY","NIO",{'\n'}
-"4000","Ventas","INCOME","NIO",{'\n'}
-"5000","Costo Ventas","EXPENSE","NIO",{'\n'}
-            </pre>
+            <pre className="text-muted-foreground whitespace-pre">{csvRowsToText(templateRows())}</pre>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" onClick={handleExportAccounts}>

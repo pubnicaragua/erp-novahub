@@ -12,9 +12,24 @@ export const CHART_ACCOUNT_CSV_TEMPLATE: ChartAccountCsvRow[] = [
     moneda: 'NIO', codigo_padre: '', permite_manual: '0', activa: '1', notas: '',
   },
   {
+    codigo: '1100', nombre: 'Activo corrientes', tipo_cuenta: 'Activos',
+    subtipo: 'Grupo', tipo_detalle: 'Balance General',
+    moneda: 'NIO', codigo_padre: '100', permite_manual: '0', activa: '1', notas: '',
+  },
+  {
+    codigo: '1101', nombre: 'Efectivo en banco', tipo_cuenta: 'Activos',
+    subtipo: 'Cuenta de detalle', tipo_detalle: 'Balance General',
+    moneda: 'NIO', codigo_padre: '1100', permite_manual: '1', activa: '1', notas: '',
+  },
+  {
     codigo: '1101-001', nombre: 'CTA. XXX', tipo_cuenta: 'Activos',
     subtipo: 'Subcuenta', tipo_detalle: 'Balance General',
     moneda: 'NIO', codigo_padre: '1101', permite_manual: '1', activa: '1', notas: '',
+  },
+  {
+    codigo: '200', nombre: 'Pasivo', tipo_cuenta: 'Pasivos',
+    subtipo: 'Grupo principal', tipo_detalle: 'Balance General',
+    moneda: 'NIO', codigo_padre: '', permite_manual: '0', activa: '1', notas: '',
   },
 ];
 
