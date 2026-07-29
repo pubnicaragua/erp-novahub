@@ -424,6 +424,15 @@ export function PlanCuentasView() {
           <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0 font-medium', TYPE_COLOR_MAP[account.type])}>
             {getTypeLabel(account.type)}
           </Badge>
+          <span className="text-[10px] text-muted-foreground min-w-[110px] truncate" title={getSubtypeLabel(account.subtype)}>
+            {getSubtypeLabel(account.subtype)}
+          </span>
+          <span className="text-[10px] text-muted-foreground min-w-[110px] truncate" title={getDetailTypeLabel(account.detailType)}>
+            {getDetailTypeLabel(account.detailType)}
+          </span>
+          <Badge variant={account.allowManualEntry ? 'outline' : 'secondary'} className="text-[10px] min-w-[70px] justify-center">
+            {account.allowManualEntry ? 'Manual' : 'No manual'}
+          </Badge>
           <span className="text-sm font-medium tabular-nums min-w-[100px] text-right">
             {formatConvertedAmount(account.balance, account.currency)}
           </span>
@@ -553,6 +562,9 @@ export function PlanCuentasView() {
                     <span className="min-w-[90px]">Código</span>
                     <span className="flex-1">Nombre</span>
                     <span className="min-w-[80px]">Tipo</span>
+                    <span className="min-w-[110px]">Subtipo</span>
+                    <span className="min-w-[110px]">Tipo detalle</span>
+                    <span className="min-w-[70px] text-center">Manual</span>
                     <span className="min-w-[100px] text-right">Saldo</span>
                     <span className="min-w-[40px] text-center">Mon</span>
                     <span className="min-w-[50px] text-center">Estado</span>
