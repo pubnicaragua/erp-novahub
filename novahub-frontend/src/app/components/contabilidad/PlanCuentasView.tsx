@@ -38,6 +38,7 @@ interface AccountNode {
   subtype: AccountSubtype;
   detailType: AccountDetailType;
   allowManualEntry: boolean;
+  acceptsPostings?: boolean;
   notes?: string | null;
   children: AccountNode[];
   level: number;
