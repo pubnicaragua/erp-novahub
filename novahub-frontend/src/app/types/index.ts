@@ -78,6 +78,8 @@ export interface Customer {
   code: string;
   name: string;
   type: 'individual' | 'company';
+  fiscalRegime?: string;
+  customerClass?: string;
   taxId?: string;
   ruc?: string;
   dv?: string;
@@ -86,6 +88,7 @@ export interface Customer {
   phone?: string;
   address?: string;
   city?: string;
+  department?: string;
   country?: string;
   contactName?: string;
   contactEmail?: string;
@@ -94,6 +97,8 @@ export interface Customer {
   balance: number;
   status: EntityStatus;
   notes?: string;
+  priceListId?: string;
+  priceList?: { id: string; code: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
 }

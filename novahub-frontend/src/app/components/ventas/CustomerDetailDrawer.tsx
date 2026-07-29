@@ -53,7 +53,7 @@ import {
   TableHeader,
   TableRow,
 } from '../ui/table';
-import { customersService, invoicesService } from '../../services/ventas.service';
+import { auditService, customersService, invoicesService } from '../../services/ventas.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import type { Customer, Invoice } from '../../types';
 
@@ -99,6 +99,7 @@ export function CustomerDetailDrawer({
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [detail, setDetail] = useState<Customer | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +108,7 @@ export function CustomerDetailDrawer({
     if (!customerId) {
       setDetail(null);
       setInvoices([]);
+      setHistory([]);
       setError(null);
       return;
     }
@@ -145,6 +147,16 @@ export function CustomerDetailDrawer({
         if (!cancelled) setInvoices([]);
       } finally {
         if (!cancelled) setLoadingInvoices(false);
+      }
+    })();
+
+    (async () => {
+      try {
+        const response: any = await auditService.getEntityHistory('CUSTOMER', customerId);
+        const list = response?.data?.data || response?.data || response;
+        if (!cancelled) setHistory(Array.isArray(list) ? list : []);
+      } catch {
+        if (!cancelled) setHistory([]);
       }
     })();
 
@@ -259,13 +271,15 @@ export function CustomerDetailDrawer({
 
                 <Card className="p-5 bg-card border-border/60 rounded-2xl space-y-4 shadow-sm">
                   <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
-                    <User className="size-4 text-primary" /> Información de Contacto
+                    <MapPin className="size-4 text-primary" /> Contacto y Ubicación
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    <InfoField label="Contacto Principal" value={customer?.contactName || 'Sin contacto asignado'} icon={User} muted={!customer?.contactName} />
-                    <InfoField label="Correo Electrónico" value={customer?.email || customer?.contactEmail || 'Sin correo'} icon={Mail} muted={!customer?.email && !customer?.contactEmail} />
-                    <InfoField label="Teléfono" value={customer?.phone || customer?.contactPhone || 'Sin teléfono'} icon={Phone} mono muted={!customer?.phone && !customer?.contactPhone} />
-                    <InfoField label="Ubicación / Dirección" value={[customer?.address, customer?.city, customer?.country].filter(Boolean).join(', ') || 'Sin dirección'} icon={MapPin} muted={!customer?.address && !customer?.city && !customer?.country} />
+                    <InfoField label="Correo Electrónico" value={customer?.email || 'Sin correo'} icon={Mail} muted={!customer?.email} />
+                    <InfoField label="Teléfono" value={customer?.phone || 'Sin teléfono'} icon={Phone} mono muted={!customer?.phone} />
+                    <InfoField label="Dirección" value={customer?.address || 'Sin dirección'} icon={MapPin} muted={!customer?.address} />
+                    <InfoField label="Ciudad" value={customer?.city || 'Sin ciudad'} icon={MapPin} muted={!customer?.city} />
+                    <InfoField label="Departamento" value={customer?.department || 'Sin departamento'} icon={MapPin} muted={!customer?.department} />
+                    <InfoField label="País" value={customer?.country || 'Sin país'} icon={MapPin} muted={!customer?.country} />
                   </div>
                 </Card>
 
@@ -275,9 +289,9 @@ export function CustomerDetailDrawer({
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                     <InfoField label="RUC" value={customer?.ruc || '—'} icon={Hash} mono muted={!customer?.ruc} />
-                    <InfoField label="DV" value={customer?.dv || '—'} icon={Hash} mono muted={!customer?.dv} />
-                    <InfoField label="Razón Social" value={customer?.razonSocial || '—'} icon={Building2} muted={!customer?.razonSocial} />
                     <InfoField label="Identificación Fiscal" value={customer?.taxId || 'No registrado'} icon={Hash} mono muted={!customer?.taxId} />
+                    <InfoField label="Régimen Fiscal" value={customer?.fiscalRegime || 'No registrado'} icon={ShieldAlert} muted={!customer?.fiscalRegime} />
+                    <InfoField label="Lista de Precios" value={customer?.priceList?.name || 'Sin lista asignada'} icon={Tag} muted={!customer?.priceList} />
                     <InfoField label="Límite de Crédito Concedido" value={formatConvertedAmount(creditLimit, 'NIO')} icon={DollarSign} mono />
                     <InfoField label="Saldo Deudor Actual" value={formatConvertedAmount(balance, 'NIO')} icon={TrendingUp} mono />
                     <InfoField label="Código Interno" value={customer?.code || '—'} icon={Tag} mono />
@@ -406,6 +420,12 @@ export function CustomerDetailDrawer({
                     <Activity className="size-4 text-primary" /> Línea de Tiempo de Registro
                   </h3>
                   <div className="space-y-4 pl-2 border-l-2 border-border/40 ml-2 pt-1">
+                    {history.length > 0 ? history.slice(0, 30).map((event: any) => {
+                      let details: any = {};
+                      try { details = event.details ? JSON.parse(event.details) : {}; } catch { details = {}; }
+                      const changes = details.commercial_changes ? Object.entries(details.commercial_changes).map(([field, values]: any) => `${field}: ${values.before ?? '—'} → ${values.after ?? '—'}`).join(' · ') : '';
+                      return <div key={event.id} className="relative pl-4 space-y-1"><div className={`absolute -left-[21px] top-1 size-3 rounded-full border-2 border-background ${event.action === 'CREATE' ? 'bg-primary' : 'bg-blue-500'}`} /><p className="text-xs font-bold text-foreground">{event.action === 'CREATE' ? 'Cliente registrado' : 'Datos comerciales actualizados'}</p><p className="text-[11px] text-muted-foreground">{changes || details.fields_updated || 'Actualización registrada'}</p><p className="text-[11px] text-muted-foreground flex items-center gap-1 font-mono"><Clock className="size-3" />{event.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : '—'}</p></div>;
+                    }) : <>
                     {customer?.createdAt && (
                       <div className="relative pl-4 space-y-1">
                         <div className="absolute -left-[21px] top-1 size-3 rounded-full bg-primary border-2 border-background" />
@@ -426,6 +446,7 @@ export function CustomerDetailDrawer({
                         </p>
                       </div>
                     )}
+                    </>}
                   </div>
                 </Card>
               </TabsContent>

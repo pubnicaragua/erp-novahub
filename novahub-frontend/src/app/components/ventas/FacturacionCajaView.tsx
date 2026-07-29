@@ -26,6 +26,7 @@ import {
   type PosInvoiceItem,
   type PosPaymentLine,
   type CashRegisterSession,
+  type CashRegisterAvailability,
   type PotentialDuplicateSale,
 } from '../../services/caja.service';
 import { accountsService } from '../../services/finanzas.service';
@@ -233,6 +234,7 @@ interface FacturacionCajaViewProps {
 export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCajaViewProps) {
   const { formatConvertedAmount: formatCurrency } = useCurrency();
   const [registers, setRegisters] = useState<CashRegister[]>([]);
+  const [registerAvailability, setRegisterAvailability] = useState<CashRegisterAvailability | null>(null);
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [customers, setCustomers] = useState<PosCustomer[]>([]);
   const [recentInvoices, setRecentInvoices] = useState<PosInvoice[]>([]);
@@ -306,6 +308,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     try {
       const cashRegisters = await cajaService.getRegisters();
       setRegisters(cashRegisters);
+
+      if (cashRegisters.length === 0) {
+        try {
+          setRegisterAvailability(await cajaService.getRegisterAvailability());
+        } catch {
+          // Si el endpoint de diagnóstico no responde, se conserva el mensaje
+          // de acceso como fallback y no se bloquea el resto de la vista.
+          setRegisterAvailability(null);
+        }
+      } else {
+        setRegisterAvailability(null);
+      }
 
       let initialRegisterId = '';
       if (cashRegisters.length > 0) {
@@ -640,6 +654,43 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const isRegisterDisabled = selectedRegister ? !selectedRegister.hasActiveSession : false;
 
   if (registers.length === 0) {
+    const availabilityMessage = (() => {
+      if (!registerAvailability) {
+        return {
+          title: 'No se puede verificar el acceso a POS',
+          description: 'No fue posible confirmar si existen cajas o sucursales configuradas. Intenta actualizar la vista o contacta al administrador.',
+        };
+      }
+      if (registerAvailability.totalRegisters === 0 && registerAvailability.totalBranches === 0) {
+        return {
+          title: 'No hay sucursales ni cajas configuradas',
+          description: 'Primero registra una sucursal y crea al menos una caja activa desde la configuración del equipo para comenzar a facturar.',
+        };
+      }
+      if (registerAvailability.totalRegisters === 0) {
+        return {
+          title: 'No hay cajas configuradas',
+          description: 'Ya existen sucursales, pero todavía no hay cajas registradoras. Crea una caja activa desde la configuración del equipo para comenzar a facturar.',
+        };
+      }
+      if (registerAvailability.activeBranches === 0) {
+        return {
+          title: 'No hay sucursales activas',
+          description: 'Hay cajas registradas, pero no existe una sucursal activa a la que puedan asociarse. Activa o configura una sucursal desde la configuración del equipo.',
+        };
+      }
+      if (registerAvailability.activeRegisters === 0) {
+        return {
+          title: 'No hay cajas activas',
+          description: 'Las cajas registradas están inactivas. Activa al menos una caja desde la configuración del equipo para comenzar a facturar.',
+        };
+      }
+      return {
+        title: 'Acceso restringido a POS',
+        description: 'Hay cajas activas en el sistema, pero tu usuario no tiene acceso a ninguna. Contacta al administrador para que te asigne una caja desde la configuración del equipo.',
+      };
+    })();
+
     if (loading) {
       return (
         <BoneyardSkeleton
@@ -659,10 +710,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
           <div className="size-20 rounded-full bg-rose-500/10 flex items-center justify-center mb-6">
             <CreditCard className="size-10 text-rose-500" />
           </div>
-          <h2 className="text-2xl font-black tracking-tight text-foreground mb-2 uppercase">Acceso Restringido a POS</h2>
+          <h2 className="text-2xl font-black tracking-tight text-foreground mb-2 uppercase">{availabilityMessage.title}</h2>
           <p className="text-muted-foreground max-w-md mb-6">
-            No tienes cajas autorizadas asignadas a tu usuario o no hay cajas activas en el sistema.
-            Contacta al administrador para que te asigne acceso a una sucursal/caja desde la configuración del equipo.
+            {availabilityMessage.description}
           </p>
         </div>
       </>

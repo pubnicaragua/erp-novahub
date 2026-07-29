@@ -3,6 +3,14 @@ import { resolveStorageReferences } from './storage.service';
 
 export type CashClosureMode = 'NORMAL' | 'BLIND';
 
+export interface CashRegisterAvailability {
+  totalRegisters: number;
+  activeRegisters: number;
+  totalBranches: number;
+  activeBranches: number;
+  accessibleRegisters: number;
+}
+
 export interface CashRegister {
   id: string;
   name: string;
@@ -208,6 +216,9 @@ export interface DashboardData {
 export const cajaService = {
   getRegisters: (all: boolean = false) =>
     api.get<CashRegister[]>('/caja/registers', { params: all ? { all: 'true' } : undefined }),
+
+  getRegisterAvailability: () =>
+    api.get<CashRegisterAvailability>('/caja/registers/status'),
 
   createRegister: (data: { name: string; code: string; location?: string; branchId?: string }) =>
     api.post<CashRegister>('/caja/registers', data),

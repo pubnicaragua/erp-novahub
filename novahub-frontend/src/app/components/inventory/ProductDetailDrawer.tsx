@@ -8,7 +8,6 @@ import {
   Warehouse,
   History,
   Hash,
-  TrendingUp,
   TrendingDown,
   AlertCircle,
   Info,
@@ -48,6 +47,7 @@ import { Skeleton } from '../ui/skeleton';
 import { Progress } from '../ui/progress';
 import { ScrollArea } from '../ui/scroll-area';
 import { Separator } from '../ui/separator';
+import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
 import {
   Table,
   TableBody,
@@ -193,6 +193,7 @@ export function ProductDetailDrawer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [kardexMovements, setKardexMovements] = useState<any[] | null>(null);
+  const [expandedImageOpen, setExpandedImageOpen] = useState(false);
 
   // ------------------------------------------------------------------
   // Fetch del detalle completo cuando se abre el drawer
@@ -228,7 +229,9 @@ export function ProductDetailDrawer({
         }
       } catch (e: any) {
         if (!cancelled) {
-          setError(e?.message || 'No se pudo cargar el producto');
+          // El snapshot de la tabla sigue siendo suficiente para mostrar el detalle
+          // cuando falla la consulta complementaria. No tapar la vista con un error.
+          if (!productSnapshot) setError(e?.message || 'No se pudo cargar el producto');
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -256,7 +259,6 @@ export function ProductDetailDrawer({
   const itemType = String(product?.itemType || 'PRODUCT').toUpperCase();
   const isService = itemType === 'SERVICE';
 
-  const salePrice = Number(product?.salePrice ?? product?.price ?? 0);
   const costPrice = Number(product?.costPrice ?? product?.cost ?? 0);
   // El endpoint de detalle incluye stockLevels. Derivarlo aquí también evita
   // mostrar cero si se consume una versión anterior del backend sin `stock`.
@@ -268,7 +270,6 @@ export function ProductDetailDrawer({
     : null;
   const totalStock = stockFromLevels ?? Number(product?.stock ?? 0);
   const stockValue = totalStock * costPrice;
-  const margin = salePrice > 0 ? ((salePrice - costPrice) / salePrice) * 100 : 0;
 
   const statusInfo = getStatusBadge(product?.status);
 
@@ -383,12 +384,29 @@ export function ProductDetailDrawer({
           {/* ===== Header sticky ===== */}
           <SheetHeader className="sticky top-0 z-10 bg-background border-b px-6 py-4 space-y-2">
             <div className="flex items-start gap-3 pr-8">
-              <ProductThumbnail
-                src={product?.imageUrl}
-                alt={product?.name || 'Producto'}
-                size="lg"
-                className="ring-1 ring-primary/10"
-              />
+              {product?.imageUrl ? (
+                <button
+                  type="button"
+                  className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  onClick={() => setExpandedImageOpen(true)}
+                  aria-label={`Ver imagen de ${product?.name || 'producto'}`}
+                  title="Ver imagen"
+                >
+                  <ProductThumbnail
+                    src={product.imageUrl}
+                    alt={product?.name || 'Producto'}
+                    size="lg"
+                    className="ring-1 ring-primary/10"
+                  />
+                </button>
+              ) : (
+                <ProductThumbnail
+                  src={undefined}
+                  alt={product?.name || 'Producto'}
+                  size="lg"
+                  className="ring-1 ring-primary/10"
+                />
+              )}
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <SheetTitle className="text-base font-bold truncate">
@@ -465,7 +483,7 @@ export function ProductDetailDrawer({
         {/* ===== Contenido con scroll ===== */}
         <ScrollArea className="flex-1">
           <div className="px-6 py-4">
-            {error && (
+            {error && !product && (
               <Card className="p-4 border-rose-500/30 bg-rose-500/5 flex items-start gap-3">
                 <AlertCircle className="size-4 text-rose-500 shrink-0 mt-0.5" />
                 <div className="text-xs">
@@ -518,24 +536,10 @@ export function ProductDetailDrawer({
                       loading={loading && !productSnapshot}
                     />
                     <MetricCard
-                      label="Precio venta"
-                      value={formatAmount(salePrice, currency)}
-                      icon={TrendingUp}
-                      accent="text-emerald-500"
-                      loading={loading && !productSnapshot}
-                    />
-                    <MetricCard
                       label="Precio costo"
                       value={formatAmount(costPrice, currency)}
                       icon={TrendingDown}
                       accent="text-rose-500"
-                      loading={loading && !productSnapshot}
-                    />
-                    <MetricCard
-                      label="Margen"
-                      value={`${margin.toFixed(1)}%`}
-                      icon={TrendingUp}
-                      accent={margin >= 0 ? 'text-emerald-500' : 'text-rose-500'}
                       loading={loading && !productSnapshot}
                     />
                     <MetricCard
@@ -875,6 +879,18 @@ export function ProductDetailDrawer({
           </Button>
         </div>
         </Tabs>
+        <Dialog open={expandedImageOpen} onOpenChange={setExpandedImageOpen}>
+          <DialogContent className="w-[calc(100vw-2rem)] max-w-4xl border-0 bg-transparent p-2 shadow-none">
+            <DialogTitle className="sr-only">Imagen del producto</DialogTitle>
+            {product?.imageUrl && (
+              <img
+                src={product.imageUrl}
+                alt={product.name || 'Producto'}
+                className="max-h-[85vh] w-full rounded-2xl object-contain shadow-2xl"
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </SheetContent>
     </Sheet>
   );

@@ -45,6 +45,10 @@ interface EditableDataTableProps<T> {
   showClearSelection?: boolean;
   onAddRow?: () => void;
   pagination?: SalesPaginationControls;
+  actionsWidth?: string;
+  fitContent?: boolean;
+  layoutMode?: 'table' | 'cards' | 'responsive';
+  showHorizontalControls?: boolean;
 }
 
 export function EditableDataTable<T extends { [key: string]: any }>({
@@ -62,6 +66,10 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   showClearSelection = true,
   onAddRow,
   pagination,
+  actionsWidth = 'w-60',
+  fitContent = false,
+  layoutMode = 'responsive',
+  showHorizontalControls = false,
 }: EditableDataTableProps<T>) {
   const [data, setData] = useState<T[]>(initialData);
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
@@ -75,10 +83,73 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [bulkDuplicateLoading, setBulkDuplicateLoading] = useState(false);
   const [mobileActionsRow, setMobileActionsRow] = useState<T | null>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const pointerInsideTable = useRef(false);
+  const [horizontalScroll, setHorizontalScroll] = useState({ left: false, right: false });
+  const actionColumnWidth = (() => {
+    const match = /^w-(\d+)$/.exec(actionsWidth);
+    return match ? Number(match[1]) * 4 : 128;
+  })();
+  const tableMinWidth = fitContent
+    ? columns.reduce((total, column) => total + (Number.parseInt(String(column.width || ''), 10) || 140), 0) + (showSelection ? 48 : 0) + actionColumnWidth
+    : undefined;
 
   useEffect(() => {
     setData(initialData);
   }, [initialData]);
+
+  useEffect(() => {
+    if (!showHorizontalControls || layoutMode === 'cards') return;
+    const element = tableScrollRef.current;
+    if (!element) return;
+    const updateScrollState = () => setHorizontalScroll({
+      left: element.scrollLeft > 4,
+      right: element.scrollLeft + element.clientWidth < element.scrollWidth - 4,
+    });
+    updateScrollState();
+    element.addEventListener('scroll', updateScrollState, { passive: true });
+    const observer = new ResizeObserver(updateScrollState);
+    observer.observe(element);
+    window.addEventListener('resize', updateScrollState);
+    return () => {
+      element.removeEventListener('scroll', updateScrollState);
+      observer.disconnect();
+      window.removeEventListener('resize', updateScrollState);
+    };
+  }, [columns.length, data.length, layoutMode, showHorizontalControls, tableMinWidth]);
+
+  const scrollTable = (direction: 'left' | 'right') => {
+    const element = tableScrollRef.current;
+    if (!element) return;
+    const amount = direction === 'right' ? 460 : -460;
+    const nextPosition = Math.max(0, Math.min(element.scrollWidth - element.clientWidth, element.scrollLeft + amount));
+    element.scrollLeft = nextPosition;
+  };
+
+  useEffect(() => {
+    if (!showHorizontalControls || layoutMode === 'cards') return;
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      const element = tableScrollRef.current;
+      const target = event.target as HTMLElement | null;
+      const tableHasFocus = Boolean(element && document.activeElement && element.contains(document.activeElement));
+      if (!element || (!pointerInsideTable.current && !tableHasFocus)) return;
+      if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return;
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      scrollTable(event.key === 'ArrowRight' ? 'right' : 'left');
+    };
+    window.addEventListener('keydown', handleWindowKeyDown);
+    return () => window.removeEventListener('keydown', handleWindowKeyDown);
+  }, [layoutMode, showHorizontalControls]);
+
+  const handleTableKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      scrollTable(event.key === 'ArrowRight' ? 'right' : 'left');
+    }
+  };
 
   useEffect(() => {
     if (editingCell && inputRef.current) {
@@ -283,8 +354,39 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         )}
       </AnimatePresence>
 
-      <div className="hidden xl:block w-full max-w-full overflow-hidden rounded-2xl border border-border/50 bg-card/30 backdrop-blur-sm">
-        <Table className="w-full table-fixed">
+      <div
+        className={cn(layoutMode === 'cards' ? 'hidden' : 'block', 'w-full max-w-full rounded-2xl border border-border/50 bg-card/30 backdrop-blur-sm')}
+        onMouseEnter={() => { pointerInsideTable.current = true; }}
+        onMouseLeave={() => { pointerInsideTable.current = false; }}
+      >
+        {showHorizontalControls && layoutMode !== 'cards' && (
+          <div className="flex items-center justify-between gap-3 border-b border-border/40 bg-muted/10 px-3 py-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Desplazamiento horizontal</span>
+            <div className="flex items-center gap-1">
+              <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg" onClick={() => scrollTable('left')} disabled={!horizontalScroll.left} aria-label="Desplazar tabla a la izquierda"><ChevronLeft className="size-4" /></Button>
+              <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg" onClick={() => scrollTable('right')} disabled={!horizontalScroll.right} aria-label="Desplazar tabla a la derecha"><ChevronRight className="size-4" /></Button>
+            </div>
+          </div>
+        )}
+        <div
+          ref={tableScrollRef}
+          tabIndex={0}
+          onKeyDownCapture={handleTableKeyDown}
+          onMouseDown={() => tableScrollRef.current?.focus({ preventScroll: true })}
+          aria-label="Tabla desplazable. Usa las flechas izquierda y derecha del teclado para moverte."
+          className="w-full max-w-full overflow-x-auto overflow-y-hidden outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+        <Table
+          containerClassName={fitContent ? 'w-max min-w-full overflow-visible' : undefined}
+          containerStyle={tableMinWidth ? { width: `${tableMinWidth}px`, maxWidth: 'none' } : undefined}
+          style={tableMinWidth ? { width: `${tableMinWidth}px`, minWidth: `${tableMinWidth}px`, maxWidth: `${tableMinWidth}px` } : undefined}
+          className={cn(fitContent ? 'w-max min-w-full' : 'w-full min-w-max', 'table-fixed')}
+        >
+          <colgroup>
+            {showSelection && <col style={{ width: '48px' }} />}
+            {columns.map((column) => <col key={column.key as string} style={{ width: column.width || '140px' }} />)}
+            <col style={{ width: `${actionColumnWidth}px` }} />
+          </colgroup>
           <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent border-none">
               {showSelection && (
@@ -299,12 +401,12 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                 <TableHead 
                   key={col.key as string} 
                   style={{ width: col.width }}
-                  className="h-12 whitespace-nowrap text-[10px] font-black uppercase tracking-widest text-muted-foreground/60"
+                  className="h-12 whitespace-nowrap align-middle text-[10px] font-black uppercase tracking-widest text-muted-foreground/60"
                 >
                   {col.header}
                 </TableHead>
               ))}
-              <TableHead data-actions-column="true" className="h-12 w-60 whitespace-nowrap pr-6 text-right text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+              <TableHead data-actions-column="true" className={cn('sticky right-0 z-30 h-12 whitespace-nowrap bg-card/60 backdrop-blur-md pr-3 text-right text-[10px] font-black uppercase tracking-widest text-muted-foreground/60', actionsWidth)}>
                 Acciones
               </TableHead>
             </TableRow>
@@ -395,7 +497,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       </TableCell>
                     );
                   })}
-                  <TableCell data-actions-column="true" className="relative z-20 h-14 w-60 overflow-visible whitespace-nowrap pr-6 text-right pointer-events-auto">
+                  <TableCell data-actions-column="true" className={cn('sticky right-0 z-20 h-14 overflow-visible whitespace-nowrap bg-card/60 backdrop-blur-md group-hover:bg-muted/20 transition-colors pr-2 text-right pointer-events-auto', isSelected && 'bg-primary/5 group-hover:bg-primary/10', actionsWidth)}>
                     <div className="relative z-30 flex min-w-max flex-nowrap items-center justify-end gap-1 overflow-visible whitespace-nowrap transition-all pointer-events-auto">
                       {actions ? actions(row) : (
                         onRowDelete && (
@@ -427,9 +529,10 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             {/* Loading skeleton placeholder could go here */}
           </TableBody>
         </Table>
+        </div>
       </div>
 
-      <div className="space-y-3 xl:hidden">
+      <div className={cn(layoutMode === 'table' ? 'hidden' : 'space-y-3', layoutMode === 'responsive' && 'xl:hidden')}>
         {data.map((row) => {
           const rowId = row[idField];
           const isSelected = selectedIds.has(rowId);

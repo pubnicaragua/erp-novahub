@@ -144,7 +144,11 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const refreshing = activeQueries.some((query) => query.isFetching) && !loading;
   const firstError = activeQueries.find((query) => query.error)?.error;
   const loadError = firstError ? (firstError as Error).message : '';
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (scope: 'all' | 'products' = 'all') => {
+    if (scope === 'products') {
+      await queryClient.invalidateQueries({ queryKey: ['inventory', 'products', tenantKey] });
+      return;
+    }
     await queryClient.invalidateQueries({ queryKey: ['inventory'] });
   }, [queryClient, tenantKey]);
 
@@ -347,7 +351,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     warehouses={data.warehouses}
                     series={data.series}
                     movements={data.movements}
-                    onRefresh={() => fetchData()}
+                    onRefresh={() => fetchData('products')}
                   />
                 </motion.div>
               </TabsContent>
@@ -364,6 +368,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     series={data.series}
                     movements={data.movements}
                     onRefresh={() => fetchData()}
+                    isSidebarCollapsed={isSidebarCollapsed}
                   />
                 </motion.div>
               </TabsContent>

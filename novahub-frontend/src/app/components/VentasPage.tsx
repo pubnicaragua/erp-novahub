@@ -349,7 +349,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
               transition={{ duration: 0.2 }}
             >
               {activeSection === 'clientes' && (
-                <ClientesView data={data.clientes} loading={loading} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} />
+                <ClientesView data={data.clientes} loading={loading} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} isSidebarCollapsed={isSidebarCollapsed} />
               )}
               {activeSection === 'estimaciones' && (
                 <EstimacionesView data={data.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={data.clientes} products={data.productos} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} />
@@ -388,7 +388,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 <NotasCreditoView data={data.notasCredito} loading={loading} onRefresh={fetchData} customers={data.clientes} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} />
               )}
               {activeSection === 'listas-precios' && (
-                <PriceListsView products={data.productos} onRefresh={fetchData} />
+                <PriceListsView products={data.productos} onRefresh={fetchData} isSidebarCollapsed={isSidebarCollapsed} />
               )}
               {activeSection === 'facturacion-caja' && (
                 <FacturacionCajaView 

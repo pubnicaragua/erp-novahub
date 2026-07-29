@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { Search, Plus, Trash2, X, Check, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig } from 'lucide-react';
+import { Search, Plus, Trash2, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { Card } from '../ui/card';
@@ -21,7 +21,23 @@ import { ProductImagePicker, ProductThumbnail } from '../ui/ProductImage';
 import { storageService } from '../../services/storage.service';
 import { AddProductsModal } from './AddProductsModal';
 import { EditProductModal } from './EditProductModal';
+import { contabilidadService } from '../../services/contabilidad.service';
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
+const WAREHOUSE_TYPES = [
+  { value: 'MAIN', label: 'Principal' },
+  { value: 'STORE', label: 'Tienda' },
+  { value: 'DISTRIBUTION_CENTER', label: 'Centro de distribución' },
+  { value: 'VIRTUAL', label: 'Virtual' },
+];
+
+const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
+  { target: '[data-tour="inventory-products-title"]', title: 'Vista de Productos', description: 'Aquí administras el catálogo, el costo, el stock y la distribución por almacén. Los precios de venta se gestionan desde Listas de precios.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-filters"]', title: 'Buscar y filtrar', description: 'Busca por nombre o SKU y filtra por categoría, almacén o nivel de stock para encontrar rápidamente los productos.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-actions"]', title: 'Acciones del catálogo', description: 'Desde aquí puedes iniciar la importación inicial, consultar solicitudes de reabastecimiento y crear categorías o almacenes cuando corresponda.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-actions"]', title: 'Importar catálogo inicial', description: 'La importación inicial solo se habilita cuando la empresa todavía no tiene productos. Descarga la plantilla, completa SKU, datos, costo, precios y stock, carga opcionalmente las imágenes y previsualiza antes de confirmar.', tip: 'Los errores se omiten y los precios faltantes se muestran como avisos.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-table"]', title: 'Tabla y tarjetas', description: 'Consulta los productos en tabla o tarjetas. Puedes editar únicamente los campos permitidos y abrir el detalle haciendo clic en el registro o en su imagen.', placement: 'top' },
+];
 
 interface ProductosViewProps {
   products: any[];
@@ -31,6 +47,7 @@ interface ProductosViewProps {
   movements?: any[];
   onRefresh: () => void;
   itemType?: 'PRODUCT' | 'SERVICE';
+  isSidebarCollapsed?: boolean;
 }
 
 interface EditingProduct {
@@ -64,7 +81,157 @@ interface EditingProduct {
   isNew?: boolean;
 }
 
-export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, itemType }: ProductosViewProps) {
+interface ImportPreviewPageProps {
+  importData: any[];
+  importFileName: string;
+  importCurrency: string;
+  categoryOptions: any[];
+  warehouseOptions: any[];
+  importing: boolean;
+  importProgress: number;
+  onRowUpdate: (index: number, field: string, value: any) => void;
+  onDownloadErrors: () => void;
+  onCreateCategory: (index: number, value: string) => void;
+  onCreateWarehouse: (index: number, value: string) => void;
+  onConfirm: () => void;
+  onBack: () => void;
+}
+
+function ImportPreviewPage({
+  importData,
+  importFileName,
+  importCurrency,
+  categoryOptions,
+  warehouseOptions,
+  importing,
+  importProgress,
+  onRowUpdate,
+  onDownloadErrors,
+  onCreateCategory,
+  onCreateWarehouse,
+  onConfirm,
+  onBack,
+}: ImportPreviewPageProps) {
+  const validRows = importData.filter((row) => !row._hasError).length;
+  const issueRows = importData.filter((row) => row._hasError || row._hasWarning).length;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-5">
+      <div className="flex flex-col gap-3 border-b border-border/50 pb-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Importación inicial</p>
+          <h2 className="mt-1 text-2xl font-black tracking-tight">Previsualizar productos</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Revisa y corrige los registros antes de formalizar la carga.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="border-primary/40 text-primary">Moneda: {importCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)'}</Badge>
+          <Badge variant="outline">{importData.length} registros</Badge>
+          <Badge variant="outline" className="text-emerald-600">{validRows} válidos</Badge>
+          {issueRows > 0 && <Badge variant="outline" className="text-amber-600">{issueRows} con incidencias</Badge>}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-3 text-sm">
+        <div className="min-w-0">
+          <p className="font-semibold">Archivo: {importFileName}</p>
+          <p className="text-xs text-muted-foreground">Los errores se omitirán y las advertencias no impedirán la carga.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={onDownloadErrors} disabled={issueRows === 0}>
+          <Download className="mr-2 size-3.5" /> Descargar incidencias
+        </Button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl border">
+        <div className="min-w-[1320px]">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-muted shadow-sm">
+              <TableRow>
+                <TableHead className="w-8 text-[10px] uppercase"></TableHead>
+                <TableHead className="w-32 text-[10px] uppercase">Código</TableHead>
+                <TableHead className="min-w-[220px] text-[10px] uppercase">Nombre</TableHead>
+                <TableHead className="w-20 text-center text-[10px] uppercase">Imagen</TableHead>
+                <TableHead className="w-32 text-[10px] uppercase">Categoría</TableHead>
+                <TableHead className="w-28 text-right text-[10px] uppercase">Unidad</TableHead>
+                <TableHead className="w-28 text-right text-[10px] uppercase">Minorista</TableHead>
+                <TableHead className="w-28 text-right text-[10px] uppercase">Mayorista</TableHead>
+                <TableHead className="w-28 text-right text-[10px] uppercase">Distribuidor</TableHead>
+                <TableHead className="w-28 text-right text-[10px] uppercase">Costo</TableHead>
+                <TableHead className="w-24 text-right text-[10px] uppercase">Stock</TableHead>
+                <TableHead className="w-24 text-right text-[10px] uppercase">Min</TableHead>
+                <TableHead className="w-40 text-[10px] uppercase">Almacén</TableHead>
+                <TableHead className="w-40 text-[10px] uppercase">Validación</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {importData.map((row, index) => (
+                <TableRow key={`${row.code || 'fila'}-${index}`} className={row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}>
+                  <TableCell>{row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}</TableCell>
+                  <TableCell className="p-1"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`h-8 text-xs font-mono ${!row.code ? 'border-red-500' : ''}`} /></TableCell>
+                  <TableCell className="min-w-[220px] p-1"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`h-8 w-full text-xs ${!row.name ? 'border-red-500' : ''}`} /></TableCell>
+                  <TableCell className="p-1 text-center">
+                    {row._imageStatus === 'matched' ? <ImageIcon className="mx-auto size-4 text-emerald-500" aria-label="Imagen vinculada" title="Imagen vinculada" /> : row._imageStatus === 'missing' ? <ImageOff className="mx-auto size-4 text-red-500" aria-label="Imagen no vinculada" title="No se encontró una imagen con el mismo SKU" /> : <ImageOff className="mx-auto size-4 text-muted-foreground/50" aria-label="Sin ZIP de imágenes" title="No se cargó un ZIP de imágenes" />}
+                  </TableCell>
+                  <TableCell className="p-1">
+                    {categoryOptions.some((category: any) => category.name?.toLowerCase() === String(row.category || '').trim().toLowerCase()) ? (
+                      <Input value={row.category} onChange={(event) => onRowUpdate(index, 'category', event.target.value)} className="h-8 text-xs" />
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <Select value="__none__" onValueChange={(value) => {
+                          const category = categoryOptions.find((item: any) => item.id === value);
+                          if (category) onRowUpdate(index, 'category', category.name);
+                        }}>
+                          <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría'}</SelectItem>
+                            {categoryOptions.length === 0 && <SelectItem value="__no_categories__" disabled>No hay registros</SelectItem>}
+                            {categoryOptions.map((category: any) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => onCreateCategory(index, row.category || '')}><Plus className="size-3.5" /></Button>
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="p-1"><Input value={row.unit || 'unidad'} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+                  <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(event) => onRowUpdate(index, 'price.RETAIL', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+                  <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(event) => onRowUpdate(index, 'price.WHOLESALE', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+                  <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(event) => onRowUpdate(index, 'price.DISTRIBUTOR', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+                  <TableCell className="p-1"><Input type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+                  <TableCell className="p-1"><Input type="number" min={0} value={row.initialStock ?? ''} onChange={(event) => onRowUpdate(index, 'initialStock', Number(event.target.value) || 0)} aria-label="Stock inicial" title="Edita el stock inicial antes de confirmar la importación" className="h-8 text-right text-xs" /></TableCell>
+                  <TableCell className="p-1"><Input type="number" min={0} value={row.minStock} onChange={(event) => onRowUpdate(index, 'minStock', Number(event.target.value) || 0)} className="h-8 text-right text-xs" /></TableCell>
+                  <TableCell className="p-1">
+                    {!row.warehouse || warehouseOptions.some((warehouse: any) => warehouse.name?.toLowerCase() === String(row.warehouse || '').trim().toLowerCase()) ? (
+                      <Select value={row.warehouse || '__none__'} onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                        <SelectContent><SelectItem value="__none__">Sin almacén</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay registros</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <Select value="__none__" onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)}>
+                          <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="__none__">{`No existe: ${row.warehouse}`}</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay registros</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear este almacén" aria-label="Crear este almacén" onClick={() => onCreateWarehouse(index, row.warehouse || '')}><Plus className="size-3.5" /></Button>
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-red-600' : row._hasWarning ? 'text-amber-600' : 'text-emerald-600'}>{row._errorMessage || row._warningMessage || 'Correcto'}</span></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      {importing && <div className="h-2 w-full overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${importProgress}%` }} /></div>}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">
+        <Button variant="outline" onClick={onBack} disabled={importing}><ChevronLeft className="mr-2 size-4" />Volver a la carga</Button>
+        <Button onClick={onConfirm} disabled={importing || validRows === 0} className="bg-primary font-bold text-primary-foreground">{importing ? `Importando... ${importProgress}%` : `Importar ${validRows} registros`}</Button>
+      </div>
+    </div>
+  );
+}
+
+export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, itemType, isSidebarCollapsed = true }: ProductosViewProps) {
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { canPerform } = useAuth();
   const catalogItemType = itemType || 'PRODUCT';
@@ -88,11 +255,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [warehouseFilters, setWarehouseFilters] = useState<string[]>([]);
   const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out'>('all');
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [initialImportIntroOpen, setInitialImportIntroOpen] = useState(false);
   const [importData, setImportData] = useState<any[]>([]);
   const [importFileName, setImportFileName] = useState('');
   const [imageZipFileName, setImageZipFileName] = useState('');
   const [imageZipEntries, setImageZipEntries] = useState<Map<string, File>>(new Map());
+  const [importProcessing, setImportProcessing] = useState(false);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageZipInputRef = useRef<HTMLInputElement>(null);
@@ -102,12 +271,19 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [productDetail, setProductDetail] = useState<any | null>(null);
+  const [expandedProductImage, setExpandedProductImage] = useState<{ src: string; alt: string } | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDescription, setNewCategoryDescription] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [pendingCategoryRowIndex, setPendingCategoryRowIndex] = useState<number | null>(null);
   const [warehouseModalOpen, setWarehouseModalOpen] = useState(false);
   const [newWarehouseName, setNewWarehouseName] = useState('');
+  const [newWarehouseLocation, setNewWarehouseLocation] = useState('');
+  const [newWarehouseType, setNewWarehouseType] = useState('STORE');
+  const [newWarehouseParentId, setNewWarehouseParentId] = useState('none');
+  const [newWarehouseInventoryAccountId, setNewWarehouseInventoryAccountId] = useState('none');
+  const [warehouseAccounts, setWarehouseAccounts] = useState<any[]>([]);
+  const [warehouseAccountsLoading, setWarehouseAccountsLoading] = useState(false);
   const [creatingWarehouse, setCreatingWarehouse] = useState(false);
   const [pendingWarehouseRowIndex, setPendingWarehouseRowIndex] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -126,6 +302,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [replenishmentModalOpen, setReplenishmentModalOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState<any | null>(null);
+  const [showTutorial, setShowTutorial] = useState(false);
   
   const [skuErrors, setSkuErrors] = useState<Map<string, string>>(new Map());
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -158,6 +335,15 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       setInitialImportCompleted(Boolean(status.completed) || products.length > 0);
     }).catch(() => undefined);
   }, [isServiceView, products.length]);
+
+  useEffect(() => {
+    if (!warehouseModalOpen || warehouseAccounts.length > 0) return;
+    setWarehouseAccountsLoading(true);
+    contabilidadService.getChartOfAccounts()
+      .then((response: any) => setWarehouseAccounts(response?.data || response || []))
+      .catch(() => setWarehouseAccounts([]))
+      .finally(() => setWarehouseAccountsLoading(false));
+  }, [warehouseModalOpen, warehouseAccounts.length]);
 
 
   // Reset page & selection when filters change
@@ -686,9 +872,23 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     if (!newWarehouseName.trim()) return toast.error('El nombre del almacén es requerido');
     setCreatingWarehouse(true);
     try {
-      const response = await inventoryService.createWarehouse({ name: newWarehouseName.trim() });
+      const response = await inventoryService.createWarehouse({
+        name: newWarehouseName.trim(),
+        location: newWarehouseLocation.trim(),
+        type: newWarehouseType,
+        parentId: newWarehouseParentId === 'none' ? null : newWarehouseParentId,
+        inventoryAccountId: newWarehouseInventoryAccountId === 'none' ? null : newWarehouseInventoryAccountId,
+      } as any);
       const created = ((response as any)?.data || response || {}) as any;
-      const createdWarehouse = { ...created, id: created.id || `import-warehouse-${Date.now()}`, name: created.name || newWarehouseName.trim() };
+      const createdWarehouse = {
+        ...created,
+        id: created.id || `import-warehouse-${Date.now()}`,
+        name: created.name || newWarehouseName.trim(),
+        location: created.location || newWarehouseLocation.trim(),
+        type: created.type || newWarehouseType,
+        parentId: created.parentId ?? (newWarehouseParentId === 'none' ? null : newWarehouseParentId),
+        inventoryAccountId: created.inventoryAccountId ?? (newWarehouseInventoryAccountId === 'none' ? null : newWarehouseInventoryAccountId),
+      };
       setImportAddedWarehouses((current) => [...current.filter((item) => item.id !== createdWarehouse.id), createdWarehouse]);
       if (pendingWarehouseRowIndex !== null) {
         setImportData((current) => {
@@ -700,6 +900,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       toast.success('Almacén creado');
       setWarehouseModalOpen(false);
       setNewWarehouseName('');
+      setNewWarehouseLocation('');
+      setNewWarehouseType('STORE');
+      setNewWarehouseParentId('none');
+      setNewWarehouseInventoryAccountId('none');
       setPendingWarehouseRowIndex(null);
       onRefresh();
     } catch (error: any) { toast.error(error?.message || 'Error al crear almacén'); }
@@ -1076,10 +1280,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
   // ==================== EXCEL IMPORT ====================
   const handleDownloadTemplate = useCallback(() => {
-    const headers = ['Código / SKU', 'Nombre', 'Tipo', 'Categoría', 'Unidad', 'Precio Minorista', 'Precio Mayorista', 'Precio Distribuidor', 'Costo', 'Stock inicial', 'Stock mínimo', 'Almacén'];
+    const headers = ['Código / SKU', 'Nombre', 'Categoría', 'Unidad', 'Precio Minorista', 'Precio Mayorista', 'Precio Distribuidor', 'Costo', 'Stock inicial', 'Stock mínimo', 'Almacén'];
     const ws = XLSX.utils.aoa_to_sheet([
       headers,
-      ['SKU-001', 'Ejemplo producto', 'PRODUCTO', categories[0]?.name || 'Categoría', 'unidad', 150, 140, 130, 100, 0, 0, warehouses[0]?.name || ''],
+      ['SKU-001', 'Ejemplo producto', categories[0]?.name || 'Categoría', 'unidad', 150, 140, 130, 100, 0, 0, warehouses[0]?.name || ''],
     ]);
     ws['!cols'] = headers.map((header) => ({ wch: Math.max(12, Math.min(28, header.length + 2)) }));
     const wb = XLSX.utils.book_new();
@@ -1099,13 +1303,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     XLSX.utils.book_append_sheet(wb, guide, 'Guía de llenado');
     XLSX.writeFile(wb, 'plantilla_importacion_inicial_inventario.xlsx');
     toast.success('Plantilla descargada');
-  }, [catalogItemType, categories, warehouses, importCurrency]);
+  }, [categories, warehouses]);
 
   const handleDownloadImportErrors = useCallback(() => {
     const errors = importData.filter((row) => row._hasError || row._hasWarning).map((row) => ({
       'Código / SKU': row.code || '', Nombre: row.name || '', Categoría: row.category || '', Almacén: row.warehouse || '',
       Costo: row.costPrice ?? '', Minorista: row.prices?.RETAIL ?? '', Mayorista: row.prices?.WHOLESALE ?? '', Distribuidor: row.prices?.DISTRIBUTOR ?? '',
-      Tipo: row._hasError ? 'Error' : 'Advertencia', Detalle: row._errorMessage || row._warningMessage || 'Revisar fila',
+      Clasificación: row._hasError ? 'Error' : 'Advertencia', Detalle: row._errorMessage || row._warningMessage || 'Revisar fila',
     }));
     if (!errors.length) return;
     const ws = XLSX.utils.json_to_sheet(errors); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Incidencias'); XLSX.writeFile(wb, 'incidencias_importacion_inicial.xlsx');
@@ -1144,8 +1348,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         invalidPrice ? `Precio ${invalidPrice[0]} inválido` : !hasAtLeastOnePrice ? 'Debe incluir al menos un precio de venta' : '',
         !Number.isFinite(stock) || stock < 0 ? 'Stock inicial inválido' : !warehouseExists ? 'Almacén no encontrado' : !warehouseOk ? 'Selecciona un almacén para el stock inicial' : '',
       ].filter(Boolean);
+      const imageStatus = zipName ? (code && entries.has(code.toLowerCase()) ? 'matched' : 'missing') : 'none';
       const warningParts = missingPrices.length > 0 ? [`Sin precio: ${missingPrices.join(', ')}`] : [];
-      if (zipName && code && !entries.has(code.toLowerCase())) warningParts.push('No se encontró imagen JPG/PNG con el mismo SKU en el ZIP');
       return {
         ...row,
         code,
@@ -1156,6 +1360,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         _errorMessage: errors[0],
         _hasWarning: warningParts.length > 0,
         _warningMessage: warningParts.join(' · '),
+        _imageStatus: imageStatus,
       };
     });
   }, [importCategoryOptions, importWarehouseOptions, imageZipEntries, imageZipFileName]);
@@ -1165,9 +1370,11 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       toast.error('Selecciona un archivo Excel o CSV válido');
       return;
     }
+    setImportProcessing(true);
     const reader = new FileReader();
     reader.onload = (e) => {
-      try {
+      window.setTimeout(() => {
+        try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -1179,7 +1386,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         const headers = raw[0].map((h: any) => String(h || '').trim().toLowerCase());
         const colMap: Record<string, number> = {};
         const aliases: Record<string, string[]> = {
-          code: ['código / sku', 'código', 'codigo', 'code', 'sku'], name: ['nombre', 'name', 'producto'], description: ['descripción', 'descripcion', 'description'], category: ['categoría', 'categoria', 'category', 'cat'], itemType: ['tipo', 'type'], taxRate: ['tasa iva', 'iva', 'tax rate'], imageUrl: ['imagen url', 'imagen', 'image url'], barcode: ['código de barras', 'barcode'], brand: ['marca', 'brand'], model: ['modelo', 'model'], color: ['color'], weight: ['peso', 'weight'], weightUnit: ['unidad peso', 'weight unit'], dimensions: ['dimensiones', 'dimensions'], width: ['ancho', 'width'], height: ['alto', 'height'], depth: ['profundidad', 'depth'], dimensionUnit: ['unidad dimensión', 'dimension unit'], warranty: ['garantía', 'garantia', 'warranty'], estimatedDuration: ['duración estimada', 'duracion estimada'], unit: ['unidad', 'unit', 'medida'], trackInventory: ['control de inventario', 'track inventory'], minStock: ['stock mínimo', 'stock minimo', 'min stock'], costPrice: ['costo', 'precio costo', 'cost price'], lastPurchasePrice: ['último costo', 'ultimo costo', 'last purchase price'], initialStock: ['stock inicial', 'initial stock', 'cantidad', 'qty'], warehouse: ['almacén', 'almacen', 'warehouse'], trackBatch: ['control de lotes', 'track batch'], trackSeries: ['control de series', 'track series'], attributes: ['atributos json', 'atributos', 'attributes'], retailPrice: ['precio minorista', 'minorista', 'retail price'], wholesalePrice: ['precio mayorista', 'mayorista', 'wholesale price'], distributorPrice: ['precio distribuidor', 'distribuidor', 'distributor price'],
+          code: ['código / sku', 'código', 'codigo', 'code', 'sku'], name: ['nombre', 'name', 'producto'], description: ['descripción', 'descripcion', 'description'], category: ['categoría', 'categoria', 'category', 'cat'], taxRate: ['tasa iva', 'iva', 'tax rate'], imageUrl: ['imagen url', 'imagen', 'image url'], barcode: ['código de barras', 'barcode'], brand: ['marca', 'brand'], model: ['modelo', 'model'], color: ['color'], weight: ['peso', 'weight'], weightUnit: ['unidad peso', 'weight unit'], dimensions: ['dimensiones', 'dimensions'], width: ['ancho', 'width'], height: ['alto', 'height'], depth: ['profundidad', 'depth'], dimensionUnit: ['unidad dimensión', 'dimension unit'], warranty: ['garantía', 'garantia', 'warranty'], estimatedDuration: ['duración estimada', 'duracion estimada'], unit: ['unidad', 'unit', 'medida'], trackInventory: ['control de inventario', 'track inventory'], minStock: ['stock mínimo', 'stock minimo', 'min stock'], costPrice: ['costo', 'precio costo', 'cost price'], lastPurchasePrice: ['último costo', 'ultimo costo', 'last purchase price'], initialStock: ['stock inicial', 'initial stock', 'cantidad', 'qty'], warehouse: ['almacén', 'almacen', 'warehouse'], trackBatch: ['control de lotes', 'track batch'], trackSeries: ['control de series', 'track series'], attributes: ['atributos json', 'atributos', 'attributes'], retailPrice: ['precio minorista', 'minorista', 'retail price'], wholesalePrice: ['precio mayorista', 'mayorista', 'wholesale price'], distributorPrice: ['precio distribuidor', 'distribuidor', 'distributor price'],
         };
         for (const [key, alts] of Object.entries(aliases)) {
           const idx = headers.findIndex((h: string) => alts.includes(h));
@@ -1187,7 +1394,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         }
         const parsed = raw.slice(1).filter((row: any[]) => row.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== '')).map((row: any[]) => {
           const get = (key: string) => colMap[key] !== undefined ? row[colMap[key]] : undefined;
-          const isService = catalogItemType === 'SERVICE';
           const toNumber = (key: string) => get(key) === '' || get(key) === undefined ? undefined : Number(get(key));
           const prices = { RETAIL: toNumber('retailPrice'), WHOLESALE: toNumber('wholesalePrice'), DISTRIBUTOR: toNumber('distributorPrice') };
           let attributes: any = undefined;
@@ -1196,13 +1402,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             code: String(get('code') || '').trim(),
             name: String(get('name') || '').trim(),
             category: String(get('category') || '').trim(),
-            itemType: catalogItemType,
+            itemType: 'PRODUCT',
             description: String(get('description') || '').trim(), taxRate: toNumber('taxRate') ?? 0.15, imageUrl: String(get('imageUrl') || '').trim() || undefined, barcode: String(get('barcode') || '').trim() || undefined, brand: String(get('brand') || '').trim() || undefined, model: String(get('model') || '').trim() || undefined, color: String(get('color') || '').trim() || undefined, weight: toNumber('weight'), weightUnit: String(get('weightUnit') || '').trim() || undefined, dimensions: String(get('dimensions') || '').trim() || undefined, width: toNumber('width'), height: toNumber('height'), depth: toNumber('depth'), dimensionUnit: String(get('dimensionUnit') || '').trim() || undefined, warranty: String(get('warranty') || '').trim() || undefined, estimatedDuration: toNumber('estimatedDuration'), trackInventory: String(get('trackInventory') || 'SI').toUpperCase() !== 'NO', lastPurchasePrice: toNumber('lastPurchasePrice'), trackBatch: String(get('trackBatch') || '').toUpperCase() === 'SI', trackSeries: String(get('trackSeries') || '').toUpperCase() === 'SI', attributes,
             unit: String(get('unit') || 'unidad').trim().toLowerCase() || 'unidad',
             salePrice: Number(prices.RETAIL ?? prices.WHOLESALE ?? prices.DISTRIBUTOR ?? 0),
             costPrice: get('costPrice') === '' || get('costPrice') === undefined ? undefined : Number(get('costPrice')),
-            initialStock: isService ? 0 : Number(get('initialStock') || 0),
-            minStock: isService ? 0 : Number(get('minStock') || 0),
+            initialStock: Number(get('initialStock') || 0),
+            minStock: Number(get('minStock') || 0),
             warehouse: String(get('warehouse') || '').trim(), prices,
           };
         });
@@ -1210,26 +1416,34 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         setImportFileName(file.name);
         setImportProgress(0);
         toast.success(`${parsed.length} registros encontrados`);
-      } catch (err) {
-        console.error('Parse error', err);
-        toast.error('No se pudo leer el archivo. Asegúrate de que sea un .xlsx o .csv válido.');
-      }
+        } catch (err) {
+          console.error('Parse error', err);
+          toast.error('No se pudo leer el archivo. Asegúrate de que sea un .xlsx o .csv válido.');
+        } finally {
+          setImportProcessing(false);
+        }
+      }, 50);
+    };
+    reader.onerror = () => {
+      setImportProcessing(false);
+      toast.error('No se pudo leer el archivo seleccionado');
     };
     reader.readAsArrayBuffer(file);
-  }, [catalogItemType, validateImportRows]);
+  }, [validateImportRows]);
 
   const handleImageZipSelected = useCallback(async (file: File) => {
     if (!/\.zip$/i.test(file.name)) {
       toast.error('Selecciona un archivo ZIP válido');
       return;
     }
+    setImportProcessing(true);
     try {
       const zip = await JSZip.loadAsync(file);
       const entries = new Map<string, File>();
-      const files = Object.values(zip.files).filter((entry) => !entry.dir && /\.(jpg|png)$/i.test(entry.name));
+      const files = Object.values(zip.files).filter((entry) => !entry.dir && /\.(jpe?g|png)$/i.test(entry.name));
       await Promise.all(files.map(async (entry) => {
         const fileName = entry.name.split('/').pop() || '';
-        const sku = fileName.replace(/\.(jpg|png)$/i, '').trim().toLowerCase();
+        const sku = fileName.replace(/\.(jpe?g|png)$/i, '').trim().toLowerCase();
         if (!sku) return;
         const blob = await entry.async('blob');
         entries.set(sku, new File([blob], fileName, { type: /\.png$/i.test(fileName) ? 'image/png' : 'image/jpeg' }));
@@ -1241,6 +1455,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     } catch (error) {
       console.error('ZIP image parse error', error);
       toast.error('No se pudo leer el ZIP de imágenes');
+    } finally {
+      setImportProcessing(false);
     }
   }, [validateImportRows]);
 
@@ -1285,51 +1501,64 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     if (initialImportConfirmText !== 'IMPORTAR' || valid.length === 0) return;
     setImporting(true);
     setImportProgress(0);
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
     try {
-      const items = [];
-      for (let index = 0; index < valid.length; index += 1) {
-        const row = valid[index];
-        const cat = importCategoryOptions.find((c: any) => c.name?.toLowerCase() === row.category?.toLowerCase());
-        const warehouse = importWarehouseOptions.find((w: any) => w.name?.toLowerCase() === row.warehouse?.toLowerCase());
-        let imageUrl = row.imageUrl;
-        const imageFile = imageZipEntries.get(String(row.code || '').trim().toLowerCase());
-        if (imageFile) {
-          try {
-            const uploaded = await storageService.uploadFile('product-image', imageFile, { folder: 'catalogo-inicial' });
-            imageUrl = uploaded.uri;
-          } catch (error) {
-            toast.warning(`No se pudo cargar la imagen de ${row.code}; el producto se importará sin ella.`);
+      const items: any[] = [];
+      const imageWarnings: string[] = [];
+      const chunkSize = 8;
+      for (let start = 0; start < valid.length; start += chunkSize) {
+        const chunk = valid.slice(start, start + chunkSize);
+        const chunkItems = await Promise.all(chunk.map(async (row) => {
+          const cat = importCategoryOptions.find((c: any) => c.name?.toLowerCase() === row.category?.toLowerCase());
+          const warehouse = importWarehouseOptions.find((w: any) => w.name?.toLowerCase() === row.warehouse?.toLowerCase());
+          let imageUrl = row.imageUrl;
+          const imageFile = imageZipEntries.get(String(row.code || '').trim().toLowerCase());
+          if (imageFile) {
+            try {
+              const uploaded = await storageService.uploadFile('product-image', imageFile, { folder: 'catalogo-inicial' });
+              imageUrl = uploaded.uri;
+            } catch {
+              imageWarnings.push(String(row.code || row.name || 'Producto'));
+            }
           }
-        }
-        items.push({
-          code: row.code,
-          name: row.name,
-          categoryId: cat?.id,
-          description: row.description, taxRate: row.taxRate, imageUrl, barcode: row.barcode, brand: row.brand, model: row.model, color: row.color, weight: row.weight, weightUnit: row.weightUnit, dimensions: row.dimensions, width: row.width, height: row.height, depth: row.depth, dimensionUnit: row.dimensionUnit, warranty: row.warranty, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, lastPurchasePrice: row.lastPurchasePrice, trackBatch: row.trackBatch, attributes: row.attributes,
-          unit: row.unit || 'unidad',
-          costPrice: row.costPrice,
-          initialStock: row.initialStock,
-          minStock: row.minStock || 0,
-          warehouseId: warehouse?.id,
-          prices: row.prices,
-          price: row.salePrice,
-          trackSeries: Boolean(row.trackSeries),
-        });
-        setImportProgress(Math.round(((index + 1) / valid.length) * 70));
+          return {
+            code: row.code,
+            name: row.name,
+            categoryId: cat?.id,
+            description: row.description, taxRate: row.taxRate, imageUrl, barcode: row.barcode, brand: row.brand, model: row.model, color: row.color, weight: row.weight, weightUnit: row.weightUnit, dimensions: row.dimensions, width: row.width, height: row.height, depth: row.depth, dimensionUnit: row.dimensionUnit, warranty: row.warranty, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, lastPurchasePrice: row.lastPurchasePrice, trackBatch: row.trackBatch, attributes: row.attributes,
+            unit: row.unit || 'unidad',
+            costPrice: row.costPrice,
+            initialStock: row.initialStock,
+            minStock: row.minStock || 0,
+            warehouseId: warehouse?.id,
+            prices: row.prices,
+            price: row.salePrice,
+            trackSeries: Boolean(row.trackSeries),
+          };
+        }));
+        items.push(...chunkItems);
+        setImportProgress(Math.round((Math.min(start + chunk.length, valid.length) / valid.length) * 55));
       }
+      if (imageWarnings.length > 0) toast.warning(`${imageWarnings.length} imagen(es) no pudieron cargarse; esos productos se importarán sin imagen.`);
+      setImportProgress(65);
+      progressTimer = setInterval(() => setImportProgress((current) => Math.min(current + 1, 92)), 250);
       const results = await inventoryService.importInitialCatalog({ items, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', confirmText: 'IMPORTAR' });
+      if (progressTimer) clearInterval(progressTimer);
       setImportProgress(100);
-      setImportResults({ success: results.success || 0, skipped: 0, failed: results.errors?.length || 0, errors: results.errors || [] });
+      setImportResults({ success: results.success || 0, skipped: (importData.length - valid.length) + (results.skipped || 0), failed: results.errors?.length || 0, errors: results.errors || [] });
       setImportModalOpen(false);
       setInitialImportConfirmOpen(false);
+      setImportPreviewOpen(false);
       setInitialImportConfirmText('');
       setImportData([]);
       setImportFileName('');
       setInitialImportCompleted(true);
       onRefresh();
+      window.setTimeout(() => setImportResults(null), 2600);
     } catch (e: any) {
       toast.error('Error durante la importación: ' + (e.message || 'Error'));
     } finally {
+      if (progressTimer) clearInterval(progressTimer);
       setImporting(false);
       setImportProgress(0);
     }
@@ -1337,8 +1566,39 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
   return (
     <>
-      <Card className="p-4 border bg-card rounded-xl">
-      <div className="mb-5">
+      <Card className={importPreviewOpen ? `fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 max-w-none flex-col overflow-hidden rounded-none border-0 bg-background p-4 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}` : 'rounded-xl border bg-card p-4'}>
+      {importPreviewOpen ? (
+        <ImportPreviewPage
+          importData={importData}
+          importFileName={importFileName}
+          importCurrency={importCurrency}
+          categoryOptions={importCategoryOptions}
+          warehouseOptions={importWarehouseOptions}
+          importing={importing}
+          importProgress={importProgress}
+          onRowUpdate={handleImportRowUpdate}
+          onDownloadErrors={handleDownloadImportErrors}
+          onCreateCategory={(index, value) => {
+            setPendingCategoryRowIndex(index);
+            setNewCategoryName(value);
+            setNewCategoryDescription('');
+            setCategoryModalOpen(true);
+          }}
+          onCreateWarehouse={(index, value) => {
+            setPendingWarehouseRowIndex(index);
+            setNewWarehouseName(value);
+            setNewWarehouseLocation('');
+            setNewWarehouseType('STORE');
+            setNewWarehouseParentId('none');
+            setNewWarehouseInventoryAccountId('none');
+            setWarehouseModalOpen(true);
+          }}
+          onConfirm={handleImportConfirm}
+          onBack={() => { setImportPreviewOpen(false); setImportModalOpen(true); }}
+        />
+      ) : (
+        <>
+      <div className="mb-5" data-tour="inventory-products-title">
         <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-xl font-black tracking-tight">{isServiceView ? 'Servicios' : 'Productos y existencias'}</h2>
@@ -1376,7 +1636,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4" data-tour="inventory-products-filters">
         <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap">
           <div className="relative min-w-56 flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -1410,7 +1670,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               onChange={setWarehouseFilters}
               className="h-9 rounded-lg"
             />
-            <Button type="button" variant="outline" size="sm" className="h-9 w-9 shrink-0 rounded-lg p-0" onClick={() => { setPendingWarehouseRowIndex(null); setWarehouseModalOpen(true); }} title="Agregar almacén" aria-label="Agregar almacén">
+            <Button type="button" variant="outline" size="sm" className="h-9 w-9 shrink-0 rounded-lg p-0" onClick={() => { setPendingWarehouseRowIndex(null); setNewWarehouseName(''); setNewWarehouseLocation(''); setNewWarehouseType('STORE'); setNewWarehouseParentId('none'); setNewWarehouseInventoryAccountId('none'); setWarehouseModalOpen(true); }} title="Agregar almacén" aria-label="Agregar almacén">
               <Plus className="size-4" />
             </Button>
           </div>
@@ -1431,12 +1691,16 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             </Button>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap" data-tour="inventory-products-actions">
+          <Button type="button" size="sm" variant="outline" className="h-9 rounded-lg px-3 font-black text-[10px] uppercase tracking-widest" onClick={() => setShowTutorial(true)}>
+            <CircleHelp className="mr-2 size-4" /> Tutorial
+          </Button>
           {!isServiceView && !initialImportCompleted && products.length === 0 && <Button
             size="sm"
             variant="outline"
             className="h-9 rounded-lg px-3 font-black text-[10px] uppercase tracking-widest"
             onClick={() => setInitialImportIntroOpen(true)}
+            data-tour="inventory-products-import"
             disabled={initialImportCompleted}
             title={initialImportCompleted ? 'La importación inicial ya fue completada' : 'Importar catálogo inicial'}
           >
@@ -1519,7 +1783,18 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           return (
             <Card key={product.id} className="min-w-0 overflow-hidden rounded-2xl border-border/40 p-4 shadow-sm" onClick={() => setProductDetail(product)}>
               <div className="flex min-w-0 items-start gap-3">
-                <ProductThumbnail src={product.imageUrl} alt={product.name} size="md" />
+                <button
+                  type="button"
+                  className="shrink-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (product.imageUrl) setExpandedProductImage({ src: product.imageUrl, alt: product.name });
+                  }}
+                  disabled={!product.imageUrl}
+                  aria-label={product.imageUrl ? `Ver imagen de ${product.name}` : `Producto ${product.name} sin imagen`}
+                >
+                  <ProductThumbnail src={product.imageUrl} alt={product.name} size="md" />
+                </button>
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -1570,7 +1845,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       </div>
 
       {/* Desktop table */}
-      <div className="hidden max-w-full overflow-x-auto rounded-lg border 2xl:block">
+      <div className="hidden max-w-full overflow-x-auto rounded-lg border 2xl:block" data-tour="inventory-products-table">
         <Table className="w-full table-fixed">
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
@@ -1653,21 +1928,21 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                      <TableCell className="font-mono text-xs text-muted-foreground">{product.code}</TableCell>
                     <TableCell>
                       <div className="flex min-w-[190px] items-center gap-3">
-                        {canPerform('INVENTORY_PRODUCTS', 'edit') ? (
+                        {product.imageUrl ? (
                           <button
                             type="button"
                             className="rounded-xl transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleEditRow(product);
+                              setExpandedProductImage({ src: product.imageUrl, alt: product.name });
                             }}
-                            aria-label={`${product.imageUrl ? 'Cambiar' : 'Agregar'} foto de ${product.name}`}
-                            title={product.imageUrl ? 'Cambiar foto' : 'Agregar foto'}
+                            aria-label={`Ver imagen de ${product.name}`}
+                            title="Ver imagen"
                           >
                             <ProductThumbnail src={product.imageUrl} alt={product.name} size="md" />
                           </button>
                         ) : (
-                          <ProductThumbnail src={product.imageUrl} alt={product.name} size="md" />
+                          <ProductThumbnail src={undefined} alt={product.name} size="md" />
                         )}
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <button
@@ -1797,6 +2072,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage(totalPages)} disabled={page >= totalPages} aria-label="Última página"><ChevronsRight className="size-4" /></button>
         </div>
       </div>
+        </>
+      )}
       <EditProductModal
         product={modalProduct}
         categories={categories}
@@ -1839,10 +2116,54 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         </DialogContent>
       </Dialog>
       <Dialog open={warehouseModalOpen} onOpenChange={(open) => { setWarehouseModalOpen(open); if (!open) setPendingWarehouseRowIndex(null); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Nuevo almacén</DialogTitle><DialogDescription>Créalo y podrás seleccionarlo en la previsualización del inventario.</DialogDescription></DialogHeader>
-          <Input value={newWarehouseName} onChange={(event) => setNewWarehouseName(event.target.value)} placeholder="Ej. Bodega principal" />
-          <DialogFooter><Button variant="outline" onClick={() => setWarehouseModalOpen(false)}>Cancelar</Button><Button onClick={handleCreateWarehouse} disabled={creatingWarehouse}>{creatingWarehouse ? 'Guardando…' : 'Guardar almacén'}</Button></DialogFooter>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Nuevo almacén</DialogTitle>
+            <DialogDescription>Completa los mismos datos disponibles en la vista de Almacenes y Sucursales.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1 sm:col-span-2">
+              <p className="text-xs font-semibold">Nombre <span className="text-red-500">*</span></p>
+              <Input value={newWarehouseName} onChange={(event) => setNewWarehouseName(event.target.value)} placeholder="Ej. Bodega principal" disabled={creatingWarehouse} autoFocus />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-semibold">Ubicación</p>
+              <Input value={newWarehouseLocation} onChange={(event) => setNewWarehouseLocation(event.target.value)} placeholder="Ej. Managua" disabled={creatingWarehouse} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-semibold">Tipo</p>
+              <Select value={newWarehouseType} onValueChange={setNewWarehouseType} disabled={creatingWarehouse}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
+                <SelectContent>{WAREHOUSE_TYPES.map((type) => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-semibold">Almacén matriz</p>
+              <Select value={newWarehouseParentId} onValueChange={setNewWarehouseParentId} disabled={creatingWarehouse}>
+                <SelectTrigger><SelectValue placeholder="Sin almacén matriz" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin almacén matriz</SelectItem>
+                  {importWarehouseOptions.length === 0 && <SelectItem value="__no_parent_warehouses__" disabled>No hay registros</SelectItem>}
+                  {importWarehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-semibold">Cuenta contable de inventario</p>
+              <Select value={newWarehouseInventoryAccountId} onValueChange={setNewWarehouseInventoryAccountId} disabled={creatingWarehouse || warehouseAccountsLoading}>
+                <SelectTrigger><SelectValue placeholder={warehouseAccountsLoading ? 'Cargando cuentas...' : 'Sin cuenta'} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin cuenta</SelectItem>
+                  {!warehouseAccountsLoading && warehouseAccounts.length === 0 && <SelectItem value="__no_accounts__" disabled>No hay registros</SelectItem>}
+                  {warehouseAccounts.map((account: any) => <SelectItem key={account.id} value={account.id}>{account.code} - {account.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWarehouseModalOpen(false)} disabled={creatingWarehouse}>Cancelar</Button>
+            <Button onClick={handleCreateWarehouse} disabled={creatingWarehouse || !newWarehouseName.trim()}>{creatingWarehouse ? 'Guardando…' : 'Guardar almacén'}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       <ProductDetailDrawer
@@ -1872,7 +2193,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           <div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm">
             <p><b>La plantilla siempre incluye:</b> costo, Minorista, Mayorista y Distribuidor.</p>
             <p>Cada producto debe tener SKU único, nombre, categoría, costo y al menos uno de los tres precios. Los precios faltantes serán advertencias.</p>
-            <p>Opcionalmente puedes cargar un ZIP con imágenes JPG o PNG cuyo nombre sea exactamente el SKU.</p>
+            <p>Opcionalmente puedes cargar un ZIP con imágenes JPG, JPEG o PNG cuyo nombre sea exactamente el SKU.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={handleDownloadTemplate}><Download className="size-4 mr-2" />Descargar plantilla</Button>
@@ -1880,15 +2201,21 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {showTutorial && <GuidedTour
+        steps={PRODUCTS_TOUR_STEPS.filter((step) => !(step.title === 'Importar catálogo inicial' && (isServiceView || initialImportCompleted || products.length > 0)))}
+        onClose={() => setShowTutorial(false)}
+        title="Productos"
+        allowTargetInteraction
+      />}
       <Dialog open={importModalOpen} onOpenChange={(open) => {
         if (!importing) {
           setImportModalOpen(open);
-          if (!open) { setImportData([]); setImportFileName(''); setImageZipFileName(''); setImageZipEntries(new Map()); setImportProgress(0); }
+          if (!open) { setImportPreviewOpen(false); setImportData([]); setImportFileName(''); setImageZipFileName(''); setImageZipEntries(new Map()); setImportProgress(0); }
         }
       }}>
         <DialogContent className="w-[calc(100vw-2rem)] max-w-[1100px] sm:max-w-[1100px] max-h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Importar {isServiceView ? 'Servicios' : 'Productos'}</DialogTitle>
+            <DialogTitle>Importar Productos</DialogTitle>
             <DialogDescription>
               Sube el catálogo inicial. Esta carga es única por empresa y se confirma en dos pasos.
             </DialogDescription>
@@ -1898,13 +2225,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Moneda del archivo</p><Select value={importCurrency} onValueChange={setImportCurrency}><SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent></Select></div>
             <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Tasa USD / moneda base</p><Input className="h-9 text-xs" type="number" min="0.0001" step="any" value={importExchangeRate} onChange={(event) => setImportExchangeRate(Number(event.target.value) || 1)} disabled={importCurrency === 'NIO'} /></div>
           </div>
+          {importProcessing && <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">Procesando archivo, espera un momento...</div>}
           <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed p-3">
             <div className="min-w-0">
               <p className="text-xs font-bold">Imágenes de productos (opcional)</p>
-              <p className="whitespace-normal text-[11px] text-muted-foreground">ZIP con archivos JPG o PNG nombrados exactamente como el SKU para asociarlos automáticamente.</p>
+              <p className="whitespace-normal text-[11px] text-muted-foreground">ZIP con archivos JPG, JPEG o PNG nombrados exactamente como el SKU para asociarlos automáticamente.</p>
               {imageZipFileName && <p className="mt-1 text-[11px] text-emerald-600">{imageZipFileName} · {imageZipEntries.size} imagen(es) reconocida(s)</p>}
             </div>
-            <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs" onClick={() => imageZipInputRef.current?.click()} disabled={importing}>
+            <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs" onClick={() => imageZipInputRef.current?.click()} disabled={importing || importProcessing}>
               <Upload className="size-3 mr-2" />{imageZipFileName ? 'Cambiar ZIP' : 'Cargar ZIP'}
             </Button>
             <input type="file" className="hidden" accept=".zip" ref={imageZipInputRef} onChange={(e) => { if (e.target.files?.[0]) handleImageZipSelected(e.target.files[0]); }} />
@@ -1914,12 +2242,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             {!importFileName ? (
               <div className="space-y-4">
                 <div 
-                  className="border-2 border-dashed border-primary/20 rounded-xl p-8 hover:bg-primary/5 transition-colors cursor-pointer text-center flex flex-col items-center gap-3"
-                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed border-primary/20 rounded-xl p-8 transition-colors text-center flex flex-col items-center gap-3 ${importProcessing ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-primary/5'}`}
+                  onClick={() => !importProcessing && fileInputRef.current?.click()}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
-                    if (e.dataTransfer.files?.[0]) handleFileSelected(e.dataTransfer.files[0]);
+                    if (!importProcessing && e.dataTransfer.files?.[0]) handleFileSelected(e.dataTransfer.files[0]);
                   }}
                 >
                   <div className="size-12 bg-primary/10 rounded-full flex items-center justify-center">
@@ -1929,27 +2257,20 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     <p className="font-bold">Haz clic para buscar un archivo</p>
                     <p className="text-xs text-muted-foreground mt-1">O arrástralo y suéltalo aquí</p>
                   </div>
-                  <input type="file" className="hidden" accept=".xlsx,.xls,.csv" ref={fileInputRef} onChange={(e) => {
+                  <input type="file" className="hidden" accept=".xlsx,.xls,.csv" ref={fileInputRef} disabled={importProcessing || importing} onChange={(e) => {
                     if (e.target.files?.[0]) handleFileSelected(e.target.files[0]);
                   }} />
                 </div>
-                <div className="bg-muted/30 p-4 rounded-xl border">
-                  <p className="text-sm font-semibold mb-2">Columnas soportadas:</p>
-                  <div className="text-xs text-muted-foreground grid grid-cols-2 gap-2">
-                    <p>• <b>Código</b> (requerido)</p>
-                    <p>• <b>Nombre</b> (requerido)</p>
-                    <p>• <b>Categoría</b></p>
-                    <p>• <b>Tipo</b> (Producto / Servicio)</p>
-                    <p>• <b>Precios por lista</b></p>
-                    <p>• <b>Costo</b></p>
-                    <p>• <b>Stock Inicial</b></p>
-                    <p>• <b>IMEI</b> (Si/No)</p>
-                  </div>
-                  <Button variant="outline" size="sm" className="mt-4 text-xs font-bold w-full" onClick={handleDownloadTemplate}>
-                    <Download className="size-3 mr-2" />
-                    Descargar Plantilla de Ejemplo
-                  </Button>
+              </div>
+            ) : !importPreviewOpen ? (
+              <div className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-muted/20 p-6 text-center">
+                <FileSpreadsheet className="size-10 text-primary" />
+                <div>
+                  <p className="font-semibold">Archivo cargado correctamente</p>
+                  <p className="mt-1 text-xs text-muted-foreground">La previsualización permanece oculta hasta que presiones el botón.</p>
+                  <p className="mt-2 text-xs font-medium">{importFileName} · {importData.length} registro(s){imageZipFileName ? ` · ${imageZipFileName}` : ''}</p>
                 </div>
+                {importProcessing && <p className="text-xs text-primary">Procesando archivo, espera un momento...</p>}
               </div>
             ) : (
               <div className="space-y-4 flex flex-col h-full">
@@ -1969,8 +2290,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                           <TableHead className="text-[10px] uppercase w-8"></TableHead>
                           <TableHead className="text-[10px] uppercase w-32">Código</TableHead>
                           <TableHead className="text-[10px] uppercase">Nombre</TableHead>
-                            <TableHead className="text-[10px] uppercase w-24">Tipo</TableHead>
-                          <TableHead className="text-[10px] uppercase w-32">Categoría</TableHead>
+                            <TableHead className="text-[10px] uppercase w-32">Categoría</TableHead>
                           <TableHead className="text-[10px] uppercase w-28 text-right">Unidad</TableHead>
                           <TableHead className="text-[10px] uppercase w-28 text-right">Minorista</TableHead>
                           <TableHead className="text-[10px] uppercase w-28 text-right">Mayorista</TableHead>
@@ -2008,7 +2328,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                                 className={`h-8 text-xs ${!row.name ? 'border-red-500' : ''}`}
                               />
                             </TableCell>
-                            <TableCell className="p-1"><Badge className={isServiceView ? 'bg-violet-500/10 text-violet-500' : 'bg-sky-500/10 text-sky-500'}>{isServiceView ? 'Servicio' : 'Producto'}</Badge></TableCell>
                             <TableCell className="p-1">
                               {importCategoryOptions.some((category: any) => category.name?.toLowerCase() === String(row.category || '').trim().toLowerCase()) ? (
                                 <Input
@@ -2063,19 +2382,15 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                               <Input type="number" min={0} value={row.costPrice ?? ''} onChange={(e) => handleImportRowUpdate(i, 'costPrice', e.target.value)} className="h-8 text-xs text-right" />
                             </TableCell>
                             <TableCell className="p-1">
-                              {row.itemType === 'SERVICE' ? (
-                                <span className="text-xs text-muted-foreground/50 italic h-8 flex items-center justify-end">N/A</span>
-                              ) : (
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  value={row.initialStock}
-                                  disabled
-                                  aria-label="Stock inicial no editable"
-                                  title="El stock inicial se toma de la plantilla y no puede editarse durante la previsualización"
-                                  className="h-8 text-xs text-right cursor-not-allowed opacity-60"
-                                />
-                              )}
+                              <Input
+                                type="number"
+                                min={0}
+                                value={row.initialStock ?? ''}
+                                onChange={(e) => handleImportRowUpdate(i, 'initialStock', Number(e.target.value) || 0)}
+                                aria-label="Stock inicial"
+                                title="Edita el stock inicial antes de confirmar la importación"
+                                className="h-8 text-xs text-right"
+                              />
                             </TableCell>
                             <TableCell className="p-1">
                               <Input type="number" min={0} value={row.minStock} onChange={(e) => handleImportRowUpdate(i, 'minStock', Number(e.target.value) || 0)} className="h-8 text-xs text-right" />
@@ -2095,6 +2410,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                                   <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear este almacén" aria-label="Crear este almacén" onClick={() => {
                                     setPendingWarehouseRowIndex(i);
                                     setNewWarehouseName(row.warehouse || '');
+                                    setNewWarehouseLocation('');
+                                    setNewWarehouseType('STORE');
+                                    setNewWarehouseParentId('none');
+                                    setNewWarehouseInventoryAccountId('none');
                                     setWarehouseModalOpen(true);
                                   }}><Plus className="size-3.5" /></Button>
                                 </div>
@@ -2123,18 +2442,34 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 )}
               </div>
             )}
+            <div className="rounded-xl border bg-muted/30 p-4">
+              <p className="mb-2 text-sm font-semibold">Columnas soportadas:</p>
+              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                <p>• <b>Código</b> (requerido)</p>
+                <p>• <b>Nombre</b> (requerido)</p>
+                <p>• <b>Categoría</b></p>
+                <p>• <b>Precios por lista</b></p>
+                <p>• <b>Costo</b></p>
+                <p>• <b>Stock Inicial</b></p>
+                <p>• <b>IMEI</b> (Si/No)</p>
+              </div>
+              <Button variant="outline" size="sm" className="mt-4 w-full text-xs font-bold" onClick={handleDownloadTemplate}>
+                <Download className="mr-2 size-3" />
+                Descargar Plantilla de Ejemplo
+              </Button>
+            </div>
           </div>
           <DialogFooter className="mt-2 pt-2 border-t">
             <Button variant="outline" onClick={() => setImportModalOpen(false)} disabled={importing}>
               Cerrar
             </Button>
-            {importData.length > 0 && (
+            {importFileName && (
               <Button 
-                onClick={handleImportConfirm} 
-                disabled={importing || importData.filter(r => !r._hasError).length === 0}
+                onClick={() => { setImportModalOpen(false); setImportPreviewOpen(true); }}
+                disabled={importing || importProcessing || importData.length === 0}
                 className="bg-primary text-primary-foreground font-bold"
               >
-                {importing ? `Importando... ${importProgress}%` : `Importar ${importData.filter(r => !r._hasError).length} Registros`}
+                {importProcessing ? 'Procesando archivos...' : 'Previsualizar importación'}
               </Button>
             )}
           </DialogFooter>
@@ -2152,25 +2487,57 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         </DialogContent>
       </Dialog>
 
+      <Dialog open={importing} onOpenChange={() => undefined}>
+        <DialogContent className="max-w-md [&>button]:hidden" onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
+          <div className="flex flex-col items-center gap-5 py-5 text-center">
+            <div className="relative flex size-24 items-center justify-center rounded-full border-4 border-primary/20 bg-primary/5">
+              <div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-primary" />
+              <span className="text-xl font-black text-primary">{importProgress}%</span>
+            </div>
+            <div>
+              <DialogTitle className="text-xl">Importando productos</DialogTitle>
+              <DialogDescription className="mt-2">Estamos guardando el catálogo y sus precios. No cierres esta ventana.</DialogDescription>
+            </div>
+            <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${Math.max(importProgress, 3)}%` }} />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
 
       <Dialog open={importResults !== null} onOpenChange={(open) => { if (!open) setImportResults(null); }}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Resultado de importación</DialogTitle>
-            <DialogDescription>
-              {importResults?.success} importados, {importResults?.skipped} saltados, {importResults?.failed} errores
-            </DialogDescription>
+            <div className="flex flex-col items-center gap-3 py-3 text-center">
+              <div className="flex size-20 animate-in zoom-in items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 duration-500">
+                <CheckCircle2 className="size-12 animate-pulse" />
+              </div>
+              <DialogTitle className="text-xl">Importación completada</DialogTitle>
+              <DialogDescription>El inventario ya está disponible y la vista se actualizó correctamente.</DialogDescription>
+            </div>
           </DialogHeader>
-          <div className="max-h-60 overflow-y-auto space-y-1">
-            {importResults?.success ? <p className="text-xs text-emerald-600 font-medium">✓ {importResults.success} producto(s) importado(s) correctamente</p> : null}
-            {importResults?.skipped ? <p className="text-xs text-amber-600 font-medium">⏭ {importResults.skipped} producto(s) saltado(s) por código duplicado</p> : null}
-            {importResults?.errors?.map((err, i) => (
-              <p key={i} className="text-xs text-red-600">✗ {err}</p>
-            ))}
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-emerald-500">{importResults?.success || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Importados</p></div>
+            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-amber-500">{importResults?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Omitidos</p></div>
+            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-rose-500">{importResults?.failed || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Incidencias</p></div>
           </div>
           <DialogFooter>
-            <Button onClick={() => setImportResults(null)}>Cerrar</Button>
+            <Button className="w-full" onClick={() => setImportResults(null)}>Continuar al inventario</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={expandedProductImage !== null} onOpenChange={(open) => { if (!open) setExpandedProductImage(null); }}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-5xl border-0 bg-transparent p-2 shadow-none">
+          <DialogTitle className="sr-only">Imagen del producto</DialogTitle>
+          {expandedProductImage && (
+            <img
+              src={expandedProductImage.src}
+              alt={expandedProductImage.alt}
+              className="max-h-[85vh] w-full rounded-2xl object-contain shadow-2xl"
+            />
+          )}
         </DialogContent>
       </Dialog>
 

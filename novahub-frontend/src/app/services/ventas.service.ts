@@ -10,8 +10,13 @@ export const customersService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<Customer>>('/sales/customers', filters as any),
   getById: (id: string) => api.get<Customer>(`/sales/customers/${id}`),
   create: (data: Partial<Customer>) => api.post<Customer>('/sales/customers', data),
+  importMassive: (data: { rows: Array<Partial<Customer> & { fiscalRegime?: string; customerClass?: string; priceListCode?: string }> }) => api.post<{ total: number; created: number; skipped: number; errors: string[]; warnings: string[] }>('/sales/customers/import', data),
   update: (id: string, data: Partial<Customer>) => api.patch<Customer>(`/sales/customers/${id}`, data),
   delete: (id: string) => api.delete<void>(`/sales/customers/${id}`),
+};
+
+export const auditService = {
+  getEntityHistory: (entity: string, entityId: string) => api.get<any[]>(`/audit/entity/${entity}/${entityId}`),
 };
 
 // ---- Estimates ----

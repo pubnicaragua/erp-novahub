@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { 
-  Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Upload, FileDown, Info, CircleX
+  Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Upload, Download, CircleX, Settings2, Check, CircleHelp
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { customersService } from '../../services/ventas.service';
+import { priceListsService, type PriceList } from '../../services/price-lists.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -16,6 +18,8 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { CustomerDetailDrawer } from './CustomerDetailDrawer';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { CustomerImportPreview, type CustomerImportResult, type CustomerImportRow } from './CustomerImportPreview';
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -23,9 +27,42 @@ interface ClientesViewProps {
   onRefresh: () => void;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
+  isSidebarCollapsed?: boolean;
 }
 
-export function ClientesView({ data, loading, onRefresh, pagination, onSearchChange }: ClientesViewProps) {
+type CustomerDraft = {
+  name: string;
+  type: 'individual' | 'company';
+  fiscalRegime: string;
+  priceListId: string;
+  taxId: string;
+  ruc: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  department: string;
+  country: string;
+  creditLimit: string;
+  notes: string;
+};
+
+const emptyCustomerDraft = (): CustomerDraft => ({
+  name: '', type: 'individual', fiscalRegime: '', priceListId: '',
+  taxId: '', ruc: '', email: '', phone: '', address: '', city: '', department: '',
+  country: 'Nicaragua', creditLimit: '', notes: '',
+});
+
+const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
+  { target: '[data-tour="customers-title"]', title: 'Directorio de Clientes', description: 'Aquí administras los clientes, sus datos fiscales, ubicación, crédito, estado y lista de precios asignada.', placement: 'bottom' },
+  { target: '[data-tour="customers-columns"]', title: 'Configurar columnas', description: 'Elige qué campos se muestran en la tabla. La vista se ajusta automáticamente a las columnas seleccionadas.', placement: 'bottom' },
+  { target: '[data-tour="customers-layout"]', title: 'Lista o tarjetas', description: 'Cambia entre una tabla para revisar muchos registros y tarjetas para consultar cada cliente de forma más visual.', placement: 'bottom' },
+  { target: '[data-tour="customers-import"]', title: 'Importar clientes', description: 'Descarga la plantilla, completa los datos sin código de cliente y carga el archivo. La numeración la genera automáticamente el sistema.', tip: 'La importación de clientes puede repetirse. Primero se prepara el archivo y luego puedes abrir una previsualización editable.', placement: 'bottom' },
+  { target: '[data-tour="customers-new"]', title: 'Crear clientes', description: 'Agrega uno o varios clientes desde el formulario. Para empresas el RUC es obligatorio; la cédula y el RUC pueden registrarse juntos.', placement: 'bottom' },
+  { target: '[data-tour="customers-table"]', title: 'Consultar y gestionar', description: 'Abre el detalle desde Ver, edita los campos permitidos y cambia el estado con confirmación. Los clientes inactivos no se pueden usar en nuevas operaciones.', placement: 'top' },
+];
+
+export function ClientesView({ data, loading, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ClientesViewProps) {
   const { formatConvertedAmount } = useCurrency();
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,162 +73,157 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const [pendingBulkDeactivateIds, setPendingBulkDeactivateIds] = useState<(string | number)[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [importRows, setImportRows] = useState<CustomerImportRow[]>([]);
+  const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importResult, setImportResult] = useState<CustomerImportResult | null>(null);
+  const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [columnConfigOpen, setColumnConfigOpen] = useState(false);
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>(['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'balance', 'status']);
   const [creating, setCreating] = useState(false);
-  const [newCustomer, setNewCustomer] = useState({ name: '', type: 'individual', contactName: '', email: '', phone: '' });
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
+  const [newCustomer, setNewCustomer] = useState<CustomerDraft>(emptyCustomerDraft);
+  const [pendingCustomers, setPendingCustomers] = useState<Array<CustomerDraft & { id: string }>>([]);
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => {
+    priceListsService.getAll().then((response: any) => setPriceLists(Array.isArray(response) ? response : (response?.data || []))).catch(() => setPriceLists([]));
+  }, []);
+
+  const normalizeHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_/-]+/g, '');
+  const getCell = (row: Record<string, any>, aliases: string[]) => {
+    const match = aliases.map(normalizeHeader).find((alias) => Object.prototype.hasOwnProperty.call(row, alias));
+    return match ? row[match] : '';
+  };
+
+  const emptyImportRow = (): CustomerImportRow => ({ name: '', type: 'INDIVIDUAL', fiscalRegime: '', priceListCode: '', taxId: '', ruc: '', email: '', phone: '', address: '', city: '', department: '', country: 'Nicaragua', creditLimit: '', status: 'ACTIVE', notes: '' });
+
+  const validateImportRows = (rows: CustomerImportRow[]) => {
+    const existingEmails = new Set(data.map((customer) => String(customer.email || '').trim().toLowerCase()).filter(Boolean));
+    const existingTaxIds = new Set(data.flatMap((customer) => [customer.taxId, customer.ruc]).map((value) => String(value || '').trim().toLowerCase()).filter(Boolean));
+    const seenEmails = new Set<string>();
+    const seenTaxIds = new Set<string>();
+    return rows.map((row) => {
+      const next = { ...row, error: undefined, warning: undefined };
+      const email = row.email.trim().toLowerCase();
+      const identifiers = [row.taxId, row.ruc].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+      const priceListMatch = row.priceListCode && priceLists.some((list) => list.code.toLowerCase() === row.priceListCode.trim().toLowerCase() || list.name.toLowerCase() === row.priceListCode.trim().toLowerCase());
+      if (!row.name.trim()) next.error = 'Nombre obligatorio';
+      else if (email && !/^\S+@\S+\.\S+$/.test(email)) next.error = 'Correo inválido';
+      else if (email && (existingEmails.has(email) || seenEmails.has(email))) next.error = 'Correo duplicado';
+      else if (identifiers.some((identifier) => existingTaxIds.has(identifier) || seenTaxIds.has(identifier))) next.error = 'Cédula o RUC duplicado';
+      else if (row.type === 'COMPANY' && !row.ruc.trim()) next.error = 'RUC obligatorio para empresas';
+      else if (row.creditLimit !== '' && (!Number.isFinite(Number(row.creditLimit)) || Number(row.creditLimit) < 0)) next.error = 'Límite de crédito inválido';
+      if (!next.error && row.priceListCode && !priceListMatch) next.warning = 'Lista no encontrada; se importará sin lista';
+      if (email) { seenEmails.add(email); existingEmails.add(email); }
+      identifiers.forEach((identifier) => { seenTaxIds.add(identifier); existingTaxIds.add(identifier); });
+      return next;
+    });
+  };
 
   const downloadTemplate = () => {
-    const rows = [
-      ['code', 'name', 'type', 'contactName', 'email', 'phone', 'address', 'status'],
-      ['CLI-000001', 'Cliente Ejemplo', 'INDIVIDUAL', 'Juan Perez', 'cliente@correo.com', '8888-8888', 'Managua', 'ACTIVE'],
-    ];
-    const csv = [
-      'sep=;',
-      ...rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(';')),
-    ].join('\r\n');
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'plantilla_clientes.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const headers = ['Nombre', 'Tipo', 'Cédula', 'RUC', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'Departamento', 'País', 'Régimen fiscal', 'Límite de crédito', 'Lista de precios', 'Estado', 'Notas'];
+    const example = ['Cliente Ejemplo', 'INDIVIDUAL', '001-010190-1000A', 'J0310000000000', 'cliente@correo.com', '8888-8888', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', 'Nicaragua', 'Régimen general', 0, priceLists[0]?.code || '', 'ACTIVE', ''];
+    const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
+    sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
+    const guide = XLSX.utils.aoa_to_sheet([
+      ['GUÍA DE LLENADO · IMPORTACIÓN DE CLIENTES'],
+      ['La importación puede ejecutarse varias veces. Cada cliente válido recibirá un número automático del sistema. No agregues código o número de cliente.'],
+      ['Campo', 'Regla'],
+      ['Nombre', 'Obligatorio. Identifica a la persona natural o jurídica.'],
+      ['Tipo', 'Usa INDIVIDUAL para particular o COMPANY para empresa. Si eliges empresa, el RUC es obligatorio.'],
+      ['Cédula y RUC', 'La Cédula identifica a un particular. El RUC es obligatorio para una empresa.'],
+      ['Contacto y ubicación', 'Completa correo, teléfono, dirección, ciudad, departamento y país cuando aplique.'],
+      ['Régimen fiscal', 'Opcional. Ejemplo: Régimen general, cuota fija o exento.'],
+      ['Lista de precios', 'Opcional. Usa el código o nombre de una lista existente. Si no existe, se mostrará un aviso y se importará sin asignación.'],
+      ['Límite de crédito', 'Opcional. Usa un número mayor o igual a cero. La cuenta por cobrar se calcula con las operaciones registradas.'],
+      ['Estado', 'Usa ACTIVE o INACTIVE. Los clientes inactivos no podrán utilizarse en nuevas operaciones.'],
+      ['Previsualización', 'Después de cargar el archivo, abre la previsualización para corregir datos. Los errores se omiten; los avisos no bloquean la importación.'],
+    ]);
+    guide['!cols'] = [{ wch: 28 }, { wch: 110 }];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Clientes');
+    XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
+    XLSX.writeFile(workbook, 'plantilla_clientes.xlsx');
     toast.success('Plantilla descargada');
   };
 
-  const splitCsvLine = (line: string, delimiter: string) => {
-    const values: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      const next = line[i + 1];
-      if (char === '"') {
-        if (inQuotes && next === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-        continue;
-      }
-      if (char === delimiter && !inQuotes) {
-        values.push(current.trim());
-        current = '';
-        continue;
-      }
-      current += char;
-    }
-    values.push(current.trim());
-    return values.map((v) => v.replace(/^"(.*)"$/, '$1').trim());
-  };
-
-  const parseCustomersCsv = async (file: File) => {
-    const text = await file.text();
-    const rawLines = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const lines = rawLines[0]?.toLowerCase().startsWith('sep=') ? rawLines.slice(1) : rawLines;
-    if (lines.length < 2) return [];
-
-    const headerLine = lines[0];
-    const delimiter = (
-      (headerLine.match(/,/g)?.length || 0) >= (headerLine.match(/;/g)?.length || 0)
-        ? ((headerLine.match(/,/g)?.length || 0) >= (headerLine.match(/\t/g)?.length || 0) ? ',' : '\t')
-        : ((headerLine.match(/;/g)?.length || 0) >= (headerLine.match(/\t/g)?.length || 0) ? ';' : '\t')
-    );
-    const headers = splitCsvLine(headerLine, delimiter).map((h) => h.toLowerCase());
-
-    const rows = lines.slice(1).map((line) => {
-      const cols = splitCsvLine(line, delimiter);
-      const row: Record<string, string> = {};
-      headers.forEach((h, idx) => {
-        row[h] = cols[idx] ?? '';
-      });
-      return row;
-    });
-    return rows;
-  };
-
-  const handleImportCustomers = async () => {
-    if (!importFile) {
-      toast.error('Selecciona un archivo CSV');
-      return;
-    }
-    setImporting(true);
-    setImportResult(null);
+  const readImportFile = async (file: File) => {
     try {
-      const rows = await parseCustomersCsv(importFile);
-      if (rows.length === 0) {
-        toast.error('El archivo no contiene filas para importar');
-        return;
-      }
-
-      const existingByCode = new Set(data.map((c) => String(c.code || '').toUpperCase()).filter(Boolean));
-      const existingByEmail = new Set(data.map((c) => String(c.email || '').toLowerCase()).filter(Boolean));
-
-      let created = 0;
-      let skipped = 0;
-      const errors: string[] = [];
-
-      for (let idx = 0; idx < rows.length; idx++) {
-        const row = rows[idx];
-        const rowNumber = idx + 2;
-        const name = String(row.name || row.nombre || '').trim();
-        const code = String(row.code || row.codigo || '').trim();
-        const email = String(row.email || '').trim().toLowerCase();
-        const typeRaw = String(row.type || row.tipo || 'INDIVIDUAL').trim().toUpperCase();
-        const type = typeRaw === 'COMPANY' || typeRaw === 'EMPRESA' ? 'company' : 'individual';
-        const statusRaw = String(row.status || row.estado || 'ACTIVE').trim().toUpperCase();
-        const status = statusRaw === 'INACTIVE' || statusRaw === 'INACTIVO' ? 'INACTIVE' : 'ACTIVE';
-
-        if (!name) {
-          skipped++;
-          errors.push(`Fila ${rowNumber}: nombre es obligatorio`);
-          continue;
-        }
-        if (code && existingByCode.has(code.toUpperCase())) {
-          skipped++;
-          errors.push(`Fila ${rowNumber}: código duplicado (${code})`);
-          continue;
-        }
-        if (email && existingByEmail.has(email)) {
-          skipped++;
-          errors.push(`Fila ${rowNumber}: email duplicado (${email})`);
-          continue;
-        }
-
-        try {
-          await customersService.create({
-            code: code || `CLI-${Date.now().toString().slice(-6)}-${idx}`,
-            name,
-            type: type as any,
-            contactName: String(row.contactname || row.contacto || '').trim() || undefined,
-            email: email || undefined,
-            phone: String(row.phone || row.telefono || '').trim() || undefined,
-            address: String(row.address || row.direccion || '').trim() || undefined,
-            status: status as any,
-          });
-          created++;
-          if (code) existingByCode.add(code.toUpperCase());
-          if (email) existingByEmail.add(email);
-        } catch (e: any) {
-          skipped++;
-          errors.push(`Fila ${rowNumber}: ${e?.response?.data?.message || e?.message || 'no se pudo crear'}`);
-        }
-      }
-
-      setImportResult({ total: rows.length, created, skipped, errors: errors.slice(0, 12) });
-      if (created > 0) onRefresh();
-      toast.success(`Importación finalizada: ${created} creados, ${skipped} omitidos`);
+      const workbook = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
+      const sheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === 'clientes') || workbook.SheetNames[0];
+      const raw = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
+      if (raw.length < 2) throw new Error('El archivo no contiene filas para importar');
+      const headers = (raw[0] || []).map(normalizeHeader);
+      const parsed = raw.slice(1).filter((row: any[]) => row.some((cell) => String(cell ?? '').trim())).map((values: any[]) => {
+        const source: Record<string, any> = {};
+        headers.forEach((header: string, index: number) => { source[header] = values[index] ?? ''; });
+        const row = emptyImportRow();
+        row.name = String(getCell(source, ['nombre', 'name', 'cliente']) || '').trim();
+        const type = String(getCell(source, ['tipo', 'type']) || 'INDIVIDUAL').toUpperCase();
+        row.type = type.includes('COMPANY') || type.includes('EMPRESA') || type.includes('JURIDICA') ? 'COMPANY' : 'INDIVIDUAL';
+        row.fiscalRegime = String(getCell(source, ['regimenfiscal', 'regimen', 'fiscalregime']) || '').trim();
+        const priceListValue = String(getCell(source, ['listadeprecios', 'lista', 'priceList', 'priceListCode']) || '').trim();
+        row.priceListCode = priceLists.find((list) => list.code.toLowerCase() === priceListValue.toLowerCase() || list.name.toLowerCase() === priceListValue.toLowerCase())?.code || priceListValue;
+        row.taxId = String(getCell(source, ['cedula', 'identificacionfiscal', 'identificacion', 'taxid']) || '').trim();
+        row.ruc = String(getCell(source, ['ruc']) || '').trim();
+        row.email = String(getCell(source, ['correo', 'email']) || '').trim();
+        row.phone = String(getCell(source, ['telefono', 'phone']) || '').trim();
+        row.address = String(getCell(source, ['direccion', 'address']) || '').trim();
+        row.city = String(getCell(source, ['ciudad', 'city']) || '').trim();
+        row.department = String(getCell(source, ['departamento', 'department']) || '').trim();
+        row.country = String(getCell(source, ['pais', 'country']) || 'Nicaragua').trim();
+        const creditLimit = getCell(source, ['limitedecredito', 'creditlimit', 'limite']);
+        row.creditLimit = creditLimit === '' || creditLimit === undefined ? '' : Number(creditLimit);
+        row.status = String(getCell(source, ['estado', 'status']) || 'ACTIVE').toUpperCase().includes('INACT') ? 'INACTIVE' : 'ACTIVE';
+        row.notes = String(getCell(source, ['notas', 'notes', 'observaciones']) || '').trim();
+        return row;
+      });
+      setImportFile(file);
+      setImportRows(validateImportRows(parsed));
+      setImportResult(null);
+      toast.success(`${parsed.length} clientes listos para previsualizar`);
     } catch (error: any) {
-      toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
-    } finally {
-      setImporting(false);
+      setImportFile(null);
+      setImportRows([]);
+      toast.error(error?.message || 'No se pudo leer el archivo');
     }
+  };
+
+  const updateImportRow = (index: number, field: keyof CustomerImportRow, value: string) => {
+    setImportRows((current) => validateImportRows(current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: field === 'creditLimit' ? (value === '' ? '' : Number(value)) : value } : row)));
+  };
+
+  const executeImport = async () => {
+    const validRows = importRows.filter((row) => !row.error);
+    if (!validRows.length) return;
+    setImporting(true);
+    setImportProgress(8);
+    setImportResult(null);
+    let timer: ReturnType<typeof setInterval> | null = null;
+    try {
+      timer = setInterval(() => setImportProgress((current) => Math.min(92, current + 3)), 180);
+      const result = await customersService.importMassive({ rows: validRows.map(({ error: _error, warning: _warning, ...row }) => row) });
+      if (timer) clearInterval(timer);
+      setImportProgress(100);
+      setImportResult(result);
+      await onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo importar clientes');
+    } finally {
+      if (timer) clearInterval(timer);
+      setImporting(false);
+      setImportProgress(0);
+    }
+  };
+
+  const finishImport = () => {
+    setImportResult(null);
+    setImportPreviewOpen(false);
+    setImportRows([]);
+    setImportFile(null);
   };
 
   const filtered = data.filter(c => {
@@ -208,6 +240,12 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
 
   const handleUpdate = async (id: string | number, updates: Partial<Customer>) => {
     try {
+      const currentCustomer = data.find((customer) => String(customer.id) === String(id));
+      const nextType = String(updates.type ?? currentCustomer?.type ?? '').toUpperCase();
+      const nextRuc = String(updates.ruc ?? currentCustomer?.ruc ?? '').trim();
+      if (nextType === 'COMPANY' && !nextRuc) {
+        throw new Error('El RUC es obligatorio para una empresa');
+      }
       await customersService.update(id.toString(), updates);
       toast.success('Cliente actualizado correctamente');
       onRefresh();
@@ -217,25 +255,58 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     }
   };
 
-  const handleCreateClient = async () => {
-    if (!newCustomer.name.trim()) {
+  const buildCustomerPayload = (draft: CustomerDraft): Partial<Customer> => ({
+    name: draft.name.trim(),
+    type: draft.type,
+    fiscalRegime: draft.fiscalRegime.trim() || undefined,
+    priceListId: draft.priceListId || undefined,
+    taxId: draft.taxId.trim() || undefined,
+    ruc: draft.ruc.trim() || undefined,
+    email: draft.email.trim() || undefined,
+    phone: draft.phone.trim() || undefined,
+    address: draft.address.trim() || undefined,
+    city: draft.city.trim() || undefined,
+    department: draft.department.trim() || undefined,
+    country: draft.country.trim() || undefined,
+    creditLimit: draft.creditLimit === '' ? undefined : Number(draft.creditLimit),
+    notes: draft.notes.trim() || undefined,
+  });
+
+  const validateCustomerDraft = (draft: CustomerDraft) => {
+    if (!draft.name.trim()) {
       toast.error('El nombre del cliente es obligatorio');
-      return;
+      return false;
     }
+    if (draft.email.trim() && !/^\S+@\S+\.\S+$/.test(draft.email.trim())) {
+      toast.error('El correo del cliente no es válido');
+      return false;
+    }
+    if (draft.type === 'company' && !draft.ruc.trim()) {
+      toast.error('El RUC es obligatorio para una empresa');
+      return false;
+    }
+    if (draft.creditLimit !== '' && (!Number.isFinite(Number(draft.creditLimit)) || Number(draft.creditLimit) < 0)) {
+      toast.error('El límite de crédito debe ser un número mayor o igual a cero');
+      return false;
+    }
+    return true;
+  };
+
+  const handleAddPendingCustomer = () => {
+    if (!validateCustomerDraft(newCustomer)) return;
+    setPendingCustomers((current) => [...current, { ...newCustomer, id: `draft-${Date.now()}-${current.length}` }]);
+    setNewCustomer(emptyCustomerDraft());
+    toast.success('Cliente agregado a la lista de espera');
+  };
+
+  const handleCreateClient = async () => {
+    if (!validateCustomerDraft(newCustomer)) return;
     setCreating(true);
     try {
-      const code = `CLI-${Date.now().toString().slice(-6)}`;
-      await customersService.create({
-        code,
-        name: newCustomer.name.trim(),
-        type: newCustomer.type as any,
-        contactName: newCustomer.contactName.trim() || undefined,
-        email: newCustomer.email.trim() || undefined,
-        phone: newCustomer.phone.trim() || undefined,
-      });
+      await customersService.create(buildCustomerPayload(newCustomer));
       toast.success('Nuevo cliente creado');
-      setCreateOpen(false);
-      setNewCustomer({ name: '', type: 'individual', contactName: '', email: '', phone: '' });
+      setNewCustomer(emptyCustomerDraft());
+      if (pendingCustomers.length === 0) setCreateOpen(false);
       onRefresh();
     } catch (e: any) {
       console.error('Error creating customer:', e);
@@ -244,6 +315,28 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       setCreating(false);
     }
   };
+
+  const handleSavePendingCustomers = async () => {
+    if (!pendingCustomers.length) return;
+    setCreating(true);
+    try {
+      const result = await Promise.allSettled(pendingCustomers.map(({ id: _id, ...draft }) => customersService.create(buildCustomerPayload(draft))));
+      const created = result.filter((item) => item.status === 'fulfilled').length;
+      const failed = result.length - created;
+      if (failed) toast.warning(`${created} clientes guardados y ${failed} no se pudieron guardar`);
+      else toast.success(`${created} clientes guardados correctamente`);
+      setPendingCustomers([]);
+      setNewCustomer(emptyCustomerDraft());
+      setCreateOpen(false);
+      onRefresh();
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  if (importPreviewOpen) {
+    return <CustomerImportPreview rows={importRows} fileName={importFile?.name || ''} priceLists={priceLists} isSidebarCollapsed={isSidebarCollapsed} importing={importing} progress={importProgress} result={importResult} onRowUpdate={updateImportRow} onBack={() => { setImportPreviewOpen(false); setImportOpen(true); }} onConfirm={executeImport} onDone={finishImport} />;
+  }
 
   const columns: ColumnDef<Customer>[] = [
     { 
@@ -255,10 +348,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { 
       key: 'name', 
       header: 'Nombre del Cliente', 
+      width: '220px',
       editable: canPerform('SALES_CLIENTS', 'edit'),
       render: (val) => <span className="text-[13px] font-bold text-foreground">{val || 'Sin nombre'}</span>
     },
-    { key: 'contactName', header: 'Contacto', editable: canPerform('SALES_CLIENTS', 'edit') },
     { 
       key: 'type', 
       header: 'Tipo', 
@@ -278,8 +371,37 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         </Badge>
       )
     },
-    { key: 'email', header: 'Email / Envío', editable: canPerform('SALES_CLIENTS', 'edit') },
+    {
+      key: 'taxId',
+      header: 'Cédula',
+      width: '130px',
+      editable: canPerform('SALES_CLIENTS', 'edit'),
+      render: (val) => <span className="font-mono text-xs text-muted-foreground">{val || '—'}</span>,
+    },
+    {
+      key: 'ruc',
+      header: 'RUC',
+      width: '130px',
+      editable: canPerform('SALES_CLIENTS', 'edit'),
+      render: (val) => <span className="font-mono text-xs text-muted-foreground">{val || '—'}</span>,
+    },
+    {
+      key: 'fiscalRegime',
+      header: 'Régimen fiscal',
+      width: '150px',
+      editable: canPerform('SALES_CLIENTS', 'edit'),
+      render: (val) => <span className="text-xs text-muted-foreground">{val || '—'}</span>,
+    },
+    {
+      key: 'priceListId',
+      header: 'Lista de precios',
+      width: '165px',
+      render: (_val, row) => <span className="text-xs font-bold text-primary">{row.priceList?.name || 'Sin asignar'}</span>,
+    },
+    { key: 'email', header: 'Correo', width: '185px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('SALES_CLIENTS', 'edit') },
+    { key: 'department', header: 'Departamento', width: '150px', editable: canPerform('SALES_CLIENTS', 'edit') },
+    { key: 'creditLimit', header: 'Límite de crédito', width: '140px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="text-xs font-bold tabular-nums">{formatConvertedAmount(val || 0, 'NIO')}</span> },
     { 
       key: 'balance', 
       header: 'Saldo Deudor', 
@@ -314,6 +436,23 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     }
   ];
 
+  const visibleColumns = columns.filter((column) => visibleColumnKeys.includes(String(column.key)));
+  const columnOptions = [
+    { key: 'code', label: 'Código' },
+    { key: 'name', label: 'Nombre' },
+    { key: 'taxId', label: 'Cédula' },
+    { key: 'ruc', label: 'RUC' },
+    { key: 'type', label: 'Tipo' },
+    { key: 'fiscalRegime', label: 'Régimen fiscal' },
+    { key: 'priceListId', label: 'Lista de precios' },
+    { key: 'email', label: 'Correo' },
+    { key: 'phone', label: 'Teléfono' },
+    { key: 'department', label: 'Departamento' },
+    { key: 'creditLimit', label: 'Límite de crédito' },
+    { key: 'balance', label: 'Saldo deudor' },
+    { key: 'status', label: 'Estado' },
+  ];
+
   const kpis = [
     { title: 'Total Clientes', value: data.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
     { title: 'Particulares', value: data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
@@ -346,7 +485,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div>
-            <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Directorio de Clientes</h2>
+            <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="customers-title">Directorio de Clientes</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión integral Excel-like sin interrupciones.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -364,10 +503,30 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               <option value="INACTIVE">Inactivos</option>
               <option value="ALL">Todos</option>
             </select>
+            <Button
+              variant="outline"
+              onClick={() => setShowTutorial(true)}
+              className="h-10 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest"
+            >
+              <CircleHelp className="mr-2 size-4" /> Tutorial
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setColumnConfigOpen(true)}
+              data-tour="customers-columns"
+              className="h-10 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest"
+            >
+              <Settings2 className="mr-2 size-4" /> Columnas <span className="ml-1 text-muted-foreground">{visibleColumns.length}</span>
+            </Button>
+            <select value={layoutMode} onChange={(e) => setLayoutMode(e.target.value as 'table' | 'cards')} aria-label="Elegir distribución" data-tour="customers-layout" className="h-10 w-32 rounded-xl border border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary">
+              <option value="table">Lista</option>
+              <option value="cards">Tarjetas</option>
+            </select>
             {canPerform('SALES_CLIENTS', 'create') && (
               <Button
                 variant="outline"
                 onClick={() => { setImportOpen(true); setImportResult(null); }}
+                data-tour="customers-import"
                 className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
               >
                 <Upload className="size-4" /> Importar
@@ -376,6 +535,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
             {canPerform('SALES_CLIENTS', 'create') && (
               <Button 
                 onClick={() => setCreateOpen(true)}
+                data-tour="customers-new"
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
               >
                 <UserPlus className="size-4" /> Nuevo Cliente
@@ -384,32 +544,40 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
           </div>
         </div>
 
-        <EditableDataTable 
-          data={filtered}
-          columns={columns}
-          onRowUpdate={handleUpdate}
-          isLoading={loading}
-          pagination={pagination}
-          showClearSelection={false}
-          actions={(row) => (
-            <div className="flex items-center gap-1">
-               <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomerDetail(row)}><Eye className="size-4" /></Button>
-               {canPerform('SALES_CLIENTS', 'edit') && (
-                 <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Anular cliente'} className={cn('size-8 rounded-lg transition-colors', String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'hover:bg-emerald-500/10 hover:text-emerald-500' : 'hover:bg-amber-500/10 hover:text-amber-500')} onClick={() => setPendingStatusChange(row)}><CircleX className="size-4" /></Button>
-               )}
-            </div>
-          )}
-          bulkActions={(selectedIds) => (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-[10px] font-black uppercase tracking-wider text-amber-600 hover:bg-amber-500/10"
-              onClick={() => setPendingBulkDeactivateIds(selectedIds)}
-            >
-              <CircleX className="mr-2 size-3" /> Desactivar clientes
-            </Button>
-          )}
-        />
+        <Card className="min-w-0 overflow-hidden rounded-2xl border-border/50 bg-card/40 shadow-sm" data-tour="customers-table">
+          <CardContent className="min-w-0 p-1.5 sm:p-3">
+            <EditableDataTable
+              data={filtered}
+              columns={visibleColumns}
+              onRowUpdate={handleUpdate}
+              isLoading={loading}
+              pagination={pagination}
+              showClearSelection={false}
+              actionsWidth="w-24"
+              fitContent
+              layoutMode={layoutMode}
+              showHorizontalControls
+              actions={(row) => (
+                <div className="flex items-center gap-1">
+                   <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomerDetail(row)}><Eye className="size-4" /></Button>
+                   {canPerform('SALES_CLIENTS', 'edit') && (
+                     <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Anular cliente'} className={cn('size-8 rounded-lg transition-colors', String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'hover:bg-emerald-500/10 hover:text-emerald-500' : 'hover:bg-amber-500/10 hover:text-amber-500')} onClick={() => setPendingStatusChange(row)}><CircleX className="size-4" /></Button>
+                   )}
+                </div>
+              )}
+              bulkActions={(selectedIds) => (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-[10px] font-black uppercase tracking-wider text-amber-600 hover:bg-amber-500/10"
+                  onClick={() => setPendingBulkDeactivateIds(selectedIds)}
+                >
+                  <CircleX className="mr-2 size-3" /> Desactivar clientes
+                </Button>
+              )}
+            />
+          </CardContent>
+        </Card>
       </div>
 
       <ConfirmDialog
@@ -461,108 +629,107 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         customerSnapshot={selectedCustomerDetail}
       />
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-lg rounded-3xl p-0">
-          <DialogHeader className="border-b border-border/40 px-5 py-4 sm:px-6">
-            <DialogTitle className="text-lg font-black uppercase tracking-tight">Nuevo Cliente</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
-            <div className="space-y-1.5 sm:col-span-2">
-              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre</label>
-              <Input value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} placeholder="Nombre del cliente" className="h-11 rounded-xl" autoFocus />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo</label>
-              <select value={newCustomer.type} onChange={(e) => setNewCustomer({ ...newCustomer, type: e.target.value })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm">
-                <option value="individual">Particular</option>
-                <option value="company">Empresa</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Contacto</label>
-              <Input value={newCustomer.contactName} onChange={(e) => setNewCustomer({ ...newCustomer, contactName: e.target.value })} placeholder="Persona de contacto" className="h-11 rounded-xl" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Email</label>
-              <Input type="email" value={newCustomer.email} onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })} placeholder="cliente@correo.com" className="h-11 rounded-xl" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Teléfono</label>
-              <Input value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} placeholder="8888-8888" className="h-11 rounded-xl" />
-            </div>
-          </div>
-          <DialogFooter className="gap-2 border-t border-border/40 px-5 py-4 sm:px-6">
-            <Button variant="outline" onClick={() => setCreateOpen(false)} className="rounded-xl">Cancelar</Button>
-            <Button onClick={handleCreateClient} disabled={creating || !newCustomer.name.trim()} className="rounded-xl font-bold">
-              {creating ? 'Guardando...' : 'Crear Cliente'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="sm:max-w-2xl">
+      <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Upload className="size-4" /> Importar clientes
-            </DialogTitle>
-            <DialogDescription>
-              Sube un CSV para cargar clientes masivamente. Usa la plantilla para evitar errores de formato.
-            </DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
+            <DialogDescription>Elige qué información quieres ver. La tabla se ajustará automáticamente al espacio disponible.</DialogDescription>
           </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="rounded-xl border border-border/60 p-4 bg-muted/20">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Formato esperado</p>
-              <p className="text-xs text-muted-foreground">
-                Columnas: <span className="font-mono">code,name,type,contactName,email,phone,address,status</span>
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                type: <b>INDIVIDUAL</b> o <b>COMPANY</b> · status: <b>ACTIVE</b> o <b>INACTIVE</b>
-              </p>
-              <Button variant="ghost" size="sm" className="mt-3 gap-2 h-8" onClick={downloadTemplate}>
-                <FileDown className="size-4" /> Descargar plantilla CSV
-              </Button>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-muted-foreground">Archivo CSV</label>
-              <Input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-              />
-              {importFile && (
-                <p className="text-xs text-muted-foreground">
-                  Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)
-                </p>
-              )}
-            </div>
-
-            {importResult && (
-              <div className="rounded-xl border border-border/60 p-4 bg-background">
-                <p className="text-xs font-black uppercase tracking-widest mb-2">Resultado</p>
-                <p className="text-sm">
-                  Total: <b>{importResult.total}</b> · Creados: <b className="text-emerald-500">{importResult.created}</b> · Omitidos: <b className="text-amber-500">{importResult.skipped}</b>
-                </p>
-                {importResult.errors.length > 0 && (
-                  <div className="mt-2 text-xs text-amber-600 space-y-1">
-                    <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
-                    {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {columnOptions.map((option) => {
+              const active = visibleColumnKeys.includes(option.key);
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setVisibleColumnKeys((current) => active ? (current.length > 1 ? current.filter((key) => key !== option.key) : current) : [...current, option.key])}
+                  className={cn('flex min-h-11 items-center justify-between rounded-xl border px-3 text-left text-xs font-bold transition-colors', active ? 'border-primary bg-primary/10 text-foreground' : 'border-border/60 bg-muted/10 text-muted-foreground hover:border-primary/50')}
+                >
+                  <span>{option.label}</span>
+                  {active && <Check className="size-4 text-primary" />}
+                </button>
+              );
+            })}
           </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
-            <Button onClick={handleImportCustomers} disabled={importing || !importFile} className="gap-2">
-              <Upload className="size-4" /> {importing ? 'Importando...' : 'Importar clientes'}
-            </Button>
+          <DialogFooter className="flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setVisibleColumnKeys(columnOptions.map((option) => option.key))}>Mostrar todas</Button>
+            <Button onClick={() => setColumnConfigOpen(false)}>Aplicar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !creating) setCreateOpen(false); }}>
+        <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,1400px)] !flex-col overflow-hidden rounded-3xl p-0">
+          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
+            <DialogTitle className="text-xl font-black uppercase tracking-tight">Nuevo cliente</DialogTitle>
+            <DialogDescription>Completa los datos del cliente. Puedes agregar varios a una lista temporal y guardarlos en una sola acción.</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
+            <div className="min-w-0 space-y-6">
+              <section className="space-y-3">
+                <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">El número de cliente se genera automáticamente.</p></div>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="space-y-1.5 sm:col-span-2 xl:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} placeholder="Nombre del particular o empresa" className="h-11 rounded-xl" autoFocus /></div>
+                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo *</label><select value={newCustomer.type} onChange={(e) => setNewCustomer({ ...newCustomer, type: e.target.value as CustomerDraft['type'] })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="individual">Particular</option><option value="company">Empresa</option></select></div>
+                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cédula</label><Input value={newCustomer.taxId} onChange={(e) => setNewCustomer({ ...newCustomer, taxId: e.target.value })} placeholder="001-010190-1000A" className="h-11 rounded-xl" /></div>
+                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC</label><Input value={newCustomer.ruc} onChange={(e) => setNewCustomer({ ...newCustomer, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
+                </div>
+              </section>
+              <section className="space-y-3 border-t border-border/40 pt-5">
+                <div><h3 className="text-sm font-black uppercase tracking-widest">Contacto y ubicación</h3><p className="text-xs text-muted-foreground">Completa la información esencial del cliente.</p></div>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Correo</label><Input type="email" value={newCustomer.email} onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })} placeholder="correo@ejemplo.com" className="h-11 rounded-xl" /></div>
+                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Teléfono</label><Input value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} placeholder="8888-8888" className="h-11 rounded-xl" /></div>
+                  <div className="space-y-1.5 xl:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dirección</label><Input value={newCustomer.address} onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })} placeholder="Calle, número y referencias" className="h-11 rounded-xl" /></div>
+                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ciudad</label><Input value={newCustomer.city} onChange={(e) => setNewCustomer({ ...newCustomer, city: e.target.value })} placeholder="Ciudad" className="h-11 rounded-xl" /></div>
+                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Departamento</label><Input value={newCustomer.department} onChange={(e) => setNewCustomer({ ...newCustomer, department: e.target.value })} placeholder="Departamento" className="h-11 rounded-xl" /></div>
+                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</label><Input value={newCustomer.country} onChange={(e) => setNewCustomer({ ...newCustomer, country: e.target.value })} placeholder="País" className="h-11 rounded-xl" /></div>
+                  <div className="space-y-1.5 xl:col-span-3"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</label><textarea value={newCustomer.notes} onChange={(e) => setNewCustomer({ ...newCustomer, notes: e.target.value })} placeholder="Observaciones opcionales" className="min-h-20 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary" /></div>
+                </div>
+              </section>
+              <section className="space-y-3 border-t border-border/40 pt-5">
+                <div><h3 className="text-sm font-black uppercase tracking-widest">Condiciones comerciales</h3><p className="text-xs text-muted-foreground">Estos cambios quedan registrados en el historial del cliente.</p></div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Régimen fiscal</label><Input value={newCustomer.fiscalRegime} onChange={(e) => setNewCustomer({ ...newCustomer, fiscalRegime: e.target.value })} placeholder="Régimen general" className="h-11 rounded-xl" /></div>
+                  <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito</label><Input type="number" min="0" value={newCustomer.creditLimit} onChange={(e) => setNewCustomer({ ...newCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" /></div>
+                  <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista de precios</label><select value={newCustomer.priceListId} onChange={(e) => setNewCustomer({ ...newCustomer, priceListId: e.target.value })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="">Sin lista asignada</option>{priceLists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}</select></div>
+                </div>
+              </section>
+            </div>
+            <aside className="min-w-0 rounded-2xl border border-border/50 bg-muted/10 p-4">
+              <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-black uppercase tracking-widest">Clientes en espera</h3><p className="mt-1 text-xs text-muted-foreground">Agrega registros aquí y guárdalos juntos.</p></div><Badge variant="secondary" className="shrink-0">{pendingCustomers.length}</Badge></div>
+              {pendingCustomers.length === 0 ? (
+                <div className="mt-5 rounded-xl border border-dashed border-border/60 p-5 text-center text-xs text-muted-foreground">Aún no hay clientes agregados. Completa el formulario y usa “Agregar a la lista”.</div>
+              ) : (
+                <div className="mt-4 max-h-[42vh] space-y-2 overflow-y-auto pr-1">
+                  {pendingCustomers.map((customer, index) => <div key={customer.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/50 bg-background/50 p-3"><div className="min-w-0"><p className="truncate text-sm font-bold">{index + 1}. {customer.name}</p><p className="mt-1 truncate text-[11px] text-muted-foreground">{customer.taxId || customer.ruc || 'Sin identificación'} · {priceLists.find((list) => list.id === customer.priceListId)?.name || 'Sin lista asignada'}</p></div><Button variant="ghost" size="icon" title="Quitar de la lista" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:text-destructive" onClick={() => setPendingCustomers((current) => current.filter((item) => item.id !== customer.id))}><CircleX className="size-4" /></Button></div>)}
+                </div>
+              )}
+            </aside>
+          </div>
+          <DialogFooter className="flex-col gap-2 border-t border-border/40 px-5 py-4 sm:flex-row sm:flex-wrap sm:justify-between sm:px-7">
+            <Button variant="outline" onClick={() => setCreateOpen(false)} className="w-full rounded-xl sm:w-auto">Cerrar</Button>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <Button variant="outline" onClick={handleAddPendingCustomer} disabled={creating || !newCustomer.name.trim()} className="w-full rounded-xl sm:w-auto">Agregar a la lista</Button>
+              <Button variant="outline" onClick={handleCreateClient} disabled={creating || !newCustomer.name.trim()} className="w-full rounded-xl sm:w-auto">{creating ? 'Guardando...' : 'Guardar'}</Button>
+              {pendingCustomers.length > 0 && <Button onClick={handleSavePendingCustomers} disabled={creating} className="w-full rounded-xl font-bold sm:w-auto">{creating ? 'Guardando...' : `Guardar ${pendingCustomers.length} clientes`}</Button>}
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) { setImportRows([]); setImportFile(null); } setImportOpen(open); }}>
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar clientes</DialogTitle><DialogDescription>Carga una plantilla Excel o CSV. Luego abre la previsualización completa para corregir los datos antes de crear los clientes.</DialogDescription></DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">El número de cliente lo asigna automáticamente el sistema. La importación puede repetirse; los correos e identificaciones duplicadas se marcarán como errores. Los avisos, como una lista de precios inexistente, no bloquean las filas.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
+            <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo de clientes</label><Input type="file" accept=".xlsx,.xls,.csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); }} />{importFile && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p>}</div>
+            <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos del cliente, sin código.</li><li>Carga el archivo; el sistema lo prepara sin mostrar cambios todavía.</li><li>Presiona “Previsualizar clientes” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; los clientes válidos recibirán su número automático.</li></ol></div>
+          </div>
+          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={() => { setImportOpen(false); setImportPreviewOpen(true); }}>Previsualizar clientes</Button>}</DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {showTutorial && <GuidedTour steps={CUSTOMERS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Clientes" allowTargetInteraction />}
     </div>
   );
 }

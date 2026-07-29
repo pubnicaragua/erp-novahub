@@ -221,7 +221,7 @@ const menuItems: MenuItem[] = [
     label: 'Inventario',
     icon: <Package className="size-5" />,
     submenu: [
-      { id: 'productos', label: 'Existencias', icon: <Package className="size-4" /> },
+      { id: 'productos', label: 'Productos', icon: <Package className="size-4" /> },
       { id: 'servicios', label: 'Servicios', icon: <BriefcaseBusiness className="size-4" /> },
       { id: 'dashboard', label: 'Resumen', icon: <BarChart3 className="size-4" /> },
       { id: 'almacenes', label: 'Almacenes', icon: <Archive className="size-4" /> },
