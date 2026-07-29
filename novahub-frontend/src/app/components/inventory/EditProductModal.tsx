@@ -165,7 +165,6 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
         code: draft.code,
         name: draft.name,
         categoryId: draft.categoryId,
-        salePrice: Number(draft.salePrice || 0) * rate,
         costPrice: Number(draft.costPrice || 0) * rate,
         trackSerialNumbers: Boolean(draft.trackSerialNumbers),
         itemType: draft.itemType || 'PRODUCT',
@@ -255,6 +254,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                 variant={draft.trackSerialNumbers ? 'default' : 'outline'}
                 className={`h-auto min-h-9 py-2 w-full text-[10px] uppercase tracking-wider font-bold whitespace-normal text-center ${draft.trackSerialNumbers ? 'bg-primary text-primary-foreground shadow-sm' : ''}`}
                 onClick={() => handleUpdate('trackSerialNumbers', !draft.trackSerialNumbers)}
+                disabled={!isService || isSaving}
               >
                 Seguimiento Serie/IMEI:<br/>{draft.trackSerialNumbers ? 'Activado' : 'Desactivado'}
               </Button>
@@ -274,7 +274,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
 
             <div className="col-span-1">
               <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría</label>
-              <Select value={draft.categoryId} onValueChange={v => handleUpdate('categoryId', v)}>
+              <Select value={draft.categoryId} onValueChange={v => handleUpdate('categoryId', v)} disabled={!isService || isSaving}>
                 <SelectTrigger className="h-9 text-xs mt-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                 <SelectContent>
                   {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -295,7 +295,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
             {!isService && (
               <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">U. Medida</label>
-                <Select value={draft.unit || 'unidad'} onValueChange={v => handleUpdate('unit', v)}>
+                <Select value={draft.unit || 'unidad'} onValueChange={v => handleUpdate('unit', v)} disabled={!isService || isSaving}>
                   <SelectTrigger className="h-9 text-xs mt-1"><SelectValue placeholder="Unidad" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unidad">Unidad</SelectItem>
@@ -315,7 +315,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
 
             <div className="col-span-1">
               <label className="text-[10px] uppercase font-bold text-muted-foreground">Moneda</label>
-              <Select value={draft.priceCurrency} onValueChange={handleCurrencyChange}>
+              <Select value={draft.priceCurrency} onValueChange={handleCurrencyChange} disabled={!isService || isSaving}>
                 <SelectTrigger className="h-9 text-xs mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="NIO">NIO</SelectItem>
@@ -330,25 +330,15 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                 type="number" min={0} step="any"
                 value={draft.costPrice} 
                 onChange={e => handleUpdate('costPrice', e.target.value)} 
-                className="h-9 text-xs text-right mt-1 tabular-nums" 
+                className="h-9 text-xs text-right mt-1 tabular-nums" readOnly
               />
             </div>}
             
-            <div className="col-span-1">
-              <label className="text-[10px] uppercase font-bold text-muted-foreground">Venta</label>
-              <Input 
-                type="number" min={0} step="any"
-                value={draft.salePrice} 
-                onChange={e => handleUpdate('salePrice', e.target.value)} 
-                className="h-9 text-xs text-right mt-1 tabular-nums" 
-              />
-            </div>
-
             {(!isService && draft.initialAllocations?.[0]) && (
               <>
                 <div className="col-span-1">
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén Principal</label>
-                  <Select value={draft.initialAllocations[0].warehouseId || ''} onValueChange={v => updateAllocation(draft.initialAllocations[0].id, { warehouseId: v })}>
+                  <Select value={draft.initialAllocations[0].warehouseId || ''} onValueChange={v => updateAllocation(draft.initialAllocations[0].id, { warehouseId: v })} disabled>
                     <SelectTrigger className="h-9 text-xs mt-1"><SelectValue placeholder="Almacén..." /></SelectTrigger>
                     <SelectContent>
                       {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
@@ -357,15 +347,15 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                 </div>
                 <div className="col-span-1">
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Actual</label>
-                  <Input type="number" min={0} value={draft.initialAllocations[0].quantity} onChange={e => updateAllocation(draft.initialAllocations[0].id, { quantity: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Stock" />
+                  <Input type="number" disabled min={0} value={draft.initialAllocations[0].quantity} onChange={e => updateAllocation(draft.initialAllocations[0].id, { quantity: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Stock" />
                 </div>
                 <div className="col-span-1">
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Mínimo</label>
-                  <Input type="number" min={0} value={draft.initialAllocations[0].minStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { minStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Min" />
+                  <Input type="number" disabled min={0} value={draft.initialAllocations[0].minStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { minStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Min" />
                 </div>
                 <div className="col-span-1">
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Máximo</label>
-                  <Input type="number" min={0} value={draft.initialAllocations[0].maxStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { maxStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Max" />
+                  <Input type="number" disabled min={0} value={draft.initialAllocations[0].maxStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { maxStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Max" />
                 </div>
               </>
             )}

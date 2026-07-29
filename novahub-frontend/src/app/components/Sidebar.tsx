@@ -64,6 +64,8 @@ import {
   Settings2,
   TicketIcon,
   Gavel,
+  BriefcaseBusiness,
+  Tags,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -193,6 +195,7 @@ const menuItems: MenuItem[] = [
       { id: 'pagos-recibidos', label: 'Pagos recibidos', icon: <CreditCard className="size-4" /> },
       { id: 'devoluciones-venta', label: 'Devoluciones de venta', icon: <FileOutput className="size-4" /> },
       { id: 'notas-credito', label: 'Notas de credito', icon: <FileMinus className="size-4" /> },
+      { id: 'listas-precios', label: 'Listas de precios', icon: <Tags className="size-4" /> },
       { id: 'facturacion-caja', label: 'Facturación por Caja', icon: <Calculator className="size-4" /> },
       { id: 'control-caja', label: 'Control de Caja', icon: <Coins className="size-4" /> },
     ]
@@ -219,6 +222,7 @@ const menuItems: MenuItem[] = [
     icon: <Package className="size-5" />,
     submenu: [
       { id: 'productos', label: 'Existencias', icon: <Package className="size-4" /> },
+      { id: 'servicios', label: 'Servicios', icon: <BriefcaseBusiness className="size-4" /> },
       { id: 'dashboard', label: 'Resumen', icon: <BarChart3 className="size-4" /> },
       { id: 'almacenes', label: 'Almacenes', icon: <Archive className="size-4" /> },
       { id: 'transferencias', label: 'Transferencias', icon: <Truck className="size-4" /> },

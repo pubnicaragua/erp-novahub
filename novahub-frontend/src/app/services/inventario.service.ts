@@ -13,7 +13,6 @@ export const inventoryService = {
     return resolveStorageReferences(product);
   },
   createProduct: (data: Partial<Product> & { initialStock?: number }) => api.post<Product>('/inventory/products', data),
-  duplicateProduct: (id: string) => api.post<Product>(`/inventory/products/${id}/duplicate`, {}),
   updateProduct: (id: string, data: Partial<Product>) => api.patch<Product>(`/inventory/products/${id}`, data),
   deleteProduct: (id: string) => api.delete(`/inventory/products/${id}`),
   checkProductCode: (code: string, excludeId?: string) => 
@@ -102,5 +101,7 @@ export const inventoryService = {
     }
     return results;
   },
+  getInitialImportStatus: () => api.get<{ completed: boolean; importedAt?: string | null; productCount?: number; priceListCode?: string | null; currency?: string | null; blockedByExistingProducts?: boolean }>('/inventory/initial-import/status'),
+  importInitialCatalog: (data: { items: any[]; currency: string; exchangeRate?: number; priceListCode?: string; confirmText: string }) => api.post<any>('/inventory/initial-import', data),
   deleteProducts: (ids: string[]) => api.post<{ deleted: number }>('/inventory/products/batch-delete', { ids }),
 };

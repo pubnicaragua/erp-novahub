@@ -177,7 +177,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                       (product.priceCurrency === 'USD' ? exchangeRate : (1 / exchangeRate)) 
                       : 1;
         const convertedCost = Number(product.costPrice || 0) * rate;
-        const convertedSale = Number(product.salePrice || 0) * rate;
 
         const createdResponse = await inventoryService.createProduct({
           code: product.code,
@@ -187,7 +186,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           warehouseId: product.initialWarehouseId || undefined,
           trackInventory: product.itemType === 'PRODUCT',
           trackSeries: Boolean(product.trackSerialNumbers),
-          salePrice: convertedSale,
           costPrice: convertedCost,
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           itemType: product.itemType || 'PRODUCT',
@@ -336,17 +334,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 />
               </div>}
               
-              <div className="col-span-1">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Venta</label>
-                <Input 
-                  type="number" min={0}
-                  value={draftProduct.salePrice} 
-                  onChange={e => handleUpdateDraft('salePrice', e.target.value)} 
-                  className="h-8 text-xs text-right mt-1 tabular-nums" 
-                  placeholder="0.00" 
-                />
-              </div>
-
               {catalogItemType !== 'SERVICE' && <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Serie/IMEI</label>
                 <Button
@@ -414,7 +401,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                    <TableHead className="text-[10px] uppercase">Nombre</TableHead>
                    <TableHead className="text-[10px] uppercase">Categoría</TableHead>
                    <TableHead className="text-[10px] uppercase text-right">Stock Inicial</TableHead>
-                   <TableHead className="text-[10px] uppercase text-right">Venta</TableHead>
                    <TableHead className="w-10"></TableHead>
                  </TableRow>
                </TableHeader>
@@ -438,9 +424,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                        </TableCell>
                        <TableCell className="text-xs text-right p-2 tabular-nums">
                          {product.itemType === 'SERVICE' ? '-' : (product.initialStock || 0)}
-                       </TableCell>
-                       <TableCell className="text-xs text-right p-2 tabular-nums">
-                         {product.priceCurrency === 'USD' ? '$' : 'C$'} {Number(product.salePrice || 0).toFixed(2)}
                        </TableCell>
                        <TableCell className="text-right p-2">
                          <Button 
