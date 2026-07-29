@@ -23,7 +23,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import type { Currency } from '../../types';
 import type { AccountDetailType, AccountSubtype, AccountType, ChartAccountCsvRow } from '../../types/accounting';
-import { CHART_ACCOUNT_CSV_HEADERS, downloadCsv, parseCsvText, templateRows } from '../../utils/chartOfAccountsCsv';
+import { downloadCsv, parseCsvText, templateRows } from '../../utils/chartOfAccountsCsv';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface AccountNode {
