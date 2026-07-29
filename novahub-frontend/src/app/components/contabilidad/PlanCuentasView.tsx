@@ -169,7 +169,8 @@ export function PlanCuentasView() {
         currency: a.currency ?? 'USD', isActive: a.isActive !== false,
         subtype: a.subtype ?? 'DETAIL_ACCOUNT',
         detailType: a.detailType ?? ((a.type === 'INCOME' || a.type === 'EXPENSE') ? 'INCOME_STATEMENT' : 'BALANCE_SHEET'),
-        allowManualEntry: a.allowManualEntry !== false,
+        allowManualEntry: a.allowManualEntry !== false && a.acceptsPostings !== false,
+        acceptsPostings: a.acceptsPostings !== false,
         notes: a.notes ?? null,
         children: [], level: 0,
         _count: a._count ?? { children: 0, transactions: 0 },
@@ -277,6 +278,7 @@ export function PlanCuentasView() {
         type: formData.type, parentId: formData.parentId || null,
         currency: formData.currency, subtype: formData.subtype,
         detailType: formData.detailType, allowManualEntry: formData.allowManualEntry,
+        acceptsPostings: formData.allowManualEntry,
         isActive: formData.isActive, notes: formData.notes.trim() || undefined,
       };
       if (editingAccount) {
