@@ -849,24 +849,55 @@ export function PlanCuentasView() {
 
       {/* Import Dialog */}
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Upload className="w-5 h-5" />
               Importar Cuentas
             </DialogTitle>
             <DialogDescription>
-              Usa la plantilla con las columnas: {CHART_ACCOUNT_CSV_HEADERS.join(', ')}. Los campos permite_manual y activa usan 1 para sí y 0 para no.
+              Descarga la plantilla, completa el archivo CSV (UTF-8) y súbelo. El sistema crea o actualiza por código.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="flex items-center gap-3">
+          <div className="space-y-4 py-1">
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+              <p className="text-xs font-medium text-foreground">Columnas requeridas</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  { key: 'codigo', label: 'Código de la cuenta' },
+                  { key: 'nombre', label: 'Nombre' },
+                  { key: 'tipo_cuenta', label: 'Activos, Pasivos, Patrimonio…' },
+                  { key: 'subtipo', label: 'Grupo, detalle, subcuenta…' },
+                  { key: 'tipo_detalle', label: 'Balance General / Resultados' },
+                  { key: 'moneda', label: 'Ej. NIO, USD' },
+                  { key: 'codigo_padre', label: 'Código del padre (opcional)' },
+                  { key: 'permite_manual', label: '1 = sí, 0 = no' },
+                  { key: 'activa', label: '1 = activa, 0 = inactiva' },
+                  { key: 'notas', label: 'Observaciones (opcional)' },
+                ].map((col) => (
+                  <div key={col.key} className="rounded-md border bg-background px-2.5 py-2">
+                    <p className="font-mono text-[11px] font-semibold text-foreground">{col.key}</p>
+                    <p className="text-[11px] text-muted-foreground leading-snug">{col.label}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Tip: <span className="font-medium text-foreground">permite_manual</span> y{' '}
+                <span className="font-medium text-foreground">activa</span> usan solo <span className="font-mono">1</span> o{' '}
+                <span className="font-mono">0</span>.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="import-file">Archivo CSV</Label>
               <Input
-                type="file" accept=".csv"
+                id="import-file"
+                type="file"
+                accept=".csv"
                 onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
-                className="flex-1"
               />
             </div>
+
             <Button variant="outline" size="sm" className="w-full" onClick={() => {
               downloadCsv('plantilla_cuentas.csv', templateRows());
             }}>
