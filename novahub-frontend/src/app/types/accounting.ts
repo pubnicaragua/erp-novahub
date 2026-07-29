@@ -10,9 +10,11 @@ export interface ChartAccount {
   subtype: AccountSubtype;
   detailType: AccountDetailType;
   parentId: string | null;
+  level?: number;
   balance: number;
   currency: string;
   allowManualEntry: boolean;
+  acceptsPostings?: boolean;
   isActive: boolean;
   notes?: string | null;
   children?: ChartAccount[];

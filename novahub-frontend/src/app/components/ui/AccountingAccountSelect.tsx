@@ -32,7 +32,7 @@ export function AccountingAccountSelect({
       if (!active) return;
       const normalized = Array.isArray(items) ? items : [];
       setAccounts(normalized.filter((account) => {
-        if (!account.isActive || account.acceptsPostings === false) return false;
+        if (!account.isActive || account.acceptsPostings === false || account.allowManualEntry === false) return false;
         if (assetOnly) return String(account.type || '').toUpperCase() === 'ASSET';
         if (incomeOnly) return String(account.type || '').toUpperCase() === 'INCOME';
         return true;

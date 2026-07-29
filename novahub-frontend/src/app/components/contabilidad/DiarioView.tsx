@@ -134,7 +134,7 @@ export function DiarioView() {
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
 
   const accountOptions = accounts
-    .filter((account) => account.isActive && account.allowManualEntry)
+    .filter((account) => account.isActive && account.allowManualEntry !== false && account.acceptsPostings !== false)
     .map((a) => ({
     label: `${a.code} - ${a.name}`,
     value: a.id,
