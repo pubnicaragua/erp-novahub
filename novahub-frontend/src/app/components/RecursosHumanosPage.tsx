@@ -1,5 +1,6 @@
+import React from 'react';
 import { cn } from './ui/utils';
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
@@ -22,6 +23,8 @@ import { EmpleadosView } from './hr/EmpleadosView';
 import { NominasView } from './hr/NominasView';
 import { AsistenciaView } from './hr/AsistenciaView';
 import { AusenciasView } from './hr/AusenciasView';
+import { AusenciasConfigView } from './hr/AusenciasConfigView';
+import { KpiView } from './hr/KpiView';
 import { EvaluacionesView } from './hr/EvaluacionesView';
 import { CapacitacionesView } from './hr/CapacitacionesView';
 import { BeneficiosView } from './hr/BeneficiosView';
@@ -46,7 +49,9 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     'config-nomina': 'config-nomina',
     'asistencia': 'asistencia',
     'ausencias': 'ausencias',
+    'ausencias-config': 'ausencias-config',
     'evaluaciones': 'evaluaciones',
+    'kpi': 'kpi',
     'capacitaciones': 'capacitaciones',
     'beneficios': 'beneficios',
   };
@@ -139,16 +144,19 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
 
 
   return (
-    <div className="space-y-6 p-4 md:p-8 pb-20 w-full max-w-[1920px] mx-auto min-w-0">
+    <div className="mx-auto w-full max-w-[1700px] min-w-0 space-y-6 p-4 pb-20 sm:p-6 md:p-10">
       {/* Header matching Suscripciones style */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         className="flex flex-col lg:flex-row lg:items-center justify-between gap-4"
       >
-        <div>
-          <h1 className="text-4xl font-black tracking-tighter flex items-center gap-3 uppercase italic">
+        <div className="flex items-center gap-3">
+          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <Users className="size-9 text-primary" />
+          </div>
+          <div>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
             Recursos <span className="text-primary">Humanos</span>
           </h1>
           <div className="flex items-center gap-2 mt-2">
@@ -159,19 +167,22 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
               {data.employees.length} empleados · {data.departments.length} departamentos
             </span>
           </div>
+          </div>
         </div>
       </motion.div>
 
       {/* Main Navigation Tabs - Estilo Compras (Píldoras Flexibles y con Scroll) */}
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar [&>button]:flex-none")}>
+        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'HR_DASHBOARD' },
             { id: 'empleados', label: 'Empleados', icon: Users, module: 'HR_EMPLOYEES' },
             { id: 'nominas', label: 'Nóminas', icon: DollarSign, module: 'HR_PAYROLL' },
             { id: 'asistencia', label: 'Asistencia', icon: UserCheck, module: 'HR_ATTENDANCE' },
             { id: 'ausencias', label: 'Vacaciones', icon: Calendar, module: 'HR_LEAVES' },
+            { id: 'ausencias-config', label: 'Tipos Ausencia', icon: Calendar, module: 'HR_LEAVES' },
             { id: 'evaluaciones', label: 'Desempeño', icon: Award, module: 'HR_PERFORMANCE' },
+            { id: 'kpi', label: 'KPI', icon: BarChart3, module: 'HR_PERFORMANCE' },
             { id: 'capacitaciones', label: 'Formación', icon: GraduationCap, module: 'HR_TRAINING' },
             { id: 'beneficios', label: 'Beneficios', icon: HandHeart, module: 'HR_BENEFITS' },
             { id: 'config-nomina', label: 'Config', icon: Settings2, module: 'HR_PAYROLL_CONFIG' }
@@ -255,9 +266,20 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
                 />
               </TabsContent>
 
+              <TabsContent value="ausencias-config" className="m-0">
+                <AusenciasConfigView onRefresh={() => fetchData(true)} />
+              </TabsContent>
+
               <TabsContent value="evaluaciones" className="m-0">
                 <EvaluacionesView
                   reviews={data.reviews}
+                  employees={data.employees}
+                  onRefresh={() => fetchData(true)}
+                />
+              </TabsContent>
+
+              <TabsContent value="kpi" className="m-0">
+                <KpiView
                   employees={data.employees}
                   onRefresh={() => fetchData(true)}
                 />

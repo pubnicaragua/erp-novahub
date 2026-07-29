@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { ScrollArea } from '../../ui/scroll-area';
@@ -329,15 +329,15 @@ export function SesionActivaStep({
           </div>
         </CardHeader>
         <CardContent className="p-0">
-            <div className="grid grid-cols-12 px-6 py-3 border-b border-border/40 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            <div className="col-span-2">Ref / Ticket</div>
-            <div className="col-span-2">Tipo</div>
-            <div className="col-span-5">Descripción</div>
-            <div className="col-span-1 text-center">Hora</div>
-            {showSystemAmounts && <div className="col-span-2 text-right">Monto</div>}
+            <div className={`hidden xl:grid ${showSystemAmounts ? 'grid-cols-[minmax(4.5rem,.8fr)_minmax(3.5rem,.7fr)_minmax(0,2fr)_auto_minmax(6.5rem,auto)]' : 'grid-cols-[minmax(4.5rem,.8fr)_minmax(3.5rem,.7fr)_minmax(0,2fr)_auto]'} gap-3 px-3 sm:px-6 py-3 border-b border-border/40 text-[10px] font-bold uppercase tracking-widest text-muted-foreground`}>
+            <div>Ref / Ticket</div>
+            <div>Tipo</div>
+            <div>Descripción</div>
+            <div className="text-center whitespace-nowrap">Hora</div>
+            {showSystemAmounts && <div className="text-right whitespace-nowrap">Monto</div>}
           </div>
           <ScrollArea className="h-[500px]">
-            <div className="divide-y divide-border/40">
+            <div className="space-y-2 px-3 py-3 xl:space-y-0 xl:px-0 xl:py-0 xl:divide-y xl:divide-border/40">
               {logs.map((log) => {
                 const logNIO = Number(log.amountNIO || 0);
                 const logUSD = Number(log.amountUSD || 0);
@@ -346,8 +346,8 @@ export function SesionActivaStep({
                   : (logNIO + (logUSD * sessionRate));
 
                 return (
-                <div key={log.id} className="grid grid-cols-12 px-6 py-3 items-center text-sm hover:bg-muted/10 transition-colors">
-                  <div className="col-span-2 font-mono text-xs text-muted-foreground truncate" title={log.reference || ''}>
+                <div key={log.id} className={`flex flex-col gap-2 rounded-xl border border-border/50 bg-card px-3 py-3 text-sm shadow-sm transition-colors hover:bg-muted/10 xl:grid ${showSystemAmounts ? 'xl:grid-cols-[minmax(4.5rem,.8fr)_minmax(3.5rem,.7fr)_minmax(0,2fr)_auto_minmax(6.5rem,auto)]' : 'xl:grid-cols-[minmax(4.5rem,.8fr)_minmax(3.5rem,.7fr)_minmax(0,2fr)_auto]'} xl:gap-3 xl:rounded-none xl:border-0 xl:bg-transparent xl:px-3 xl:py-3 xl:shadow-none`}>
+                  <div className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={log.reference || ''}>
                     {(() => {
                       if (log.type === 'SALE' && log.description?.includes('Factura')) {
                         const match = log.description.match(/FC-\d{4}-\d{5}/);
@@ -359,19 +359,19 @@ export function SesionActivaStep({
                       return log.type === 'SALE' ? 'TKT-' + log.id.slice(0,4).toUpperCase() : 'GST-' + log.id.slice(0,4).toUpperCase();
                     })()}
                   </div>
-                  <div className="col-span-2">
+                  <div className="min-w-0 truncate">
                     {renderLogIcon(log.type)}
                   </div>
-                  <div className="col-span-5 truncate text-sm font-medium">
+                  <div className="min-w-0 truncate text-sm font-medium" title={log.description || ''}>
                     {log.type === 'SALE' && log.description?.includes('Factura') 
                       ? 'Cobro de Venta (POS)' 
                       : log.description}
                   </div>
-                  <div className="col-span-1 text-center text-xs text-muted-foreground">
+                  <div className="text-left text-xs text-muted-foreground whitespace-nowrap xl:text-center">
                     {new Date(log.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                   </div>
                   {showSystemAmounts && (
-                    <div className={`col-span-2 text-right font-mono text-sm font-bold flex flex-col items-end justify-center ${log.type === 'EXIT' ? 'text-destructive' : log.type === 'OPEN' ? 'text-muted-foreground' : 'text-emerald-500'}`}>
+                    <div className={`min-w-0 text-right font-mono text-sm font-bold flex flex-col items-end justify-center whitespace-nowrap ${log.type === 'EXIT' ? 'text-destructive' : log.type === 'OPEN' ? 'text-muted-foreground' : 'text-emerald-500'}`}>
                       <span>{log.type === 'EXIT' ? '-' : '+'}{symbol} {logConverted.toFixed(2)}</span>
                       <span className="text-[9px] opacity-70 font-normal mt-0.5 whitespace-nowrap">
                         C$ {logNIO.toFixed(2)} | $ {logUSD.toFixed(2)}
@@ -382,8 +382,8 @@ export function SesionActivaStep({
               )})}
             </div>
           </ScrollArea>
-          <div className="p-4 border-t border-border/40 flex justify-between items-center bg-muted/10 rounded-b-xl text-xs text-muted-foreground">
-            <span>Tip: Revisa los gastos detalladamente antes del cierre.</span>
+          <div className="p-4 border-t border-border/40 flex flex-wrap gap-3 justify-between items-center bg-muted/10 rounded-b-xl text-xs text-muted-foreground">
+            <span className="min-w-0">Tip: Revisa los gastos detalladamente antes del cierre.</span>
             <Button variant="outline" size="sm" className="h-7 text-[11px] font-bold" onClick={handlePrintSummary}>
               <Printer className="size-3 mr-2" /> Imprimir Resumen
             </Button>

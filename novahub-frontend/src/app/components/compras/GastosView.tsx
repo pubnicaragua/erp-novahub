@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Calendar } from '../ui/calendar';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { expensesService, suppliersService } from '../../services/compras.service';
+import { contabilidadService } from '../../services/contabilidad.service';
 import type { Expense, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
@@ -20,6 +21,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { storageService } from '../../services/storage.service';
 import { generateExpensePDF } from '../../utils/pdfGenerator';
+import { PurchaseAuditButton } from './PurchaseAuditButton';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'pending' } | { type: 'category'; category: string };
@@ -38,6 +40,11 @@ const statusOpts = [
 export function GastosView({ data, loading, onRefresh }: Props) {
   const { canPerform } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
+
+  useEffect(() => {
+    contabilidadService.getExpenseCategories().then(setExpenseCategories).catch(() => {});
+  }, []);
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -74,6 +81,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
             exchangeRate: globalRate,
             category: 'OPERACIONAL',
             categoryCustom: '',
+            expenseCategoryId: '',
             description: '',
             paidTo: '',
             paymentSource: 'EFECTIVO',
@@ -357,7 +365,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
       setPendingDeleteId(null);
       if (editingId === pendingDeleteId) setEditingId(null);
       onRefresh();
-    } catch (e) {
+    } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
     } finally {
       setDeleteLoading(false);
@@ -482,7 +490,11 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                     <select
                       disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
                       value={localDoc.category || 'OPERATIVO'}
-                      onChange={(e) => setLocalDoc({ ...localDoc, category: e.target.value })}
+                      onChange={(e) => {
+                        const cat = e.target.value;
+                        const matched = expenseCategories.find(c => c.name.toUpperCase() === cat);
+                        setLocalDoc({ ...localDoc, category: cat, expenseCategoryId: matched ? matched.id : '' });
+                      }}
                       className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs uppercase"
                     >
                       <option value="OPERATIVO">Operativo</option>
@@ -490,6 +502,10 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                       <option value="VENTAS">Ventas / Marketing</option>
                       <option value="FINANCIERO">Financiero</option>
                       <option value="OTRO">Otro</option>
+                      {expenseCategories.length > 0 && <option disabled>── Catálogo ──</option>}
+                      {expenseCategories.map(c => (
+                        <option key={c.id} value={c.name.toUpperCase()}>{c.name}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -790,13 +806,14 @@ export function GastosView({ data, loading, onRefresh }: Props) {
               }
               toast.success('Elementos eliminados');
               onRefresh();
-            } catch (e) {
+            } catch (e: any) {
               toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
               <Button title={canPerform('PURCHASES_EXPENSES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <PurchaseAuditButton entity="EXPENSE" entityId={row.id} title="Auditoria del Gasto" />
               {canPerform('PURCHASES_EXPENSES', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
               )}

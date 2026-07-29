@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +20,8 @@ interface ConfirmDialogProps {
   variant?: 'destructive' | 'warning' | 'default';
   onConfirm: () => void | Promise<void>;
   loading?: boolean;
+  disabled?: boolean;
+  children?: React.ReactNode;
 }
 
 const variantConfig = {
@@ -51,12 +52,18 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   variant = 'destructive',
   onConfirm,
   loading = false,
+  disabled = false,
+  children,
 }) => {
   const config = variantConfig[variant];
 
   const handleConfirm = async () => {
-    await onConfirm();
-    onOpenChange(false);
+    try {
+      await onConfirm();
+      onOpenChange(false);
+    } catch {
+      // Error handling is done by the caller
+    }
   };
 
   return (
@@ -85,20 +92,21 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               {description}
             </DialogDescription>
           </DialogHeader>
+          {children && <div className="w-full px-2">{children}</div>}
         </div>
 
         <DialogFooter className="px-6 pb-6 pt-2 flex gap-3 sm:gap-3">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={loading}
+            disabled={loading || disabled}
             className="flex-1 h-11 rounded-xl font-bold uppercase text-xs tracking-widest"
           >
             {cancelLabel}
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={loading}
+            disabled={loading || disabled}
             className={`flex-1 h-11 rounded-xl font-bold uppercase text-xs tracking-widest ${config.buttonClass}`}
           >
             {loading ? (

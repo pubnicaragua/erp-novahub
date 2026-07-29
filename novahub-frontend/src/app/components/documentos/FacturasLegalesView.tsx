@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { LegalInvoice } from '../../types';
 import { Card, CardContent } from '../ui/card';
@@ -93,7 +93,7 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
           columns={columns} 
           onRowUpdate={canPerform('DOCUMENTS_INVOICES', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('DOCUMENTS_INVOICES', 'delete') ? async (id) => { try { await legalInvoicesService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar factura'); } } : undefined} 
+          onRowDelete={canPerform('DOCUMENTS_INVOICES', 'delete') ? async (id) => { try { await legalInvoicesService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar factura'); } } : undefined} 
         />
       </Card>
     </div>

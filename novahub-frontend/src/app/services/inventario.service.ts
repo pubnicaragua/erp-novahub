@@ -13,7 +13,6 @@ export const inventoryService = {
     return resolveStorageReferences(product);
   },
   createProduct: (data: Partial<Product> & { initialStock?: number }) => api.post<Product>('/inventory/products', data),
-  duplicateProduct: (id: string) => api.post<Product>(`/inventory/products/${id}/duplicate`, {}),
   updateProduct: (id: string, data: Partial<Product>) => api.patch<Product>(`/inventory/products/${id}`, data),
   deleteProduct: (id: string) => api.delete(`/inventory/products/${id}`),
   checkProductCode: (code: string, excludeId?: string) => 
@@ -21,8 +20,8 @@ export const inventoryService = {
 
   // ==================== CATEGORIES ====================
   getCategories: () => api.get<any[]>('/inventory/categories'),
-  createCategory: (data: { name: string; description?: string }) => api.post<any>('/inventory/categories', data),
-  updateCategory: (id: string, data: { name: string; description?: string }) => api.patch<any>(`/inventory/categories/${id}`, data),
+  createCategory: (data: { name: string; description?: string; type?: 'PRODUCT' | 'SERVICE' }) => api.post<any>('/inventory/categories', data),
+  updateCategory: (id: string, data: { name: string; description?: string; type?: 'PRODUCT' | 'SERVICE' }) => api.patch<any>(`/inventory/categories/${id}`, data),
   deleteCategory: (id: string) => api.delete(`/inventory/categories/${id}`),
 
   // ==================== WAREHOUSES ====================
@@ -72,6 +71,8 @@ export const inventoryService = {
   // ==================== DASHBOARD ====================
   getDashboardStats: () => api.get<any>('/inventory/dashboard/stats'),
   getLowStockProducts: () => api.get<any[]>('/inventory/dashboard/low-stock'),
+  getReplenishmentReport: (period: 'weekly' | 'biweekly' | 'monthly' = 'weekly') =>
+    api.get<any>('/inventory/stock/replenishment-report', { period } as any),
 
   // ==================== BULK IMPORT ====================
   bulkCreateProducts: async (items: Array<Partial<Product> & { initialStock?: number }>, onProgress?: (done: number, total: number) => void) => {
@@ -100,5 +101,7 @@ export const inventoryService = {
     }
     return results;
   },
+  getInitialImportStatus: () => api.get<{ completed: boolean; importedAt?: string | null; productCount?: number; priceListCode?: string | null; currency?: string | null; blockedByExistingProducts?: boolean }>('/inventory/initial-import/status'),
+  importInitialCatalog: (data: { items: any[]; currency: string; exchangeRate?: number; priceListCode?: string; confirmText: string }) => api.post<any>('/inventory/initial-import', data),
   deleteProducts: (ids: string[]) => api.post<{ deleted: number }>('/inventory/products/batch-delete', { ids }),
 };

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package,
@@ -63,6 +64,8 @@ import {
   Settings2,
   TicketIcon,
   Gavel,
+  BriefcaseBusiness,
+  Tags,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -185,13 +188,14 @@ const menuItems: MenuItem[] = [
     section: 'Operaciones',
     submenu: [
       { id: 'clientes', label: 'Clientes', icon: <UserCircle className="size-4" /> },
-      { id: 'estimaciones', label: 'Estimaciones', icon: <FileSpreadsheet className="size-4" /> },
+      { id: 'estimaciones', label: 'Cotizaciones', icon: <FileSpreadsheet className="size-4" /> },
       { id: 'ordenes-venta', label: 'Ordenes de venta', icon: <ClipboardList className="size-4" />, hasAdd: true },
       { id: 'facturas', label: 'Facturas', icon: <FileText className="size-4" /> },
       { id: 'facturas-recurrentes', label: 'Facturas recurrentes', icon: <RotateCcw className="size-4" /> },
       { id: 'pagos-recibidos', label: 'Pagos recibidos', icon: <CreditCard className="size-4" /> },
       { id: 'devoluciones-venta', label: 'Devoluciones de venta', icon: <FileOutput className="size-4" /> },
       { id: 'notas-credito', label: 'Notas de credito', icon: <FileMinus className="size-4" /> },
+      { id: 'listas-precios', label: 'Listas de precios', icon: <Tags className="size-4" /> },
       { id: 'facturacion-caja', label: 'Facturación por Caja', icon: <Calculator className="size-4" /> },
       { id: 'control-caja', label: 'Control de Caja', icon: <Coins className="size-4" /> },
     ]
@@ -218,6 +222,7 @@ const menuItems: MenuItem[] = [
     icon: <Package className="size-5" />,
     submenu: [
       { id: 'productos', label: 'Existencias', icon: <Package className="size-4" /> },
+      { id: 'servicios', label: 'Servicios', icon: <BriefcaseBusiness className="size-4" /> },
       { id: 'dashboard', label: 'Resumen', icon: <BarChart3 className="size-4" /> },
       { id: 'almacenes', label: 'Almacenes', icon: <Archive className="size-4" /> },
       { id: 'transferencias', label: 'Transferencias', icon: <Truck className="size-4" /> },
@@ -354,6 +359,7 @@ const menuItems: MenuItem[] = [
     ]
   },
   { id: 'suscripciones', label: 'Mi Suscripción', icon: <Zap className="size-5" />, section: 'Sistema' },
+  { id: 'dashboard-cxc', label: 'CxC / CxP', icon: <BadgeDollarSign className="size-5" /> },
   { id: 'configuracion', label: 'Configuracion', icon: <Settings className="size-5" /> },
 ];
 
@@ -515,10 +521,10 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       >
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
+          <div className={cn("flex h-16 items-center border-b border-sidebar-border px-3 overflow-visible", isCollapsed ? "justify-center" : "justify-between")}>
             <div className="flex items-center gap-3">
               {themeConfig.logo ? (
-                <img src={themeConfig.logo} alt="Company Logo" className={cn("max-h-9 object-contain transition-all", isCollapsed ? "max-w-9" : "max-w-16")} />
+                <img src={themeConfig.logo} alt="Company Logo" className="size-9 shrink-0 object-contain transition-all" />
               ) : (
                 <NovaHubLogo size={isCollapsed ? 36 : 38} />
               )}

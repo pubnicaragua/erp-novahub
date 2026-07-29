@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Table,
   TableBody,
@@ -9,12 +9,15 @@ import {
 } from './table';
 import { Input } from './input';
 import { cn } from './utils';
-import { Pencil, Trash2, Copy, Eraser, Plus } from 'lucide-react';
+import { Pencil, Trash2, Copy, Eraser, MoreHorizontal, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './dialog';
+import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
+import type { SalesPaginationControls } from '../../types';
 
 export interface ColumnDef<T> {
   key: keyof T | string;
@@ -39,7 +42,9 @@ interface EditableDataTableProps<T> {
   actions?: (row: T) => React.ReactNode;
   showSelection?: boolean;
   bulkActions?: (selectedIds: (string | number)[]) => React.ReactNode;
+  showClearSelection?: boolean;
   onAddRow?: () => void;
+  pagination?: SalesPaginationControls;
 }
 
 export function EditableDataTable<T extends { [key: string]: any }>({
@@ -54,7 +59,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   actions,
   showSelection = true,
   bulkActions,
+  showClearSelection = true,
   onAddRow,
+  pagination,
 }: EditableDataTableProps<T>) {
   const [data, setData] = useState<T[]>(initialData);
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
@@ -67,6 +74,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const [confirmBulkDeleteIds, setConfirmBulkDeleteIds] = useState<(string | number)[]>([]);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [bulkDuplicateLoading, setBulkDuplicateLoading] = useState(false);
+  const [mobileActionsRow, setMobileActionsRow] = useState<T | null>(null);
 
   useEffect(() => {
     setData(initialData);
@@ -212,6 +220,21 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   };
 
   return (
+    <BoneyardSkeleton
+      name="sales-data-table"
+      loading={Boolean(isLoading)}
+      select="viewport"
+      animate="shimmer"
+      transition={180}
+      fallback={(
+        <div className="w-full space-y-3 rounded-2xl border border-border/50 bg-card/30 p-4" aria-label="Cargando tabla">
+          <div className="h-10 w-full animate-pulse rounded-xl bg-muted/40" />
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="h-14 w-full animate-pulse rounded-xl bg-muted/30" />
+          ))}
+        </div>
+      )}
+    >
     <div className="sales-data-table w-full min-w-0 max-w-full space-y-4" onPaste={handlePaste}>
       {/* Bulk Actions Toolbar */}
       <AnimatePresence>
@@ -226,9 +249,11 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               <span className="text-xs font-black uppercase tracking-widest text-primary/60">
                 {selectedIds.size} Seleccionados
               </span>
-              <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider" onClick={() => setSelectedIds(new Set())}>
-                <Eraser className="size-3 mr-2" /> Despejar
-              </Button>
+              {showClearSelection && (
+                <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider" onClick={() => setSelectedIds(new Set())}>
+                  <Eraser className="size-3 mr-2" /> Despejar
+                </Button>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
                {bulkActions && bulkActions(Array.from(selectedIds))}
@@ -258,8 +283,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         )}
       </AnimatePresence>
 
-      <div className="rounded-2xl border border-border/50 bg-card/30 backdrop-blur-sm overflow-hidden">
-        <Table>
+      <div className="hidden xl:block w-full max-w-full overflow-hidden rounded-2xl border border-border/50 bg-card/30 backdrop-blur-sm">
+        <Table className="w-full table-fixed">
           <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent border-none">
               {showSelection && (
@@ -274,12 +299,12 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                 <TableHead 
                   key={col.key as string} 
                   style={{ width: col.width }}
-                  className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 h-12"
+                  className="h-12 whitespace-nowrap text-[10px] font-black uppercase tracking-widest text-muted-foreground/60"
                 >
                   {col.header}
                 </TableHead>
               ))}
-              <TableHead className="w-20 text-right pr-6 h-12 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+              <TableHead data-actions-column="true" className="h-12 w-60 whitespace-nowrap pr-6 text-right text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
                 Acciones
               </TableHead>
             </TableRow>
@@ -316,7 +341,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                         key={colKey}
                         onClick={() => handleCellClick(rowId, colKey, value, col.editable)}
                         className={cn(
-                          "relative cursor-cell group flex-1 h-14 min-w-[120px]",
+                          "relative cursor-cell group h-14 min-w-0",
                           col.editable && "hover:bg-primary/5 transition-colors",
                           isEditing && "p-0"
                         )}
@@ -370,8 +395,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       </TableCell>
                     );
                   })}
-                  <TableCell className="text-right pr-6 h-14">
-                    <div className="flex justify-end items-center gap-1 transition-all">
+                  <TableCell data-actions-column="true" className="relative z-20 h-14 w-60 overflow-visible whitespace-nowrap pr-6 text-right pointer-events-auto">
+                    <div className="relative z-30 flex min-w-max flex-nowrap items-center justify-end gap-1 overflow-visible whitespace-nowrap transition-all pointer-events-auto">
                       {actions ? actions(row) : (
                         onRowDelete && (
                           <Button
@@ -404,18 +429,124 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         </Table>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 px-2">
-         <p className="min-w-0 text-[11px] font-medium text-muted-foreground/50 italic">
-            Tip: Usa Tab para moverte entre celdas y Enter para guardar. O pega desde Excel.
-         </p>
-         <Button 
-            variant="ghost" 
-            className="h-8 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
-            onClick={handleAddNewRow}
-         >
-            <Plus className="size-3 mr-2" /> Agregar Nueva Fila
-         </Button>
+      <div className="space-y-3 xl:hidden">
+        {data.map((row) => {
+          const rowId = row[idField];
+          const isSelected = selectedIds.has(rowId);
+          return (
+            <motion.article
+              key={rowId}
+              layout
+              className={cn(
+                'overflow-hidden rounded-2xl border border-border/50 bg-card/70 shadow-sm',
+                isSelected && 'border-primary/50 bg-primary/5'
+              )}
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-border/40 p-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  {showSelection && (
+                    <Checkbox
+                      className="mt-0.5 shrink-0"
+                      checked={isSelected}
+                      onCheckedChange={() => toggleSelectRow(rowId)}
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-foreground">
+                      {String(row.name || row.title || row.number || row.code || rowId)}
+                    </p>
+                    <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                      {String(row.code || row.number || rowId)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4">
+                {columns.map((col) => {
+                  const value = row[col.key as string];
+                  return (
+                    <div key={col.key as string} className="min-w-0">
+                      <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">
+                        {col.header}
+                      </p>
+                      <div className="min-w-0 truncate text-sm font-medium text-foreground">
+                        {col.render ? col.render(value, row) : String(value ?? '—')}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {(actions || onRowDelete) && (
+                <div className="flex items-center justify-end gap-2 border-t border-border/40 bg-muted/10 p-3">
+                  {actions ? actions(row) : (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="h-10 rounded-xl px-4 text-xs font-black uppercase tracking-widest"
+                      onClick={() => setConfirmDeleteId(rowId)}
+                    >
+                      <Trash2 className="mr-2 size-4" /> Eliminar
+                    </Button>
+                  )}
+                </div>
+              )}
+            </motion.article>
+          );
+        })}
+        {data.length === 0 && !isLoading && (
+          <div className="rounded-2xl border border-dashed border-border/50 px-4 py-12 text-center text-sm italic text-muted-foreground">
+            No hay registros disponibles.
+          </div>
+        )}
       </div>
+
+      {pagination && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span>Mostrar</span>
+            <select
+              value={pagination.pageSize}
+              onChange={(event) => pagination.onPageSizeChange(Number(event.target.value) as SalesPaginationControls['pageSize'])}
+              className="h-8 rounded-lg border border-border/50 bg-background px-2 font-bold text-foreground outline-none"
+              aria-label="Registros por página"
+            >
+              {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
+            </select>
+            <span>por página</span>
+            <span className="ml-2 rounded-lg border border-border/40 px-2 py-1">
+              {pagination.total === 0 ? 0 : `${(pagination.page - 1) * pagination.pageSize + 1}-${Math.min(pagination.page * pagination.pageSize, pagination.total)}`} de {pagination.total}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination.onPageChange(1)} disabled={pagination.page <= 1} aria-label="Primera página"><ChevronsLeft className="size-4" /></button>
+            <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination.onPageChange(pagination.page - 1)} disabled={pagination.page <= 1} aria-label="Página anterior"><ChevronLeft className="size-4" /></button>
+            <span className="min-w-24 text-center font-bold text-foreground">Pág. {pagination.page} / {Math.max(1, pagination.totalPages)}</span>
+            <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination.onPageChange(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages} aria-label="Página siguiente"><ChevronRight className="size-4" /></button>
+            <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination.onPageChange(pagination.totalPages)} disabled={pagination.page >= pagination.totalPages} aria-label="Última página"><ChevronsRight className="size-4" /></button>
+          </div>
+        </div>
+      )}
+
+      <Dialog open={mobileActionsRow !== null} onOpenChange={(open) => !open && setMobileActionsRow(null)}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-3xl p-0">
+          <DialogHeader className="border-b border-border/40 px-5 py-4">
+            <DialogTitle className="text-base font-black">Acciones del registro</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 p-4" onClick={() => setMobileActionsRow(null)}>
+            {mobileActionsRow && actions?.(mobileActionsRow)}
+            {mobileActionsRow && !actions && onRowDelete && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="h-11 w-full justify-start rounded-xl"
+                onClick={() => setConfirmDeleteId(mobileActionsRow[idField])}
+              >
+                <Trash2 className="mr-2 size-4" /> Eliminar
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirm Delete Dialog */}
       <ConfirmDialog
@@ -458,5 +589,6 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         }}
       />
     </div>
+    </BoneyardSkeleton>
   );
 }

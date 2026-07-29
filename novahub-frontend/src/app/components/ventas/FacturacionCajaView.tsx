@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
   CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
-  UserPlus, PackagePlus, AlertCircle, Coins
+  UserPlus, AlertCircle, Coins
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -26,12 +26,15 @@ import {
   type PosInvoiceItem,
   type PosPaymentLine,
   type CashRegisterSession,
+  type PotentialDuplicateSale,
 } from '../../services/caja.service';
 import { accountsService } from '../../services/finanzas.service';
 import type { Account } from '../../types';
-import { AddProductsModal } from '../inventory/AddProductsModal';
 import { QuickAddCustomerModal } from './QuickAddCustomerModal';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { brandingService } from '../../services/branding.service';
+import { createIdempotencyKey } from '../../services/api';
+import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -55,6 +58,7 @@ interface InvoiceSummary {
 }
 
 type CatalogViewMode = 'list' | 'catalog';
+type CatalogItemFilter = 'ALL' | 'PRODUCT' | 'SERVICE';
 
 const CATALOG_VIEW_STORAGE_KEY = 'novahub-pos-catalog-view';
 
@@ -234,12 +238,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const [recentInvoices, setRecentInvoices] = useState<PosInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const checkoutIdempotencyKey = useRef<string | null>(null);
 
   const [selectedRegisterId, setSelectedRegisterId] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(undefined);
   const [emitDate, setEmitDate] = useState(getTodayInputDate());
   const [discountPercent, setDiscountPercent] = useState(0);
   const [productSearch, setProductSearch] = useState('');
+  const [catalogItemFilter, setCatalogItemFilter] = useState<CatalogItemFilter>('ALL');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -255,8 +262,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const [createdPaymentLines, setCreatedPaymentLines] = useState<PosPaymentLine[]>([]);
   const [createdExchangeRate, setCreatedExchangeRate] = useState(1);
   const [companyName, setCompanyName] = useState('Empresa');
+  const [duplicateMatches, setDuplicateMatches] = useState<PotentialDuplicateSale[]>([]);
 
-  const [showAddProduct, setShowAddProduct] = useState(false);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
 
   const cartSessions = useRef<Map<string, CartSession>>(new Map());
@@ -331,10 +338,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     }
   }, []);
 
-  const handleProductCreated = useCallback(() => {
-    void loadInitialData();
-  }, [loadInitialData]);
-
   const handleCustomerCreated = useCallback(() => {
     cajaService.getCustomers().then(setCustomers);
   }, []);
@@ -346,7 +349,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     }).catch(() => undefined);
     accountsService.getAll({ page: 1, pageSize: 100 }).then((response: any) => {
       const items = response?.data ?? response?.items ?? response;
-      setBankAccounts(Array.isArray(items) ? items.filter((account: Account) => account.isActive && account.type === 'asset') : []);
+      setBankAccounts(Array.isArray(items) ? items.filter((account: Account) => account.isActive && String(account.type || '').toUpperCase() === 'ASSET') : []);
     }).catch(() => setBankAccounts([]));
   }, [loadInitialData]);
 
@@ -396,7 +399,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     return () => clearTimeout(timer);
   }, [productSearch, selectedRegisterId, registers]);
 
-  const filteredProducts = products; // Ya están filtrados por el backend
+  const filteredProducts = useMemo(
+    () => catalogItemFilter === 'ALL'
+      ? products
+      : products.filter((product) => String(product.itemType || 'PRODUCT').toUpperCase() === catalogItemFilter),
+    [products, catalogItemFilter],
+  );
 
   const getGlobalCartQuantity = (productId: string) => {
     let total = 0;
@@ -523,10 +531,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     setCreatedInvoice(null);
     setCreatedTicketCart([...cart]);
     setCreatedPaymentLines([]);
+    checkoutIdempotencyKey.current = null;
     setShowPayment(true);
   };
 
-  const submitPayment = async () => {
+  const submitPayment = async (confirmedDuplicate = false) => {
+    if (submittingRef.current) return;
     if (!activeSession) return;
     const totalInPaymentCurrency = paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total;
     const received = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
@@ -534,13 +544,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       toast.error('El monto recibido debe ser igual o mayor al total');
       return;
     }
-    if (payments.some((payment) => payment.method === 'TRANSFER' && (!payment.accountId || !payment.reference?.trim()))) {
-      toast.error('La transferencia requiere cuenta bancaria y referencia');
+    if (payments.some((payment) => !payment.accountId)) {
+      toast.error('Cada método de pago requiere una cuenta contable');
       return;
     }
+    if (payments.some((payment) => payment.method === 'TRANSFER' && !payment.reference?.trim())) {
+      toast.error('La transferencia requiere una referencia');
+      return;
+    }
+    submittingRef.current = true;
     setSubmitting(true);
     try {
-      const createdResponse = await cajaService.createInvoice({
+      const checkoutPayload = {
         registerId: selectedRegisterId,
         sessionId: activeSession.id,
         customerId: selectedCustomerId,
@@ -552,7 +567,23 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         currency: paymentCurrency,
         exchangeRate: Number(activeSession.exchangeRateUSD),
         payments,
-      });
+        ...(confirmedDuplicate && duplicateMatches.length > 0
+          ? { duplicateConfirmation: { candidateIds: duplicateMatches.map((match) => match.id) } }
+          : {}),
+      };
+
+      if (!confirmedDuplicate) {
+        const duplicateCheck = await cajaService.checkPotentialDuplicates(checkoutPayload);
+        if (duplicateCheck.matches?.length) {
+          setDuplicateMatches(duplicateCheck.matches);
+          checkoutIdempotencyKey.current = null;
+          return;
+        }
+      }
+
+      const idempotencyKey = checkoutIdempotencyKey.current || createIdempotencyKey('checkout');
+      checkoutIdempotencyKey.current = idempotencyKey;
+      const createdResponse = await cajaService.createInvoice(checkoutPayload, idempotencyKey);
       const created = (createdResponse as any)?.data || createdResponse;
 
       toast.success('Factura emitida exitosamente');
@@ -560,6 +591,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       setCreatedPaymentLines([...payments]);
       setCreatedExchangeRate(Number(activeSession.exchangeRateUSD));
       setShowPayment(false);
+      setDuplicateMatches([]);
+      checkoutIdempotencyKey.current = null;
 
       // Limpiar datos en memoria de esta caja
       setCart([]);
@@ -577,8 +610,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         handleRegisterChange(pendingSessionEntry[0], true); // skipSave = true
       }
     } catch (error: unknown) {
+      if ((error as any)?.status) checkoutIdempotencyKey.current = null;
+      const errorData = (error as any)?.data;
+      if ((error as any)?.code === 'POTENTIAL_DUPLICATE_SALE' && Array.isArray(errorData?.matches)) {
+        setDuplicateMatches(errorData.matches);
+        checkoutIdempotencyKey.current = null;
+        return;
+      }
       toast.error(getErrorMessage(error, 'Error al emitir factura'));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -599,6 +640,19 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const isRegisterDisabled = selectedRegister ? !selectedRegister.hasActiveSession : false;
 
   if (registers.length === 0) {
+    if (loading) {
+      return (
+        <BoneyardSkeleton
+          name="sales-pos-shell"
+          loading
+          select="viewport"
+          animate="shimmer"
+          fallback={<div className="space-y-4 rounded-2xl border border-border/40 p-6"><div className="h-14 w-full animate-pulse rounded-xl bg-muted/40" /><div className="h-72 w-full animate-pulse rounded-2xl bg-muted/30" /></div>}
+        >
+          <div />
+        </BoneyardSkeleton>
+      );
+    }
     return (
       <>
         <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
@@ -634,15 +688,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
             className="h-10 gap-2 px-3 text-xs font-black rounded-xl border-primary/30 hover:bg-primary/10 shadow-sm bg-background/80"
           >
             <UserPlus className="size-4 text-primary" /> Agregar Cliente
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAddProduct(true)}
-            disabled={isRegisterDisabled}
-            className="h-10 gap-2 px-3 text-xs font-black rounded-xl border-primary/30 hover:bg-primary/10 shadow-sm bg-background/80"
-          >
-            <PackagePlus className="size-4 text-primary" /> Agregar Producto
           </Button>
           <Button type="button" variant="outline" onClick={() => setShowTutorial(true)} className="h-10 rounded-xl border-primary/30 bg-background/80 text-xs font-black text-primary shadow-sm hover:bg-primary/10">
             <CircleHelp className="mr-2 size-4" /> Cómo facturar
@@ -739,8 +784,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
               <CardContent className="p-5">
                 <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <h3 className="text-sm font-black uppercase tracking-tight">Catálogo de Productos</h3>
-                    <p className="mt-1 text-[11px] text-muted-foreground">{filteredProducts.length} productos disponibles</p>
+                    <h3 className="text-sm font-black uppercase tracking-tight">Catálogo de venta</h3>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{filteredProducts.length} {catalogItemFilter === 'SERVICE' ? 'servicios' : catalogItemFilter === 'PRODUCT' ? 'productos' : 'artículos'} disponibles</p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <div className="inline-flex h-9 items-center rounded-xl border border-border/60 bg-muted/30 p-1" role="group" aria-label="Vista del catálogo">
@@ -772,32 +817,61 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                       <Input
                         value={productSearch}
                         onChange={(e) => setProductSearch(e.target.value)}
-                        placeholder="Buscar producto..."
+                        placeholder="Buscar producto o servicio..."
                         disabled={isRegisterDisabled}
                         className="pl-9 h-9 rounded-lg text-xs focus-visible:ring-primary focus-visible:border-primary"
                       />
                     </div>
                   </div>
                 </div>
+                <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-muted/20 p-1.5" role="group" aria-label="Tipo de artículo">
+                  <span className="px-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Mostrar:</span>
+                  {([
+                    ['ALL', 'Todos'],
+                    ['PRODUCT', 'Productos'],
+                    ['SERVICE', 'Servicios'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={catalogItemFilter === value}
+                      onClick={() => setCatalogItemFilter(value)}
+                      className={cn('rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors', catalogItemFilter === value ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 {catalogView === 'list' ? (
                   <div className="overflow-hidden rounded-xl border border-border/50">
                     <div className="max-h-64 overflow-y-auto">
-                      <table className="w-full text-xs">
+                      <table className="w-full table-fixed text-xs">
+                        <colgroup>
+                          <col className="w-[18%]" />
+                          <col className="w-[38%]" />
+                          <col className="w-[22%]" />
+                          <col className="w-[22%]" />
+                        </colgroup>
                         <thead>
                           <tr className="border-b border-border/30 bg-muted/30">
-                            <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</th>
-                            <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción del Producto</th>
-                            <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest text-muted-foreground">Precio Unit. (C$)</th>
-                            <th className="px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">Acción</th>
+                            <th className="px-2 sm:px-3 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Código</th>
+                            <th className="px-2 sm:px-3 py-2.5 text-left text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground">Descripción</th>
+                            <th className="px-2 sm:px-3 py-2.5 text-right text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Precio unit.</th>
+                            <th data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground whitespace-nowrap">Acción</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border/20">
                           {filteredProducts.slice(0, 30).map((prod) => (
                             <tr key={prod.id} className="transition-colors hover:bg-muted/20">
-                              <td className="px-3 py-2.5 font-mono font-bold text-primary">{prod.code}</td>
-                              <td className="px-3 py-2.5">
-                                <div className="flex items-center gap-2">
-                                  <p className="truncate font-bold">{prod.name}</p>
+                              <td className="min-w-0 px-2 sm:px-3 py-2.5 font-mono font-bold text-primary truncate">{prod.code}</td>
+                              <td className="min-w-0 px-2 sm:px-3 py-2.5">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <div className="min-w-0">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                      <p className="min-w-0 truncate font-bold">{prod.name}</p>
+                                      <Badge variant="secondary" className="shrink-0 text-[9px]">{prod.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</Badge>
+                                    </div>
+                                  </div>
                                   {prod.trackInventory && (
                                     <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
                                       {prod.currentStock ?? 0} unid.
@@ -806,18 +880,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                                 </div>
                                 {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
                               </td>
-                              <td className="px-3 py-2.5 text-right font-mono">{formatCurrency(prod.salePrice)}</td>
-                              <td className="px-3 py-2.5 text-center">
+                              <td className="px-2 sm:px-3 py-2.5 text-right font-mono whitespace-nowrap">{formatCurrency(prod.salePrice)}</td>
+                              <td data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center">
                                 <Button size="sm" variant="ghost" onClick={() => addItem(prod)}
                                   disabled={isRegisterDisabled || (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
-                                  className="h-7 rounded-lg px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
+                                  className="h-7 max-w-full whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
                                   <Plus className="mr-1 size-3" /> {prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar'}
                                 </Button>
                               </td>
                             </tr>
                           ))}
                           {filteredProducts.length === 0 && (
-                            <tr><td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">No hay productos disponibles</td></tr>
+                            <tr><td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">No hay productos ni servicios disponibles</td></tr>
                           )}
                         </tbody>
                       </table>
@@ -839,8 +913,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                             <div className="space-y-3 p-4">
                               <div>
                                 <div className="mb-1.5 flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-1.5">
+                                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                     <Badge variant="outline" className="font-mono text-[9px] text-primary">{prod.code}</Badge>
+                                    <Badge variant="secondary" className="text-[9px]">{prod.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</Badge>
                                     {prod.trackInventory && (
                                       <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
                                         {prod.currentStock ?? 0} unid.
@@ -851,7 +926,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                                 </div>
                                 <h4 className="truncate text-sm font-black">{prod.name}</h4>
                                 <p className="mt-1 line-clamp-2 min-h-8 text-[11px] leading-4 text-muted-foreground">
-                                  {prod.description || 'Producto disponible para facturación inmediata.'}
+                                  {prod.description || (prod.itemType === 'SERVICE' ? 'Servicio disponible para facturación inmediata.' : 'Producto disponible para facturación inmediata.')}
                                 </p>
                               </div>
                               <Button
@@ -868,7 +943,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                       </div>
                     ) : (
                       <div className="rounded-xl border border-dashed border-border/60 px-4 py-10 text-center text-sm text-muted-foreground">
-                        No hay productos disponibles
+                        No hay productos ni servicios disponibles
                       </div>
                     )}
                   </div>
@@ -897,14 +972,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                           <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Cant</th>
                           <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Precio Unit.</th>
                           <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Subtotal</th>
-                          <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Acción</th>
+                          <th data-actions-column="compact" className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Acción</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/20">
                         {cart.map((item) => (
                           <tr key={item.productId} className="hover:bg-muted/20 transition-colors">
                             <td className="px-3 py-2 font-bold">{item.description}</td>
-                            <td className="px-3 py-2 text-center">
+                            <td data-actions-column="compact" className="px-3 py-2 text-center">
                               <Input
                                 type="number"
                                 value={item.quantity}
@@ -1137,7 +1212,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                     {payments.map((payment, index) => (
                       <div key={`${payment.method}-${index}`} className="rounded-xl border p-3">
                         <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                          <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: value === 'TRANSFER' ? item.reference : undefined, accountId: value === 'TRANSFER' ? item.accountId : undefined } : item))}>
+                          <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: value === 'TRANSFER' ? item.reference : undefined } : item))}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="CASH">Efectivo</SelectItem>
@@ -1149,15 +1224,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                           <Button variant="ghost" disabled={payments.length === 1} onClick={() => setPayments(current => current.filter((_, itemIndex) => itemIndex !== index))}>✕</Button>
                         </div>
                         {payment.method === 'CARD' && <Input className="mt-2" placeholder="Voucher / referencia (opcional)" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                        {payment.method === 'TRANSFER' && (
-                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                            <Select value={payment.accountId || ''} onValueChange={(value) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, accountId: value } : item))}>
-                              <SelectTrigger><SelectValue placeholder="Cuenta bancaria destino" /></SelectTrigger>
-                              <SelectContent>{bankAccounts.map(account => <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>)}</SelectContent>
-                            </Select>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <Select value={payment.accountId || ''} onValueChange={(value) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, accountId: value } : item))}>
+                            <SelectTrigger><SelectValue placeholder="Cuenta contable del cobro *" /></SelectTrigger>
+                            <SelectContent>{bankAccounts.map(account => <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>)}</SelectContent>
+                          </Select>
+                          {payment.method === 'TRANSFER' && (
                             <Input placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1165,16 +1240,40 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                 </>
               );
             })()}
-            <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setShowPayment(false)}>Cancelar</Button><Button onClick={submitPayment} disabled={submitting}>{submitting ? <Loader2 className="size-4 animate-spin" /> : 'Confirmar y emitir'}</Button></div>
+            <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setShowPayment(false)}>Cancelar</Button><Button onClick={() => void submitPayment()} disabled={submitting}>{submitting ? <Loader2 className="size-4 animate-spin" /> : 'Confirmar y emitir'}</Button></div>
           </div>
         </div>
       )}
       {showTutorial && <GuidedTour steps={POS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Facturación por Caja" />}
-      <AddProductsModal
-        open={showAddProduct}
-        onOpenChange={setShowAddProduct}
-        onRefresh={handleProductCreated}
-      />
+      <ConfirmDialog
+        open={duplicateMatches.length > 0}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDuplicateMatches([]);
+            checkoutIdempotencyKey.current = null;
+          }
+        }}
+        title="Posible venta duplicada"
+        description="Encontramos ventas recientes con características similares. Revisa la información antes de continuar."
+        confirmLabel="Continuar venta"
+        cancelLabel="Revisar"
+        variant="warning"
+        loading={submitting}
+        onConfirm={() => submitPayment(true)}
+      >
+        <div className="mt-3 max-h-52 space-y-2 overflow-y-auto text-left">
+          {duplicateMatches.map((match) => (
+            <div key={match.id} className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs">
+              <div className="flex items-center justify-between gap-2 font-bold">
+                <span>{match.number}</span>
+                <span>{match.currency === 'USD' ? '$' : 'C$'} {Number(match.total).toFixed(2)}</span>
+              </div>
+              <p className="mt-1 text-muted-foreground">{match.customerName} · {match.registerName}</p>
+              <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-300">Coincidencias: {match.matchedCriteria.join(', ')}</p>
+            </div>
+          ))}
+        </div>
+      </ConfirmDialog>
       <QuickAddCustomerModal
         open={showAddCustomer}
         onOpenChange={setShowAddCustomer}

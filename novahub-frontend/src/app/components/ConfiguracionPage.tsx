@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Palette, RotateCcw, Save, Upload, Eye, Check, Sparkles,
@@ -70,7 +71,7 @@ const AVAILABLE_MODULES = [
 export const SUBMODULES_FOR_PERMS = [
   // Ventas
   { id: 'SALES_CLIENTS', label: 'Clientes', parent: 'SALES' },
-  { id: 'SALES_QUOTES', label: 'Estimaciones', parent: 'SALES' },
+  { id: 'SALES_QUOTES', label: 'Cotizaciones', parent: 'SALES' },
   { id: 'SALES_ORDERS', label: 'Órdenes de Venta', parent: 'SALES' },
   { id: 'SALES_INVOICES', label: 'Facturas', parent: 'SALES' },
   { id: 'SALES_RECURRING', label: 'Facturas Recurrentes', parent: 'SALES' },

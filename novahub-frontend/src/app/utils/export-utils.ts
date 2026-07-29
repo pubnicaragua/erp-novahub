@@ -8,7 +8,7 @@ export const getBase64Image = async (url: string): Promise<string | null> => {
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
-  } catch (e) {
+  } catch (e: any) {
     return null;
   }
 };
@@ -82,6 +82,6 @@ export const sanitizeHtml2CanvasOklch = (elementId: string, clonedDoc: Document,
           cloneNode.setAttribute('stroke', '#e5e7eb');
         }
       }
-    } catch (e) {}
+    } catch (e: any) {}
   }
 };

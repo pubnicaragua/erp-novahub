@@ -10,12 +10,13 @@ import { salesReturnsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
-import type { SalesReturn, Customer, Invoice, Product } from '../../types';
+import type { SalesReturn, Customer, Invoice, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 
 interface DevolucionesViewProps {
   data: SalesReturn[];
@@ -24,6 +25,8 @@ interface DevolucionesViewProps {
   customers?: Customer[];
   invoices?: Invoice[];
   products?: Product[];
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
 }
 
 const statusOptions = [
@@ -33,7 +36,7 @@ const statusOptions = [
   { label: 'Rechazada',  value: 'REJECTED',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [] }: DevolucionesViewProps) {
+export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [], pagination, onSearchChange }: DevolucionesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -41,6 +44,9 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
+  const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
+  const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
@@ -69,6 +75,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
       total: 0,
       currency: displayCurrency,
       exchangeRate: globalRate,
+      accountId: '',
     });
   };
 
@@ -79,6 +86,8 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
     if (!localDoc.invoiceId) { toast.error('Selecciona la factura de origen'); return; }
     if (!localDoc.reason.trim()) { toast.error('Ingresa la razón de la devolución'); return; }
+    if (!localDoc.accountId) { toast.error('Selecciona la cuenta contable de la devolución'); return; }
+    const saveToastId = toast.loading(isCreating ? 'Creando devolución...' : 'Guardando cambios...');
     try {
       if (isCreating) {
         await salesReturnsService.create({
@@ -97,14 +106,14 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           status: 'PENDING',
           currency: localDoc.currency || displayCurrency,
           exchangeRate: localDoc.exchangeRate || globalRate,
+          accountId: localDoc.accountId,
         } as any);
-        toast.success('Devolución registrada exitosamente');
+        toast.success('Devolución registrada', { id: saveToastId });
       } else {
         await salesReturnsService.update(localDoc.id, localDoc);
-        toast.success('Devolución actualizada');
       }
       setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
-    } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar', { id: saveToastId }); }
   };
 
   const handleExportPDF = async (row: SalesReturn) => {
@@ -201,7 +210,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
                     options={(customers || [])
@@ -226,6 +235,13 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                 {!isCreating && <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span></div>}
               </div>
+              <AccountingAccountSelect
+                value={localDoc?.accountId || ''}
+                onChange={(accountId) => setLocalDoc({ ...localDoc, accountId })}
+                assetOnly
+                label="Cuenta contable de la devolución"
+                required
+              />
               <div><p className="text-[10px] text-muted-foreground mb-1">Razón de la Devolución</p>
                 <textarea value={localDoc?.reason || ''} onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })}
                   className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm resize-none" placeholder="Describe el motivo de la devolución..." /></div>
@@ -247,21 +263,24 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos Devueltos</p>
-              <Button variant="outline" size="sm" onClick={() => {
-                const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0 }];
+              <div className="flex flex-wrap gap-2">
+              {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" onClick={() => {
+                const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }];
                 setLocalDoc({ ...localDoc, items: newItems });
-              }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar Item</Button>
+              }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
+              </div>
             </div>
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
+              <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                 <div className="col-span-5">Descripción</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div><div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-start">
-                  <div className="col-span-5"><Combobox options={products.map(p => ({ label: `${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
-                    onChange={(val) => { const ni = [...(localDoc.items || [])]; const prod = products.find(p => p.id === val);
-                      ni[idx] = { ...ni[idx], productId: val, description: prod?.name || '', unitPrice: Number(prod?.price || 0), total: Number(ni[idx].quantity || 1) * Number(prod?.price || 0) };
-                      setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} placeholder="Producto..." /></div>
+                <div key={item.id || idx} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
+                  <div className="col-span-5"><Combobox options={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).map(p => ({ label: `${resolveItemType(item) === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
+                    onChange={(val) => { const ni = [...(localDoc.items || [])]; const prod = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
+                      const unitPrice = Number(prod?.salePrice ?? prod?.price ?? 0);
+                      ni[idx] = { ...ni[idx], productId: val, description: prod?.name || '', unitPrice, total: Number(ni[idx].quantity || 1) * unitPrice };
+                    setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'} /></div>
                   <div className="col-span-2"><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };
                     setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-8 text-xs text-right" /></div>
@@ -298,7 +317,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de retornos y aprobación de mercancía.</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input placeholder="Buscar devolución..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+              <Input placeholder="Buscar devolución..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('SALES_RETURNS', 'create') && (
               <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Devolución</Button>
@@ -306,6 +325,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           </div>
         </div>
         <EditableDataTable data={filtered}
+          pagination={pagination}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error'); } }}
           columns={columns} onRowUpdate={async () => {}} isLoading={loading}
           actions={(row) => (

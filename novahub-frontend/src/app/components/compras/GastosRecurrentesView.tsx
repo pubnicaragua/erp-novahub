@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { PurchaseAuditButton } from './PurchaseAuditButton';
 
 interface Props { data: RecurringExpense[]; loading: boolean; onRefresh: () => void; }
 
@@ -111,7 +112,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
       setPendingDeleteId(null);
       if (editingId === pendingDeleteId) setEditingId(null);
       onRefresh();
-    } catch (e) {
+    } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
     } finally {
       setDeleteLoading(false);
@@ -364,13 +365,14 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
               }
               toast.success('Elementos eliminados');
               onRefresh();
-            } catch (e) {
+            } catch (e: any) {
               toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
             }
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
               <Button title={canPerform('PURCHASES_EXPENSES_REC', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <PurchaseAuditButton entity="RECURRING_EXPENSE" entityId={row.id} title="Auditoria del Gasto Recurrente" />
               {canPerform('PURCHASES_EXPENSES_REC', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
               )}

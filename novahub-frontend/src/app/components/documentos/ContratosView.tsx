@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { Contract } from '../../types';
 import { Card, CardContent } from '../ui/card';
@@ -94,7 +94,7 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onR
           columns={columns} 
           onRowUpdate={canPerform('DOCUMENTS_CONTRACTS', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('DOCUMENTS_CONTRACTS', 'delete') ? async (id) => { try { await contractsService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar contrato'); } } : undefined} 
+          onRowDelete={canPerform('DOCUMENTS_CONTRACTS', 'delete') ? async (id) => { try { await contractsService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar contrato'); } } : undefined} 
         />
       </Card>
     </div>

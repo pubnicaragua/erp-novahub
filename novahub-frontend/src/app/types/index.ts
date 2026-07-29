@@ -6,7 +6,7 @@
 // ---- Shared / Base ----
 export type EntityStatus = 'active' | 'inactive' | 'archived' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 export type DocumentStatus = 'draft' | 'sent' | 'approved' | 'rejected' | 'cancelled' | 'DRAFT' | 'SENT' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
-export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'refunded' | 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'REFUNDED';
+export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'refunded' | 'cancelled' | 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'REFUNDED' | 'CANCELLED';
 export type PaymentMethod = 'cash' | 'transfer' | 'check' | 'card' | 'other' | 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER';
 export type Currency = 'USD' | 'EUR' | 'GTQ' | 'HNL' | 'NIO' | 'CRC' | 'PAB';
 
@@ -29,6 +29,17 @@ export interface ApiFilters {
   pageSize?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+}
+
+export type SalesPageSize = 50 | 100 | 200;
+
+export interface SalesPaginationControls {
+  page: number;
+  pageSize: SalesPageSize;
+  total: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: SalesPageSize) => void;
 }
 
 // ---- Tenants ----
@@ -68,6 +79,9 @@ export interface Customer {
   name: string;
   type: 'individual' | 'company';
   taxId?: string;
+  ruc?: string;
+  dv?: string;
+  razonSocial?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -91,6 +105,7 @@ export interface Estimate {
   number: string;
   customerId: string;
   customer?: Customer;
+  warehouseId?: string;
   date: string;
   expiryDate: string;
   subtotal: number;
@@ -100,6 +115,7 @@ export interface Estimate {
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;
+  accountId?: string;
   status: DocumentStatus;
   notes?: string;
   items: EstimateItem[];
@@ -136,11 +152,22 @@ export interface SalesOrder {
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;
+  accountId?: string;
+  warehouseId?: string;
   status: 'draft' | 'pending_review' | 'confirmed' | 'in_progress' | 'shipped' | 'delivered' | 'cancelled';
   notes?: string;
   items: SalesOrderItem[];
   createdAt: string;
   updatedAt: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  invoicedAt?: string;
+  invoicedBy?: { id?: string; name?: string };
+  sellerEmployeeId?: string;
+  sellerEmployee?: { id?: string; firstName?: string; lastName?: string };
+  commissionType?: 'PERCENTAGE' | 'FIXED';
+  commissionRate?: number;
+  commissionAmount?: number;
 }
 
 export interface SalesOrderItem {
@@ -163,6 +190,7 @@ export interface Invoice {
   customerId: string;
   customer?: Customer;
   salesOrderId?: string;
+  warehouseId?: string;
   date: string;
   dueDate: string;
   subtotal: number;
@@ -174,10 +202,13 @@ export interface Invoice {
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;
+  accountId?: string;
   status: PaymentStatus;
   notes?: string;
   sellerEmployeeId?: string | null;
   commissionRate?: number | null;
+  commissionType?: 'PERCENTAGE' | 'FIXED' | null;
+  commissionAmount?: number | null;
   items: InvoiceItem[];
   createdAt: string;
   updatedAt: string;
@@ -207,10 +238,12 @@ export interface RecurringInvoice {
   nextInvoiceDate: string;
   subtotal: number;
   taxAmount: number;
+  discountAmount?: number;
   total: number;
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;
+  accountId?: string;
   status: 'active' | 'paused' | 'expired' | 'cancelled';
   sourceRecurringExpenseId?: string;
   sourceRecurringExpenseRef?: string;
@@ -231,6 +264,7 @@ export interface RecurringInvoiceItem {
   quantity: number;
   unitPrice: number;
   taxRate: number;
+  discount?: number;
   total: number;
 }
 
@@ -248,9 +282,11 @@ export interface PaymentReceived {
   currency: Currency;
   exchangeRate?: number;
   baseAmount?: number;
+  accountId?: string;
   method: PaymentMethod;
   reference?: string;
   notes?: string;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -267,6 +303,7 @@ export interface SalesReturn {
   date: string;
   total: number;
   reason: string;
+  accountId?: string;
   status: 'pending' | 'approved' | 'processed' | 'rejected';
   items: SalesReturnItem[];
   createdAt: string;
@@ -296,6 +333,7 @@ export interface CreditNote {
   total: number;
   status: 'draft' | 'issued' | 'applied' | 'voided';
   reason: string;
+  accountId?: string;
   items: CreditNoteItem[];
   createdAt: string;
   updatedAt: string;
@@ -349,6 +387,8 @@ export interface PurchaseOrder {
   expectedDelivery?: string;
   subtotal: number;
   taxAmount: number;
+  withholdingTotal?: number;
+  withholdingBase?: number;
   total: number;
   currency: Currency;
   exchangeRate?: number;
@@ -356,6 +396,7 @@ export interface PurchaseOrder {
   status: PurchaseOrderStatus;
   requestedBy: string;
   address?: string;
+  purchaseType?: string;
   includeTax?: boolean;
   taxRate?: number;
   withholdingRate?: number;
@@ -386,6 +427,14 @@ export interface PurchaseOrderItem {
   quantity: number;
   unitPrice: number;
   taxRate?: number;
+  taxType?: string;
+  taxBase?: number;
+  taxAmount?: number;
+  withholdingType?: string;
+  withholdingRate?: number;
+  withholdingBase?: number;
+  accountId?: string;
+  costCenterId?: string;
   total: number;
 }
 
@@ -399,9 +448,10 @@ export interface PurchaseReceipt {
   supplierId: string;
   supplier?: Supplier;
   date: string;
-  status: 'pending' | 'received' | 'partial' | 'rejected';
+  status: 'pending' | 'received' | 'partial' | 'rejected' | 'with_incidents';
   notes?: string;
   items: PurchaseReceiptItem[];
+  supplierInvoices?: SupplierInvoice[];
   createdAt: string;
   updatedAt: string;
 }
@@ -414,6 +464,16 @@ export interface PurchaseReceiptItem {
   description: string;
   quantityOrdered: number;
   quantityReceived: number;
+  quantityRejected?: number;
+  unitPrice?: number;
+  taxType?: string;
+  taxBase?: number;
+  taxAmount?: number;
+  withholdingType?: string;
+  withholdingRate?: number;
+  withholdingBase?: number;
+  accountId?: string;
+  costCenterId?: string;
 }
 
 // ---- Supplier Invoices ----
@@ -424,10 +484,13 @@ export interface SupplierInvoice {
   supplierId: string;
   supplier?: Supplier;
   purchaseOrderId?: string;
+  purchaseReceiptId?: string;
   date: string;
   dueDate: string;
   subtotal: number;
   taxAmount: number;
+  withholdingTotal?: number;
+  withholdingBase?: number;
   total: number;
   amountPaid: number;
   balance: number;
@@ -448,6 +511,14 @@ export interface SupplierInvoiceItem {
   quantity: number;
   unitPrice: number;
   taxRate: number;
+  taxType?: string;
+  taxBase?: number;
+  taxAmount?: number;
+  withholdingType?: string;
+  withholdingRate?: number;
+  withholdingBase?: number;
+  accountId?: string;
+  costCenterId?: string;
   total: number;
 }
 
@@ -496,6 +567,7 @@ export interface PaymentMade {
   method: PaymentMethod;
   reference?: string;
   notes?: string;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -585,6 +657,13 @@ export interface Expense {
   baseAmount?: number;
   category: string;
   categoryCustom?: string;
+  expenseCategoryId?: string;
+  expenseCategory?: {
+    id: string;
+    name: string;
+    code?: string;
+    color?: string;
+  };
   description: string;
   paidTo?: string;
   paymentSource?: 'EFECTIVO' | 'BAC' | 'LAFISE' | 'ATLANTIDA' | 'FICOHSA' | 'BANPRO' | 'BDF' | 'AVANZ';
@@ -639,6 +718,10 @@ export interface JournalEntry {
   description: string;
   status: 'draft' | 'posted' | 'voided';
   lines: JournalEntryLine[];
+  referenceType?: string;
+  referenceId?: string;
+  costCenterId?: string;
+  costCenter?: any;
   createdAt: string;
   updatedAt: string;
 }
@@ -688,15 +771,40 @@ export interface Product {
   price: number;
   cost: number;
   salePrice: number;
+  priceCurrency?: string;
+  priceExchangeRate?: number;
+  salePriceOriginal?: number;
   costPrice: number;
+  lastPurchasePrice?: number;
   taxRate: number;
   stock: number;
   minStock: number;
+  maxStock?: number | null;
   trackSerialNumbers?: boolean;
   itemType?: 'PRODUCT' | 'SERVICE';
   status: EntityStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CostHistory {
+  id: string;
+  clientTenantId: string;
+  productId: string;
+  warehouseId?: string | null;
+  date: string;
+  documentType: 'PURCHASE_ORDER' | 'PURCHASE_RECEIPT' | 'SUPPLIER_INVOICE' | 'ADJUSTMENT' | string;
+  documentId: string;
+  documentNumber?: string | null;
+  previousCost: number;
+  previousQty: number;
+  orderPrice: number;
+  receivedCost: number;
+  invoicedCost: number;
+  quantityChange: number;
+  newQuantity: number;
+  newAverageCost: number;
+  product?: Product;
 }
 
 export interface Warehouse {
@@ -740,6 +848,7 @@ export interface Permission {
 // ---- Employees ----
 export interface Employee {
   id: string;
+  userId?: string;
   tenantId: string;
   code: string;
   firstName: string;
@@ -748,17 +857,29 @@ export interface Employee {
   phone?: string;
   position: string;
   department: string;
+  departmentId?: string;
+  positionId?: string;
+  managerId?: string;
   hireDate: string;
   terminationDate?: string;
+  probationEndDate?: string;
   salary: number;
   salaryType: 'monthly' | 'biweekly' | 'hourly';
   currency: Currency;
   bankAccount?: string;
   taxId?: string;
+  nationalId?: string;
+  socialSecurityNumber?: string;
   address?: string;
   emergencyContact?: string;
   emergencyPhone?: string;
   status: 'active' | 'on_leave' | 'terminated';
+  employmentStatus?: string;
+  approvalStatus?: string;
+  rejectionReason?: string;
+  contractType?: string;
+  payFrequency?: string;
+  notes?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -970,3 +1091,167 @@ export interface Message {
   messages: ChatMessage[];
 }
 export interface PushNotification { id: string; title: string; content: string; type: string; sent?: boolean; isRead: boolean; createdAt: string; deviceId?: string; }
+
+// ============================================================
+// SOLICITUDES DE COMPRA
+// ============================================================
+export type PurchasePriority = 'NORMAL' | 'URGENT' | 'CRITICAL';
+export type PurchaseRequestStatus = 'DRAFT' | 'SUBMITTED' | 'RECEIVED' | 'IN_REVIEW' | 'IN_QUOTATION' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'RETURNED_FOR_CORRECTION' | 'CONVERTED_TO_ORDER' | 'CLOSED' | 'CANCELLED';
+
+export interface PurchaseRequestItem {
+  id: string;
+  purchaseRequestId: string;
+  productId?: string;
+  description: string;
+  quantity: number;
+  currentStock: number;
+  minStock: number;
+  warehouseId: string;
+  observations?: string;
+  product?: Product;
+}
+
+export interface PurchaseRequest {
+  id: string;
+  number: string;
+  clientTenantId: string;
+  warehouseId: string;
+  warehouse?: Warehouse;
+  branchId?: string;
+  branch?: any;
+  requestedById: string;
+  requestedBy?: { id: string; firstName: string; lastName: string; employeeNumber?: string };
+  userId?: string;
+  date: string;
+  requiredDate?: string;
+  priority: PurchasePriority;
+  status: PurchaseRequestStatus;
+  justification?: string;
+  notes?: string;
+  items: PurchaseRequestItem[];
+  management?: PurchaseManagement[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================
+// GESTIÓN DE COMPRA
+// ============================================================
+export type PurchaseManagementStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'RETURNED_FOR_CORRECTION' | 'CONVERTED_TO_ORDER' | 'CANCELLED';
+
+export interface PurchaseManagementItem {
+  id: string;
+  purchaseManagementId: string;
+  productId?: string;
+  description: string;
+  quantityRequested: number;
+  quantityProposed: number;
+  unitPrice: number;
+  discount: number;
+  taxType: string;
+  taxRate: number;
+  taxBase: number;
+  taxAmount: number;
+  subtotal: number;
+  total: number;
+  accountId?: string;
+  product?: Product;
+}
+
+export interface PurchaseManagement {
+  id: string;
+  number: string;
+  purchaseRequestId?: string;
+  purchaseRequest?: PurchaseRequest;
+  clientTenantId: string;
+  date: string;
+  status: PurchaseManagementStatus;
+  currency: string;
+  exchangeRate: number;
+  baseTotal?: number;
+  supplierId?: string;
+  supplier?: Supplier;
+  quotationNumber?: string;
+  quotationDate?: string;
+  quotationValidity?: string;
+  supplierContact?: string;
+  paymentTerms?: string;
+  creditDays?: number;
+  advancePayment: number;
+  expectedDelivery?: string;
+  shippingCost: number;
+  total: number;
+  internalNotes?: string;
+  notes?: string;
+  approvedById?: string;
+  approvedBy?: { id: string; name: string };
+  approvedAt?: string;
+  rejectionReason?: string;
+  items: PurchaseManagementItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---- HR Extensions ----
+export interface EmployeeChangeLog {
+  id: string;
+  employeeId: string;
+  field: string;
+  oldValue?: string;
+  newValue?: string;
+  changedById: string;
+  effectiveDate: string;
+  createdAt: string;
+}
+
+export interface VacationBalance {
+  id: string;
+  employeeId: string;
+  year: number;
+  totalDays: number;
+  usedDays: number;
+  pendingDays: number;
+  remainingDays: number;
+  employee?: { id: string; firstName: string; lastName: string; employeeNumber: string };
+}
+
+export interface AbsenceType {
+  id: string;
+  code: string;
+  name: string;
+  paidByCompanyPct: number;
+  paidByThirdPartyPct: number;
+  maxDays?: number;
+  cap?: number;
+  salaryBase: string;
+  requiresDoc: boolean;
+  isActive: boolean;
+}
+
+export interface KpiDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  target?: number;
+  weight: number;
+  periodType: string;
+  assignToType: string;
+  assignToId?: string;
+  isActive: boolean;
+}
+
+export interface KpiResult {
+  id: string;
+  employeeId: string;
+  employee?: { id: string; firstName: string; lastName: string };
+  kpiDefinitionId: string;
+  kpiDefinition?: KpiDefinition;
+  periodStart: string;
+  periodEnd: string;
+  target?: number;
+  actual: number;
+  weight: number;
+  evaluatorId?: string;
+  comment?: string;
+  createdAt: string;
+}

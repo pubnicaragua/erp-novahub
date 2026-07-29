@@ -357,11 +357,11 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const tabTriggerClass = "flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all";
 
   return (
-    <div className="space-y-4 p-4 md:p-6 pb-20 max-w-[1800px] mx-auto">
+    <div className="mx-auto w-full max-w-[1700px] space-y-4 p-4 pb-20 sm:p-6 md:p-10">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-primary/10 rounded-xl">
+          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <DollarSign className="size-9 text-primary" />
           </div>
           <div>
@@ -379,7 +379,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
       {/* Main Navigation Tabs — matches RH pattern with primary theme colors */}
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto justify-start pb-2 flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 custom-scrollbar [&>button]:flex-none")}>
+        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'FINANCIAL_DASHBOARD' },
             { id: 'ingresos', label: 'Ingresos', icon: TrendingUp, module: 'FINANCIAL_INCOMES' },

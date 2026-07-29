@@ -113,13 +113,13 @@ export function FinanceTableView({
       await onUpdate(id, { [key]: newValue });
       toast.success('Cambio guardado automáticamente');
       setLocalData(prev => prev.map(item => item.id === id ? { ...item, isDraft: false } : item));
-    } catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar cambio'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar cambio'); }
     finally { setSavingIds(prev => { const n = new Set(prev); n.delete(id); return n; }); }
   };
 
   const handleDelete = async (id: string) => {
     try { setDeleteLoading(true); await onDelete(id); }
-    catch (e) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar registro'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar registro'); }
     finally { setDeleteLoading(false); setPendingDeleteId(null); }
   };
 
@@ -199,7 +199,7 @@ export function FinanceTableView({
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
-    } catch (e) {
+    } catch (e: any) {
       return null;
     }
   };

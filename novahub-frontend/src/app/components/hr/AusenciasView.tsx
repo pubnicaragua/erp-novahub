@@ -1,12 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import React from 'react';
+import { useState, useEffect } from 'react';
+import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw, Umbrella, Sun, Cloud, CalendarDays } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Card, CardContent } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { Separator } from '../ui/separator';
 import { toast } from 'sonner';
+import { motion } from 'motion/react';
+import { cn } from '../ui/utils';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';
+import type { AbsenceType, VacationBalance } from '../../types';
 
 export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
@@ -15,11 +22,16 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     employeeId: '',
     leaveType: 'VACATION',
     leaveTypeCustom: '',
+    absenceTypeId: '',
     startDate: '',
     endDate: '',
     days: 1,
     reason: '',
   });
+
+  const [vacationBalance, setVacationBalance] = useState<VacationBalance | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const [absenceTypes, setAbsenceTypes] = useState<AbsenceType[]>([]);
 
   useEffect(() => {
     if (newRequest.startDate && newRequest.endDate) {
@@ -36,6 +48,40 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       }
     }
   }, [newRequest.startDate, newRequest.endDate]);
+
+  useEffect(() => {
+    loadVacationBalance();
+    loadAbsenceTypes();
+  }, [newRequest.employeeId]);
+
+  const loadVacationBalance = async () => {
+    if (!newRequest.employeeId) { setVacationBalance(null); return; }
+    try {
+      setBalanceLoading(true);
+      const res = await hrService.getVacationBalance(newRequest.employeeId, new Date().getFullYear()) as any;
+      setVacationBalance(res || null);
+    } catch { setVacationBalance(null); }
+    finally { setBalanceLoading(false); }
+  };
+
+  const loadAbsenceTypes = async () => {
+    try {
+      const res = await hrService.getAbsenceTypes() as any;
+      setAbsenceTypes(Array.isArray(res) ? res : res?.data || []);
+    } catch {}
+  };
+
+  const handleRecalcVacation = async () => {
+    if (!newRequest.employeeId) return;
+    try {
+      setBalanceLoading(true);
+      const res = await hrService.recalcVacationBalance(newRequest.employeeId, new Date().getFullYear()) as any;
+      setVacationBalance(res || null);
+      toast.success('Saldo de vacaciones recalculado');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al recalcular');
+    } finally { setBalanceLoading(false); }
+  };
 
   const handleCreateRequest = async () => {
     if (!newRequest.employeeId || !newRequest.startDate || !newRequest.endDate) {
@@ -133,6 +179,43 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
         </div>
       </div>
 
+      {/* Vacation Balance */}
+      {newRequest.employeeId && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <Card className="border-primary/20 shadow-sm bg-gradient-to-br from-primary/5 to-transparent">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                  <Umbrella className="size-4" /> Vacaciones {new Date().getFullYear()}
+                </h3>
+                <Button size="sm" variant="outline" onClick={handleRecalcVacation} disabled={balanceLoading} className="h-8 text-xs rounded-xl gap-1">
+                  <RefreshCw className={cn("size-3", balanceLoading && "animate-spin")} />
+                  Recalcular
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-primary/5 p-3 rounded-xl border border-primary/10 text-center">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Totales</p>
+                  <p className="text-xl font-black text-primary">{vacationBalance?.totalDays ?? '—'}</p>
+                </div>
+                <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-xl border border-orange-200 dark:border-orange-800/30 text-center">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Usados</p>
+                  <p className="text-xl font-black text-orange-600">{vacationBalance?.usedDays ?? '—'}</p>
+                </div>
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-xl border border-amber-200 dark:border-amber-800/30 text-center">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Pendientes</p>
+                  <p className="text-xl font-black text-amber-600">{vacationBalance?.pendingDays ?? '—'}</p>
+                </div>
+                <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-xl border border-green-200 dark:border-green-800/30 text-center">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Disponibles</p>
+                  <p className="text-xl font-black text-green-600">{vacationBalance?.remainingDays ?? '—'}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
       {/* New Request Button */}
       <div className="flex justify-end">
         {canPerform('HR_LEAVE', 'create') && (
@@ -186,6 +269,21 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                   onChange={e => setNewRequest({...newRequest, leaveTypeCustom: e.target.value})}
                   className="mt-2 bg-background"
                 />
+              )}
+              {newRequest.leaveType === 'VACATION' && absenceTypes.length > 0 && (
+                <div className="mt-2">
+                  <label className="text-xs font-medium mb-1 block text-muted-foreground">Tipo de Ausencia (config)</label>
+                  <Select value={newRequest.absenceTypeId} onValueChange={(v) => setNewRequest({ ...newRequest, absenceTypeId: v })}>
+                    <SelectTrigger className="bg-background h-9 text-xs">
+                      <SelectValue placeholder="Seleccionar tipo..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {absenceTypes.filter(at => at.isActive).map(at => (
+                        <SelectItem key={at.id} value={at.id}>{at.code} - {at.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
             </div>
             <div>

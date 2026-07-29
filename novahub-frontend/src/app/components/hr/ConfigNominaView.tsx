@@ -106,7 +106,7 @@ export function ConfigNominaView() {
         setHasExisting(true);
       }
       toast.success('Configuración de nómina guardada exitosamente');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving payroll config:', error);
       toast.error(error?.response?.data?.message || error?.message || 'Error al guardar configuración de nómina');
     } finally {

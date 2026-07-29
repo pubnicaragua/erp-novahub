@@ -1,4 +1,3 @@
-import React from 'react';
 import { Module } from '../contexts/AuthContext';
 
 interface ModulePlaceholderProps {

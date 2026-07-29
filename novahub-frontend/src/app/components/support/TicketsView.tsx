@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { Ticket, TicketAudit, TicketComment } from '../../types';
 import { Card, CardContent } from '../ui/card';

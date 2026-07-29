@@ -71,6 +71,8 @@ interface ProductImagePickerProps {
   src?: string | null;
   productName?: string;
   disabled?: boolean;
+  size?: "sm" | "md";
+  className?: string;
   onSelect: (file: File) => void;
   onRemove: () => void;
 }
@@ -79,6 +81,8 @@ export function ProductImagePicker({
   src,
   productName,
   disabled,
+  size = "md",
+  className,
   onSelect,
   onRemove,
 }: ProductImagePickerProps) {
@@ -97,18 +101,22 @@ export function ProductImagePicker({
     onSelect(file);
   };
 
+  const isSm = size === "sm";
+
   return (
-    <div className="group relative mx-auto w-fit">
+    <div className="group relative shrink-0">
       <button
         type="button"
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
         className={cn(
-          "relative flex size-16 items-center justify-center overflow-hidden rounded-2xl border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          "relative flex items-center justify-center overflow-hidden transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          isSm ? "size-9 rounded-lg" : "size-16 rounded-2xl",
           src
-            ? "border-border/70 bg-muted shadow-sm hover:border-primary/60"
-            : "border-dashed border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10",
+            ? "border border-border/70 bg-muted shadow-sm hover:border-primary/60"
+            : "border border-dashed border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10",
           disabled && "cursor-not-allowed opacity-50",
+          className,
         )}
         aria-label={
           src
@@ -125,15 +133,17 @@ export function ProductImagePicker({
               className="h-full w-full object-cover"
             />
             <span className="absolute inset-0 flex items-center justify-center bg-slate-950/55 opacity-0 transition-opacity group-hover:opacity-100">
-              <Camera className="size-5 text-white" />
+              <Camera className={cn("text-white", isSm ? "size-3.5" : "size-5")} />
             </span>
           </>
         ) : (
-          <span className="flex flex-col items-center gap-1">
-            <ImagePlus className="size-5" />
-            <span className="text-[8px] font-black uppercase tracking-wider">
-              Foto
-            </span>
+          <span className="flex flex-col items-center justify-center">
+            <ImagePlus className={isSm ? "size-3.5" : "size-5"} />
+            {!isSm && (
+              <span className="mt-1 text-[8px] font-black uppercase tracking-wider">
+                Foto
+              </span>
+            )}
           </span>
         )}
       </button>

@@ -168,18 +168,22 @@ export function TrainingHubView() {
   });
 
   return (
-    <div className="space-y-6 p-4 md:p-8 animate-in fade-in duration-500">
+    <div className="mx-auto w-full max-w-[1700px] space-y-6 p-4 animate-in fade-in duration-500 sm:p-6 md:p-10">
       {/* Header Original */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-black tracking-tighter flex items-center gap-3 uppercase italic">
+        <div className="flex items-center gap-3">
+          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <GraduationCap className="size-9 text-primary" />
+          </div>
+          <div>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
             Centro de <span className="text-primary">Capacitación</span>
           </h1>
-          <p className="text-muted-foreground mt-1 font-medium flex items-center gap-2">
+          <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
             <Video className="size-4" />
             Domina el ERP con nuestras guías visuales paso a paso.
           </p>
+          </div>
         </div>
 
         {isSuperAdmin && (

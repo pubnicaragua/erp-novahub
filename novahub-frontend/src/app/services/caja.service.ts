@@ -85,7 +85,9 @@ export interface PosProduct {
   description?: string;
   imageUrl?: string | null;
   imageUrlStorageUri?: string;
+  itemType?: 'PRODUCT' | 'SERVICE';
   trackInventory: boolean;
+  costPrice?: number;
   currentStock?: number | null;
 }
 
@@ -119,6 +121,18 @@ export interface PosInvoice {
   register?: CashRegister;
   customer?: PosCustomer;
   items?: any[];
+}
+
+export interface PotentialDuplicateSale {
+  id: string;
+  number: string;
+  date: string;
+  total: number;
+  currency: string;
+  customerName: string;
+  registerName: string;
+  matchedCriteria: string[];
+  similarityScore: number;
 }
 
 export type PosPaymentMethod = 'CASH' | 'CARD' | 'TRANSFER';
@@ -233,8 +247,22 @@ export const cajaService = {
     currency: 'NIO' | 'USD';
     exchangeRate: number;
     payments: PosPaymentLine[];
-  }) =>
-    api.post<PosInvoice>('/caja/invoices', dto),
+    duplicateConfirmation?: { candidateIds: string[] };
+  }, idempotencyKey?: string) =>
+    api.idempotentPost<PosInvoice>('/caja/invoices', dto, idempotencyKey),
+
+  checkPotentialDuplicates: (dto: {
+    registerId: string;
+    customerId?: string;
+    customCustomerName?: string;
+    date: string;
+    discountPercent?: number;
+    items: PosInvoiceItem[];
+    includeTax?: boolean;
+    currency: 'NIO' | 'USD';
+    exchangeRate: number;
+    payments: PosPaymentLine[];
+  }) => api.post<{ hasPotentialDuplicate: boolean; matches: PotentialDuplicateSale[] }>('/caja/invoices/check-duplicates', dto),
 
   getRecentInvoices: async (registerId?: string) => {
     const params = registerId ? { registerId } : {};

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -173,7 +173,7 @@ export function CustomerDetailDrawer({
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-3xl p-0 flex flex-col gap-0 border-l border-border/50 bg-background"
+        className="customer-detail-panel w-full sm:max-w-3xl p-0 flex flex-col gap-0 border-l border-border/50 bg-background"
       >
         <Tabs
           value={activeTab}
@@ -223,7 +223,7 @@ export function CustomerDetailDrawer({
               </div>
             </div>
 
-            <TabsList className="w-full justify-start h-9 bg-muted/40 p-1 rounded-xl border border-border/40 font-bold text-xs">
+            <TabsList className="w-full justify-start h-9 overflow-x-auto bg-muted/40 p-1 rounded-xl border border-border/40 font-bold text-xs">
               <TabsTrigger value="general" className="rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
                 <User className="size-3.5" /> General
               </TabsTrigger>
@@ -239,7 +239,7 @@ export function CustomerDetailDrawer({
             </TabsList>
           </SheetHeader>
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="customer-detail-scroll min-h-0 flex-1 overflow-hidden">
             <div className="p-6 space-y-6">
               {error && (
                 <Card className="p-4 bg-rose-500/10 border-rose-500/20 text-rose-500 flex items-center gap-3">
@@ -274,7 +274,10 @@ export function CustomerDetailDrawer({
                     <Building2 className="size-4 text-purple-500" /> Datos Fiscales y Financieros
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    <InfoField label="Identificación Fiscal (RUC / Cédula)" value={customer?.taxId || 'No registrado'} icon={Hash} mono muted={!customer?.taxId} />
+                    <InfoField label="RUC" value={customer?.ruc || '—'} icon={Hash} mono muted={!customer?.ruc} />
+                    <InfoField label="DV" value={customer?.dv || '—'} icon={Hash} mono muted={!customer?.dv} />
+                    <InfoField label="Razón Social" value={customer?.razonSocial || '—'} icon={Building2} muted={!customer?.razonSocial} />
+                    <InfoField label="Identificación Fiscal" value={customer?.taxId || 'No registrado'} icon={Hash} mono muted={!customer?.taxId} />
                     <InfoField label="Límite de Crédito Concedido" value={formatConvertedAmount(creditLimit, 'NIO')} icon={DollarSign} mono />
                     <InfoField label="Saldo Deudor Actual" value={formatConvertedAmount(balance, 'NIO')} icon={TrendingUp} mono />
                     <InfoField label="Código Interno" value={customer?.code || '—'} icon={Tag} mono />
@@ -346,7 +349,8 @@ export function CustomerDetailDrawer({
                 ) : invoices.length === 0 ? (
                   <EmptyState icon={FileText} title="Sin facturas registradas" description="Este cliente aún no registra facturas de venta en el sistema." />
                 ) : (
-                  <Card className="rounded-2xl border border-border/60 overflow-hidden shadow-sm">
+                  <>
+                  <Card className="hidden rounded-2xl border border-border/60 overflow-hidden shadow-sm xl:block">
                     <Table>
                       <TableHeader className="bg-muted/40">
                         <TableRow>
@@ -372,6 +376,26 @@ export function CustomerDetailDrawer({
                       </TableBody>
                     </Table>
                   </Card>
+                  <div className="h-[calc(100dvh-15rem)] min-h-[24rem] max-h-none space-y-3 overflow-y-auto rounded-2xl border border-border/60 bg-muted/5 p-3 xl:hidden">
+                    {invoices.map((inv) => (
+                      <article key={inv.id} className="rounded-2xl border border-border/50 bg-card p-4 shadow-sm">
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate font-mono text-sm font-black text-foreground">{inv.number}</p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">{inv.date ? format(new Date(inv.date), 'dd/MM/yyyy') : '—'}</p>
+                          </div>
+                          <Badge variant="outline" className="shrink-0 border-none bg-emerald-500/10 text-[9px] font-black uppercase tracking-wider text-emerald-500">
+                            {inv.status || 'Emitida'}
+                          </Badge>
+                        </div>
+                        <div className="mt-4 flex items-end justify-between gap-3 border-t border-border/40 pt-3">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total</span>
+                          <span className="font-mono text-base font-black text-foreground">{formatConvertedAmount(inv.total, 'NIO')}</span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                  </>
                 )}
               </TabsContent>
 

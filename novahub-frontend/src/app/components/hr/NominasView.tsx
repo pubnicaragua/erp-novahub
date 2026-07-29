@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useState } from 'react';
 import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
@@ -163,7 +164,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
 
       doc.save(`nominas_${new Date().toISOString().split('T')[0]}.pdf`);
       toast.success('Reporte PDF descargado');
-    } catch (e) {
+    } catch (e: any) {
       toast.error('Error generando PDF');
     }
   };

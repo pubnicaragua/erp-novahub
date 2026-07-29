@@ -8,6 +8,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
+import { Tag, Wallet } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { PlanCuentasView } from './PlanCuentasView';
 import { DiarioView } from './DiarioView';
@@ -22,6 +23,8 @@ import { LibroMayorView } from './LibroMayorView';
 import { ActivosFijosView } from './ActivosFijosView';
 import { CambiosPatrimonioView } from './CambiosPatrimonioView';
 import { ConfiguracionContableView } from './ConfiguracionContableView';
+import { CategoriasGastosView } from './CategoriasGastosView';
+import { BudgetItemsView } from './BudgetItemsView';
 
 const SECTIONS = [
   { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: BookOpen },
@@ -36,6 +39,8 @@ const SECTIONS = [
   { id: 'conciliacion', label: 'Conciliación Bancaria', icon: Landmark },
   { id: 'periodos', label: 'Períodos Contables', icon: Calendar },
   { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: FileBarChart },
+  { id: 'presupuestos', label: 'Presupuestos', icon: Wallet },
+  { id: 'categorias-gastos', label: 'Categorías Gastos', icon: Tag },
   { id: 'configuracion', label: 'Configuración', icon: Settings2 },
 ];
 
@@ -242,10 +247,10 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
   return (
     <div className="flex h-full min-h-[calc(100vh-5rem)]">
       <main className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="p-6 md:p-10 max-w-[1700px] mx-auto">
+        <div className="mx-auto w-full max-w-[1700px] p-4 sm:p-6 md:p-10">
           {/* Header */}
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-primary/10 rounded-xl">
+            <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
               <BookOpen className="size-9 text-primary" />
             </div>
             <div className="flex-1">
@@ -273,8 +278,8 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
           </div>
 
           {/* Horizontal tab navigation */}
-          <div className="w-full overflow-x-auto custom-scrollbar mb-8">
-            <div className="flex gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40">
+          <div className={cn("w-full overflow-x-auto custom-scrollbar mb-8", !isSidebarCollapsed && "hidden lg:hidden")}>
+            <div className="flex w-max min-w-full gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40">
               {SECTIONS.map((section) => {
                 const isActive = activeSection === section.id;
                 return (
@@ -318,6 +323,8 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   {activeSection === 'conciliacion' && <ConciliacionView />}
                   {activeSection === 'periodos' && <PeriodosView />}
                   {activeSection === 'reportes-fiscales' && <ReportesFiscalesView />}
+                  {activeSection === 'presupuestos' && <BudgetItemsView />}
+                  {activeSection === 'categorias-gastos' && <CategoriasGastosView />}
                   {activeSection === 'configuracion' && <ConfiguracionContableView />}
                 </motion.div>
               </AnimatePresence>

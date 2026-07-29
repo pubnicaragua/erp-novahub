@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { 
-  Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Trash2, Upload, FileDown, Info
+  Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Upload, FileDown, Info, CircleX
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -10,30 +10,37 @@ import { customersService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
-import type { Customer } from '../../types';
+import type { Customer, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { CustomerDetailDrawer } from './CustomerDetailDrawer';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface ClientesViewProps {
   data: Customer[];
   loading: boolean;
   onRefresh: () => void;
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
 }
 
-export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
+export function ClientesView({ data, loading, onRefresh, pagination, onSearchChange }: ClientesViewProps) {
   const { formatConvertedAmount } = useCurrency();
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Customer | null>(null);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [pendingStatusChange, setPendingStatusChange] = useState<Customer | null>(null);
+  const [statusChanging, setStatusChanging] = useState(false);
+  const [pendingBulkDeactivateIds, setPendingBulkDeactivateIds] = useState<(string | number)[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({ name: '', type: 'individual', contactName: '', email: '', phone: '' });
 
   const downloadTemplate = () => {
     const rows = [
@@ -189,6 +196,8 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
 
   const filtered = data.filter(c => {
     const search = searchTerm.toLowerCase();
+    const customerStatus = String(c.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    if (statusFilter !== 'ALL' && customerStatus !== statusFilter) return false;
     return (
       String(c.name || '').toLowerCase().includes(search) || 
       (c.email || '').toLowerCase().includes(search) ||
@@ -208,19 +217,31 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
     }
   };
 
-  const handleAddClient = async () => {
+  const handleCreateClient = async () => {
+    if (!newCustomer.name.trim()) {
+      toast.error('El nombre del cliente es obligatorio');
+      return;
+    }
+    setCreating(true);
     try {
       const code = `CLI-${Date.now().toString().slice(-6)}`;
       await customersService.create({
         code,
-        name: 'Nuevo Cliente',
-        type: 'individual' as any
+        name: newCustomer.name.trim(),
+        type: newCustomer.type as any,
+        contactName: newCustomer.contactName.trim() || undefined,
+        email: newCustomer.email.trim() || undefined,
+        phone: newCustomer.phone.trim() || undefined,
       });
       toast.success('Nuevo cliente creado');
+      setCreateOpen(false);
+      setNewCustomer({ name: '', type: 'individual', contactName: '', email: '', phone: '' });
       onRefresh();
     } catch (e: any) {
       console.error('Error creating customer:', e);
       toast.error(e?.response?.data?.message || e?.message || 'Error al crear cliente');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -235,14 +256,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
       key: 'name', 
       header: 'Nombre del Cliente', 
       editable: canPerform('SALES_CLIENTS', 'edit'),
-      render: (val) => (
-        <div className="flex items-center gap-3">
-          <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center font-black text-primary text-xs border border-primary/20">
-            {String(val || '?').charAt(0)}
-          </div>
-          <span className="text-[13px] font-bold text-foreground">{val || 'Sin nombre'}</span>
-        </div>
-      )
+      render: (val) => <span className="text-[13px] font-bold text-foreground">{val || 'Sin nombre'}</span>
     },
     { key: 'contactName', header: 'Contacto', editable: canPerform('SALES_CLIENTS', 'edit') },
     { 
@@ -335,16 +349,21 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Directorio de Clientes</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión integral Excel-like sin interrupciones.</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input 
                 placeholder="Buscar cliente..." 
                 className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
             </div>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')} aria-label="Filtrar clientes por estado" className="h-10 min-w-0 max-w-full rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary">
+              <option value="ACTIVE">Activos</option>
+              <option value="INACTIVE">Inactivos</option>
+              <option value="ALL">Todos</option>
+            </select>
             {canPerform('SALES_CLIENTS', 'create') && (
               <Button
                 variant="outline"
@@ -356,7 +375,7 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
             )}
             {canPerform('SALES_CLIENTS', 'create') && (
               <Button 
-                onClick={handleAddClient}
+                onClick={() => setCreateOpen(true)}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
               >
                 <UserPlus className="size-4" /> Nuevo Cliente
@@ -367,32 +386,74 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
 
         <EditableDataTable 
           data={filtered}
-          onBulkDelete={async (ids) => {
-            try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await customersService.delete(id as string);
-              }
-              toast.success('Elementos eliminados');
-              onRefresh();
-            } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
-            }
-          }}
           columns={columns}
           onRowUpdate={handleUpdate}
-          onAddRow={handleAddClient}
           isLoading={loading}
+          pagination={pagination}
+          showClearSelection={false}
           actions={(row) => (
             <div className="flex items-center gap-1">
                <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomerDetail(row)}><Eye className="size-4" /></Button>
-               {canPerform('SALES_CLIENTS', 'delete') && (
-                 <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+               {canPerform('SALES_CLIENTS', 'edit') && (
+                 <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Anular cliente'} className={cn('size-8 rounded-lg transition-colors', String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'hover:bg-emerald-500/10 hover:text-emerald-500' : 'hover:bg-amber-500/10 hover:text-amber-500')} onClick={() => setPendingStatusChange(row)}><CircleX className="size-4" /></Button>
                )}
             </div>
           )}
+          bulkActions={(selectedIds) => (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-[10px] font-black uppercase tracking-wider text-amber-600 hover:bg-amber-500/10"
+              onClick={() => setPendingBulkDeactivateIds(selectedIds)}
+            >
+              <CircleX className="mr-2 size-3" /> Desactivar clientes
+            </Button>
+          )}
         />
       </div>
+
+      <ConfirmDialog
+        open={pendingStatusChange !== null}
+        onOpenChange={(open) => { if (!open && !statusChanging) setPendingStatusChange(null); }}
+        title={pendingStatusChange && String(pendingStatusChange.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? '¿Activar cliente?' : '¿Inactivar cliente?'}
+        description={pendingStatusChange && String(pendingStatusChange.status || 'ACTIVE').toUpperCase() === 'INACTIVE'
+          ? `El cliente ${pendingStatusChange.name || ''} volverá a estar disponible en las operaciones.`
+          : `El cliente ${pendingStatusChange?.name || ''} quedará inactivo y no estará disponible para nuevas operaciones.`}
+        confirmLabel={pendingStatusChange && String(pendingStatusChange.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Inactivar cliente'}
+        variant={pendingStatusChange && String(pendingStatusChange.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'default' : 'destructive'}
+        loading={statusChanging}
+        onConfirm={async () => {
+          if (!pendingStatusChange) return;
+          const nextStatus = String(pendingStatusChange.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE';
+          try {
+            setStatusChanging(true);
+            await handleUpdate(pendingStatusChange.id, { status: nextStatus } as Partial<Customer>);
+            setPendingStatusChange(null);
+          } finally {
+            setStatusChanging(false);
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingBulkDeactivateIds.length > 0}
+        onOpenChange={(open) => { if (!open && !statusChanging) setPendingBulkDeactivateIds([]); }}
+        title="¿Desactivar clientes seleccionados?"
+        description={`Se desactivarán ${pendingBulkDeactivateIds.length} clientes y no estarán disponibles para nuevas operaciones.`}
+        confirmLabel="Desactivar clientes"
+        variant="destructive"
+        loading={statusChanging}
+        onConfirm={async () => {
+          if (pendingBulkDeactivateIds.length === 0) return;
+          try {
+            setStatusChanging(true);
+            await Promise.all(pendingBulkDeactivateIds.map((id) => handleUpdate(id, { status: 'INACTIVE' } as Partial<Customer>)));
+            setPendingBulkDeactivateIds([]);
+          } finally {
+            setStatusChanging(false);
+          }
+        }}
+      />
 
       <CustomerDetailDrawer
         customerId={selectedCustomerDetail?.id ?? null}
@@ -400,34 +461,44 @@ export function ClientesView({ data, loading, onRefresh }: ClientesViewProps) {
         customerSnapshot={selectedCustomerDetail}
       />
 
-      <ConfirmDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-        title="¿Eliminar cliente?"
-        description="Si el cliente tiene transacciones activas (facturas, pedidos, pagos), no se podrá eliminar."
-        confirmLabel="Eliminar"
-        variant="destructive"
-        loading={deleteLoading}
-        onConfirm={async () => {
-          if (!pendingDeleteId) return;
-          try {
-            setDeleteLoading(true);
-            await customersService.delete(pendingDeleteId);
-            toast.success('Cliente eliminado correctamente');
-            onRefresh();
-          } catch (error: any) {
-            const msg = error?.response?.data?.message || error?.message || '';
-            if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
-              toast.error('No se puede eliminar: este cliente tiene transacciones activas (facturas, pedidos, pagos, etc.)');
-            } else {
-              toast.error(`Error al eliminar cliente: ${msg}`);
-            }
-          } finally {
-            setDeleteLoading(false);
-            setPendingDeleteId(null);
-          }
-        }}
-      />
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-lg rounded-3xl p-0">
+          <DialogHeader className="border-b border-border/40 px-5 py-4 sm:px-6">
+            <DialogTitle className="text-lg font-black uppercase tracking-tight">Nuevo Cliente</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre</label>
+              <Input value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} placeholder="Nombre del cliente" className="h-11 rounded-xl" autoFocus />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo</label>
+              <select value={newCustomer.type} onChange={(e) => setNewCustomer({ ...newCustomer, type: e.target.value })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm">
+                <option value="individual">Particular</option>
+                <option value="company">Empresa</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Contacto</label>
+              <Input value={newCustomer.contactName} onChange={(e) => setNewCustomer({ ...newCustomer, contactName: e.target.value })} placeholder="Persona de contacto" className="h-11 rounded-xl" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Email</label>
+              <Input type="email" value={newCustomer.email} onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })} placeholder="cliente@correo.com" className="h-11 rounded-xl" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Teléfono</label>
+              <Input value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} placeholder="8888-8888" className="h-11 rounded-xl" />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 border-t border-border/40 px-5 py-4 sm:px-6">
+            <Button variant="outline" onClick={() => setCreateOpen(false)} className="rounded-xl">Cancelar</Button>
+            <Button onClick={handleCreateClient} disabled={creating || !newCustomer.name.trim()} className="rounded-xl font-bold">
+              {creating ? 'Guardando...' : 'Crear Cliente'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent className="sm:max-w-2xl">

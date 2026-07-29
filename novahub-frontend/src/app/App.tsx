@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { useLocation } from 'react-router';
+import * as Sentry from '@sentry/react';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth, type Module } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -8,68 +9,56 @@ import { LoginPage } from './components/LoginPage';
 import { RegisterTenantPage } from './components/auth/RegisterTenantPage';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
-import { OverviewDashboard } from './components/OverviewDashboard';
-import { PartnerDashboard } from './components/PartnerDashboard';
-import { InventarioPage } from './components/InventarioPage';
-import { VentasPage } from './components/VentasPage';
-import { ComprasPage } from './components/ComprasPage';
-import { FinanzasPage } from './components/FinanzasPage';
-import { RecursosHumanosPage } from './components/RecursosHumanosPage';
-import { ClientesPage } from './components/ClientesPage';
-import { ProveedoresPage } from './components/ProveedoresPage';
-import { ActividadesPage } from './components/ActividadesPage';
-import { TicketsPage } from './components/TicketsPage';
-import { DocumentosPage } from './components/DocumentosPage';
-import { NotificacionesPage } from './components/NotificacionesPage';
-import { TransferenciasPage } from './components/TransferenciasPage';
-import { ReportesPage } from './components/ReportesPage';
-import { ConfiguracionPage } from './components/ConfiguracionPage';
-import { SuscripcionesPage } from './components/SuscripcionesPage';
-import { PrismaSchemaPage } from './components/PrismaSchemaPage';
-import { FinanciamientoPymePage } from './components/FinanciamientoPymePage';
-import { AsesoriaLegalPage } from './components/AsesoriaLegalPage';
-import { NovaChatView } from './components/novachat/NovaChatView';
-import { TrainingHubView } from './components/help/TrainingHubView';
-import { SoporteTecnicoView } from './components/help/SoporteTecnicoView';
-import { SoporteTecnicoAdminView } from './components/help/SoporteTecnicoAdminView';
-import { ContabilidadPage } from './components/contabilidad/ContabilidadPage';
 
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean; error: Error | null }
-> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error('[ErrorBoundary] Uncaught error:', error, info);
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ padding: 32, fontFamily: 'monospace', background: '#0f0f0f', color: '#ff6b6b', minHeight: '100vh' }}>
-          <h2 style={{ color: '#ff6b6b', marginBottom: 16 }}>⚠ Error de renderizado detectado</h2>
-          <pre style={{ background: '#1a1a1a', padding: 16, borderRadius: 8, overflowX: 'auto', color: '#ffa07a', fontSize: 13 }}>
-            {this.state.error?.message}
-            {'\n\n'}
-            {this.state.error?.stack}
-          </pre>
-          <button
-            style={{ marginTop: 16, padding: '8px 20px', background: '#333', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
-            onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
-          >
-            Recargar
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
+const OverviewDashboard = lazy(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })));
+const PartnerDashboard = lazy(() => import('./components/PartnerDashboard').then(m => ({ default: m.PartnerDashboard })));
+const InventarioPage = lazy(() => import('./components/InventarioPage').then(m => ({ default: m.InventarioPage })));
+const VentasPage = lazy(() => import('./components/VentasPage').then(m => ({ default: m.VentasPage })));
+const ComprasPage = lazy(() => import('./components/ComprasPage').then(m => ({ default: m.ComprasPage })));
+const FinanzasPage = lazy(() => import('./components/FinanzasPage').then(m => ({ default: m.FinanzasPage })));
+const RecursosHumanosPage = lazy(() => import('./components/RecursosHumanosPage').then(m => ({ default: m.RecursosHumanosPage })));
+const ClientesPage = lazy(() => import('./components/ClientesPage').then(m => ({ default: m.ClientesPage })));
+const ProveedoresPage = lazy(() => import('./components/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })));
+const ActividadesPage = lazy(() => import('./components/ActividadesPage').then(m => ({ default: m.ActividadesPage })));
+const TicketsPage = lazy(() => import('./components/TicketsPage').then(m => ({ default: m.TicketsPage })));
+const DocumentosPage = lazy(() => import('./components/DocumentosPage').then(m => ({ default: m.DocumentosPage })));
+const NotificacionesPage = lazy(() => import('./components/NotificacionesPage').then(m => ({ default: m.NotificacionesPage })));
+const TransferenciasPage = lazy(() => import('./components/TransferenciasPage').then(m => ({ default: m.TransferenciasPage })));
+const ReportesPage = lazy(() => import('./components/ReportesPage').then(m => ({ default: m.ReportesPage })));
+const ConfiguracionPage = lazy(() => import('./components/ConfiguracionPage').then(m => ({ default: m.ConfiguracionPage })));
+const SuscripcionesPage = lazy(() => import('./components/SuscripcionesPage').then(m => ({ default: m.SuscripcionesPage })));
+const PrismaSchemaPage = lazy(() => import('./components/PrismaSchemaPage').then(m => ({ default: m.PrismaSchemaPage })));
+const FinanciamientoPymePage = lazy(() => import('./components/FinanciamientoPymePage').then(m => ({ default: m.FinanciamientoPymePage })));
+const AsesoriaLegalPage = lazy(() => import('./components/AsesoriaLegalPage').then(m => ({ default: m.AsesoriaLegalPage })));
+const NovaChatView = lazy(() => import('./components/novachat/NovaChatView').then(m => ({ default: m.NovaChatView })));
+const TrainingHubView = lazy(() => import('./components/help/TrainingHubView').then(m => ({ default: m.TrainingHubView })));
+const SoporteTecnicoView = lazy(() => import('./components/help/SoporteTecnicoView').then(m => ({ default: m.SoporteTecnicoView })));
+const SoporteTecnicoAdminView = lazy(() => import('./components/help/SoporteTecnicoAdminView').then(m => ({ default: m.SoporteTecnicoAdminView })));
+const ContabilidadPage = lazy(() => import('./components/contabilidad/ContabilidadPage').then(m => ({ default: m.ContabilidadPage })));
+const DashboardCxc = lazy(() => import('./components/DashboardCxc').then(m => ({ default: m.DashboardCxc })));
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh] text-muted-foreground">
+      <div className="flex flex-col items-center gap-3">
+        <div className="size-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm">Cargando...</p>
+      </div>
+    </div>
+  );
 }
+
+const ErrorBoundaryFallback = () => (
+  <div style={{ padding: 32, fontFamily: 'monospace', background: '#0f0f0f', color: '#ff6b6b', minHeight: '100vh' }}>
+    <h2 style={{ color: '#ff6b6b', marginBottom: 16 }}>⚠ Error de renderizado detectado</h2>
+    <button
+      style={{ marginTop: 16, padding: '8px 20px', background: '#333', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+      onClick={() => window.location.reload()}
+    >
+      Recargar
+    </button>
+  </div>
+);
 
 
 function DashboardLayout() {
@@ -131,7 +120,8 @@ function DashboardLayout() {
         'clientes', 'proveedores', 'actividades', 'tickets',
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
         'documentos', 'notificaciones', 'transferencias', 
-        'reportes', 'roles', 'configuracion', 'suscripciones', 'schema'
+        'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
+        'dashboard-cxc'
       ];
       
       const firstAllowed = preferredOrder.find(m => hasAccess(m));
@@ -193,6 +183,7 @@ function DashboardLayout() {
       case 'centro-capacitacion': return <TrainingHubView />;
       case 'soporte-tecnico': return user?.isPlatformAdmin ? <SoporteTecnicoAdminView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /> : <SoporteTecnicoView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'contabilidad': return <ContabilidadPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
+      case 'dashboard-cxc': return <DashboardCxc />;
       case 'asesoria-legal': return <AsesoriaLegalPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'novachat': return <NovaChatView />;
       default: return <OverviewDashboard onNavigate={handleNavigate} />;
@@ -217,8 +208,10 @@ function DashboardLayout() {
           isCollapsed={isCollapsed}
           onToggleCollapse={handleToggleCollapse}
         />
-        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-          {renderContent()}
+        <main className="scrollbar-overlay min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <Suspense fallback={<PageLoader />}>
+            {renderContent()}
+          </Suspense>
         </main>
       </div>
       <Toaster position="top-right" />
@@ -268,7 +261,7 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ErrorBoundary>
+    <Sentry.ErrorBoundary fallback={<ErrorBoundaryFallback />}>
       <AuthProvider>
         <ThemeProvider>
           <CurrencyProvider>
@@ -276,6 +269,6 @@ export default function App() {
           </CurrencyProvider>
         </ThemeProvider>
       </AuthProvider>
-    </ErrorBoundary>
+    </Sentry.ErrorBoundary>
   );
 }

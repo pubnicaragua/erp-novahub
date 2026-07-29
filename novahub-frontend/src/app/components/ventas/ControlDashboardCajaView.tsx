@@ -4,7 +4,7 @@ import { cajaService, CashRegister } from '../../services/caja.service';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
-import { Loader2, Coins, Settings2, Eye } from 'lucide-react';
+import { Coins, Settings2, Eye } from 'lucide-react';
 import { DashboardCajaView } from './DashboardCajaView';
 import { AperturaCajaStep } from './caja/AperturaCajaStep';
 import { SesionActivaStep } from './caja/SesionActivaStep';
@@ -18,6 +18,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { CajaSetupGuide } from './caja/CajaSetupGuide';
 import { getApiErrorMessage } from '../../services/api';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
+import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 
 type SectionType = 'dashboard' | 'session' | 'history';
 
@@ -112,7 +113,17 @@ export function ControlDashboardCajaView({
   };
 
   if (loading && (!registers || registers.length === 0)) {
-    return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-primary size-8" /></div>;
+    return (
+      <BoneyardSkeleton
+        name="sales-cash-control"
+        loading
+        select="viewport"
+        animate="shimmer"
+        fallback={<div className="space-y-4 rounded-2xl border border-border/40 p-6"><div className="h-12 w-full animate-pulse rounded-xl bg-muted/40" /><div className="h-64 w-full animate-pulse rounded-2xl bg-muted/30" /></div>}
+      >
+        <div />
+      </BoneyardSkeleton>
+    );
   }
 
   return (
@@ -280,19 +291,19 @@ export function ControlDashboardCajaView({
 
                     return (
                     <AccordionItem key={h.id} value={h.id} className="border border-border/50 rounded-lg bg-card/50 px-4">
-                      <AccordionTrigger className="hover:no-underline py-4">
-                        <div className="flex items-center gap-4 w-full text-sm">
-                          <Badge variant={h.status === 'CLOSED' ? 'outline' : h.status === 'COUNTING' ? 'secondary' : 'default'} className="w-24 justify-center pointer-events-none shadow-none">
+                      <AccordionTrigger className="py-4 hover:no-underline">
+                        <div className="flex w-full min-w-0 flex-wrap items-center gap-3 text-sm">
+                          <Badge variant={h.status === 'CLOSED' ? 'outline' : h.status === 'COUNTING' ? 'secondary' : 'default'} className="w-24 shrink-0 justify-center pointer-events-none shadow-none">
                             {h.status === 'CLOSED' ? 'CERRADA' : h.status === 'COUNTING' ? 'EN ARQUEO' : 'ABIERTA'}
                           </Badge>
-                          <div className="flex-1 text-left">
-                            <p className="font-bold">{new Date(h.openedAt).toLocaleString()}</p>
+                          <div className="min-w-0 flex-1 text-left">
+                            <p className="break-words font-bold leading-5">{new Date(h.openedAt).toLocaleString()}</p>
                             {selectedRegister === 'ALL' && h.cashRegister && (
                               <p className="text-[10px] text-primary font-black uppercase tracking-widest">{h.cashRegister.code} - {h.cashRegister.name}</p>
                             )}
-                            <p className="text-xs text-muted-foreground">Por: {h.openedBy?.name}</p>
+                            <p className="break-words text-xs text-muted-foreground">Por: {h.openedBy?.name}</p>
                           </div>
-                          <div className="text-right flex flex-col items-end">
+                          <div className="flex w-full min-w-0 items-center justify-between border-t border-border/30 pt-2 text-left sm:w-auto sm:flex-col sm:items-end sm:justify-start sm:border-t-0 sm:pt-0 sm:text-right">
                             {isBlindBeforeCount ? (
                               <p className="text-xs font-bold text-amber-600">Importes ocultos</p>
                             ) : <>
@@ -302,7 +313,7 @@ export function ControlDashboardCajaView({
                             </>}
                           </div>
                           {h.status === 'CLOSED' && (
-                            <div className="text-right ml-4 flex flex-col items-end">
+                            <div className="ml-0 flex w-full min-w-0 items-center justify-between border-t border-border/30 pt-2 text-left sm:ml-4 sm:w-auto sm:flex-col sm:items-end sm:justify-start sm:border-t-0 sm:pt-0 sm:text-right">
                               <p className="text-xs text-muted-foreground">Diferencia</p>
                               <p className={`font-mono font-bold ${diffConverted < 0 ? 'text-red-500' : diffConverted > 0 ? 'text-green-500' : 'text-emerald-500'}`}>
                                 {symbol} {diffConverted > 0 ? '+' : ''}{diffConverted.toFixed(2)}

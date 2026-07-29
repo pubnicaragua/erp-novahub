@@ -10,9 +10,10 @@ import { paymentsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
-import type { PaymentReceived, Customer, Invoice } from '../../types';
+import type { PaymentReceived, Customer, Invoice, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
+import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
@@ -23,6 +24,8 @@ interface PagosRecibidosViewProps {
   onRefresh: () => void;
   customers?: Customer[];
   invoices?: Invoice[];
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
 }
 
 const methodOptions = [
@@ -32,12 +35,13 @@ const methodOptions = [
   { label: 'Cheque', value: 'CHECK', color: 'bg-amber-500/10 text-amber-500' },
 ];
 
-export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [] }: PagosRecibidosViewProps) {
+export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [], pagination, onSearchChange }: PagosRecibidosViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [localDoc, setLocalDoc] = useState<any>(null);
 
@@ -50,7 +54,6 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const handleUpdate = async (id: string | number, updates: Partial<PaymentReceived>) => {
     try {
       await paymentsService.update(id.toString(), updates);
-      toast.success('Pago actualizado');
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
@@ -68,6 +71,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       currency: displayCurrency === 'USD' ? 'USD' : 'NIO',
       exchangeRate: globalRate,
       method: 'TRANSFER',
+      accountId: '',
       reference: '',
       notes: '',
     });
@@ -78,6 +82,8 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
     if (Number(localDoc.amount) <= 0) { toast.error('El monto debe ser mayor a 0'); return; }
+    if (!localDoc.accountId) { toast.error('Selecciona la cuenta contable que recibirá el pago'); return; }
+    const saveToastId = toast.loading('Registrando pago...');
     try {
       await paymentsService.create({
         customerId: localDoc.customerId,
@@ -87,12 +93,13 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         currency: localDoc.currency,
         exchangeRate: localDoc.exchangeRate || globalRate,
         method: localDoc.method,
+        accountId: localDoc.accountId,
         reference: localDoc.reference || undefined,
         notes: localDoc.notes || undefined,
       } as any);
-      toast.success('Pago registrado exitosamente');
+      toast.success('Pago registrado', { id: saveToastId });
       setIsCreating(false); setLocalDoc(null); onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al registrar pago'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo registrar el pago', { id: saveToastId }); }
   };
 
   const handleExportPDF = async (row: PaymentReceived) => {
@@ -138,10 +145,13 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     },
   ];
 
-  const mainMethod = data.length > 0
+  const rawMainMethod = data.length > 0
     ? Object.entries(data.reduce((acc, p) => { const m = (p.method || 'TRANSFER').toUpperCase(); acc[m] = (acc[m] || 0) + 1; return acc; }, {} as Record<string, number>))
       .sort(([, a], [, b]) => b - a)[0]?.[0] || 'N/A'
     : 'N/A';
+  
+  const mainMethodMap: Record<string, string> = { TRANSFER: 'Transferencia', CASH: 'Efectivo', CARD: 'Tarjeta', CHECK: 'Cheque', 'N/A': 'N/A' };
+  const mainMethod = mainMethodMap[rawMainMethod] || rawMainMethod;
 
   const totalCollectedInDisplayCurrency = data.reduce(
     (acc, payment) => acc + convertAmount(payment.amount || 0, payment.currency, payment.exchangeRate),
@@ -184,7 +194,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Pago</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
                     options={(customers || [])
@@ -209,6 +219,13 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   <select value={localDoc.method} onChange={(e) => setLocalDoc({ ...localDoc, method: e.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                     {methodOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select></div>
+
+                <AccountingAccountSelect
+                  value={localDoc.accountId}
+                  onChange={(accountId) => setLocalDoc({ ...localDoc, accountId })}
+                  assetOnly
+                  label="Cuenta del pago"
+                />
 
                 <div><p className="text-[10px] text-muted-foreground mb-1">Referencia Bancaria</p>
                   <Input value={localDoc.reference} onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} className="h-8 text-xs" placeholder="Nº transferencia, cheque..." /></div>
@@ -262,7 +279,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Historial de cobranza y conciliación de ingresos.</p></div>
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input placeholder="Buscar pago..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+              <Input placeholder="Buscar pago..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('SALES_PAYMENTS', 'create') && (
               <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Registrar Pago</Button>
@@ -270,48 +287,56 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           </div>
         </div>
         <EditableDataTable data={filtered}
-          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}
+          pagination={pagination}
+          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.cancel(id as string, 'Anulación masiva'); } toast.success('Pagos anulados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular'); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (
             <div className="flex items-center gap-1">
               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
               {canPerform('SALES_PAYMENTS', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
               )}
             </div>
           )}
         />
       </div>
       <ConfirmDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-        title={"¿Eliminar pago recibido?"}
-        description="¿Estás seguro de que deseas eliminar este pago? Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
+        open={pendingCancelId !== null}
+        onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
+        title={"¿Anular pago recibido?"}
+        description="El pago quedará anulado y se revertirá el saldo de la factura asociada. Esta acción no se puede deshacer."
+        confirmLabel="Anular Pago"
         variant="destructive"
-        loading={deleteLoading}
+        loading={cancelLoading}
+        disabled={!cancelReason.trim()}
         onConfirm={async () => {
-          if (!pendingDeleteId) return;
+          if (!pendingCancelId || !cancelReason.trim()) return;
           try {
-            setDeleteLoading(true);
-            await paymentsService.delete(pendingDeleteId);
-            toast.success('Pago eliminado');
-
+            setCancelLoading(true);
+            await paymentsService.cancel(pendingCancelId, cancelReason.trim());
+            toast.success('Pago anulado');
             onRefresh();
           } catch (error: any) {
-            const msg = error?.response?.data?.message || error?.message || '';
-            if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
-              toast.error('No se puede eliminar: tiene dependencias en el sistema.');
-            } else {
-              toast.error(`Error al eliminar: ${msg || 'Error desconocido'}`);
-            }
+            toast.error(error?.response?.data?.message || error?.message || 'Error al anular pago');
           } finally {
-            setDeleteLoading(false);
-            setPendingDeleteId(null);
+            setCancelLoading(false);
+            setPendingCancelId(null);
+            setCancelReason('');
           }
         }}
-      />
+      >
+        <div className="mt-4">
+          <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
+          <textarea
+            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+            rows={3}
+            placeholder="Ej: Pago duplicado, error en monto..."
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+          />
+        </div>
+      </ConfirmDialog>
 
     </div>
   );

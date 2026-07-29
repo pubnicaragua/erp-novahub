@@ -7,7 +7,8 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { billsService, suppliersService, purchaseOrdersService, paymentsService, expensesService } from '../../services/compras.service';
+import { billsService, suppliersService, purchaseOrdersService, paymentsService, expensesService, purchaseReceiptsService } from '../../services/compras.service';
+import { contabilidadService } from '../../services/contabilidad.service';
 import type { SupplierInvoice, Supplier } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
@@ -16,6 +17,7 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateSupplierInvoicePDF } from '../../utils/pdfGenerator';
+import { PurchaseAuditButton } from './PurchaseAuditButton';
 
 interface Props {
   data: SupplierInvoice[];
@@ -38,9 +40,12 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [receipts, setReceipts] = useState<any[]>([]);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<SupplierInvoice> | null>(null);
@@ -50,6 +55,14 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     suppliersService.getAll().then(res => {
       const list = Array.isArray(res) ? res : (res as any).data || [];
       setSuppliers(list);
+    }).catch();
+    contabilidadService.getChartOfAccounts().then((res: any) => {
+      const list = Array.isArray(res) ? res : (res as any)?.data || [];
+      setAccounts(Array.isArray(list) ? list : []);
+    }).catch();
+    purchaseReceiptsService.getAll().then((res: any) => {
+      const list = Array.isArray(res) ? res : (res as any)?.data || [];
+      setReceipts(Array.isArray(list) ? list : []);
     }).catch();
   }, []);
 
@@ -80,6 +93,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       items: [],
       subtotal: 0,
       taxAmount: 0,
+      withholdingTotal: 0,
+      withholdingBase: 0,
       total: 0
     });
     setEditingId('NEW');
@@ -223,22 +238,23 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); }
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!pendingDeleteId) return;
-    setDeleteLoading(true);
+  const handleCancelConfirm = async () => {
+    if (!pendingCancelId || !cancelReason.trim()) return;
+    setCancelLoading(true);
     try {
-      await billsService.delete(pendingDeleteId);
-      toast.success('Factura eliminada correctamente');
-      setPendingDeleteId(null);
-      if (editingId === pendingDeleteId) {
+      await billsService.cancel(pendingCancelId, cancelReason.trim());
+      toast.success('Factura de proveedor anulada');
+      setPendingCancelId(null);
+      setCancelReason('');
+      if (editingId === pendingCancelId) {
         setEditingId(null);
         setLocalDoc(null);
       }
       onRefresh();
-    } catch (e) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar factura');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al anular factura');
     } finally {
-      setDeleteLoading(false);
+      setCancelLoading(false);
     }
   };
 
@@ -249,22 +265,50 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     }
     
     try {
-      if (editingId === 'NEW') {
-        const payloadToSave: any = { ...localDoc };
-        delete payloadToSave._sourceOrderId;
-        delete payloadToSave._fromDraft;
+      const docToSave: any = {
+        ...localDoc,
+        taxRate: 0,
+        withholdingRate: 0,
+        subtotal: Number(localDoc.subtotal || 0),
+        taxAmount: Number(localDoc.taxAmount || 0),
+        withholdingTotal: Number(localDoc.withholdingTotal || 0),
+        withholdingBase: Number(localDoc.withholdingBase || 0),
+        total: Number(localDoc.total || 0),
+        items: (localDoc.items || []).map((it: any) => ({
+          ...it,
+          description: it.description || it.name || '',
+          quantity: Number(it.quantity || 0),
+          unitPrice: Number(it.unitPrice || 0),
+          taxType: it.taxType || 'GRAVADO',
+          taxRate: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxRate || 15),
+          taxBase: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxBase || 0),
+          taxAmount: Number(it.taxAmount || 0),
+          withholdingType: it.withholdingType || 'NONE',
+          withholdingRate: Number(it.withholdingRate || 0),
+          withholdingBase: it.withholdingType === 'NONE' ? 0 : Number(it.withholdingBase || 0),
+          accountId: it.accountId || null,
+          costCenterId: it.costCenterId || null,
+          total: Number(it.total || 0),
+        })),
+      };
+      delete docToSave._sourceOrderId;
+      delete docToSave._fromDraft;
 
-        if (payloadToSave.purchaseOrderId) {
-          const duplicateForOrder = data.some((inv) => inv.purchaseOrderId === payloadToSave.purchaseOrderId);
+      if (editingId === 'NEW') {
+        if (docToSave.purchaseOrderId) {
+          const duplicateForOrder = data.some((inv) => inv.purchaseOrderId === docToSave.purchaseOrderId);
           if (duplicateForOrder) {
             return toast.error('Ya existe una factura para esta orden de compra');
           }
         }
+        if (docToSave.purchaseReceiptId) {
+          const duplicateForReceipt = data.some((inv) => inv.purchaseReceiptId === docToSave.purchaseReceiptId);
+          if (duplicateForReceipt) {
+            return toast.error('Ya existe una factura para esta recepción');
+          }
+        }
 
-        const createdResponse = await billsService.create({
-          ...payloadToSave,
-          number: payloadToSave.number || generateSupplierInvoiceNumber(),
-        });
+        const createdResponse = await billsService.create(docToSave);
         const created = (createdResponse as any)?.data || createdResponse;
         if (isPayingStatus(String(created?.status || localDoc.status || ''))) {
           try {
@@ -288,9 +332,9 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       } else {
         const existingInvoice = data.find((x) => x.id === editingId);
         const previousStatus = String(existingInvoice?.status || '').toUpperCase();
-        const updatedResponse = await billsService.update(editingId!, localDoc as any);
+        const updatedResponse = await billsService.update(editingId!, docToSave);
         const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
-        const nextStatus = String(updatedInvoice?.status || localDoc.status || '').toUpperCase();
+        const nextStatus = String(updatedInvoice?.status || docToSave.status || '').toUpperCase();
         if (!isPayingStatus(previousStatus) && isPayingStatus(nextStatus)) {
           try {
             await ensureFinanceExpenseForInvoice({
@@ -304,8 +348,6 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           }
         }
         toast.success('Factura guardada');
-        setLocalDoc((prev) => prev ? { ...prev } : prev);
-        setEditingId(editingId);
       }
       onRefresh();
     } catch (e: any) {
@@ -325,22 +367,57 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     const newItems = [...(localDoc.items || [])];
     newItems[idx] = { ...newItems[idx], [field]: value };
     
-    if (['quantity', 'unitPrice', 'taxRate'].includes(field)) {
+    if (['quantity', 'unitPrice', 'taxType', 'taxRate', 'withholdingType', 'withholdingRate'].includes(field)) {
        const q = Number(newItems[idx].quantity || 0);
        const p = Number(newItems[idx].unitPrice || 0);
-       const t = Number(newItems[idx].taxRate || 0);
        const sub = q * p;
-       const tax = sub * (t / 100);
-       newItems[idx].total = sub + tax;
+       const tt = (newItems[idx].taxType || 'GRAVADO').toUpperCase();
+       if (tt === 'EXENTO' || tt === 'NO_GRAVADO') {
+         newItems[idx].taxRate = 0;
+         newItems[idx].taxBase = 0;
+         newItems[idx].taxAmount = 0;
+       }
+       const wt = (newItems[idx].withholdingType || 'NONE').toUpperCase();
+       if (wt === 'NONE') {
+         newItems[idx].withholdingRate = 0;
+         newItems[idx].withholdingBase = 0;
+       }
+       newItems[idx].total = sub;
     }
     recalculateTotals(newItems);
   };
 
-  const recalculateTotals = (items: any[]) => {
+  const calculateTotals = (items: any[]) => {
     const subtotal = items.reduce((acc, it) => acc + (Number(it.quantity||0) * Number(it.unitPrice||0)), 0);
-    const taxAmount = items.reduce((acc, it) => acc + ((Number(it.quantity||0) * Number(it.unitPrice||0)) * (Number(it.taxRate||0)/100)), 0);
-    const total = subtotal + taxAmount;
-    setLocalDoc(prev => ({ ...prev!, items, subtotal, taxAmount, total }));
+    const taxAmount = items.reduce((acc, it) => {
+      const tt = (it.taxType || 'GRAVADO').toUpperCase();
+      if (tt !== 'GRAVADO') return acc + 0;
+      const lineTotal = Number(it.quantity||0) * Number(it.unitPrice||0);
+      const base = Number(it.taxBase) || lineTotal;
+      const rate = Number(it.taxRate) || 15;
+      return acc + (base * rate / 100);
+    }, 0);
+    const withholdingTotal = items.reduce((acc, it) => {
+      const wt = (it.withholdingType || 'NONE').toUpperCase();
+      if (wt === 'NONE') return acc + 0;
+      const lineTotal = Number(it.quantity||0) * Number(it.unitPrice||0);
+      const base = Number(it.withholdingBase) || lineTotal;
+      const rate = Number(it.withholdingRate) || 0;
+      return acc + (base * rate / 100);
+    }, 0);
+    const withholdingBase = items.reduce((acc, it) => {
+      const wt = (it.withholdingType || 'NONE').toUpperCase();
+      if (wt === 'NONE') return acc + 0;
+      const lineTotal = Number(it.quantity||0) * Number(it.unitPrice||0);
+      return acc + (Number(it.withholdingBase) || lineTotal);
+    }, 0);
+    const total = subtotal + taxAmount - withholdingTotal;
+    return { subtotal, taxAmount, withholdingTotal, withholdingBase, total };
+  };
+
+  const recalculateTotals = (items: any[]) => {
+    const totals = calculateTotals(items);
+    setLocalDoc(prev => ({ ...prev!, items, ...totals }));
   };
 
   if (editingId && localDoc) {
@@ -359,8 +436,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     };
     
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
-        <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setLocalDoc(null); }} className="rounded-full">
               <ChevronLeft className="size-5" />
@@ -385,12 +462,12 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                  <Download className="size-3 mr-2" /> Descargar
                </Button>
              )}
-              {!isNew && canPerform('PURCHASES_INVOICES', 'delete') && (
-                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => setPendingDeleteId(editingId)}>
-                  <Trash2 className="size-3 mr-2" /> Eliminar
-                </Button>
-              )}
+               {!isNew && canPerform('PURCHASES_INVOICES', 'delete') && (
+                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                   onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
+                   <Trash2 className="size-3 mr-2" /> Anular
+                 </Button>
+               )}
               {!isNew && canPerform('PURCHASES_INVOICES', 'create') && onRegisterPaymentFromInvoice && (
                 <Button
                   variant="outline"
@@ -434,6 +511,55 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     placeholder="Seleccionar Proveedor"
                   />
                 </div>
+                {isNew && (
+                  <div className="col-span-2">
+                    <p className="text-[10px] text-muted-foreground mb-1">Generar desde Recepción (opcional)</p>
+                    <Combobox
+                      options={[
+                        { label: 'Sin recepción (ingreso manual)', value: '__none__' },
+                        ...receipts
+                          .filter((r: any) => r.status === 'RECEIVED')
+                          .map((r: any) => ({
+                            label: `#${r.number || r.id?.slice(0, 8)}`,
+                            value: r.id,
+                            description: `${r.supplier?.name || 'Proveedor'} · ${r.items?.length || 0} ítems`,
+                          }))
+                      ]}
+                      value={(localDoc.purchaseReceiptId as string) || '__none__'}
+                      onChange={(val) => {
+                        if (val === '__none__' || !val) {
+                          setLocalDoc((prev: any) => prev ? { ...prev, purchaseReceiptId: null, purchaseOrderId: null, items: [] } : prev);
+                          return;
+                        }
+                        const receipt = receipts.find((r: any) => r.id === val);
+                        if (!receipt) return;
+                        const receiptItems = (receipt.items || []).map((it: any) => ({
+                          description: it.description || it.name || '',
+                          quantity: Number(it.quantity || 0),
+                          unitPrice: Number(it.unitPrice || 0),
+                          productId: it.productId || null,
+                          taxType: it.taxType || 'GRAVADO',
+                          taxRate: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxRate || 15),
+                          taxBase: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxBase || 0),
+                          taxAmount: Number(it.taxAmount || 0),
+                          withholdingType: it.withholdingType || 'NONE',
+                          withholdingRate: Number(it.withholdingRate || 0),
+                          withholdingBase: it.withholdingType === 'NONE' ? 0 : Number(it.withholdingBase || 0),
+                          accountId: it.accountId || null,
+                          total: Number(it.total || Number(it.quantity || 0) * Number(it.unitPrice || 0)),
+                        }));
+                        setLocalDoc((prev: any) => prev ? {
+                          ...prev,
+                          purchaseReceiptId: val,
+                          purchaseOrderId: receipt.purchaseOrderId || null,
+                          supplierId: receipt.supplierId || prev.supplierId,
+                          items: receiptItems,
+                        } : prev);
+                      }}
+                      placeholder="Buscar recepción..."
+                    />
+                  </div>
+                )}
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
                   <Input 
@@ -490,8 +616,19 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   <span className="font-bold tabular-nums">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.subtotal||0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Impuesto</span>
+                  <span className="text-muted-foreground">IVA</span>
                   <span className="font-bold tabular-nums text-rose-500">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.taxAmount||0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Retenciones</span>
+                  <span className="font-bold tabular-nums text-amber-500">-{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.withholdingTotal||0).toLocaleString()}</span>
+                </div>
+                <div className="border-t pt-3 border-border/50">
+                  <p className="text-[10px] text-muted-foreground mb-2 font-bold uppercase tracking-widest">Impuestos por línea</p>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>IVA calculado por producto según tipo fiscal (Gravado/Exento/No Gravado)</p>
+                    <p>Retenciones calculadas por producto según tipo de retención</p>
+                  </div>
                 </div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black uppercase text-xs tracking-widest">Total</span>
@@ -511,7 +648,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Ítems a Facturar</p>
               {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
                 <Button variant="outline" size="sm" onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, taxRate: 0, total: 0 }];
+                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, taxType: 'GRAVADO', taxRate: 15, taxBase: 0, taxAmount: 0, withholdingType: 'NONE', withholdingRate: 0, withholdingBase: 0, accountId: '', total: 0 }];
                   setLocalDoc({ ...localDoc, items: newItems as any });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                   <Plus className="size-3 mr-2" /> Agregar Item
@@ -519,64 +656,124 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
               )}
             </div>
             
-            <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className="col-span-4">Descripción</div>
-                <div className="col-span-2 text-right">Cant.</div>
-                <div className="col-span-2 text-right">Precio Unitario</div>
-                <div className="col-span-2 text-right">Imp. %</div>
-                <div className="col-span-2 text-right">Total</div>
-              </div>
+            <div className="space-y-3">
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-4">
-                    <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
-                      value={item.description || ''} 
-                      onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
-                      className="h-8 text-xs" 
-                      placeholder="Concepto" 
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
-                      type="number" 
-                      min="0" 
-                      value={item.quantity === 0 ? '' : item.quantity} 
-                      onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} 
-                      className="h-8 text-xs text-right" 
-                      placeholder="0" 
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
-                      type="number" 
-                      min="0" 
-                      value={item.unitPrice === 0 ? '' : item.unitPrice} 
-                      onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
-                      className="h-8 text-xs text-right" 
-                      placeholder="0" 
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
-                      type="number" 
-                      min="0" 
-                      value={item.taxRate === 0 ? '' : item.taxRate} 
-                      onChange={(e) => handleItemChange(idx, 'taxRate', e.target.value)} 
-                      className="h-8 text-xs text-right" 
-                      placeholder="0" 
-                    />
-                  </div>
-                  <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black w-20 text-right tabular-nums">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                <div key={item.id || idx} className="group relative rounded-2xl border border-border/40 bg-background/60 backdrop-blur-sm p-4 space-y-3 hover:border-primary/30 hover:shadow-md transition-all duration-200">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1.5">Descripción</p>
+                      <Input 
+                        disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                        value={item.description || ''} 
+                        onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
+                        className="h-8 text-xs" 
+                        placeholder="Concepto o servicio facturado" 
+                      />
+                    </div>
                     {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
-                      <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
-                        <Trash2 className="size-3" />
+                      <Button variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground/40 hover:bg-rose-500/10 hover:text-rose-500 rounded-xl opacity-0 group-hover:opacity-100 transition-all" onClick={() => handleDeleteItem(idx)}>
+                        <Trash2 className="size-3.5" />
                       </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-12 gap-2 items-end">
+                    <div className="col-span-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Cant.</p>
+                      <Input 
+                        disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                        type="number" min="0" 
+                        value={item.quantity === 0 ? '' : item.quantity} 
+                        onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} 
+                        className="h-8 text-xs text-right" placeholder="0" 
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Precio U.</p>
+                      <Input 
+                        disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                        type="number" min="0" 
+                        value={item.unitPrice === 0 ? '' : item.unitPrice} 
+                        onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} 
+                        className="h-8 text-xs text-right" placeholder="0" 
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Tipo IVA</p>
+                      <select
+                        disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                        value={item.taxType || 'GRAVADO'}
+                        onChange={(e) => handleItemChange(idx, 'taxType', e.target.value)}
+                        className="h-8 w-full rounded-md border border-input bg-background px-1 text-[10px] font-bold"
+                      >
+                        <option value="GRAVADO">Gravado</option>
+                        <option value="EXENTO">Exento</option>
+                        <option value="NO_GRAVADO">No Gravado</option>
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Retención</p>
+                      <select
+                        disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                        value={item.withholdingType || 'NONE'}
+                        onChange={(e) => handleItemChange(idx, 'withholdingType', e.target.value)}
+                        className="h-8 w-full rounded-md border border-input bg-background px-1 text-[10px] font-bold"
+                      >
+                        <option value="NONE">Sin retención</option>
+                        <option value="IR_1">IR 1%</option>
+                        <option value="IR_2">IR 2%</option>
+                        <option value="IR_5">IR 5%</option>
+                        <option value="IR_10">IR 10%</option>
+                        <option value="IR_15">IR 15%</option>
+                        <option value="IR_20">IR 20%</option>
+                        <option value="IR_25">IR 25%</option>
+                        <option value="IVA_1">IVA 1%</option>
+                        <option value="IVA_2">IVA 2%</option>
+                        <option value="IVA_3">IVA 3%</option>
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Cuenta Contable</p>
+                      <select
+                        disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                        value={item.accountId || ''}
+                        onChange={(e) => handleItemChange(idx, 'accountId', e.target.value)}
+                        className="h-8 w-full rounded-md border border-input bg-background px-1 text-[10px] font-bold"
+                      >
+                        <option value="">Seleccionar...</option>
+                        {accounts
+                          .filter((a: any) => (a.isActive ?? true) !== false)
+                          .map((a: any) => (
+                            <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Total</p>
+                      <span className="block h-8 leading-8 text-xs font-black text-right tabular-nums">
+                        {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-4 pt-1 border-t border-border/30">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">Subtotal</span>
+                    <span className="text-sm font-black tabular-nums">
+                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.quantity * item.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    {item.taxType === 'GRAVADO' && (
+                      <>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-rose-500/60">IVA</span>
+                        <span className="text-xs font-black tabular-nums text-rose-500">
+                          {localDoc.currency === 'USD' ? '$' : 'C$'} {Number((Number(item.quantity||0) * Number(item.unitPrice||0)) * (Number(item.taxRate||15) / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </>
+                    )}
+                    {item.withholdingType !== 'NONE' && (
+                      <>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-amber-500/60">Ret.</span>
+                        <span className="text-xs font-black tabular-nums text-amber-500">
+                          -{localDoc.currency === 'USD' ? '$' : 'C$'} {Number((Number(item.quantity||0) * Number(item.unitPrice||0)) * (Number(item.withholdingRate||0) / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </>
                     )}
                   </div>
                 </div>
@@ -611,7 +808,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((k, i) => (
           <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
@@ -625,10 +822,10 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight">Facturas de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Cuentas por pagar</p></div>
-          <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+            <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('PURCHASES_INVOICES', 'create') && (
-              <Button onClick={handleCreateNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Factura</Button>
+              <Button onClick={handleCreateNew} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Factura</Button>
             )}
           </div>
         </div>
@@ -637,12 +834,12 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
-                await billsService.delete(id as string);
+                await billsService.cancel(id as string, 'Anulación masiva');
               }
-              toast.success('Elementos eliminados');
+              toast.success('Facturas anuladas');
               onRefresh();
-            } catch (e) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+            } catch (e: any) {
+              toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
             }
           } : undefined}
           actions={(row) => (
@@ -669,21 +866,35 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   <Banknote className="size-4" />
                 </Button>
               )}
+              <PurchaseAuditButton entity="SUPPLIER_INVOICE" entityId={row.id} title="Auditoria de la Factura" />
               {canPerform('PURCHASES_INVOICES', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
               )}
             </div>
           )}
         />
         <ConfirmDialog
-          open={!!pendingDeleteId}
-          onOpenChange={(open) => !open && setPendingDeleteId(null)}
-          title="Eliminar Factura"
-          description="¿Estás seguro de que deseas eliminar esta factura? Esta acción no se puede deshacer."
-          confirmLabel="Eliminar Factura"
-          onConfirm={handleDeleteConfirm}
-          loading={deleteLoading}
-        />
+          open={!!pendingCancelId}
+          onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
+          title="Anular Factura de Proveedor"
+          description="La factura quedará cancelada y se revertirá su efecto en el saldo del proveedor. Esta acción no se puede deshacer."
+          confirmLabel="Anular Factura"
+          variant="destructive"
+          loading={cancelLoading}
+          disabled={!cancelReason.trim()}
+          onConfirm={handleCancelConfirm}
+        >
+          <div className="mt-4">
+            <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
+            <textarea
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+              rows={3}
+              placeholder="Ej: Factura duplicada, error del proveedor..."
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+          </div>
+        </ConfirmDialog>
       </div>
     </div>
   );

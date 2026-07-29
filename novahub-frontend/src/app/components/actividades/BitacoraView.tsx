@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useState } from 'react';
 import { EditableDataTable } from '../ui/EditableDataTable';
 import { ActivityLog } from '../../types';
 import { Card, CardContent } from '../ui/card';
@@ -209,7 +210,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
               await activityLogsService.delete(String(id));
               toast.success('Registro eliminado');
               onRefresh();
-            } catch (e) {
+            } catch (e: any) {
               toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar registro');
             }
           } : undefined}

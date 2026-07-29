@@ -15,7 +15,7 @@ export interface Module {
 // Submódulos de Ventas (alineados con sidebar)
 export const SALES_SUBMODULES: Submodule[] = [
   { id: 'SALES_CLIENTS', label: 'Clientes', description: 'Gestión de clientes y CRM' },
-  { id: 'SALES_QUOTES', label: 'Estimaciones', description: 'Cotizaciones comerciales' },
+  { id: 'SALES_QUOTES', label: 'Cotizaciones', description: 'Cotizaciones comerciales' },
   { id: 'SALES_ORDERS', label: 'Órdenes de Venta', description: 'Pedidos por procesar' },
   { id: 'SALES_INVOICES', label: 'Facturas', description: 'Facturación y cobros' },
   { id: 'SALES_RECURRING', label: 'Facturas Recurrentes', description: 'Suscripciones y contratos' },

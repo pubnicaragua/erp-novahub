@@ -60,6 +60,9 @@ export function ClientesPage() {
       setFormData({
         name: cliente.name,
         type: cliente.type,
+        ruc: cliente.ruc || '',
+        dv: cliente.dv || '',
+        razonSocial: cliente.razonSocial || '',
         contactName: cliente.contactName,
         email: cliente.email,
         phone: cliente.phone,
@@ -67,7 +70,7 @@ export function ClientesPage() {
       });
     } else {
       setEditingCliente(null);
-      setFormData({ name: '', type: 'company', contactName: '', email: '', phone: '', status: 'active' });
+      setFormData({ name: '', type: 'company', ruc: '', dv: '', razonSocial: '', contactName: '', email: '', phone: '', status: 'active' });
     }
     setIsDialogOpen(true);
   };
@@ -87,7 +90,7 @@ export function ClientesPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6 p-4 md:p-6" style={{ background: 'var(--role-surface)' }}>
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-card p-4 rounded-xl border shadow-sm">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-primary/10 rounded-lg">
@@ -130,6 +133,24 @@ export function ClientesPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                {formData.type === 'company' && (
+                  <>
+                    <div className="grid gap-2">
+                      <Label htmlFor="razonSocial">Razón Social</Label>
+                      <Input id="razonSocial" value={formData.razonSocial || ''} onChange={e => setFormData({ ...formData, razonSocial: e.target.value })} />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="grid gap-2 col-span-2">
+                        <Label htmlFor="ruc">RUC</Label>
+                        <Input id="ruc" value={formData.ruc || ''} onChange={e => setFormData({ ...formData, ruc: e.target.value })} />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="dv">DV</Label>
+                        <Input id="dv" value={formData.dv || ''} onChange={e => setFormData({ ...formData, dv: e.target.value })} />
+                      </div>
+                    </div>
+                  </>
+                )}
                 <div className="grid gap-2">
                   <Label htmlFor="contacto">Nombre del Contacto</Label>
                   <Input id="contacto" value={formData.contactName || ''} onChange={e => setFormData({ ...formData, contactName: e.target.value })} />

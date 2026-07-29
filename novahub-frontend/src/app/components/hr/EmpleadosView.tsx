@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp } from 'lucide-react';
+import React from 'react';
+import { useState } from 'react';
+import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Send, CheckCircle2, XCircle, History } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -11,6 +12,9 @@ import { hrService } from '../../services/hr.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { Badge } from '../ui/badge';
+import { cn } from '../ui/utils';
+import { Textarea } from '../ui/textarea';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh }: any) {
   const { formatConvertedAmount } = useCurrency();
@@ -29,6 +33,11 @@ export function EmpleadosView({ employees, departments, positions, onRefresh }: 
   const [newPosTitle, setNewPosTitle] = useState('');
   const [newPosDeptId, setNewPosDeptId] = useState('');
   const [showTutorial, setShowTutorial] = useState(false);
+  const [rejectEmpId, setRejectEmpId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [changeLog, setChangeLog] = useState<any[]>([]);
+  const [showChangeLog, setShowChangeLog] = useState(false);
+  const [loadingChangeLog, setLoadingChangeLog] = useState(false);
 
 const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
   {
@@ -156,6 +165,9 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         phone: editData.phone?.trim() || null,
         salary: isNaN(editData.salary) ? 0 : Number(editData.salary),
         currency: editData.currency || 'NIO',
+        nationalId: editData.nationalId?.trim() || null,
+        socialSecurityNumber: editData.socialSecurityNumber?.trim() || null,
+        probationEndDate: editData.probationEndDate || null,
       };
 
       await hrService.updateEmployee(id, sanitizedData);
@@ -180,6 +192,43 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       setDeleteLoading(false);
       setPendingDeleteId(null);
     }
+  };
+
+  const handleSubmitApproval = async (id: string) => {
+    try {
+      await hrService.submitEmployee(id);
+      toast.success('Empleado enviado a aprobación');
+      onRefresh();
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); }
+  };
+
+  const handleApprove = async (id: string) => {
+    try {
+      await hrService.approveEmployee(id);
+      toast.success('Empleado aprobado');
+      onRefresh();
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); }
+  };
+
+  const handleReject = async () => {
+    if (!rejectEmpId || !rejectReason.trim()) return toast.error('Debe indicar el motivo del rechazo');
+    try {
+      await hrService.rejectEmployee(rejectEmpId, rejectReason);
+      toast.success('Empleado rechazado');
+      setRejectEmpId(null);
+      setRejectReason('');
+      onRefresh();
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); }
+  };
+
+  const loadChangeLog = async (id: string) => {
+    try {
+      setLoadingChangeLog(true);
+      const res = await hrService.getEmployeeChangeLog(id);
+      setChangeLog(Array.isArray(res) ? res : (res as any)?.data || []);
+      setShowChangeLog(true);
+    } catch (e: any) { toast.error('Error al cargar historial'); }
+    finally { setLoadingChangeLog(false); }
   };
 
   const handleAddRow = () => {
@@ -207,6 +256,9 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       contractType: 'FULL_TIME',
       salary: 0,
       currency: 'NIO',
+      nationalId: '',
+      socialSecurityNumber: '',
+      probationEndDate: '',
       employmentStatus: 'ACTIVE',
     };
     setNewRows([...newRows, newRow]);
@@ -255,6 +307,9 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         positionId: row.positionId,
         salary: isNaN(row.salary) ? 0 : Number(row.salary),
         currency: row.currency || 'NIO',
+        nationalId: row.nationalId?.trim() || null,
+        socialSecurityNumber: row.socialSecurityNumber?.trim() || null,
+        probationEndDate: row.probationEndDate || null,
         hireDate: row.hireDate || new Date().toISOString().split('T')[0],
         contractType: row.contractType || 'FULL_TIME',
       };
@@ -346,6 +401,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                   <th className="px-4 py-3 text-left text-xs font-semibold">Puesto</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold">Salario</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold">Estado</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold">Auth</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold">Acciones</th>
                 </tr>
               </thead>
@@ -455,6 +511,9 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                       <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded font-bold">Nuevo</span>
                     </td>
                     <td className="px-4 py-2">
+                      <span className="text-xs text-muted-foreground">—</span>
+                    </td>
+                    <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
                         <Button size="sm" variant="ghost" onClick={() => handleSaveNewRow(row.tempId)} className="h-7 px-2">
                           <Save className="size-3" />
@@ -546,6 +605,13 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                       </span>
                     </td>
                     <td className="px-4 py-2">
+                      {(() => {
+                        const opts: Record<string, {label:string,color:string}> = {APPROVED:{label:'Aprobado',color:'bg-emerald-500/10 text-emerald-500'},PENDING_APPROVAL:{label:'Pendiente',color:'bg-amber-500/10 text-amber-500'},REJECTED:{label:'Rechazado',color:'bg-rose-500/10 text-rose-500'},DRAFT:{label:'Borrador',color:'bg-muted/20 text-muted-foreground'}};
+                        const s = opts[String(emp.approvalStatus||'APPROVED').toUpperCase()] || opts.APPROVED;
+                        return <Badge variant="outline" className={cn('text-[8px] font-black uppercase px-1.5 py-0 border-none', s.color)}>{s.label}</Badge>;
+                      })()}
+                    </td>
+                    <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
                         {editingId === emp.id ? (
                           <>
@@ -563,6 +629,24 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                                 <Edit2 className="size-3" />
                               </Button>
                             )}
+                            {emp.approvalStatus === 'DRAFT' && (
+                              <Button title="Enviar a aprobación" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={(e) => { e.stopPropagation(); handleSubmitApproval(emp.id); }}>
+                                <Send className="size-4" />
+                              </Button>
+                            )}
+                            {emp.approvalStatus === 'PENDING_APPROVAL' && canPerform('HR_EMPLOYEES', 'edit') && (
+                              <>
+                                <Button title="Aprobar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={(e) => { e.stopPropagation(); handleApprove(emp.id); }}>
+                                  <CheckCircle2 className="size-4" />
+                                </Button>
+                                <Button title="Rechazar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={(e) => { e.stopPropagation(); setRejectEmpId(emp.id); }}>
+                                  <XCircle className="size-4" />
+                                </Button>
+                              </>
+                            )}
+                            <Button title="Historial de cambios" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" onClick={(e) => { e.stopPropagation(); loadChangeLog(emp.id); }}>
+                              <History className="size-4" />
+                            </Button>
                             {canPerform('HR_EMPLOYEES', 'delete') && (
                               <Button size="sm" variant="ghost" onClick={() => setPendingDeleteId(emp.id)} className="h-7 px-2 text-red-600">
                                 <Trash2 className="size-3" />
@@ -801,6 +885,32 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         loading={deleteLoading} 
         onConfirm={() => pendingDeleteId ? handleDelete(pendingDeleteId) : Promise.resolve()} 
       />
+      <Dialog open={rejectEmpId !== null} onOpenChange={(o) => { if (!o) { setRejectEmpId(null); setRejectReason(''); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Rechazar Empleado</DialogTitle><DialogDescription>Indique el motivo del rechazo</DialogDescription></DialogHeader>
+          <Textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Motivo del rechazo..." className="min-h-[100px]" />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRejectEmpId(null); setRejectReason(''); }}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleReject}>Rechazar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showChangeLog} onOpenChange={setShowChangeLog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><History className="size-5 text-primary" /> Historial de Cambios</DialogTitle></DialogHeader>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {loadingChangeLog ? <p className="text-xs text-muted-foreground">Cargando...</p> : changeLog.length === 0 ? <p className="text-xs text-muted-foreground">Sin cambios registrados</p> : changeLog.map((log: any, i: number) => (
+              <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-muted/20 text-xs">
+                <History className="size-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="font-bold capitalize">{log.field}: <span className="text-muted-foreground font-normal">{log.oldValue || '(vacío)'}</span> → <span className="text-primary">{log.newValue || '(vacío)'}</span></p>
+                  <p className="text-[10px] text-muted-foreground/60">{new Date(log.createdAt).toLocaleString()}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
       {showTutorial && <GuidedTour steps={EMPLEADOS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Empleados" />}
     </div>
   );

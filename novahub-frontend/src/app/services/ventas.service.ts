@@ -28,19 +28,23 @@ export const estimatesService = {
 export const salesOrdersService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<SalesOrder>>('/sales/orders', filters as any),
   getById: (id: string) => api.get<SalesOrder>(`/sales/orders/${id}`),
-  create: (data: Partial<SalesOrder>) => api.post<SalesOrder>('/sales/orders', data),
+  create: (data: Partial<SalesOrder>, idempotencyKey?: string) => api.idempotentPost<SalesOrder>('/sales/orders', data, idempotencyKey),
   update: (id: string, data: Partial<SalesOrder>) => api.patch<SalesOrder>(`/sales/orders/${id}`, data),
   delete: (id: string) => api.delete<void>(`/sales/orders/${id}`),
   confirm: (id: string) => api.patch<SalesOrder>(`/sales/orders/${id}/confirm`, {}),
-  convertToInvoice: (id: string) => api.post<Invoice>(`/sales/orders/${id}/convert-to-invoice`, {}),
+  convertToInvoice: (id: string, data?: Pick<SalesOrder, 'accountId' | 'sellerEmployeeId'>, idempotencyKey?: string) =>
+    api.idempotentPost<Invoice>(`/sales/orders/${id}/convert-to-invoice`, data || {}, idempotencyKey),
 };
 
 // ---- Invoices ----
 export const invoicesService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<Invoice>>('/sales/invoices', filters as any),
   getById: (id: string) => api.get<Invoice>(`/sales/invoices/${id}`),
-  create: (data: Partial<Invoice>) => api.post<Invoice>('/sales/invoices', data),
+  create: (data: Partial<Invoice>, idempotencyKey?: string) => api.idempotentPost<Invoice>('/sales/invoices', data, idempotencyKey),
   update: (id: string, data: Partial<Invoice>) => api.patch<Invoice>(`/sales/invoices/${id}`, data),
+  checkNumber: (number: string, excludeId?: string) =>
+    api.get<{ exists: boolean; record?: Pick<Invoice, 'id' | 'number' | 'status'> }>(`/sales/invoices/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
+  cancel: (id: string, reason?: string, idempotencyKey?: string) => api.idempotentPost<Invoice>(`/sales/invoices/${id}/cancel`, { reason }, idempotencyKey),
   delete: (id: string) => api.delete<void>(`/sales/invoices/${id}`),
 };
 
@@ -59,8 +63,11 @@ export const recurringInvoicesService = {
 export const paymentsService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<PaymentReceived>>('/sales/payments', filters as any),
   getById: (id: string) => api.get<PaymentReceived>(`/sales/payments/${id}`),
-  create: (data: Partial<PaymentReceived>) => api.post<PaymentReceived>('/sales/payments', data),
+  create: (data: Partial<PaymentReceived>, idempotencyKey?: string) => api.idempotentPost<PaymentReceived>('/sales/payments', data, idempotencyKey),
   update: (id: string, data: Partial<PaymentReceived>) => api.patch<PaymentReceived>(`/sales/payments/${id}`, data),
+  checkNumber: (number: string, excludeId?: string) =>
+    api.get<{ exists: boolean; record?: Pick<PaymentReceived, 'id' | 'number'> }>(`/sales/payments/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
+  cancel: (id: string, reason?: string, idempotencyKey?: string) => api.idempotentPost<PaymentReceived>(`/sales/payments/${id}/cancel`, { reason }, idempotencyKey),
   delete: (id: string) => api.delete<void>(`/sales/payments/${id}`),
 };
 
@@ -68,9 +75,10 @@ export const paymentsService = {
 export const salesReturnsService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<SalesReturn>>('/sales/returns', filters as any),
   getById: (id: string) => api.get<SalesReturn>(`/sales/returns/${id}`),
-  create: (data: Partial<SalesReturn>) => api.post<SalesReturn>('/sales/returns', data),
+  create: (data: Partial<SalesReturn>, idempotencyKey?: string) => api.idempotentPost<SalesReturn>('/sales/returns', data, idempotencyKey),
   update: (id: string, data: Partial<SalesReturn>) => api.patch<SalesReturn>(`/sales/returns/${id}`, data),
-  approve: (id: string) => api.patch<SalesReturn>(`/sales/returns/${id}/approve`, {}),
+  approve: (id: string, idempotencyKey?: string) => api.idempotentPatch<SalesReturn>(`/sales/returns/${id}/approve`, {}, idempotencyKey),
+  process: (id: string, idempotencyKey?: string) => api.idempotentPatch<SalesReturn>(`/sales/returns/${id}/process`, {}, idempotencyKey),
   delete: (id: string) => api.delete<void>(`/sales/returns/${id}`),
 };
 
@@ -78,8 +86,14 @@ export const salesReturnsService = {
 export const creditNotesService = {
   getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<CreditNote>>('/sales/credit-notes', filters as any),
   getById: (id: string) => api.get<CreditNote>(`/sales/credit-notes/${id}`),
-  create: (data: Partial<CreditNote>) => api.post<CreditNote>('/sales/credit-notes', data),
+  create: (data: Partial<CreditNote>, idempotencyKey?: string) => api.idempotentPost<CreditNote>('/sales/credit-notes', data, idempotencyKey),
   update: (id: string, data: Partial<CreditNote>) => api.patch<CreditNote>(`/sales/credit-notes/${id}`, data),
-  issue: (id: string) => api.patch<CreditNote>(`/sales/credit-notes/${id}/issue`, {}),
+  issue: (id: string, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/issue`, {}, idempotencyKey),
+  apply: (id: string, data: any, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/apply`, data, idempotencyKey),
   delete: (id: string) => api.delete<void>(`/sales/credit-notes/${id}`),
+};
+
+export const reportsService = {
+  getAging: (customerId?: string) => api.get<any>('/sales/reports/aging', { customerId }),
+  getSalesSummary: () => api.get<any>('/sales/reports/summary'),
 };

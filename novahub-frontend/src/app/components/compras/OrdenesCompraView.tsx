@@ -20,6 +20,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generatePurchaseOrderPDF } from '../../utils/pdfGenerator';
 import { exportToCsv } from '../../utils/exportUtils';
+import { PurchaseAuditButton } from './PurchaseAuditButton';
 
 interface Props {
   data: PurchaseOrder[];
@@ -44,8 +45,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   
@@ -76,17 +78,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 currency: displayCurrency,
                 exchangeRate: globalRate,
                 status: 'DRAFT',
-                isService: false,
+                purchaseType: 'INVENTORY',
                 requestedBy: 'Admin',
                 address: '',
-                includeTax: true,
-            taxRate: 15,
-            withholdingRate: 0,
-            items: [],
-            subtotal: 0,
-            taxAmount: 0,
-            withholdingAmount: 0,
-            total: 0
+                items: [],
+                subtotal: 0,
+                taxAmount: 0,
+                withholdingTotal: 0,
+                withholdingBase: 0,
+                total: 0
           });
       } else {
          const found = data.find(x => x.id === editingId);
@@ -144,19 +144,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!pendingDeleteId) return;
-    setDeleteLoading(true);
+  const handleCancelConfirm = async () => {
+    if (!pendingCancelId || !cancelReason.trim()) return;
+    setCancelLoading(true);
     try {
-      await purchaseOrdersService.delete(pendingDeleteId);
-      toast.success('Orden de compra eliminada correctamente');
-      setPendingDeleteId(null);
-      if (editingId === pendingDeleteId) setEditingId(null);
+      await purchaseOrdersService.cancel(pendingCancelId, cancelReason.trim());
+      toast.success('Orden de compra anulada');
+      setPendingCancelId(null);
+      setCancelReason('');
+      if (editingId === pendingCancelId) setEditingId(null);
       onRefresh();
-    } catch (e) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
     } finally {
-      setDeleteLoading(false);
+      setCancelLoading(false);
     }
   };
 
@@ -170,26 +171,32 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
 
     const cleanedDoc: any = {
       ...localDoc,
-      includeTax: localDoc.includeTax !== false,
-      taxRate: Number(localDoc.taxRate || 0),
-      withholdingRate: Number(localDoc.withholdingRate || 0),
+      isService: localDoc.purchaseType === 'SERVICE',
+      taxRate: 0,
+      withholdingRate: 0,
       subtotal: Number(localDoc.subtotal || 0),
       taxAmount: Number(localDoc.taxAmount || 0),
-      withholdingAmount: Number(localDoc.withholdingAmount || 0),
+      withholdingTotal: Number(localDoc.withholdingTotal || 0),
+      withholdingBase: Number(localDoc.withholdingBase || 0),
       total: Number(localDoc.total || 0),
       items: (localDoc.items || []).map((it: any) => ({
         ...it,
         description: it.description || it.name || '',
         quantity: Number(it.quantity || 0),
         unitPrice: Number(it.unitPrice || 0),
+        taxType: it.taxType || 'GRAVADO',
+        taxRate: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxRate || 15),
+        taxBase: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxBase || 0),
+        taxAmount: Number(it.taxAmount || 0),
+        withholdingType: it.withholdingType || 'NONE',
+        withholdingRate: Number(it.withholdingRate || 0),
+        withholdingBase: it.withholdingType === 'NONE' ? 0 : Number(it.withholdingBase || 0),
+        accountId: it.accountId || null,
+        costCenterId: it.costCenterId || null,
         stock: it.stock === '' || it.stock === undefined || it.stock === null ? undefined : Number(it.stock),
         total: Number(it.total || 0),
       })),
     };
-    if (!cleanedDoc.includeTax) {
-      cleanedDoc.taxRate = 0;
-      cleanedDoc.taxAmount = 0;
-    }
 
     if (evidenceFile) {
       const isImage = evidenceFile.type.startsWith('image/');
@@ -256,10 +263,23 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       items: (order.items || []).map((it: any) => ({
         ...it,
         description: it.description || it.name || '',
-        taxRate: 0,
+        productId: it.productId || null,
+        taxType: it.taxType || 'GRAVADO',
+        taxRate: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : (it.taxRate || 15),
+        taxBase: it.taxBase || 0,
+        taxAmount: it.taxAmount || 0,
+        withholdingType: it.withholdingType || 'NONE',
+        withholdingRate: it.withholdingRate || 0,
+        withholdingBase: it.withholdingBase || 0,
+        accountId: it.accountId || null,
+        unitPrice: Number(it.unitPrice || 0),
+        quantity: Number(it.quantity || 0),
+        total: Number(it.total || 0),
       })),
       subtotal: order.subtotal,
       taxAmount: order.taxAmount,
+      withholdingTotal: order.withholdingTotal || 0,
+      withholdingBase: order.withholdingBase || 0,
       total: order.total,
       _sourceOrderId: order.id,
     };
@@ -267,15 +287,32 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     toast.success('Abriendo formulario de factura...', { position: 'bottom-right' });
   };
 
-  const calculateTotals = (items: any[], options?: { includeTax?: boolean; taxRate?: number; withholdingRate?: number }) => {
+  const calculateTotals = (items: any[]) => {
     const subtotal = items.reduce((acc, it) => acc + (Number(it.quantity||0) * Number(it.unitPrice||0)), 0);
-    const includeTax = options?.includeTax ?? (localDoc?.includeTax !== false);
-    const taxRate = Number(options?.taxRate ?? localDoc?.taxRate ?? 0);
-    const withholdingRate = Number(options?.withholdingRate ?? localDoc?.withholdingRate ?? 0);
-    const taxAmount = includeTax ? subtotal * (taxRate / 100) : 0;
-    const withholdingAmount = subtotal * (withholdingRate / 100);
-    const total = subtotal + taxAmount - withholdingAmount;
-    return { subtotal, taxAmount, withholdingAmount, total };
+    const taxAmount = items.reduce((acc, it) => {
+      const tt = (it.taxType || 'GRAVADO').toUpperCase();
+      if (tt !== 'GRAVADO') return acc + 0;
+      const lineTotal = Number(it.quantity||0) * Number(it.unitPrice||0);
+      const base = Number(it.taxBase) || lineTotal;
+      const rate = Number(it.taxRate) || 15;
+      return acc + (base * rate / 100);
+    }, 0);
+    const withholdingTotal = items.reduce((acc, it) => {
+      const wt = (it.withholdingType || 'NONE').toUpperCase();
+      if (wt === 'NONE') return acc + 0;
+      const lineTotal = Number(it.quantity||0) * Number(it.unitPrice||0);
+      const base = Number(it.withholdingBase) || lineTotal;
+      const rate = Number(it.withholdingRate) || 0;
+      return acc + (base * rate / 100);
+    }, 0);
+    const withholdingBase = items.reduce((acc, it) => {
+      const wt = (it.withholdingType || 'NONE').toUpperCase();
+      if (wt === 'NONE') return acc + 0;
+      const lineTotal = Number(it.quantity||0) * Number(it.unitPrice||0);
+      return acc + (Number(it.withholdingBase) || lineTotal);
+    }, 0);
+    const total = subtotal + taxAmount - withholdingTotal;
+    return { subtotal, taxAmount, withholdingTotal, withholdingBase, total };
   };
 
   const handleItemChange = (idx: number, field: string, value: any) => {
@@ -287,10 +324,21 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       newItems[idx].stock = undefined;
     }
     
-    if (['quantity', 'unitPrice'].includes(field)) {
+    if (['quantity', 'unitPrice', 'taxType', 'taxRate', 'withholdingType', 'withholdingRate'].includes(field)) {
        const q = Number(newItems[idx].quantity || 0);
        const p = Number(newItems[idx].unitPrice || 0);
        const sub = q * p;
+       const tt = (newItems[idx].taxType || 'GRAVADO').toUpperCase();
+       if (tt === 'EXENTO' || tt === 'NO_GRAVADO') {
+         newItems[idx].taxRate = 0;
+         newItems[idx].taxBase = 0;
+         newItems[idx].taxAmount = 0;
+       }
+       const wt = (newItems[idx].withholdingType || 'NONE').toUpperCase();
+       if (wt === 'NONE') {
+         newItems[idx].withholdingRate = 0;
+         newItems[idx].withholdingBase = 0;
+       }
        newItems[idx].total = sub;
     }
     recalculateTotals(newItems);
@@ -304,6 +352,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     const newItems = [...(localDoc.items || [])];
     const currentItem = newItems[idx] || {};
     const purchasePrice = Number(selected.costPrice ?? selected.cost ?? selected.price ?? 0);
+    const currentStock = selected.stock != null ? selected.stock :
+      (selected.inventoryLevels?.[0]?.quantity ?? selected.quantity ?? 0);
     newItems[idx] = {
       ...currentItem,
       productId: selected.id,
@@ -311,8 +361,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       name: selected.name || currentItem.name || '',
       description: selected.description || currentItem.description || selected.name || '',
       category: selected.category?.name || selected.category || selected.categoryId || currentItem.category || '',
-      stockApplies: localDoc.isService ? false : true,
+      stockApplies: localDoc.purchaseType === 'SERVICE' ? false : true,
+      currentStock: Number(currentStock),
       unitPrice: purchasePrice,
+      taxType: currentItem.taxType || 'GRAVADO',
+      taxRate: currentItem.taxRate || 15,
+      withholdingType: currentItem.withholdingType || 'NONE',
       quantity: Number(currentItem.quantity || 1),
       total: Number(currentItem.quantity || 1) * purchasePrice,
     };
@@ -326,17 +380,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       stockApplies: checked ? false : !!item.stockApplies,
       stock: checked ? undefined : item.stock,
     }));
-    setLocalDoc((prev) => prev ? { ...prev, isService: checked, items: updatedItems } : prev);
+    setLocalDoc((prev: any) => prev ? { ...prev, purchaseType: checked ? 'SERVICE' : 'INVENTORY', items: updatedItems } : prev);
   };
 
-  const recalculateTotals = (items: any[], options?: { includeTax?: boolean; taxRate?: number; withholdingRate?: number }) => {
-    const totals = calculateTotals(items, options);
-    setLocalDoc(prev => ({ ...prev!, ...options, items, ...totals }));
-  };
-
-  const handleTaxToggle = (checked: boolean) => {
-    if (!localDoc) return;
-    recalculateTotals(localDoc.items || [], { includeTax: checked });
+  const recalculateTotals = (items: any[]) => {
+    const totals = calculateTotals(items);
+    setLocalDoc(prev => ({ ...prev!, items, ...totals }));
   };
 
   const handlePurchaseOrderExportCSV = (doc: Partial<PurchaseOrder>) => {
@@ -347,6 +396,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       item.stock ?? '',
       item.quantity || 0,
       item.unitPrice || 0,
+      item.taxType || 'GRAVADO',
+      item.withholdingType || 'NONE',
       item.total || 0,
     ]);
     exportToCsv(`OC_${doc.number || doc.id || 'borrador'}`, [
@@ -356,16 +407,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       ['Fecha', doc.date ? new Date(doc.date).toLocaleDateString() : '-'],
       ['Entrega Esperada', doc.expectedDelivery ? new Date(doc.expectedDelivery).toLocaleDateString() : '-'],
       ['Moneda', doc.currency || 'NIO'],
-      ['Tipo OC', doc.isService ? 'Servicio' : 'Producto'],
-      ['IVA Habilitado', doc.includeTax === false ? 'No' : 'Si'],
-      ['IVA %', Number(doc.taxRate || 0)],
-      ['Retencion IR %', Number(doc.withholdingRate || 0)],
+      ['Tipo OC', doc.purchaseType || 'INVENTORY'],
       ['Subtotal', Number(doc.subtotal || 0)],
       ['IVA', Number(doc.taxAmount || 0)],
-      ['Retencion IR', Number(doc.withholdingAmount || 0)],
+      ['Retencion', Number(doc.withholdingTotal || 0)],
       ['Total', Number(doc.total || 0)],
       [],
-      ['Codigo', 'Nombre', 'Categoria', 'Stock', 'Cantidad', 'Precio U.', 'Total'],
+      ['Codigo', 'Nombre', 'Categoria', 'Stock', 'Cantidad', 'Precio U.', 'TipoIVA', 'Retencion', 'Total'],
       ...rows,
     ]);
   };
@@ -375,8 +423,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
     
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
-        <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
               <ChevronLeft className="size-5" />
@@ -416,12 +464,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                  </Button>
                </>
              )}
-             {!isNew && canPerform('PURCHASES_ORDERS', 'delete') && (
-                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => setPendingDeleteId(editingId)}>
-                  <Trash2 className="size-3 mr-2" /> Eliminar
-                </Button>
-             )}
+              {!isNew && canPerform('PURCHASES_ORDERS', 'delete') && (
+                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                   onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
+                   <Trash2 className="size-3 mr-2" /> Anular
+                 </Button>
+              )}
             {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar
@@ -497,16 +545,28 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   </select>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Tipo de OC</p>
-                  <div className="h-8 px-3 rounded-md border border-input bg-background flex items-center justify-between">
-                    <span className="text-xs font-bold">{localDoc.isService ? 'Servicio' : 'Producto'}</span>
-                    <Switch
-                      checked={!!localDoc.isService}
-                      onCheckedChange={handleServiceToggle}
+                    <p className="text-[10px] text-muted-foreground mb-1">Tipo de Compra</p>
+                    <select
                       disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                    />
+                      value={localDoc.purchaseType || 'INVENTORY'}
+                      onChange={(e) => {
+                        const pt = e.target.value;
+                        setLocalDoc({ ...localDoc, purchaseType: pt });
+                        if (pt === 'SERVICE') {
+                          const updatedItems = (localDoc.items || []).map((item: any) => ({
+                            ...item, stockApplies: false, stock: undefined,
+                          }));
+                          setLocalDoc((prev: any) => prev ? { ...prev, purchaseType: pt, items: updatedItems } : prev);
+                        }
+                      }}
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
+                    >
+                      <option value="INVENTORY">Inventario</option>
+                      <option value="ASSET">Activo Fijo</option>
+                      <option value="SERVICE">Servicio</option>
+                      <option value="ADMIN">Gasto Administrativo</option>
+                    </select>
                   </div>
-                </div>
                 <div className="col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Dirección</p>
                   <Input
@@ -551,45 +611,14 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   <span className="font-bold tabular-nums text-rose-500">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.taxAmount||0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Retención IR</span>
-                  <span className="font-bold tabular-nums text-amber-500">-{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.withholdingAmount||0).toLocaleString()}</span>
+                  <span className="text-muted-foreground">Retenciones</span>
+                  <span className="font-bold tabular-nums text-amber-500">-{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.withholdingTotal||0).toLocaleString()}</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 border-t pt-3 border-border/50">
-                  <div className="col-span-1">
-                    <p className="text-[10px] text-muted-foreground mb-1">IVA habilitado</p>
-                    <label className="flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        checked={localDoc.includeTax !== false}
-                        onChange={(e) => handleTaxToggle(e.target.checked)}
-                      />
-                      <span>{localDoc.includeTax !== false ? 'Sí' : 'No'}</span>
-                    </label>
-                  </div>
-                  <div className="col-span-1">
-                    <p className="text-[10px] text-muted-foreground mb-1">IVA %</p>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      disabled={localDoc.includeTax === false}
-                      value={localDoc.taxRate === 0 ? '' : localDoc.taxRate}
-                      onChange={(e) => recalculateTotals(localDoc.items || [], { taxRate: Number(e.target.value || 0) })}
-                      className="h-8 text-xs text-right"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div className="col-span-1">
-                    <p className="text-[10px] text-muted-foreground mb-1">Retención IR %</p>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={localDoc.withholdingRate === 0 ? '' : localDoc.withholdingRate}
-                      onChange={(e) => recalculateTotals(localDoc.items || [], { withholdingRate: Number(e.target.value || 0) })}
-                      className="h-8 text-xs text-right"
-                      placeholder="0"
-                    />
+                <div className="border-t pt-3 border-border/50">
+                  <p className="text-[10px] text-muted-foreground mb-2 font-bold uppercase tracking-widest">Impuestos por línea</p>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>IVA calculado por producto según tipo fiscal (Gravado/Exento/No Gravado)</p>
+                    <p>Retenciones calculadas por producto según tipo de retención</p>
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
@@ -609,9 +638,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Ítems de Orden</p>
               {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
-                <Button variant="outline" size="sm" onClick={() => {
-                  const isServiceOrder = !!localDoc.isService;
-                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, productId: '', code: '', name: '', category: '', stockApplies: isServiceOrder ? false : false, stock: undefined, quantity: 1, unitPrice: 0, total: 0 }];
+                  <Button variant="outline" size="sm" onClick={() => {
+                  const isServiceOrder = localDoc.purchaseType === 'SERVICE';
+                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, productId: '', code: '', name: '', category: '', stockApplies: isServiceOrder ? false : false, stock: undefined, currentStock: 0, quantity: 1, unitPrice: 0, taxType: 'GRAVADO', taxRate: 15, taxBase: 0, taxAmount: 0, withholdingType: 'NONE', withholdingRate: 0, withholdingBase: 0, accountId: '', total: 0 }];
                   setLocalDoc({ ...localDoc, items: newItems as any });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                   <Plus className="size-3 mr-2" /> Agregar Item
@@ -669,7 +698,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
 
                   {/* Fields grid */}
                   <div className="grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-3">
+                    <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Código</p>
                       <Input
                         disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
@@ -679,14 +708,14 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                         placeholder="Código"
                       />
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Nombre</p>
                       <Input
                         disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                         value={item.name || ''}
                         onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
                         className="h-8 text-xs"
-                        placeholder={localDoc.isService ? 'Nombre del servicio' : 'Nombre del producto'}
+                        placeholder={localDoc.purchaseType === 'SERVICE' ? 'Servicio' : 'Producto'}
                       />
                     </div>
                     <div className="col-span-2">
@@ -700,14 +729,19 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                       />
                     </div>
                     <div className="col-span-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Stock inicial</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">
+                        Stock actual
+                        {item.currentStock !== undefined && (
+                          <span className="ml-1 text-primary font-black">{Number(item.currentStock).toLocaleString()}</span>
+                        )}
+                      </p>
                       <div className="flex items-center gap-1.5">
                         <label className="flex items-center gap-1 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={!!item.stockApplies}
                             onChange={(e) => handleItemChange(idx, 'stockApplies', e.target.checked)}
-                            disabled={!!localDoc.isService || (isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit'))}
+                            disabled={localDoc.purchaseType === 'SERVICE' || (isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit'))}
                             className="accent-primary size-3"
                           />
                         </label>
@@ -746,14 +780,64 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                         placeholder="0"
                       />
                     </div>
+                    <div className="col-span-1">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Tipo IVA</p>
+                      <select
+                        disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                        value={item.taxType || 'GRAVADO'}
+                        onChange={(e) => handleItemChange(idx, 'taxType', e.target.value)}
+                        className="h-8 w-full rounded-md border border-input bg-background px-1 text-[10px] font-bold"
+                      >
+                        <option value="GRAVADO">Gravado</option>
+                        <option value="EXENTO">Exento</option>
+                        <option value="NO_GRAVADO">No Gravado</option>
+                      </select>
+                    </div>
+                    <div className="col-span-1">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Retención</p>
+                      <select
+                        disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                        value={item.withholdingType || 'NONE'}
+                        onChange={(e) => handleItemChange(idx, 'withholdingType', e.target.value)}
+                        className="h-8 w-full rounded-md border border-input bg-background px-1 text-[10px] font-bold"
+                      >
+                        <option value="NONE">Sin retención</option>
+                        <option value="IR_1">IR 1%</option>
+                        <option value="IR_2">IR 2%</option>
+                        <option value="IR_5">IR 5%</option>
+                        <option value="IR_10">IR 10%</option>
+                        <option value="IR_15">IR 15%</option>
+                        <option value="IR_20">IR 20%</option>
+                        <option value="IR_25">IR 25%</option>
+                        <option value="IVA_1">IVA 1%</option>
+                        <option value="IVA_2">IVA 2%</option>
+                        <option value="IVA_3">IVA 3%</option>
+                      </select>
+                    </div>
                   </div>
 
-                  {/* Total footer */}
-                  <div className="flex items-center justify-end pt-1 border-t border-border/30">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 mr-2">Subtotal ítem</span>
-                    <span className="text-sm font-black tabular-nums text-primary">
-                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {/* Subtotal + tax info footer */}
+                  <div className="flex items-center justify-end gap-4 pt-1 border-t border-border/30">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">Subtotal</span>
+                    <span className="text-sm font-black tabular-nums">
+                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.quantity * item.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
+                    {item.taxType === 'GRAVADO' && (
+                      <>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-rose-500/60">IVA</span>
+                        <span className="text-xs font-black tabular-nums text-rose-500">
+                          {localDoc.currency === 'USD' ? '$' : 'C$'} {Number((Number(item.quantity||0) * Number(item.unitPrice||0)) * (Number(item.taxRate||15) / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </>
+                    )}
+                    {item.withholdingType !== 'NONE' && (
+                      <>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-amber-500/60">Ret.</span>
+                        <span className="text-xs font-black tabular-nums text-amber-500">
+                          -{localDoc.currency === 'USD' ? '$' : 'C$'} {Number((Number(item.quantity||0) * Number(item.unitPrice||0)) * (Number(item.withholdingRate||0) / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -787,7 +871,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((k, i) => (
           <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
@@ -801,10 +885,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight">Órdenes de Compra</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Pedidos a proveedores</p></div>
-          <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+            <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('PURCHASES_ORDERS', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Orden</Button>
+              <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Orden</Button>
             )}
           </div>
         </div>
@@ -813,12 +897,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
-                await purchaseOrdersService.delete(id as string);
+                await purchaseOrdersService.cancel(id as string, 'Anulación masiva');
               }
-              toast.success('Elementos eliminados');
+              toast.success('Órdenes anuladas');
               onRefresh();
-            } catch (e) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+            } catch (e: any) {
+              toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
             }
           } : undefined}
           actions={(row) => (
@@ -834,21 +918,35 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 <FileInput className="size-4" />
               </Button>
               <Button title={canPerform('PURCHASES_ORDERS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <PurchaseAuditButton entity="PURCHASE_ORDER" entityId={row.id} title="Auditoria de la Orden" />
               {canPerform('PURCHASES_ORDERS', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
               )}
             </div>
           )}
         />
         <ConfirmDialog
-          open={!!pendingDeleteId}
-          onOpenChange={(open) => !open && setPendingDeleteId(null)}
-          title="Eliminar Orden de Compra"
-          description="¿Estás seguro de que deseas eliminar esta orden? Esta acción no se puede deshacer."
-          confirmLabel="Eliminar Orden"
-          onConfirm={handleDeleteConfirm}
-          loading={deleteLoading}
-        />
+          open={!!pendingCancelId}
+          onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
+          title="Anular Orden de Compra"
+          description="La orden quedará cancelada. No se podrá recibir ni facturar. Esta acción no se puede deshacer."
+          confirmLabel="Anular Orden"
+          variant="destructive"
+          loading={cancelLoading}
+          disabled={!cancelReason.trim()}
+          onConfirm={handleCancelConfirm}
+        >
+          <div className="mt-4">
+            <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
+            <textarea
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+              rows={3}
+              placeholder="Ej: Cancelada por el proveedor, error en productos..."
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+          </div>
+        </ConfirmDialog>
       </div>
     </div>
   );

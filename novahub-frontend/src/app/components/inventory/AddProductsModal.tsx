@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -18,9 +18,10 @@ interface AddProductsModalProps {
   categories?: any[];
   warehouses?: any[];
   onRefresh: () => void;
+  itemType?: 'PRODUCT' | 'SERVICE';
 }
 
-export function AddProductsModal({ open, onOpenChange, categories, warehouses, onRefresh }: AddProductsModalProps) {
+export function AddProductsModal({ open, onOpenChange, categories, warehouses, onRefresh, itemType = 'PRODUCT' }: AddProductsModalProps) {
   const { formatAmount, exchangeRate, baseCurrency } = useCurrency();
   const [internalCategories, setInternalCategories] = useState<any[]>([]);
   const [internalWarehouses, setInternalWarehouses] = useState<any[]>([]);
@@ -36,6 +37,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
 
   const effectiveCategories = categories ?? internalCategories;
   const effectiveWarehouses = warehouses ?? internalWarehouses;
+  const catalogItemType = itemType;
 
   const [productsList, setProductsList] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -45,7 +47,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
     code: '',
     name: '',
     categoryId: effectiveCategories[0]?.id || '',
-    itemType: 'PRODUCT',
+    itemType: catalogItemType,
     priceCurrency: 'NIO',
     costPrice: '',
     salePrice: '',
@@ -72,7 +74,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
         const response = await inventoryService.checkProductCode(code);
         const exists = response?.exists;
         setSkuError(exists ? 'Código duplicado' : '');
-      } catch (e) {
+      } catch (e: any) {
         console.error('Error validating SKU', e);
       }
     }, 1000);
@@ -112,6 +114,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       toast.error('Debes seleccionar un almacén para el stock inicial');
       return;
     }
+    if (draftProduct.itemType === 'SERVICE' && !draftProduct.initialWarehouseId) {
+      toast.error('Debes seleccionar el almacén del servicio');
+      return;
+    }
 
     setProductsList((prev) => [...prev, { ...draftProduct }]);
     
@@ -145,6 +151,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
         toast.error('Debes seleccionar un almacén para el stock inicial');
         return;
       }
+      if (draftProduct.itemType === 'SERVICE' && !draftProduct.initialWarehouseId) {
+        toast.error('Debes seleccionar el almacén del servicio');
+        return;
+      }
       listToSave.push(draftProduct);
     }
 
@@ -167,16 +177,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                       (product.priceCurrency === 'USD' ? exchangeRate : (1 / exchangeRate)) 
                       : 1;
         const convertedCost = Number(product.costPrice || 0) * rate;
-        const convertedSale = Number(product.salePrice || 0) * rate;
 
         const createdResponse = await inventoryService.createProduct({
           code: product.code,
           name: product.name,
           categoryId: product.categoryId,
           type: product.itemType || 'PRODUCT',
+          warehouseId: product.initialWarehouseId || undefined,
           trackInventory: product.itemType === 'PRODUCT',
           trackSeries: Boolean(product.trackSerialNumbers),
-          salePrice: convertedSale,
           costPrice: convertedCost,
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           itemType: product.itemType || 'PRODUCT',
@@ -214,12 +223,12 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
             }
           } catch (err) {
             console.error('Error allocating initial stock', err);
-            toast.error(`Error al asignar stock al producto ${product.name}`);
+            toast.error(`Error al asignar stock al ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'} ${product.name}`);
           }
         }
         successCount++;
       }
-      toast.success(`${successCount} producto(s) guardado(s) correctamente`);
+      toast.success(`${successCount} ${catalogItemType === 'SERVICE' ? 'servicio(s)' : 'producto(s)'} guardado(s) correctamente`);
       setProductsList([]);
       setDraftProduct({
         ...defaultDraft,
@@ -230,7 +239,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       onOpenChange(false);
       onRefresh();
     } catch (error: any) {
-      toast.error(`Hubo un error guardando. Solo se guardaron ${successCount} productos.`);
+            toast.error(`Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
     } finally {
       setIsSaving(false);
     }
@@ -241,10 +250,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg font-black">
-            <Package className="size-5 text-primary" /> Agregar productos
+            <Package className="size-5 text-primary" /> Agregar {catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}
           </DialogTitle>
           <DialogDescription>
-            Llena los campos para guardar un producto, o haz clic en "Agregar a la lista" si deseas crear varios al mismo tiempo.
+            Llena los campos para guardar un {catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}, o agrega varios a la lista.
           </DialogDescription>
         </DialogHeader>
 
@@ -279,7 +288,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   value={draftProduct.name} 
                   onChange={e => handleUpdateDraft('name', e.target.value)} 
                   className="h-8 text-xs mt-1" 
-                  placeholder="Nombre del producto" 
+                    placeholder={`Nombre del ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
                 />
               </div>
               <div className="col-span-2">
@@ -292,7 +301,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 </Select>
               </div>
 
-              <div className="col-span-1">
+              {!itemType && <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Tipo</label>
                 <Select value={draftProduct.itemType} onValueChange={v => handleUpdateDraft('itemType', v)}>
                   <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
@@ -301,7 +310,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                     <SelectItem value="SERVICE">Servicio</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </div>}
 
               <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Moneda</label>
@@ -314,7 +323,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 </Select>
               </div>
               
-              <div className="col-span-1">
+              {catalogItemType !== 'SERVICE' && <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
                 <Input 
                   type="number" min={0}
@@ -323,20 +332,9 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   className="h-8 text-xs text-right mt-1 tabular-nums" 
                   placeholder="0.00" 
                 />
-              </div>
+              </div>}
               
-              <div className="col-span-1">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Venta</label>
-                <Input 
-                  type="number" min={0}
-                  value={draftProduct.salePrice} 
-                  onChange={e => handleUpdateDraft('salePrice', e.target.value)} 
-                  className="h-8 text-xs text-right mt-1 tabular-nums" 
-                  placeholder="0.00" 
-                />
-              </div>
-
-              <div className="col-span-1">
+              {catalogItemType !== 'SERVICE' && <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Serie/IMEI</label>
                 <Button
                   type="button"
@@ -346,9 +344,9 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 >
                   {draftProduct.trackSerialNumbers ? 'Sí' : 'No'}
                 </Button>
-              </div>
+              </div>}
 
-              {draftProduct.itemType === 'PRODUCT' && (
+              {draftProduct.itemType === 'PRODUCT' ? (
                 <>
                   <div className="col-span-2">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén (Stock Inicial)</label>
@@ -370,6 +368,16 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                     />
                   </div>
                 </>
+              ) : (
+                <div className="col-span-3">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén vinculado *</label>
+                  <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
+                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar almacén" /></SelectTrigger>
+                    <SelectContent>
+                      {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
               
               <div className={`col-span-5 flex justify-end ${draftProduct.itemType === 'SERVICE' ? 'mt-0' : 'mt-0'}`}>
@@ -393,7 +401,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                    <TableHead className="text-[10px] uppercase">Nombre</TableHead>
                    <TableHead className="text-[10px] uppercase">Categoría</TableHead>
                    <TableHead className="text-[10px] uppercase text-right">Stock Inicial</TableHead>
-                   <TableHead className="text-[10px] uppercase text-right">Venta</TableHead>
                    <TableHead className="w-10"></TableHead>
                  </TableRow>
                </TableHeader>
@@ -417,9 +424,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                        </TableCell>
                        <TableCell className="text-xs text-right p-2 tabular-nums">
                          {product.itemType === 'SERVICE' ? '-' : (product.initialStock || 0)}
-                       </TableCell>
-                       <TableCell className="text-xs text-right p-2 tabular-nums">
-                         {product.priceCurrency === 'USD' ? '$' : 'C$'} {Number(product.salePrice || 0).toFixed(2)}
                        </TableCell>
                        <TableCell className="text-right p-2">
                          <Button 
@@ -448,7 +452,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
             disabled={isSaving || (productsList.length === 0 && (!!skuError || !draftProduct.code.trim() || !draftProduct.name.trim()))}
             className="font-bold bg-primary text-primary-foreground"
           >
-            {isSaving ? 'Guardando...' : (productsList.length > 0 ? `Guardar ${productsList.length} producto(s)` : 'Guardar producto')}
+            {isSaving ? 'Guardando...' : (productsList.length > 0 ? `Guardar ${productsList.length} ${catalogItemType === 'SERVICE' ? 'servicio(s)' : 'producto(s)'}` : `Guardar ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`)}
           </Button>
         </DialogFooter>
       </DialogContent>
