@@ -16,6 +16,7 @@ import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { toast } from 'sonner'
 import { contabilidadService } from '../../services/contabilidad.service'
+import { downloadCsv, templateRows } from '../../utils/chartOfAccountsCsv'
 
 const INDUSTRIES = [
   { value: 'RETAIL', label: 'Comercio Minorista' },
@@ -373,14 +374,8 @@ export function ConfiguracionContableView() {
   const handleExportAccounts = async () => {
     try {
       const raw = await contabilidadService.exportAccounts()
-      const list: any[] = Array.isArray(raw) ? raw : []
-      const headers = ['code,name,type,currency,isActive']
-      const rows = list.map((a: any) => `"${a.code}","${a.name}","${a.type}","${a.currency || 'NIO'}","${a.isActive !== false}"`).join('\r\n')
-      const csv = '\uFEFF' + headers + '\r\n' + rows
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
-      link.download = 'plan_cuentas.csv'
-      link.click()
+      if (!Array.isArray(raw) || raw.length === 0) throw new Error('El servidor no devolvió cuentas para exportar')
+      downloadCsv('plan_cuentas.csv', raw)
       toast.success('Plan de cuentas exportado')
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al exportar')
@@ -388,11 +383,7 @@ export function ConfiguracionContableView() {
   }
 
   const handleDownloadTemplate = () => {
-    const csv = '\uFEFFcode,name,type,currency,parentCode\n"1000","Caja General","ASSET","NIO",\n"2000","Proveedores","LIABILITY","NIO",'
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
-    link.download = 'plantilla_cuentas.csv'
-    link.click()
+    downloadCsv('plantilla_cuentas.csv', templateRows())
     toast.success('Plantilla descargada')
   }
 

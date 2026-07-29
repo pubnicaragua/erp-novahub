@@ -1,14 +1,15 @@
 import { api } from './api';
+import type { ChartAccount, ChartAccountCsvRow } from '../types/accounting';
 
 export const contabilidadService = {
   // Plan de Cuentas
-  getChartOfAccounts: () => api.get<any[]>('/accounting/accounts'),
-  getAccount: (id: string) => api.get<any>(`/accounting/accounts/${id}`),
-  createAccount: (data: any) => api.post<any>('/accounting/accounts', data),
-  updateAccount: (id: string, data: any) => api.put<any>(`/accounting/accounts/${id}`, data),
+  getChartOfAccounts: () => api.get<ChartAccount[]>('/accounting/accounts'),
+  getAccount: (id: string) => api.get<ChartAccount>(`/accounting/accounts/${id}`),
+  createAccount: (data: Partial<ChartAccount>) => api.post<ChartAccount>('/accounting/accounts', data),
+  updateAccount: (id: string, data: Partial<ChartAccount>) => api.put<ChartAccount>(`/accounting/accounts/${id}`, data),
   deleteAccount: (id: string) => api.delete(`/accounting/accounts/${id}`),
-  importAccounts: (data: any[]) => api.post<any>('/accounting/accounts/import', data),
-  exportAccounts: () => api.get<any[]>('/accounting/accounts/export'),
+  importAccounts: (data: ChartAccountCsvRow[]) => api.post<ChartAccount[]>('/accounting/accounts/import', data),
+  exportAccounts: () => api.get<string[][]>('/accounting/accounts/export'),
   getDefaultAccountsByIndustry: (industry: string) => api.get<any[]>(`/accounting/accounts/defaults/${industry}`),
   getAccountBalance: (id: string, dateFrom?: string, dateTo?: string) => api.get<any>(`/accounting/accounts/${id}/balance`, { params: { dateFrom, dateTo } }),
 

@@ -34,7 +34,8 @@ import {
 } from '../ui/table';
 import { Combobox } from '../ui/Combobox';
 import { cn } from '../ui/utils';
-import type { JournalEntry, Account } from '../../types';
+import type { JournalEntry } from '../../types';
+import type { ChartAccount } from '../../types/accounting';
 import { useAuth } from '../../contexts/AuthContext';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
@@ -78,7 +79,7 @@ export function DiarioView() {
   const { canPerform } = useAuth();
   const [journals, setJournals] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accounts, setAccounts] = useState<ChartAccount[]>([]);
 
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [filterDateFrom, setFilterDateFrom] = useState('');
@@ -118,7 +119,8 @@ export function DiarioView() {
   const loadAccounts = useCallback(async () => {
     try {
       const data = await contabilidadService.getChartOfAccounts();
-      setAccounts(data as Account[]);
+      const flatten = (items: ChartAccount[]): ChartAccount[] => items.flatMap(account => [account, ...flatten(account.children ?? [])]);
+      setAccounts(flatten(data));
     } catch {
       // non-critical
     }
@@ -127,11 +129,13 @@ export function DiarioView() {
   useEffect(() => { loadJournals(); }, [loadJournals]);
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
 
-  const accountOptions = accounts.map((a) => ({
+  const accountOptions = accounts
+    .filter((account) => account.isActive && account.allowManualEntry)
+    .map((a) => ({
     label: `${a.code} - ${a.name}`,
     value: a.id,
     description: a.type,
-  }));
+    }));
 
   const refTypeOptions = REFERENCE_TYPES.map((r) => ({ label: r.label, value: r.value }));
 

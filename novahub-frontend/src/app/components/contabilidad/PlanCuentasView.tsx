@@ -16,14 +16,15 @@ import {
 } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Separator } from '../ui/separator';
+import { Switch } from '../ui/switch';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import type { Currency } from '../../types';
+import type { AccountDetailType, AccountSubtype, AccountType, ChartAccountCsvRow } from '../../types/accounting';
+import { CHART_ACCOUNT_CSV_HEADERS, downloadCsv, parseCsvText, templateRows } from '../../utils/chartOfAccountsCsv';
 import { useAuth } from '../../contexts/AuthContext';
-
-type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE';
 
 interface AccountNode {
   id: string;
@@ -34,6 +35,10 @@ interface AccountNode {
   balance: number;
   currency: Currency;
   isActive: boolean;
+  subtype: AccountSubtype;
+  detailType: AccountDetailType;
+  allowManualEntry: boolean;
+  notes?: string | null;
   children: AccountNode[];
   level: number;
   _count?: { children: number; transactions: number };
@@ -56,6 +61,16 @@ const TYPE_COLOR_MAP: Record<AccountType, string> = {
 };
 
 const CURRENCIES: Currency[] = ['USD', 'NIO', 'EUR', 'GTQ', 'HNL', 'CRC', 'PAB'];
+const ACCOUNT_SUBTYPES: { value: AccountSubtype; label: string }[] = [
+  { value: 'MAIN_GROUP', label: 'Grupo principal' },
+  { value: 'GROUP', label: 'Grupo' },
+  { value: 'DETAIL_ACCOUNT', label: 'Cuenta de detalle' },
+  { value: 'SUBACCOUNT', label: 'Subcuenta' },
+];
+const ACCOUNT_DETAIL_TYPES: { value: AccountDetailType; label: string }[] = [
+  { value: 'BALANCE_SHEET', label: 'Balance General' },
+  { value: 'INCOME_STATEMENT', label: 'Estado de Resultados' },
+];
 
 const INDUSTRIES = [
   { value: 'General', label: 'General' },
@@ -126,6 +141,9 @@ export function PlanCuentasView() {
   const [formData, setFormData] = useState({
     code: '', name: '', type: 'ASSET' as AccountType,
     parentId: '' as string | undefined, currency: 'USD' as Currency,
+    subtype: 'DETAIL_ACCOUNT' as AccountSubtype,
+    detailType: 'BALANCE_SHEET' as AccountDetailType,
+    allowManualEntry: true, isActive: true, notes: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -149,6 +167,10 @@ export function PlanCuentasView() {
         type: (a.type ?? 'ASSET').toUpperCase() as AccountType,
         parentId: a.parentId ?? null, balance: Number(a.balance ?? 0),
         currency: a.currency ?? 'USD', isActive: a.isActive !== false,
+        subtype: a.subtype ?? 'DETAIL_ACCOUNT',
+        detailType: a.detailType ?? ((a.type === 'INCOME' || a.type === 'EXPENSE') ? 'INCOME_STATEMENT' : 'BALANCE_SHEET'),
+        allowManualEntry: a.allowManualEntry !== false,
+        notes: a.notes ?? null,
         children: [], level: 0,
         _count: a._count ?? { children: 0, transactions: 0 },
       }));
@@ -185,6 +207,8 @@ export function PlanCuentasView() {
   }, [flatList, searchTerm]);
 
   const getTypeLabel = (t: AccountType) => ACCOUNT_TYPES.find(at => at.value === t)?.label ?? t;
+  const getSubtypeLabel = (subtype: AccountSubtype) => ACCOUNT_SUBTYPES.find(item => item.value === subtype)?.label ?? subtype;
+  const getDetailTypeLabel = (detailType: AccountDetailType) => ACCOUNT_DETAIL_TYPES.find(item => item.value === detailType)?.label ?? detailType;
 
   const toggleExpand = (id: string) => {
     setExpandedIds(prev => {
@@ -224,7 +248,11 @@ export function PlanCuentasView() {
     setEditingAccount(null);
     const type = 'ASSET';
     const code = await generateCode(type, parentId);
-    setFormData({ code, name: '', type, parentId, currency: 'USD' });
+    setFormData({
+      code, name: '', type, parentId, currency: 'USD',
+      subtype: parentId ? 'SUBACCOUNT' : 'DETAIL_ACCOUNT',
+      detailType: 'BALANCE_SHEET', allowManualEntry: true, isActive: true, notes: '',
+    });
     setDialogOpen(true);
   };
 
@@ -233,6 +261,9 @@ export function PlanCuentasView() {
     setFormData({
       code: account.code, name: account.name, type: account.type,
       parentId: account.parentId ?? undefined, currency: account.currency,
+      subtype: account.subtype, detailType: account.detailType,
+      allowManualEntry: account.allowManualEntry, isActive: account.isActive,
+      notes: account.notes ?? '',
     });
     setDialogOpen(true);
   };
@@ -244,7 +275,9 @@ export function PlanCuentasView() {
       const payload = {
         code: formData.code, name: formData.name.trim(),
         type: formData.type, parentId: formData.parentId || null,
-        currency: formData.currency, isActive: true,
+        currency: formData.currency, subtype: formData.subtype,
+        detailType: formData.detailType, allowManualEntry: formData.allowManualEntry,
+        isActive: formData.isActive, notes: formData.notes.trim() || undefined,
       };
       if (editingAccount) {
         await contabilidadService.updateAccount(editingAccount.id, payload);
@@ -295,24 +328,9 @@ export function PlanCuentasView() {
   const handleExport = async () => {
     try {
       const raw = await contabilidadService.exportAccounts();
-      const list = Array.isArray(raw) ? raw : (raw as any)?.data ?? flatList;
-      const headers = ['code', 'name', 'type', 'parentCode', 'balance', 'currency', 'isActive'];
-      const rows = list.map((a: any) => [
-        a.code, a.name, a.type,
-        a.parentId ? flatList.find(f => f.id === a.parentId)?.code ?? '' : '',
-        a.balance, a.currency, a.isActive ? 'true' : 'false',
-      ]);
-      const csv = [
-        headers.join(','),
-        ...rows.map((r: string[]) => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')),
-      ].join('\r\n');
-      const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'plan_cuentas.csv';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const rows = Array.isArray(raw) ? raw : (raw as any)?.data;
+      if (!Array.isArray(rows) || rows.length === 0) throw new Error('El servidor no devolvió cuentas para exportar');
+      downloadCsv('plan_cuentas.csv', rows);
       toast.success('Plan de cuentas exportado');
     } catch (e: any) {
       toast.error(e?.message || 'Error al exportar');
@@ -324,30 +342,36 @@ export function PlanCuentasView() {
     setImporting(true);
     try {
       const text = await importFile.text();
-      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-      const headerLine = lines[0];
-      const delimiter = headerLine.includes(';') ? ';' : ',';
-      const headers = headerLine.split(delimiter).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
-      const rows = lines.slice(1).map(line => {
-        const cols = line.split(delimiter).map(c => c.replace(/^"|"$/g, '').trim());
+      const csvRows = parseCsvText(text);
+      const headers = (csvRows[0] ?? []).map(header => header.trim().toLowerCase());
+      const rows = csvRows.slice(1).map(cols => {
         const row: Record<string, string> = {};
-        headers.forEach((h, i) => { row[h] = cols[i] ?? ''; });
+        headers.forEach((header, index) => { row[header] = cols[index] ?? ''; });
         return row;
       });
 
-      const valid: any[] = [];
+      const valid: ChartAccountCsvRow[] = [];
       const errors: string[] = [];
 
       for (let idx = 0; idx < rows.length; idx++) {
         const r = rows[idx];
         const rowNum = idx + 2;
-        const name = r.name || r.nombre || '';
-        const code = r.code || r.codigo || '';
-        const typeRaw = (r.type || r.tipo || 'ASSET').toUpperCase();
-        const type = ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'].includes(typeRaw) ? typeRaw : 'ASSET';
-        const currency = (r.currency || r.moneda || 'USD').toUpperCase() as Currency;
-        if (!name || !code) { errors.push(`Fila ${rowNum}: nombre y código son obligatorios`); continue; }
-        valid.push({ code, name, type, currency, isActive: true });
+        const nombre = r.nombre || r.name || '';
+        const codigo = r.codigo || r.code || '';
+        const tipoCuenta = r.tipo_cuenta || r.type || r.tipo || 'ASSET';
+        const permiteManual = r.permite_manual ?? r.allowmanualentry ?? '1';
+        const activa = r.activa ?? r.isactive ?? '1';
+        if (!nombre || !codigo) { errors.push(`Fila ${rowNum}: nombre y código son obligatorios`); continue; }
+        valid.push({
+          codigo, nombre, tipo_cuenta: tipoCuenta,
+          subtipo: r.subtipo || r.subtype || 'Cuenta de detalle',
+          tipo_detalle: r.tipo_detalle || r.detailtype || '',
+          moneda: (r.moneda || r.currency || 'NIO').toUpperCase(),
+          codigo_padre: r.codigo_padre || r.parentcode || '',
+          permite_manual: permiteManual,
+          activa,
+          notas: r.notas || r.notes || '',
+        });
       }
 
       if (valid.length > 0) {
@@ -574,6 +598,14 @@ export function PlanCuentasView() {
                   </Badge>
                 </div>
                 <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Subtipo</p>
+                  <p className="text-sm">{getSubtypeLabel(selectedAccount.subtype)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Tipo de detalle</p>
+                  <p className="text-sm">{getDetailTypeLabel(selectedAccount.detailType)}</p>
+                </div>
+                <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Moneda</p>
                   <p className="text-sm">{selectedAccount.currency}</p>
                 </div>
@@ -583,6 +615,18 @@ export function PlanCuentasView() {
                     {selectedAccount.isActive ? 'Activo' : 'Inactivo'}
                   </Badge>
                 </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Captura manual</p>
+                  <Badge variant={selectedAccount.allowManualEntry ? 'default' : 'secondary'}>
+                    {selectedAccount.allowManualEntry ? 'Permitida' : 'No permitida'}
+                  </Badge>
+                </div>
+                {selectedAccount.notes && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Notas</p>
+                    <p className="text-sm whitespace-pre-wrap">{selectedAccount.notes}</p>
+                  </div>
+                )}
                 <Separator />
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Saldo Actual</p>
@@ -707,6 +751,50 @@ export function PlanCuentasView() {
                 </Select>
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="subtype">Subtipo</Label>
+                <Select value={formData.subtype} onValueChange={(value: AccountSubtype) => setFormData(previous => ({ ...previous, subtype: value }))}>
+                  <SelectTrigger id="subtype"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ACCOUNT_SUBTYPES.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="detailType">Tipo de detalle</Label>
+                <Select value={formData.detailType} onValueChange={(value: AccountDetailType) => setFormData(previous => ({ ...previous, detailType: value }))}>
+                  <SelectTrigger id="detailType"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ACCOUNT_DETAIL_TYPES.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div>
+                <Label htmlFor="allowManualEntry">Permite captura manual</Label>
+                <p className="text-xs text-muted-foreground">Habilita esta cuenta para asientos manuales.</p>
+              </div>
+              <Switch id="allowManualEntry" checked={formData.allowManualEntry} onCheckedChange={(checked) => setFormData(previous => ({ ...previous, allowManualEntry: checked }))} />
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div>
+                <Label htmlFor="isActive">Cuenta activa</Label>
+                <p className="text-xs text-muted-foreground">Las cuentas inactivas no se pueden usar en nuevos movimientos.</p>
+              </div>
+              <Switch id="isActive" checked={formData.isActive} onCheckedChange={(checked) => setFormData(previous => ({ ...previous, isActive: checked }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notas</Label>
+              <textarea
+                id="notes"
+                value={formData.notes}
+                onChange={(event) => setFormData(previous => ({ ...previous, notes: event.target.value }))}
+                className="flex min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring"
+                placeholder="Observaciones de la cuenta"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancelar</Button>
@@ -753,7 +841,7 @@ export function PlanCuentasView() {
               Importar Cuentas
             </DialogTitle>
             <DialogDescription>
-              Sube un archivo CSV con las columnas: code, name, type, currency. El tipo puede ser: ASSET, LIABILITY, EQUITY, INCOME, EXPENSE.
+              Usa la plantilla con las columnas: {CHART_ACCOUNT_CSV_HEADERS.join(', ')}. Los campos permite_manual y activa usan 1 para sí y 0 para no.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -765,14 +853,7 @@ export function PlanCuentasView() {
               />
             </div>
             <Button variant="outline" size="sm" className="w-full" onClick={() => {
-              const csv = 'code,name,type,currency\r\n"100001","Caja General","ASSET","USD"\r\n"200001","Proveedores","LIABILITY","NIO"';
-              const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-              const link = document.createElement('a');
-              link.href = URL.createObjectURL(blob);
-              link.download = 'plantilla_cuentas.csv';
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
+              downloadCsv('plantilla_cuentas.csv', templateRows());
             }}>
               <FileSpreadsheet className="w-4 h-4 mr-1" /> Descargar Plantilla
             </Button>
