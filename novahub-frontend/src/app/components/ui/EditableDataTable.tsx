@@ -325,7 +325,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         </div>
       )}
     >
-    <div className="sales-data-table w-full min-w-0 max-w-full space-y-4" onPaste={handlePaste}>
+    <div className="sales-data-table w-full min-w-0 max-w-full space-y-4" data-tour="sales-data-table" onPaste={handlePaste}>
       {/* Bulk Actions Toolbar */}
       <AnimatePresence>
         {selectedIds.size > 0 && (

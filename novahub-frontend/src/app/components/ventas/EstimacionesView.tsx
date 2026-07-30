@@ -22,6 +22,7 @@ import { storageService } from '../../services/storage.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
+import { SalesViewTutorial } from './SalesViewTutorial';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -658,7 +659,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                   {pricingMode === 'individual' && (
                     <div className="col-span-2 mt-0 grid min-w-0 grid-cols-2 items-start gap-1.5 self-start text-[10px]">
                       <label className="relative flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
-                        <span className="absolute -top-5 left-0 h-3 whitespace-nowrap text-[9px] leading-3 text-muted-foreground">IVA</span>
                         <span className="flex h-8 w-full items-center gap-1.5 rounded-md bg-muted/30 px-2">
                           <input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
                             const nextItems = [...(localDoc.items || [])];
@@ -671,7 +671,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         </span>
                       </label>
                       <label className="relative flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
-                        <span className="absolute -top-5 left-0 h-3 whitespace-nowrap text-[9px] leading-3 text-muted-foreground">Descuento (%)</span>
                         <Input type="number" min="0" max="100" value={item.discount || ''} onChange={(event) => {
                           const nextItems = [...(localDoc.items || [])];
                           nextItems[idx] = { ...nextItems[idx], discount: Number(event.target.value) || 0 };
@@ -779,10 +778,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div>
-          <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Cotizaciones</h2>
+          <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Cotizaciones</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Negociaciones en tiempo real sin modals ni esperas.</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
+            <SalesViewTutorial view="quotes" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />

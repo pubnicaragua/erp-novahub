@@ -13,6 +13,7 @@ import { invoicesService } from '../../services/ventas.service';
 import { supplierInvoicesService } from '../../services/compras.service';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme';
 
 interface Props {
   incomes: any[];
@@ -23,22 +24,7 @@ interface Props {
   onNavigate?: (tab: string) => void;
 }
 
-const AXIS_TICK = { fontSize: 11, fill: '#9ca3af', fontWeight: 500 }
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899']
-
-function TooltipCard({ active, payload, label, formatter }: any) {
-  if (!active || !payload?.length) return null
-  return (
-    <div style={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, padding: '10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
-      <p style={{ fontWeight: 700, fontSize: 12, marginBottom: 4, color: 'hsl(var(--foreground))' }}>{label}</p>
-      {payload.map((entry: any, i: number) => (
-        <p key={i} style={{ fontSize: 11, color: entry.color, fontWeight: 600, margin: 0 }}>
-          {entry.name}: {formatter ? formatter(entry.value) : entry.value}
-        </p>
-      ))}
-    </div>
-  )
-}
 
 export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, accounts, onNavigate }: Props) {
   const { displayCurrency, convertAmount } = useCurrency();
@@ -140,23 +126,23 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardHeader className="pb-2 px-5 pt-4">
             <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Cobros vs Pagos por Mes</CardTitle>
             <p className="text-[10px] text-muted-foreground">Barras: ingresos (verde) y gastos (rojo). Línea naranja: resultado neto.</p>
           </CardHeader>
-          <CardContent className="px-2 pb-3">
+          <CardContent className="min-w-0 overflow-visible px-2 pb-3">
             <ResponsiveContainer width="100%" height={320}>
-              <ComposedChart data={monthlyData} margin={{ top: 8, right: 16, left: -8, bottom: 0 }}>
+              <ComposedChart data={monthlyData} margin={{ top: 12, right: 20, left: 8, bottom: 14 }}>
                 <defs>
                   <linearGradient id="incG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.9} /><stop offset="100%" stopColor="#10b981" stopOpacity={0.6} /></linearGradient>
                   <linearGradient id="expG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef4444" stopOpacity={0.9} /><stop offset="100%" stopColor="#ef4444" stopOpacity={0.6} /></linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                <XAxis dataKey="month" tick={AXIS_TICK} tickLine={false} axisLine={false} />
-                <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={56} />
-                <Tooltip content={<TooltipCard formatter={fmt} />} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                <Legend verticalAlign="bottom" height={28} formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))', fontWeight: 600, fontSize: 11 }}>{value}</span>} />
+                <CartesianGrid strokeDasharray="4 4" stroke={FINANCE_GRID} opacity={0.45} vertical={false} />
+                <XAxis dataKey="month" tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickMargin={8} />
+                <YAxis tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={64} />
+                <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <Legend verticalAlign="bottom" height={28} formatter={(value: string) => <span style={{ color: 'var(--foreground)', fontWeight: 600, fontSize: 11 }}>{value}</span>} />
                 <Bar dataKey="income" name="Ingresos" fill="url(#incG)" radius={[5, 5, 0, 0]} maxBarSize={36} onClick={(data: any) => toast.info(`Ingresos ${data.month}: ${fmt(data.income)}`)} style={{ cursor: 'pointer' }} />
                 <Bar dataKey="expense" name="Gastos" fill="url(#expG)" radius={[5, 5, 0, 0]} maxBarSize={36} onClick={(data: any) => toast.info(`Gastos ${data.month}: ${fmt(data.expense)}`)} style={{ cursor: 'pointer' }} />
                 <Line dataKey="net" name="Resultado Neto" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b', strokeWidth: 0 }} connectNulls />
@@ -165,21 +151,21 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardHeader className="pb-2 px-5 pt-4">
             <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Flujo de Caja Proyectado</CardTitle>
             <p className="text-[10px] text-muted-foreground">Proyección a 30, 60 y 90 días según recurrentes</p>
           </CardHeader>
-          <CardContent className="px-2 pb-3">
+          <CardContent className="min-w-0 overflow-visible px-2 pb-3">
             <ResponsiveContainer width="100%" height={320}>
-              <ComposedChart data={projectData} margin={{ top: 8, right: 16, left: -8, bottom: 0 }}>
+              <ComposedChart data={projectData} margin={{ top: 12, right: 20, left: 8, bottom: 14 }}>
                 <defs>
                   <linearGradient id="projG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#06b6d4" stopOpacity={0.25} /><stop offset="100%" stopColor="#06b6d4" stopOpacity={0} /></linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} />
-                <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={56} />
-                <Tooltip content={<TooltipCard formatter={fmt} />} cursor={{ stroke: '#06b6d4', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <CartesianGrid strokeDasharray="4 4" stroke={FINANCE_GRID} opacity={0.45} vertical={false} />
+                <XAxis dataKey="label" tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickMargin={8} />
+                <YAxis tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={64} />
+                <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#06b6d4', strokeWidth: 1, strokeDasharray: '4 4' }} />
                 <Area dataKey="amount" fill="url(#projG)" stroke="#06b6d4" strokeWidth={2.5} type="monotone" dot={{ r: 4, fill: '#06b6d4', strokeWidth: 0 }} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -188,18 +174,18 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2 rounded-2xl border-border/40 bg-card shadow-sm">
+        <Card className="min-w-0 lg:col-span-2 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardHeader className="pb-2 px-5 pt-4">
             <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">CxC y CxP por Vencimiento</CardTitle>
           </CardHeader>
-          <CardContent className="px-2 pb-3">
+          <CardContent className="min-w-0 overflow-visible px-2 pb-3">
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={agingData} layout="vertical" margin={{ top: 8, right: 16, left: -8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" horizontal={false} />
-                <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} />
-                <YAxis dataKey="label" type="category" tick={{ ...AXIS_TICK, fill: 'hsl(var(--foreground))', fontWeight: 600 }} width={88} />
-                <Tooltip content={<TooltipCard formatter={fmt} />} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                <Legend verticalAlign="bottom" height={28} formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))', fontWeight: 600, fontSize: 11 }}>{value}</span>} />
+              <BarChart data={agingData} layout="vertical" margin={{ top: 8, right: 20, left: 8, bottom: 14 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke={FINANCE_GRID} opacity={0.45} horizontal={false} />
+                <XAxis type="number" tick={FINANCE_AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} tickMargin={8} />
+                <YAxis dataKey="label" type="category" tick={{ ...FINANCE_AXIS_TICK, fill: 'var(--foreground)', fontWeight: 600 }} width={96} />
+                <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <Legend verticalAlign="bottom" height={28} formatter={(value: string) => <span style={{ color: 'var(--foreground)', fontWeight: 600, fontSize: 11 }}>{value}</span>} />
                 <Bar dataKey="cxc" name="Por Cobrar" fill="#10b981" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`CxC ${data.label}: ${fmt(data.cxc)}`)} style={{ cursor: 'pointer' }} />
                 <Bar dataKey="cxp" name="Por Pagar" fill="#ef4444" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`CxP ${data.label}: ${fmt(data.cxp)}`)} style={{ cursor: 'pointer' }} />
               </BarChart>
@@ -207,20 +193,20 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardHeader className="pb-2 px-5 pt-4">
             <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Gastos por Categoría</CardTitle>
           </CardHeader>
-          <CardContent className="px-2 pb-3">
+          <CardContent className="min-w-0 overflow-visible px-2 pb-3">
             {categoryData.length === 0 ? (
               <p className="text-xs text-muted-foreground py-12 text-center">Sin datos de gastos</p>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={categoryData} layout="vertical" margin={{ top: 4, right: 16, left: -8, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" horizontal={false} />
-                  <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} />
-                  <YAxis dataKey="name" type="category" tick={{ ...AXIS_TICK, fill: 'hsl(var(--foreground))', fontWeight: 500 }} width={88} />
-                  <Tooltip content={<TooltipCard formatter={fmt} />} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <BarChart data={categoryData} layout="vertical" margin={{ top: 4, right: 20, left: 8, bottom: 14 }}>
+                  <CartesianGrid strokeDasharray="4 4" stroke={FINANCE_GRID} opacity={0.45} horizontal={false} />
+                  <XAxis type="number" tick={FINANCE_AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} tickMargin={8} />
+                  <YAxis dataKey="name" type="category" tick={{ ...FINANCE_AXIS_TICK, fill: 'var(--foreground)', fontWeight: 500 }} width={96} />
+                  <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
                   <Bar dataKey="value" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`Gastos ${data.name}: ${fmt(data.value)}`)} style={{ cursor: 'pointer' }}>
                     {categoryData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Bar>

@@ -311,7 +311,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   exit={{ opacity: 0, y: -12 }}
                   transition={{ duration: 0.2 }}
                 >
-                  {activeSection === 'plan-cuentas' && <PlanCuentasView />}
+                  {activeSection === 'plan-cuentas' && <PlanCuentasView isSidebarCollapsed={isSidebarCollapsed} />}
                   {activeSection === 'diario' && <DiarioView />}
                   {activeSection === 'libro-mayor' && <LibroMayorView />}
                   {activeSection === 'balance-comprobacion' && <BalanceComprobacionView />}

@@ -46,10 +46,13 @@ interface CartItem extends PosInvoiceItem {
   productId: string;
   lineTotal: number;
   taxRate: number;
+  discount: number;
   irRate?: number;
   irTaxId?: string | null;
   priceListId?: string;
 }
+
+type PricingMode = 'global' | 'individual';
 
 interface CartSession {
   cart: CartItem[];
@@ -57,6 +60,7 @@ interface CartSession {
   emitDate: string;
   discountPercent: number;
   includeTax: boolean;
+  pricingMode: PricingMode;
 }
 
 interface InvoiceSummary {
@@ -194,6 +198,15 @@ function calculateLineTotal(quantity: number, unitPrice: number) {
   return quantity * unitPrice;
 }
 
+function calculateIndividualLineTotal(item: CartItem) {
+  const gross = Number(item.quantity || 0) * Number(item.unitPrice || 0);
+  const discount = gross * Number(item.discount || 0) / 100;
+  const taxable = Math.max(0, gross - discount);
+  const tax = taxable * Number(item.taxRate || 0) / 100;
+  const ir = taxable * Number(item.irRate || 0) / 100;
+  return taxable + tax - ir;
+}
+
 function normalizeQuantity(value: string, fallback: number) {
   const quantity = Number(value);
   return Number.isFinite(quantity) && quantity >= MIN_QUANTITY ? quantity : fallback;
@@ -210,8 +223,26 @@ function calculateInvoiceSummary(
   discountPercent: number,
   includeTax: boolean,
   irRate = 0,
+  pricingMode: PricingMode = 'global',
 ): InvoiceSummary {
-  const subtotal = cart.reduce((sum, item) => sum + item.lineTotal, 0);
+  const subtotal = cart.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
+  if (pricingMode === 'individual') {
+    const discount = cart.reduce((sum, item) => {
+      const gross = Number(item.quantity || 0) * Number(item.unitPrice || 0);
+      return sum + gross * Number(item.discount || 0) / 100;
+    }, 0);
+    const tax = cart.reduce((sum, item) => {
+      const gross = Number(item.quantity || 0) * Number(item.unitPrice || 0);
+      const taxable = Math.max(0, gross - gross * Number(item.discount || 0) / 100);
+      return sum + taxable * Number(item.taxRate || 0) / 100;
+    }, 0);
+    const ir = cart.reduce((sum, item) => {
+      const gross = Number(item.quantity || 0) * Number(item.unitPrice || 0);
+      const taxable = Math.max(0, gross - gross * Number(item.discount || 0) / 100);
+      return sum + taxable * Number(item.irRate || 0) / 100;
+    }, 0);
+    return { subtotal, tax, discount, ir, total: subtotal + tax - discount - ir };
+  }
   const discount = subtotal * (discountPercent / 100);
   const taxableSubtotal = Math.max(0, subtotal - discount);
   const tax = includeTax ? taxableSubtotal * (NICARAGUA_IVA_RATE / 100) : 0;
@@ -233,6 +264,8 @@ function buildInvoiceItems(cart: CartItem[]): PosInvoiceItem[] {
     quantity: item.quantity,
     unitPrice: item.unitPrice,
     priceListId: item.priceListId,
+    taxRate: item.taxRate,
+    discount: item.discount,
     irRate: item.irRate,
     irTaxId: item.irTaxId,
   }));
@@ -266,6 +299,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const [selectedPriceListId, setSelectedPriceListId] = useState('');
   const [emitDate, setEmitDate] = useState(getTodayInputDate());
   const [discountPercent, setDiscountPercent] = useState(0);
+  const [pricingMode, setPricingMode] = useState<PricingMode>('global');
   const [irRate, setIrRate] = useState(0);
   const [irTaxId, setIrTaxId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState('');
@@ -320,6 +354,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     return entry ? getSalesUnitPrice(entry, paymentCurrency, Number(activeSession?.exchangeRateUSD || 1)) : undefined;
   };
 
+  const getCatalogPrice = (product: PosProduct) => {
+    if (product.itemType === 'SERVICE') return Number(product.salePrice || 0);
+    return getConfiguredPrice(selectedPriceListId, product.id);
+  };
+
   const handleRegisterChange = (newRegisterId: string, skipSave = false) => {
     // Guardar sesión de la caja actual
     if (selectedRegisterId && !skipSave) {
@@ -328,7 +367,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         selectedCustomerId,
         emitDate,
         discountPercent,
-        includeTax
+        includeTax,
+        pricingMode,
       });
     }
 
@@ -340,6 +380,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       setEmitDate(savedSession.emitDate);
       setDiscountPercent(savedSession.discountPercent);
       setIncludeTax(savedSession.includeTax);
+      setPricingMode(savedSession.pricingMode || 'global');
     } else {
       // Estado fresco
       setCart([]);
@@ -347,6 +388,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       setEmitDate(getTodayInputDate());
       setDiscountPercent(0);
       setIncludeTax(true);
+      setPricingMode('global');
     }
 
     setSelectedRegisterId(newRegisterId);
@@ -482,10 +524,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   };
 
   const addItem = (product: PosProduct) => {
-    const configuredPrice = getConfiguredPrice(selectedPriceListId, product.id);
-    if (configuredPrice === undefined) {
-      toast.error(`El producto "${product.name}" no tiene precio configurado en la lista seleccionada.`);
-      return;
+    const isService = product.itemType === 'SERVICE';
+    const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id);
+    const priceMissing = !isService && configuredPrice === undefined;
+    if (priceMissing) {
+      toast.warning(`El producto "${product.name}" no tiene precio en esta lista. Puedes agregarlo, pero selecciona otra lista antes de emitir.`);
     }
     setCart((prev) => {
       const existing = prev.find((i) => i.productId === product.id);
@@ -530,12 +573,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
           productId: product.id,
           description: product.name,
           quantity: 1,
-          unitPrice: configuredPrice,
-          priceListId: selectedPriceListId,
-          priceMissing: false,
-          // El IVA del POS es la regla fiscal nacional, no el valor del catálogo.
+          unitPrice: configuredPrice ?? 0,
+          priceListId: isService ? undefined : selectedPriceListId,
+          priceMissing,
+          discount: 0,
+          // En modo global este valor se ignora; en modo por producto parte con IVA.
           taxRate: NICARAGUA_IVA_RATE,
-          lineTotal: calculateLineTotal(1, configuredPrice),
+          lineTotal: calculateLineTotal(1, configuredPrice ?? 0),
         },
       ];
     });
@@ -569,10 +613,32 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     setCart((prev) => prev.filter((item) => item.productId !== productId));
   };
 
+  const changePricingMode = (mode: PricingMode) => {
+    if (mode === pricingMode) return;
+    if (mode === 'individual') {
+      setDiscountPercent(0);
+      setCart((current) => current.map((item) => ({
+        ...item,
+        taxRate: Number(item.taxRate || 0) > 0 ? Number(item.taxRate) : (includeTax ? NICARAGUA_IVA_RATE : 0),
+      })));
+    } else {
+      setIncludeTax(cart.some((item) => Number(item.taxRate || 0) > 0));
+      setDiscountPercent(0);
+    }
+    setPricingMode(mode);
+  };
+
+  const updateCartItemCharges = (productId: string, changes: Partial<Pick<CartItem, 'taxRate' | 'discount'>>) => {
+    setCart((current) => current.map((item) => item.productId === productId
+      ? { ...item, ...changes, taxRate: Math.min(100, Math.max(0, Number(changes.taxRate ?? item.taxRate) || 0)), discount: Math.min(100, Math.max(0, Number(changes.discount ?? item.discount) || 0)) }
+      : item));
+  };
+
   const summary = useMemo(
-    () => calculateInvoiceSummary(cart, discountPercent, includeTax, irRate),
-    [cart, discountPercent, includeTax, irRate],
+    () => calculateInvoiceSummary(cart, discountPercent, includeTax, irRate, pricingMode),
+    [cart, discountPercent, includeTax, irRate, pricingMode],
   );
+  const missingPriceMessage = useMemo(() => getMissingSalesPriceMessage(cart), [cart]);
 
   const selectedRegister = registers.find((r) => r.id === selectedRegisterId);
 
@@ -583,8 +649,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     setSelectedCustomerId(customerId);
     setSelectedPriceListId(nextListId);
     setCart((current) => current.map((item) => {
-      const price = getConfiguredPrice(nextListId, item.productId);
-                        return price === undefined ? { ...item, priceListId: nextListId, unitPrice: 0, lineTotal: 0, priceMissing: true } : { ...item, priceListId: nextListId, unitPrice: price, lineTotal: calculateLineTotal(item.quantity, price), priceMissing: false };
+      const isService = productsById.get(item.productId)?.itemType === 'SERVICE';
+      const price = isService ? Number(productsById.get(item.productId)?.salePrice || item.unitPrice || 0) : getConfiguredPrice(nextListId, item.productId);
+      return price === undefined
+        ? { ...item, priceListId: nextListId, unitPrice: 0, lineTotal: 0, priceMissing: true }
+        : { ...item, priceListId: isService ? undefined : nextListId, unitPrice: price, lineTotal: calculateLineTotal(item.quantity, price), priceMissing: false };
     }));
   };
 
@@ -603,9 +672,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       toast.error('La caja no tiene una sesión activa');
       return;
     }
-    const priceMessage = getMissingSalesPriceMessage(cart);
-    if (priceMessage) {
-      toast.error(priceMessage);
+    if (missingPriceMessage) {
+      toast.error(missingPriceMessage);
       return;
     }
     setPayments([{ method: 'CASH', amount: 0 }]);
@@ -620,9 +688,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const submitPayment = async (confirmedDuplicate = false) => {
     if (submittingRef.current) return;
     if (!activeSession) return;
-    const priceMessage = getMissingSalesPriceMessage(cart);
-    if (priceMessage) {
-      toast.error(priceMessage);
+    if (missingPriceMessage) {
+      toast.error(missingPriceMessage);
       return;
     }
     const totalInPaymentCurrency = paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total;
@@ -649,6 +716,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         customCustomerName: selectedCustomerId ? undefined : GENERAL_CUSTOMER_NAME,
         date: emitDate,
         discountPercent: discountPercent || undefined,
+        pricingMode,
         irRate: irRate || undefined,
         irTaxId: irTaxId || undefined,
         priceListId: selectedPriceListId || undefined,
@@ -717,6 +785,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const clearCart = () => {
     setCart([]);
     setDiscountPercent(0);
+    setPricingMode('global');
   };
 
   if (loading) {
@@ -897,19 +966,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                       emptyMessage="No se encontraron clientes"
                       className="!h-11 rounded-xl text-sm font-normal"
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Lista de precios</Label>
-                    <Select value={selectedPriceListId} onValueChange={(value) => {
-                      setSelectedPriceListId(value);
-                      setCart((current) => current.map((item) => {
-                        const price = getConfiguredPrice(value, item.productId);
-                        return price === undefined ? { ...item, priceListId: value, unitPrice: 0, lineTotal: 0, priceMissing: true } : { ...item, priceListId: value, unitPrice: price, lineTotal: calculateLineTotal(item.quantity, price), priceMissing: false };
-                      }));
-                    }} disabled={isRegisterDisabled || !priceLists.length}>
-                      <SelectTrigger className="!h-11 rounded-xl"><SelectValue placeholder="Seleccionar lista" /></SelectTrigger>
-                      <SelectContent>{priceLists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}</SelectContent>
-                    </Select>
+                    <p className="text-[10px] text-muted-foreground">
+                      Lista de precios: <span className="font-semibold text-foreground">{priceLists.find((list) => sameSalesId(list.id, selectedPriceListId))?.name || 'No configurada'}</span>
+                    </p>
                   </div>
                   <div className="space-y-1.5" data-tour="pos-date">
                     <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Fecha de Emisión</Label>
@@ -1019,7 +1078,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                                 </div>
                                 {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
                               </td>
-                              <td className="px-2 sm:px-3 py-2.5 text-right font-mono whitespace-nowrap">{formatCurrency(prod.salePrice)}</td>
+                              <td className="px-2 sm:px-3 py-2.5 text-right font-mono whitespace-nowrap">
+                                {getCatalogPrice(prod) === undefined ? <span className="text-[10px] font-black uppercase text-rose-500">Sin precio</span> : formatCurrency(getCatalogPrice(prod))}
+                              </td>
                               <td data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center">
                                 <Button size="sm" variant="ghost" onClick={() => addItem(prod)}
                                   disabled={isRegisterDisabled || (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
@@ -1061,7 +1122,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                                       </Badge>
                                     )}
                                   </div>
-                                  <span className="font-mono text-sm font-black text-primary">{formatCurrency(prod.salePrice)}</span>
+                                  <span className="font-mono text-sm font-black text-primary">{getCatalogPrice(prod) === undefined ? 'Sin precio' : formatCurrency(getCatalogPrice(prod))}</span>
                                 </div>
                                 <h4 className="truncate text-sm font-black">{prod.name}</h4>
                                 <p className="mt-1 line-clamp-2 min-h-8 text-[11px] leading-4 text-muted-foreground">
@@ -1108,6 +1169,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                       <thead>
                         <tr className="bg-muted/30 border-b border-border/30">
                           <th className="px-3 py-2.5 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Descripción</th>
+                          <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">IVA</th>
+                          <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Descuento (%)</th>
                           <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Cant</th>
                           <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Precio Unit.</th>
                           <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Subtotal</th>
@@ -1118,23 +1181,53 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                         {cart.map((item) => (
                           <tr key={item.productId} className="hover:bg-muted/20 transition-colors">
                             <td className="px-3 py-2 font-bold"><div className="flex min-w-0 flex-wrap items-center gap-2"><span className="min-w-0 flex-1">{item.description}</span><SalesLinePriceListSelect productId={item.productId} productCode={productsById.get(item.productId)?.code} itemType={productsById.get(item.productId)?.itemType} value={item.priceListId} defaultPriceListId={selectedPriceListId} currency={paymentCurrency} exchangeRate={Number(activeSession?.exchangeRateUSD || 1)} disabled={isRegisterDisabled} onChange={(priceListId, result) => { setCart((current) => current.map((line) => line.productId === item.productId ? { ...line, priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, lineTotal: calculateLineTotal(line.quantity, result.unitPrice || 0) } : line)); }} /><SalesIrSelector value={item.irTaxId} rate={Number(item.irRate || 0)} compact disabled={isRegisterDisabled} onChange={(option) => { setCart((current) => current.map((line) => line.productId === item.productId ? { ...line, irTaxId: option?.id || null, irRate: Number(option?.rate || 0) } : line)); }} />{item.priceMissing && <PriceMissingBadge className="basis-full" />}</div></td>
+                            <td className="px-3 py-2 text-center">
+                              {pricingMode === 'individual' ? (
+                                <label className="inline-flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
+                                  <input
+                                    type="checkbox"
+                                    checked={Number(item.taxRate || 0) > 0}
+                                    onChange={(event) => updateCartItemCharges(item.productId, { taxRate: event.target.checked ? NICARAGUA_IVA_RATE : 0 })}
+                                    disabled={isRegisterDisabled}
+                                    className="size-3.5 accent-primary"
+                                  />
+                                  {Number(item.taxRate || 0) > 0 ? `${Number(item.taxRate)}%` : 'No'}
+                                </label>
+                              ) : <span className="text-[10px] text-muted-foreground">Global</span>}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {pricingMode === 'individual' ? (
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  value={item.discount || ''}
+                                  onChange={(event) => updateCartItemCharges(item.productId, { discount: Number(event.target.value) || 0 })}
+                                  disabled={isRegisterDisabled}
+                                  className="ml-auto h-7 w-16 rounded-lg text-right text-xs font-mono"
+                                  placeholder="0"
+                                />
+                              ) : <span className="text-[10px] text-muted-foreground">Global</span>}
+                            </td>
                             <td data-actions-column="compact" className="px-3 py-2 text-center">
-                              <Input
-                                type="number"
-                                value={item.quantity}
-                                onChange={(e) =>
-                                  updateQty(
-                                    item.productId,
-                                    normalizeQuantity(e.target.value, item.quantity),
-                                  )
-                                }
-                                disabled={isRegisterDisabled}
-                                className="h-7 w-16 rounded-lg text-center text-xs font-mono"
-                                min={1}
-                              />
+                              <div className="mx-auto w-12 max-w-12">
+                                <Input
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) =>
+                                    updateQty(
+                                      item.productId,
+                                      normalizeQuantity(e.target.value, item.quantity),
+                                    )
+                                  }
+                                  disabled={isRegisterDisabled}
+                                  className="!h-7 !w-12 !max-w-12 rounded-lg px-1 text-center text-xs font-mono"
+                                  min={1}
+                                />
+                              </div>
                             </td>
                             <td className="px-3 py-2 text-right font-mono">{formatCurrency(item.unitPrice)}</td>
-                            <td className="px-3 py-2 text-right font-mono font-bold">{formatCurrency(item.lineTotal)}</td>
+                            <td className="px-3 py-2 text-right font-mono font-bold">{formatCurrency(pricingMode === 'individual' ? calculateIndividualLineTotal(item) : item.lineTotal)}</td>
                             <td className="px-3 py-2 text-center">
                               <Button variant="ghost" onClick={() => removeItem(item.productId)}
                                 disabled={isRegisterDisabled}
@@ -1158,23 +1251,36 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                 <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
                   <Calculator className="size-4 text-primary" /> Resumen Financiero
                 </h3>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Aplicar Descuento (%)</Label>
-                  <Input
-                    type="number"
-                    value={discountPercent || ''}
-                    onChange={(e) => setDiscountPercent(normalizeDiscountPercent(e.target.value))}
-                    placeholder="0"
-                    className="h-10 rounded-xl"
-                    min={0}
-                    max={100}
-                    disabled={isRegisterDisabled}
-                  />
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-muted/20 p-2">
+                  <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Aplicar impuestos/descuentos:</span>
+                  <Button type="button" size="sm" variant={pricingMode === 'global' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => changePricingMode('global')} disabled={isRegisterDisabled}>Global</Button>
+                  <Button type="button" size="sm" variant={pricingMode === 'individual' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => changePricingMode('individual')} disabled={isRegisterDisabled}>Por producto</Button>
                 </div>
-                  <div className="flex items-center justify-between pt-2">
-                  <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Incluir IVA</Label>
-                  <Switch checked={includeTax} onCheckedChange={setIncludeTax} disabled={isRegisterDisabled} />
-                </div>
+                {pricingMode === 'global' ? (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Aplicar Descuento (%)</Label>
+                      <Input
+                        type="number"
+                        value={discountPercent || ''}
+                        onChange={(e) => setDiscountPercent(normalizeDiscountPercent(e.target.value))}
+                        placeholder="0"
+                        className="h-10 rounded-xl"
+                        min={0}
+                        max={100}
+                        disabled={isRegisterDisabled}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between pt-2">
+                      <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Incluir IVA</Label>
+                      <Switch checked={includeTax} onCheckedChange={setIncludeTax} disabled={isRegisterDisabled} />
+                    </div>
+                  </>
+                ) : (
+                  <p className="rounded-lg bg-primary/5 px-3 py-2 text-[11px] text-muted-foreground">
+                    Configura el IVA y el descuento directamente en cada producto o servicio.
+                  </p>
+                )}
                 <div className="space-y-2 pt-2 border-t border-border/30">
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Subtotal Bruto:</span>
@@ -1199,7 +1305,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                   size="lg"
                   data-tour="pos-pay"
                   onClick={handlePay}
-                  disabled={submitting || cart.length === 0 || isRegisterDisabled}
+                  disabled={submitting || cart.length === 0 || isRegisterDisabled || Boolean(missingPriceMessage)}
                   className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest gap-2 shadow-lg shadow-primary/20"
                 >
                   {submitting ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}

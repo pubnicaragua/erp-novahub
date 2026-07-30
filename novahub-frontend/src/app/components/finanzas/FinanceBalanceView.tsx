@@ -20,6 +20,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell, LabelList
 } from 'recharts';
+import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme';
 
 interface FinanceBalanceViewProps {
   incomes: any[];
@@ -1068,34 +1069,27 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
       </div>
 
       <div id="balance-monthly-chart">
-        <Card className="border-border/50">
+        <Card className="min-w-0 border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
               <BarChart3 className="size-4 text-primary" />
               {viewType === 'solo-ingresos' ? 'Ingresos por Mes' : viewType === 'solo-gastos' ? 'Gastos por Mes' : viewType === 'recurrentes' ? 'Recurrentes por Mes' : 'Ingresos vs Gastos por Mes'}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-w-0 overflow-visible">
             {monthlyData.length === 0 ? (
               <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Sin datos para el rango seleccionado</div>
             ) : (
               <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={monthlyData} barGap={4} margin={{ top: 12, right: 16, left: -8, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                  <XAxis dataKey="month" tick={{fontSize:11, fill:'#6b7280', fontWeight:500}} tickLine={false} axisLine={false} />
-                  <YAxis tick={{fontSize:11, fill:'#6b7280', fontWeight:500}} tickLine={false} axisLine={false} tickFormatter={(v: number) => sym + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'K' : v.toFixed(0))} width={56} />
+                <BarChart data={monthlyData} barGap={4} margin={{ top: 12, right: 20, left: 8, bottom: 14 }}>
+                  <CartesianGrid strokeDasharray="4 4" stroke={FINANCE_GRID} opacity={0.45} vertical={false} />
+                  <XAxis dataKey="month" tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickMargin={8} />
+                  <YAxis tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => sym + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'K' : v.toFixed(0))} width={64} />
                   <Tooltip content={({active, payload, label}: any) => {
                     if (!active || !payload?.length) return null
-                    return (
-                      <div style={{background:'#ffffff', border:'1px solid #e5e7eb', borderRadius:12, padding:'10px 14px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)'}}>
-                        <p style={{fontWeight:700, fontSize:12, marginBottom:4, color:'#111827'}}>{label}</p>
-                        {payload.map((entry: any, i: number) => (
-                          <p key={i} style={{fontSize:11, color:entry.color, fontWeight:600, margin:0}}>{entry.name}: {sym}{Number(entry.value).toLocaleString(undefined,{minimumFractionDigits:2})}</p>
-                        ))}
-                      </div>
-                    )
-                  }} cursor={{fill:'rgba(0,0,0,0.03)'}} />
-                  <Legend verticalAlign="bottom" height={28} formatter={(value:string) => <span style={{color:'hsl(var(--foreground))', fontWeight:600, fontSize:11}}>{value}</span>} />
+                    return <FinanceTooltipCard active={active} payload={payload} label={label} formatter={(value) => `${sym}${Number(value).toLocaleString(undefined,{minimumFractionDigits:2})}`} />
+                  }} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ fill: 'var(--muted)', fillOpacity: 0.35 }} />
+                  <Legend verticalAlign="bottom" height={28} formatter={(value:string) => <span style={{color:'var(--foreground)', fontWeight:600, fontSize:11}}>{value}</span>} />
                   {(viewType !== 'solo-gastos') && <Bar dataKey="ingresos" fill="#10b981" radius={[5,5,0,0]} maxBarSize={32} name="Ingresos" />}
                   {(viewType !== 'solo-ingresos') && <Bar dataKey="gastos" fill="#ef4444" radius={[5,5,0,0]} maxBarSize={32} name="Gastos" />}
                 </BarChart>
@@ -1107,23 +1101,24 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
 
       <div id="balance-category-section" className="grid gap-6 lg:grid-cols-2">
         <div id="balance-category-chart">
-          <Card className="border-border/50">
+          <Card className="min-w-0 border-border/50">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
                 <PieChartIcon className="size-4 text-primary" /> Distribución por Categoría
                 <Badge variant="outline" className="text-[9px] ml-auto">{viewType === 'solo-ingresos' ? 'Ingresos' : viewType === 'solo-gastos' ? 'Gastos' : viewType === 'recurrentes' ? 'Recurrentes' : 'Todo'}</Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="min-w-0 overflow-visible">
               {categoryData.length === 0 ? (
                 <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Sin datos</div>
               ) : (
-                <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
-                    <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value" label={({name,percent}:any) => `${name} ${(percent*100).toFixed(0)}%`}>
+                    <Pie data={categoryData} cx="50%" cy="44%" innerRadius="52%" outerRadius="76%" startAngle={90} endAngle={-270} paddingAngle={categoryData.length > 1 ? 2 : 0} dataKey="value">
                       {categoryData.map((_,i) => <Cell key={i} fill={COLORS[i%COLORS.length]} />)}
                     </Pie>
-                    <Tooltip formatter={(v:any) => `${sym}${Number(v).toLocaleString()}`} />
+                    <Tooltip content={<FinanceTooltipCard formatter={(value) => `${sym}${Number(value).toLocaleString(undefined,{minimumFractionDigits:2})}`} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} />
+                    <Legend verticalAlign="bottom" height={36} iconType="circle" formatter={(value: string) => <span style={{ color: 'var(--foreground)', fontSize: 11, fontWeight: 600 }}>{value}</span>} />
                   </PieChart>
                 </ResponsiveContainer>
               )}

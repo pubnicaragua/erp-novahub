@@ -21,6 +21,7 @@ import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceLis
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesIrSelector } from './SalesIrSelector';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
+import { SalesViewTutorial } from './SalesViewTutorial';
 
 interface DevolucionesViewProps {
   data: SalesReturn[];
@@ -325,9 +326,10 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
-          <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground">Devoluciones de Venta</h2>
+          <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Devoluciones de Venta</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de retornos y aprobación de mercancía.</p></div>
-          <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
+            <SalesViewTutorial view="returns" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar devolución..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>

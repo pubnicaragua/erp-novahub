@@ -8,21 +8,9 @@ import { toast } from 'sonner'
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell,
 } from 'recharts'
+import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme'
 
-const AXIS_TICK = { fontSize: 11, fill: '#9ca3af', fontWeight: 500 }
 const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#3b82f6']
-
-function TooltipCard({ active, payload, label, formatter }: any) {
-  if (!active || !payload?.length) return null
-  return (
-    <div style={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, padding: '10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
-      <p style={{ fontWeight: 700, fontSize: 12, marginBottom: 4, color: 'hsl(var(--foreground))' }}>{label}</p>
-      {payload.map((entry: any, i: number) => (
-        <p key={i} style={{ fontSize: 11, color: entry.color, fontWeight: 600, margin: 0 }}>{entry.name}: {formatter ? formatter(entry.value) : entry.value}</p>
-      ))}
-    </div>
-  )
-}
 
 export function FinancePayablesView() {
   const { displayCurrency } = useCurrency()
@@ -64,25 +52,25 @@ export function FinancePayablesView() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardContent className="p-4">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total por Pagar</p>
             <p className="text-2xl font-black tabular-nums text-amber-500">{fmt(totalPending)}</p>
           </CardContent>
         </Card>
-        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardContent className="p-4">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Vencido</p>
             <p className="text-2xl font-black tabular-nums text-rose-500">{fmt(totalOverdue)}</p>
           </CardContent>
         </Card>
-        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardContent className="p-4">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Por Vencer</p>
             <p className="text-2xl font-black tabular-nums text-emerald-500">{fmt(notDue)}</p>
           </CardContent>
         </Card>
-        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardContent className="p-4">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Facturas</p>
             <p className="text-2xl font-black tabular-nums text-foreground">{pending.length} / {invoices.length}</p>
@@ -92,39 +80,39 @@ export function FinancePayablesView() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardHeader className="pb-0 px-5 pt-4">
             <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Antigüedad de Saldos</CardTitle>
             <p className="text-[10px] text-muted-foreground">Distribución de facturas vencidas por rango de días</p>
           </CardHeader>
-          <CardContent className="px-2 pb-3">
+          <CardContent className="min-w-0 overflow-visible px-2 pb-3">
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={agingData} margin={{ top: 8, right: 16, left: -4, bottom: 0 }}>
+              <BarChart data={agingData} margin={{ top: 12, right: 20, left: 8, bottom: 14 }}>
                 <defs><linearGradient id="ageG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef4444" stopOpacity={0.85} /><stop offset="100%" stopColor="#ef4444" stopOpacity={0.55} /></linearGradient></defs>
-                <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} />
-                <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={56} />
-                <Tooltip content={<TooltipCard formatter={fmt} />} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <CartesianGrid strokeDasharray="4 4" stroke={FINANCE_GRID} opacity={0.45} vertical={false} />
+                <XAxis dataKey="label" tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickMargin={8} />
+                <YAxis tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={64} />
+                <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
                 <Bar dataKey="amount" fill="url(#ageG)" radius={[6, 6, 0, 0]} maxBarSize={52} onClick={(data: any) => toast.info(`CxP vencido ${data.label}: ${fmt(data.amount)}`)} style={{ cursor: 'pointer' }} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
-        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+        <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardHeader className="pb-0 px-5 pt-4">
             <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Deuda por Proveedor</CardTitle>
             <p className="text-[10px] text-muted-foreground">Top 5 proveedores con mayor saldo pendiente</p>
           </CardHeader>
-          <CardContent className="px-2 pb-3">
+          <CardContent className="min-w-0 overflow-visible px-2 pb-3">
             {topCreditors.length === 0 ? (
               <p className="text-xs text-muted-foreground py-12 text-center">Sin proveedores con deuda</p>
             ) : (
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={topCreditors} layout="vertical" margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" horizontal={false} />
-                  <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} />
-                  <YAxis dataKey="name" type="category" tick={{ ...AXIS_TICK, fill: 'hsl(var(--foreground))', fontWeight: 500 }} width={80} />
-                  <Tooltip content={<TooltipCard formatter={fmt} />} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <BarChart data={topCreditors} layout="vertical" margin={{ top: 8, right: 20, left: 8, bottom: 14 }}>
+                  <CartesianGrid strokeDasharray="4 4" stroke={FINANCE_GRID} opacity={0.45} horizontal={false} />
+                  <XAxis type="number" tick={FINANCE_AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} tickMargin={8} />
+                  <YAxis dataKey="name" type="category" tick={{ ...FINANCE_AXIS_TICK, fill: 'var(--foreground)', fontWeight: 500 }} width={96} />
+                  <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
                   <Bar dataKey="amount" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`${data.name}: ${fmt(data.amount)}`)} style={{ cursor: 'pointer' }}>
                     {topCreditors.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Bar>

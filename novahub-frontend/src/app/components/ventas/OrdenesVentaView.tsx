@@ -23,6 +23,7 @@ import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceLis
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
+import { SalesViewTutorial } from './SalesViewTutorial';
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -785,9 +786,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     )}
                   </div>
                   {pricingMode === 'individual' && (
-                    <div className="col-span-2 -mt-4 flex min-w-0 items-start gap-2 self-start text-[10px]">
+                    <div className="col-span-2 mt-0 flex min-w-0 items-start gap-2 self-start text-[10px]">
                       <label className="flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
-                        <span className="h-3 text-[9px] leading-3 text-muted-foreground">IVA</span>
                         <span className="flex h-8 w-full items-center gap-1.5 rounded-md bg-muted/30 px-2">
                           <input
                             type="checkbox"
@@ -804,7 +804,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         </span>
                       </label>
                       <label className="flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
-                        <span className="h-3 text-[9px] leading-3 text-muted-foreground">Descuento (%)</span>
                         <Input
                           type="number"
                           min="0"
@@ -935,10 +934,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div>
-            <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Órdenes de Venta</h2>
+            <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Órdenes de Venta</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Órdenes confirmadas listas para preparación y facturación.</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
+            <SalesViewTutorial view="orders" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />

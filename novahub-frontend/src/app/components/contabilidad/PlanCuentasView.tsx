@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Plus, Search, Upload, FileDown, Pencil, Trash2,
-  ChevronRight, ChevronDown, FolderTree, Building2,
-  RefreshCw, X, Loader2, FileSpreadsheet,
+  ChevronRight, ChevronDown, FolderTree,
+  RefreshCw, X, Loader2, FileSpreadsheet, ChevronsDownUp, ChevronsUpDown,
   AlertTriangle, Info
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -24,8 +24,9 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import type { Currency } from '../../types';
 import type { AccountDetailType, AccountSubtype, AccountType, ChartAccountCsvRow } from '../../types/accounting';
-import { downloadCsv, downloadXlsx, parseCsvText, templateRows } from '../../utils/chartOfAccountsCsv';
+import { downloadCsv, downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv';
 import { useAuth } from '../../contexts/AuthContext';
+import { AccountImportPreview } from './AccountImportPreview';
 
 interface AccountNode {
   id: string;
@@ -74,21 +75,6 @@ const ACCOUNT_DETAIL_TYPES: { value: AccountDetailType; label: string }[] = [
   { value: 'INCOME_STATEMENT', label: 'Estado de Resultados' },
 ];
 
-const INDUSTRIES = [
-  { value: 'General', label: 'General' },
-  { value: 'Retail', label: 'Comercio Minorista' },
-  { value: 'Manufacturing', label: 'Manufactura' },
-  { value: 'Services', label: 'Servicios' },
-  { value: 'Construction', label: 'Construcción' },
-  { value: 'Agriculture', label: 'Agricultura' },
-  { value: 'Technology', label: 'Tecnología' },
-  { value: 'Healthcare', label: 'Salud' },
-  { value: 'Education', label: 'Educación' },
-  { value: 'Hospitality', label: 'Hostelería' },
-  { value: 'RealEstate', label: 'Bienes Raíces' },
-  { value: 'Transportation', label: 'Transporte' },
-];
-
 function buildTree(accounts: AccountNode[]): AccountNode[] {
   const map = new Map<string, AccountNode>();
   const roots: AccountNode[] = [];
@@ -128,7 +114,11 @@ function flattenTree(nodes: AccountNode[]): AccountNode[] {
   return result;
 }
 
-export function PlanCuentasView() {
+interface PlanCuentasViewProps {
+  isSidebarCollapsed?: boolean;
+}
+
+export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewProps) {
   const { canPerform } = useAuth();
   const { formatConvertedAmount } = useCurrency();
 
@@ -152,12 +142,10 @@ export function PlanCuentasView() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const [industry, setIndustry] = useState('');
-  const [loadingDefaults, setLoadingDefaults] = useState(false);
-
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
   const [replaceAccounts, setReplaceAccounts] = useState(false);
   const [importPreviewRows, setImportPreviewRows] = useState<ChartAccountCsvRow[]>([]);
   const [importPreviewErrors, setImportPreviewErrors] = useState<string[]>([]);
@@ -330,20 +318,6 @@ export function PlanCuentasView() {
     }
   };
 
-  const loadDefaults = async () => {
-    if (!industry) { toast.error('Selecciona una industria'); return; }
-    setLoadingDefaults(true);
-    try {
-      const res = await contabilidadService.importDefaultsWithHierarchy(industry);
-      toast.success(res?.message || 'Catálogo importado exitosamente');
-      fetchAccounts(true);
-    } catch (e: any) {
-      toast.error(e?.message || 'Error al cargar cuentas predeterminadas');
-    } finally {
-      setLoadingDefaults(false);
-    }
-  };
-
   const handleExport = async () => {
     try {
       const raw = await contabilidadService.exportAccounts();
@@ -357,21 +331,17 @@ export function PlanCuentasView() {
   };
 
   const parseImportFile = async () => {
-    if (!importFile) { toast.error('Selecciona un archivo CSV o Excel'); return null; }
+    if (!importFile) { toast.error('Selecciona un archivo Excel'); return null; }
     try {
       let csvRows: string[][];
       const fileName = importFile.name.toLowerCase();
 
-      if (fileName.endsWith('.csv')) {
-        const text = await importFile.text();
-        csvRows = parseCsvText(text);
-      } else {
-        const buffer = await importFile.arrayBuffer();
-        const workbook = XLSX.read(buffer, { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonRows = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: '' });
-        csvRows = jsonRows.map((row: any) => (Array.isArray(row) ? row : [String(row)]).map(String));
-      }
+      if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) { toast.error('El archivo debe ser Excel (.xlsx o .xls)'); return null; }
+      const buffer = await importFile.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonRows = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: '' });
+      csvRows = jsonRows.map((row: any) => (Array.isArray(row) ? row : [String(row)]).map(String));
 
       const nonEmpty = csvRows.filter(row => row.some(cell => String(cell ?? '').trim().length > 0));
       if (nonEmpty.length < 2) { toast.error('El archivo no contiene datos'); return null; }
@@ -425,35 +395,22 @@ export function PlanCuentasView() {
   const handleConfirmImport = async () => {
     if (importPreviewRows.length === 0) { toast.error('No hay cuentas válidas para importar'); return; }
     setImporting(true);
+    setImportProgress(5);
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
     try {
+      // La petición de importación es atómica en el backend; avanzamos de
+      // forma continua mientras termina, igual que la importación masiva de
+      // productos, sin afirmar que ya terminó antes de recibir la respuesta.
+      let progress = 5;
+      progressTimer = setInterval(() => {
+        progress = Math.min(progress + 3, 92);
+        setImportProgress(progress);
+      }, 120);
       const res: any = await contabilidadService.importAccounts(importPreviewRows, replaceAccounts);
-      
-      // Direct update from response — no fetch or reload needed
-      if (res?.accounts && Array.isArray(res.accounts)) {
-        const flatten = (items: any[]): any[] => {
-          const result: any[] = [];
-          for (const item of items) {
-            const { children, ...rest } = item;
-            result.push(rest);
-            if (Array.isArray(children) && children.length > 0) result.push(...flatten(children));
-          }
-          return result;
-        };
-        setAccounts(buildTree(
-          flatten(res.accounts).map((a: any) => ({
-            id: a.id, code: a.code ?? '', name: a.name ?? '',
-            type: (a.type ?? 'ASSET').toUpperCase() as AccountType,
-            parentId: a.parentId ?? null, balance: Number(a.balance ?? 0),
-            currency: a.currency ?? 'USD', isActive: a.isActive !== false,
-            subtype: a.subtype ?? 'DETAIL_ACCOUNT',
-            detailType: a.detailType ?? ((a.type === 'INCOME' || a.type === 'EXPENSE') ? 'INCOME_STATEMENT' : 'BALANCE_SHEET'),
-            allowManualEntry: a.allowManualEntry !== false && a.acceptsPostings !== false,
-            acceptsPostings: a.acceptsPostings !== false,
-            notes: a.notes ?? null, children: [], level: 0,
-            _count: a._count ?? { children: 0, transactions: 0 },
-          }))
-        ));
-      }
+      if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+      setImportProgress(94);
+      await fetchAccounts(true);
+      setImportProgress(100);
       
       const msg = replaceAccounts
         ? `${res?.imported ?? importPreviewRows.length} importadas, ${res?.removed ?? 0} reemplazadas`
@@ -462,16 +419,26 @@ export function PlanCuentasView() {
       setImportPreviewOpen(false);
       setImportOpen(false);
       setImportFile(null);
+      setImportFileName('');
       setImportPreviewRows([]);
       setImportPreviewErrors([]);
     } catch (e: any) {
       toast.error(e?.message || 'Error al importar');
     } finally {
+      if (progressTimer) clearInterval(progressTimer);
       setImporting(false);
+      setImportProgress(0);
     }
   };
 
+  const collapseAll = () => setExpandedIds(new Set());
+  const expandAll = () => setExpandedIds(new Set(flatList.filter((account) => account.children.length > 0).map((account) => account.id)));
+
   const handleImport = handlePreviewImport;
+
+  const updateImportRow = (index: number, field: keyof ChartAccountCsvRow, value: string) => {
+    setImportPreviewRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
+  };
 
   const renderTreeRow = (account: AccountNode) => {
     const hasChildren = account.children.length > 0;
@@ -546,6 +513,22 @@ export function PlanCuentasView() {
     );
   };
 
+  if (importPreviewOpen) {
+    return (
+      <AccountImportPreview
+        rows={importPreviewRows}
+        errors={importPreviewErrors}
+        fileName={importFileName}
+        isSidebarCollapsed={isSidebarCollapsed}
+        importing={importing}
+        progress={importProgress}
+        onRowUpdate={updateImportRow}
+        onBack={() => { setImportPreviewOpen(false); setImportOpen(true); }}
+        onConfirm={handleConfirmImport}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -566,12 +549,6 @@ export function PlanCuentasView() {
             </Button>
           )}
           {canPerform('ACCOUNTING_CHARTS', 'create') && (
-            <Button variant="outline" size="sm" onClick={loadDefaults} disabled={loadingDefaults || !industry}>
-              {loadingDefaults ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Building2 className="w-4 h-4 mr-1" />}
-              Cargar Defaults
-            </Button>
-          )}
-          {canPerform('ACCOUNTING_CHARTS', 'create') && (
             <Button size="sm" onClick={() => openAddDialog()}>
               <Plus className="w-4 h-4 mr-1" /> Nueva Cuenta
             </Button>
@@ -579,7 +556,7 @@ export function PlanCuentasView() {
         </div>
       </div>
 
-      {/* Filters & Industry */}
+      {/* Filtros */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -590,16 +567,6 @@ export function PlanCuentasView() {
             className="pl-8 h-9"
           />
         </div>
-        <Select value={industry} onValueChange={setIndustry}>
-          <SelectTrigger className="w-[220px] h-9">
-            <SelectValue placeholder="Industria..." />
-          </SelectTrigger>
-          <SelectContent>
-            {INDUSTRIES.map(ind => (
-              <SelectItem key={ind.value} value={ind.value}>{ind.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Button variant="ghost" size="icon" className="w-9 h-9" onClick={() => fetchAccounts(true)} title="Recargar">
           <RefreshCw className="w-4 h-4" />
         </Button>
@@ -614,9 +581,19 @@ export function PlanCuentasView() {
         <div className="xl:col-span-2">
           <Card>
             <CardHeader className="py-3 px-4">
-              <div className="flex items-center gap-2">
-                <FolderTree className="w-4 h-4 text-muted-foreground" />
-                <CardTitle className="text-sm font-medium">Jerarquía de Cuentas</CardTitle>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <FolderTree className="w-4 h-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Jerarquía de Cuentas</CardTitle>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={collapseAll} title="Contraer todas las cuentas y grupos">
+                    <ChevronsDownUp className="size-3.5" /> Contraer todo
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={expandAll} title="Expandir todas las cuentas y grupos">
+                    <ChevronsUpDown className="size-3.5" /> Expandir todo
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -933,10 +910,10 @@ export function PlanCuentasView() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Upload className="w-5 h-5" />
-              Importar Cuentas
+              Importar Cuentas desde Excel
             </DialogTitle>
             <DialogDescription>
-              Descarga la plantilla, completa el archivo CSV (UTF-8) y súbelo. El sistema crea o actualiza por código.
+              Descarga la plantilla Excel y súbela. El sistema crea o actualiza las cuentas por código dentro de esta empresa.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-1">
@@ -969,11 +946,11 @@ export function PlanCuentasView() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="import-file">Archivo Excel / CSV (.xlsx, .xls, .csv)</Label>
+              <Label htmlFor="import-file">Archivo Excel (.xlsx, .xls)</Label>
               <Input
                 id="import-file"
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".xlsx,.xls"
                 onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
               />
             </div>
@@ -1009,73 +986,6 @@ export function PlanCuentasView() {
         </DialogContent>
       </Dialog>
 
-      {/* Preview Dialog */}
-      <Dialog open={importPreviewOpen} onOpenChange={setImportPreviewOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Upload className="w-5 h-5" />
-              Previsualizar importación de cuentas
-            </DialogTitle>
-            <DialogDescription>
-              {importFileName} — {importPreviewRows.length} cuentas válidas
-              {importPreviewErrors.length > 0 && ` · ${importPreviewErrors.length} errores`}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-auto min-h-0 border rounded-lg">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 z-10 bg-muted">
-                <tr className="border-b">
-                  <th className="text-left p-2 font-bold uppercase tracking-wider">Código</th>
-                  <th className="text-left p-2 font-bold uppercase tracking-wider">Nombre</th>
-                  <th className="text-left p-2 font-bold uppercase tracking-wider">Tipo</th>
-                  <th className="text-left p-2 font-bold uppercase tracking-wider">Subtipo</th>
-                  <th className="text-left p-2 font-bold uppercase tracking-wider">Detalle</th>
-                  <th className="text-left p-2 font-bold uppercase tracking-wider">Moneda</th>
-                  <th className="text-left p-2 font-bold uppercase tracking-wider">Padre</th>
-                  <th className="text-center p-2 font-bold uppercase tracking-wider">Manual</th>
-                  <th className="text-center p-2 font-bold uppercase tracking-wider">Activa</th>
-                </tr>
-              </thead>
-              <tbody>
-                {importPreviewRows.map((row, i) => (
-                  <tr key={i} className="border-b border-border/20 hover:bg-muted/20">
-                    <td className="p-2 font-mono text-primary">{row.codigo}</td>
-                    <td className="p-2 font-medium">{row.nombre}</td>
-                    <td className="p-2">{row.tipo_cuenta}</td>
-                    <td className="p-2 text-muted-foreground">{row.subtipo}</td>
-                    <td className="p-2 text-muted-foreground">{row.tipo_detalle}</td>
-                    <td className="p-2">{row.moneda}</td>
-                    <td className="p-2 font-mono text-muted-foreground">{row.codigo_padre || '—'}</td>
-                    <td className="p-2 text-center">{row.permite_manual === '1' ? 'Sí' : 'No'}</td>
-                    <td className="p-2 text-center">{row.activa === '1' ? 'Sí' : 'No'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {importPreviewErrors.length > 0 && (
-            <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3">
-              <p className="text-xs font-bold text-rose-500 mb-1">Filas omitidas ({importPreviewErrors.length})</p>
-              <ul className="text-[10px] text-rose-400 space-y-0.5 list-disc list-inside">
-                {importPreviewErrors.map((err, i) => <li key={i}>{err}</li>)}
-              </ul>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportPreviewOpen(false)} disabled={importing}>
-              Cancelar
-            </Button>
-            <Button onClick={handleConfirmImport} disabled={importing || importPreviewRows.length === 0}
-              className="bg-primary text-primary-foreground">
-              {importing ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Importando...</> : `Importar ${importPreviewRows.length} cuenta(s)`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

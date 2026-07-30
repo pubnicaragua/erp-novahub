@@ -114,7 +114,7 @@ export function PriceMissingBadge({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-black uppercase text-rose-500 bg-rose-500/10 border border-rose-500/20", className)}>
       <AlertTriangle className="size-3 shrink-0" />
-      Sin precio configurado en esta lista
+      Sin precio en esta lista · selecciona otra
     </span>
   );
 }
