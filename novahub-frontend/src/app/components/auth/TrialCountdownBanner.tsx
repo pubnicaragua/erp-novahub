@@ -47,12 +47,13 @@ export function TrialCountdownBanner() {
   const { days, hours, totalMs } = getTimeRemaining(expiresAt);
   // Si ya expiró, el guard del backend se encarga — no mostramos banner
   if (totalMs <= 0) return null;
-  // Si quedan más de 3 días, no es urgente
-  if (days > 3) return null;
+  // Si quedan más de 15 días, no mostrar (probablemente no es trial)
+  if (days > 15) return null;
   // Si fue descartado
   if (dismissed) return null;
 
-  const isUrgent = days <= 1;
+  const isUrgent = days <= 3;
+  const isWarning = days <= 7 && days > 3;
 
   const handleDismiss = () => {
     setDismissed(true);
@@ -68,7 +69,9 @@ export function TrialCountdownBanner() {
         'bg-gradient-to-r text-white',
         isUrgent
           ? 'from-amber-600 via-orange-600 to-rose-600'
-          : 'from-emerald-600 via-emerald-500 to-amber-500',
+          : isWarning
+          ? 'from-amber-500 via-yellow-500 to-orange-500'
+          : 'from-emerald-600 via-teal-500 to-cyan-500',
       )}
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -84,7 +87,9 @@ export function TrialCountdownBanner() {
           <p className="text-[10px] text-white/80 truncate hidden sm:block">
             {isUrgent
               ? '⚠️ Tu prueba vence pronto. Actualizá tu plan para no perder tus datos.'
-              : 'Actualizá tu plan para acceder a todos los módulos y funciones.'}
+              : isWarning
+              ? `🗓️ Te quedan ${days} días. Recordá actualizar antes de que venza tu plan.`
+              : `✅ Estás en período de prueba por ${days} días más. Disfrutá de todas las funciones.`}
           </p>
         </div>
       </div>
@@ -93,7 +98,7 @@ export function TrialCountdownBanner() {
           size="sm"
           variant="ghost"
           className="h-7 px-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/20 hover:text-white gap-1"
-          onClick={() => window.open('https://wa.me/0000?text=Hola%20quiero%20contratar%20NovaHub', '_blank')}
+          onClick={() => window.open('https://wa.me/50588241003?text=Hola%20quiero%20contratar%20NovaHub', '_blank')}
         >
           Actualizar plan
           <ArrowUpRight className="size-3" />

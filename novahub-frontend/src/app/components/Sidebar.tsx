@@ -71,6 +71,7 @@ import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { NovaHubLogo } from './NovaHubLogo';
+import { GlobalSearch } from './ui/GlobalSearch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface SidebarProps {
@@ -555,6 +556,14 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
               <X className="size-5" />
             </button>
           </div>
+
+          {/* Global Search */}
+          {!isCollapsed && <GlobalSearch onNavigate={(mod, subMod, q) => {
+            onModuleChange(mod as Module, subMod);
+            // Store search term for the target module to pick up
+            sessionStorage.setItem('global-search-term', q);
+            sessionStorage.setItem('global-search-module', subMod);
+          }} />}
 
           {/* Navigation */}
           <div className="flex-1 min-h-0 overflow-y-auto py-3 no-scrollbar">

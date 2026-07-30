@@ -15,6 +15,7 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useGlobalSearch } from '../hooks/useGlobalSearch';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
@@ -58,7 +59,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(sessionStorage.getItem('global-search-module') === 'facturas' ? (sessionStorage.removeItem('global-search-module') || sessionStorage.getItem('global-search-term') || '') : '');
+  useEffect(() => { try { sessionStorage.removeItem('global-search-term') } catch {} }, [])
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -1119,4 +1121,5 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     </div>
   );
 }
+
 
