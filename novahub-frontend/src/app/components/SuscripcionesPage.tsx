@@ -495,11 +495,17 @@ export function SuscripcionesPage() {
     }
   };
 
-  const filteredTenants = tenants.filter(t =>
-    t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.industry?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const [filterTrial, setFilterTrial] = useState<'ALL' | 'TRIAL' | 'ACTIVE'>('ALL');
+
+  const filteredTenants = tenants.filter(t => {
+    const matchesSearch = t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.industry?.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!matchesSearch) return false;
+    if (filterTrial === 'TRIAL') return t.implementationStatus === 'TRIAL' || t.plan === 'BASIC';
+    if (filterTrial === 'ACTIVE') return t.implementationStatus !== 'TRIAL';
+    return true;
+  });
 
   const getIndustryIcon = (industry: string) => {
     switch (industry) {
@@ -814,6 +820,11 @@ export function SuscripcionesPage() {
               onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setFilterTrial('ALL')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterTrial === 'ALL' ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>Todos</button>
+            <button onClick={() => setFilterTrial('TRIAL')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterTrial === 'TRIAL' ? 'bg-amber-500 text-white' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>Trial</button>
+            <button onClick={() => setFilterTrial('ACTIVE')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterTrial === 'ACTIVE' ? 'bg-emerald-500 text-white' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>Activas</button>
+          </div>
 
           <div className="grid grid-cols-1 gap-6">
             {filteredTenants.map(tenant => {
@@ -835,6 +846,22 @@ export function SuscripcionesPage() {
                             <Badge variant="outline" className={cn("text-[10px] font-bold uppercase tracking-widest", getPlanColor(tenant.plan))}>
                               {tenant.plan}
                             </Badge>
+                            {(tenant.implementationStatus === 'TRIAL' || tenant.plan === 'BASIC') && (
+                              <div className="flex items-center gap-1">
+                                <Badge variant="outline" className="text-[9px] text-amber-500 border-amber-500/30 bg-amber-500/5">
+                                  {tenant.expiresAt ? `Exp: ${new Date(tenant.expiresAt).toLocaleDateString('es-NI')}` : 'Trial'}
+                                </Badge>
+                                <button onClick={async () => {
+                                  try {
+                                    await api.patch(`/tenants/${tenant.id}`, { expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() });
+                                    toast.success(`Trial extendido 7 días para ${tenant.name}`);
+                                    fetchData();
+                                  } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); }
+                                }} className="px-2 py-0.5 rounded text-[9px] font-bold text-emerald-500 hover:bg-emerald-500/10 border border-emerald-500/30 transition-colors" title="Extender trial 7 días">
+                                  +7 días
+                                </button>
+                              </div>
+                            )}
                           </div>
                           <div className="flex flex-wrap items-center gap-4 mt-1 text-xs text-muted-foreground font-bold uppercase tracking-tighter">
                             <span className="flex items-center gap-1.5"><Globe className="size-3.5" /> {tenant.slug}.novahub.io</span>

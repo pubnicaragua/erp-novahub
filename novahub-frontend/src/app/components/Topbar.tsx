@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import {
   Search,
@@ -85,6 +85,75 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   const hasPosAccess = user?.enabledModules?.some(m => m === 'RETAIL_POS' || m === 'SALES_POS') ?? false;
   const { unreadCount, markAllAsRead, notifications } = useNotifications();
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{ label: string; description: string; module: string; subModule: string; group: string }[]>([]);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  const SEARCH_CATALOG = [
+    { label: 'Facturas de Venta', description: 'Emisión, cobro y anulación de facturas', module: 'ventas', subModule: 'facturas', keywords: ['factura', 'venta', 'cobro', 'cliente'], group: 'Ventas' },
+    { label: 'Presupuestos', description: 'Cotizaciones y presupuestos a clientes', module: 'ventas', subModule: 'estimaciones', keywords: ['presupuesto', 'cotizacion', 'estimacion'], group: 'Ventas' },
+    { label: 'Órdenes de Venta', description: 'Órdenes de venta y pedidos', module: 'ventas', subModule: 'ordenes-venta', keywords: ['orden', 'pedido', 'venta'], group: 'Ventas' },
+    { label: 'Clientes', description: 'Registro y gestión de clientes', module: 'ventas', subModule: 'clientes', keywords: ['cliente', 'contacto'], group: 'Ventas' },
+    { label: 'Pagos Recibidos', description: 'Cobros y pagos de clientes', module: 'ventas', subModule: 'pagos-recibidos', keywords: ['pago', 'cobro', 'recibido'], group: 'Ventas' },
+    { label: 'Productos', description: 'Catálogo de productos y servicios', module: 'inventario', subModule: 'productos', keywords: ['producto', 'articulo', 'servicio', 'sku'], group: 'Inventario' },
+    { label: 'Categorías', description: 'Categorías de productos', module: 'inventario', subModule: 'categorias', keywords: ['categoria', 'tipo'], group: 'Inventario' },
+    { label: 'Movimientos', description: 'Entradas y salidas de inventario', module: 'inventario', subModule: 'movimientos', keywords: ['movimiento', 'entrada', 'salida'], group: 'Inventario' },
+    { label: 'Ajustes de Stock', description: 'Ajustes manuales de inventario', module: 'inventario', subModule: 'ajustes', keywords: ['ajuste', 'stock'], group: 'Inventario' },
+    { label: 'Transferencias', description: 'Movimientos entre almacenes', module: 'inventario', subModule: 'transferencias', keywords: ['transferencia', 'almacen'], group: 'Inventario' },
+    { label: 'Proveedores', description: 'Registro y gestión de proveedores', module: 'compras', subModule: 'proveedores', keywords: ['proveedor', 'vendor'], group: 'Compras' },
+    { label: 'Órdenes de Compra', description: 'Órdenes de compra a proveedores', module: 'compras', subModule: 'ordenes-compra', keywords: ['orden', 'compra', 'pedido'], group: 'Compras' },
+    { label: 'Recepciones', description: 'Recepción de mercadería', module: 'compras', subModule: 'recepciones-compra', keywords: ['recepcion', 'entrada', 'mercaderia'], group: 'Compras' },
+    { label: 'Facturas de Proveedor', description: 'Facturas recibidas de proveedores', module: 'compras', subModule: 'facturas-proveedor', keywords: ['factura', 'proveedor'], group: 'Compras' },
+    { label: 'Pagos Realizados', description: 'Pagos a proveedores', module: 'compras', subModule: 'pagos-realizados', keywords: ['pago', 'proveedor'], group: 'Compras' },
+    { label: 'Solicitudes de Compra', description: 'Solicitudes internas de compra', module: 'compras', subModule: 'solicitudes-compra', keywords: ['solicitud', 'requisicion'], group: 'Compras' },
+    { label: 'Gestión de Compras', description: 'Aprobación y gestión de compras', module: 'compras', subModule: 'gestion-compras', keywords: ['gestion', 'aprobacion'], group: 'Compras' },
+    { label: 'Gastos', description: 'Gastos operativos directos', module: 'compras', subModule: 'gastos', keywords: ['gasto', 'caja chica'], group: 'Compras' },
+    { label: 'Plan de Cuentas', description: 'Catálogo de cuentas contables', module: 'contabilidad', subModule: 'cuentas', keywords: ['cuenta', 'contable', 'plan', 'catalogo'], group: 'Contabilidad' },
+    { label: 'Asientos Contables', description: 'Diario y asientos contables', module: 'contabilidad', subModule: 'asientos', keywords: ['asiento', 'diario', 'contable'], group: 'Contabilidad' },
+    { label: 'Balance General', description: 'Reporte de balance general', module: 'contabilidad', subModule: 'balance-general', keywords: ['balance', 'activo', 'pasivo'], group: 'Contabilidad' },
+    { label: 'Estado de Resultados', description: 'Pérdidas y ganancias', module: 'contabilidad', subModule: 'estado-resultados', keywords: ['resultado', 'ganancia', 'perdida'], group: 'Contabilidad' },
+    { label: 'Conciliación Bancaria', description: 'Conciliación de cuentas bancarias', module: 'contabilidad', subModule: 'conciliacion', keywords: ['conciliacion', 'banco'], group: 'Contabilidad' },
+    { label: 'Reportes Fiscales', description: 'IVA, IR, INSS, INATEC', module: 'contabilidad', subModule: 'reportes-fiscales', keywords: ['fiscal', 'iva', 'ir', 'inss', 'dgi'], group: 'Contabilidad' },
+    { label: 'Resumen Financiero', description: 'Dashboard financiero con KPIs', module: 'finanzas', subModule: 'resumen-financiero', keywords: ['finanzas', 'resumen', 'dashboard'], group: 'Finanzas' },
+    { label: 'Caja y Bancos', description: 'Saldo y movimientos de efectivo', module: 'finanzas', subModule: 'caja-bancos', keywords: ['caja', 'banco', 'efectivo'], group: 'Finanzas' },
+    { label: 'CxC', description: 'Cuentas por cobrar', module: 'finanzas', subModule: 'cuentas-cobrar', keywords: ['cxc', 'cobrar', 'pendiente'], group: 'Finanzas' },
+    { label: 'CxP', description: 'Cuentas por pagar', module: 'finanzas', subModule: 'cuentas-pagar', keywords: ['cxp', 'pagar', 'pendiente'], group: 'Finanzas' },
+    { label: 'Empleados', description: 'Registro y expediente de empleados', module: 'rh', subModule: 'empleados', keywords: ['empleado', 'trabajador', 'colaborador'], group: 'RRHH' },
+    { label: 'Nóminas', description: 'Procesamiento de nóminas', module: 'rh', subModule: 'nominas', keywords: ['nomina', 'salario', 'pago'], group: 'RRHH' },
+    { label: 'Asistencia', description: 'Control de asistencia y marcaje', module: 'rh', subModule: 'asistencia', keywords: ['asistencia', 'marcaje', 'reloj'], group: 'RRHH' },
+    { label: 'Ausencias', description: 'Solicitudes de permisos y vacaciones', module: 'rh', subModule: 'ausencias', keywords: ['ausencia', 'permiso', 'vacacion'], group: 'RRHH' },
+    { label: 'Configuración', description: 'Roles, usuarios y ajustes del sistema', module: 'configuracion', subModule: undefined, keywords: ['configuracion', 'ajustes', 'roles', 'permisos'], group: 'Sistema' },
+  ];
+
+  const getSearchResults = (query: string) => {
+    if (!query.trim()) return [];
+    const q = query.toLowerCase().trim();
+    return SEARCH_CATALOG
+      .filter(entry => 
+        entry.label.toLowerCase().includes(q) ||
+        entry.description.toLowerCase().includes(q) ||
+        entry.keywords.some(k => k.includes(q))
+      )
+      .slice(0, 12)
+      .map(entry => ({ label: entry.label, description: entry.description, module: entry.module, subModule: entry.subModule || '', group: entry.group }));
+  };
+
+  const groupedResults = Object.entries(
+    searchResults.reduce((acc: Record<string, typeof searchResults>, r) => {
+      (acc[r.group] = acc[r.group] || []).push(r);
+      return acc;
+    }, {})
+  );
+
+  // Close search results on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchResults([]);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -255,15 +324,59 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           {getRoleBadge(user?.role || '')}
         </div>
 
-        <div className="relative max-w-sm w-full">
+        <div className="relative max-w-sm w-full" ref={searchRef}>
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Buscar..."
+            placeholder="Buscar módulos, clientes, facturas..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setSearchResults(getSearchResults(e.target.value));
+            }}
+            onFocus={() => searchQuery.trim() && setSearchResults(getSearchResults(searchQuery))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && searchResults.length > 0) {
+                const first = searchResults[0];
+                setSearchQuery('');
+                setSearchResults([]);
+                onNavigate(first.module as Module);
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('navigate-submodule', { detail: { subModule: first.subModule } }));
+                }, 100);
+              }
+            }}
             className="pl-9 pr-4 h-9 bg-muted/20 border-border/40 focus:bg-background"
           />
+          {searchResults.length > 0 && (
+            <div className="absolute top-full mt-1 left-0 right-0 bg-popover border border-border rounded-xl shadow-xl z-50 py-2 max-h-80 overflow-y-auto">
+              {groupedResults.map(([group, items]) => (
+                <div key={group}>
+                  <p className="px-3 py-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">{group}</p>
+                  {items.map((item, i) => (
+                    <button
+                      key={`${item.label}-${i}`}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-xs hover:bg-accent transition-colors text-left"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setSearchResults([]);
+                        onNavigate(item.module as Module);
+                        setTimeout(() => {
+                          window.dispatchEvent(new CustomEvent('navigate-submodule', { detail: { subModule: item.subModule } }));
+                        }, 100);
+                      }}
+                    >
+                      <span className="size-6 rounded-md bg-primary/10 flex items-center justify-center text-primary font-bold text-[10px]">{group[0]}</span>
+                      <div>
+                        <p className="font-medium text-foreground">{item.label}</p>
+                        <p className="text-[10px] text-muted-foreground">{item.description}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
