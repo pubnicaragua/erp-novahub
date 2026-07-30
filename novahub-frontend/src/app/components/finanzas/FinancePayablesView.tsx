@@ -1,0 +1,185 @@
+import { useState, useEffect } from 'react'
+import { AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { Badge } from '../ui/badge'
+import { useCurrency } from '../../contexts/CurrencyContext'
+import { supplierInvoicesService } from '../../services/compras.service'
+import { toast } from 'sonner'
+import {
+  Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell,
+} from 'recharts'
+
+const AXIS_TICK = { fontSize: 11, fill: '#9ca3af', fontWeight: 500 }
+const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#3b82f6']
+
+function TooltipCard({ active, payload, label, formatter }: any) {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, padding: '10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+      <p style={{ fontWeight: 700, fontSize: 12, marginBottom: 4, color: 'hsl(var(--foreground))' }}>{label}</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} style={{ fontSize: 11, color: entry.color, fontWeight: 600, margin: 0 }}>{entry.name}: {formatter ? formatter(entry.value) : entry.value}</p>
+      ))}
+    </div>
+  )
+}
+
+export function FinancePayablesView() {
+  const { displayCurrency } = useCurrency()
+  const sym = displayCurrency === 'USD' ? '$' : 'C$'
+  const fmt = (n: number) => sym + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const fmtShort = (n: number) => {
+    if (Math.abs(n) >= 1_000_000) return sym + (n / 1_000_000).toFixed(1) + 'M'
+    if (Math.abs(n) >= 1_000) return sym + (n / 1_000).toFixed(1) + 'K'
+    return sym + n.toLocaleString(undefined, { minimumFractionDigits: 0 })
+  }
+
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supplierInvoicesService.getAll().then((res: any) => { const list = res?.data || res || []; setInvoices(Array.isArray(list) ? list : []) }).catch(() => {}).finally(() => setLoading(false))
+  }, [])
+
+  const pending = invoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' })
+  const totalPending = pending.reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0)
+  const overdue = pending.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; return due && due < new Date() })
+  const totalOverdue = overdue.reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0)
+  const notDue = totalPending - totalOverdue
+
+  const agingData = ['0-30', '31-60', '61-90', '+90'].map(label => {
+    const [min, max] = label === '+90' ? [91, Infinity] : label.split('-').map(Number)
+    const total = overdue.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= min && days <= max }).reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0)
+    return { label, amount: total }
+  })
+
+  const topCreditors = Object.entries(pending.reduce((acc: Record<string, number>, inv: any) => { const name = inv.supplier?.name || inv.supplierName || inv.supplier?.businessName || 'Proveedor'; acc[name] = (acc[name] || 0) + Number(inv.balanceDue || inv.total || 0); return acc }, {})).sort(([, a], [, b]) => b - a).slice(0, 5).map(([name, amount]) => ({ name, amount }))
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-2 mb-2">
+        <AlertTriangle className="size-5 text-primary" />
+        <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Cuentas por Pagar</h3>
+        <Badge variant="outline" className="text-xs">{pending.length} facturas pendientes</Badge>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total por Pagar</p>
+            <p className="text-2xl font-black tabular-nums text-amber-500">{fmt(totalPending)}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Vencido</p>
+            <p className="text-2xl font-black tabular-nums text-rose-500">{fmt(totalOverdue)}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Por Vencer</p>
+            <p className="text-2xl font-black tabular-nums text-emerald-500">{fmt(notDue)}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Facturas</p>
+            <p className="text-2xl font-black tabular-nums text-foreground">{pending.length} / {invoices.length}</p>
+            <p className="text-[9px] text-muted-foreground">pendientes / totales</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+          <CardHeader className="pb-0 px-5 pt-4">
+            <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Antigüedad de Saldos</CardTitle>
+            <p className="text-[10px] text-muted-foreground">Distribución de facturas vencidas por rango de días</p>
+          </CardHeader>
+          <CardContent className="px-2 pb-3">
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={agingData} margin={{ top: 8, right: 16, left: -4, bottom: 0 }}>
+                <defs><linearGradient id="ageG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef4444" stopOpacity={0.85} /><stop offset="100%" stopColor="#ef4444" stopOpacity={0.55} /></linearGradient></defs>
+                <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} />
+                <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={56} />
+                <Tooltip content={<TooltipCard formatter={fmt} />} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <Bar dataKey="amount" fill="url(#ageG)" radius={[6, 6, 0, 0]} maxBarSize={52} onClick={(data: any) => toast.info(`CxP vencido ${data.label}: ${fmt(data.amount)}`)} style={{ cursor: 'pointer' }} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+          <CardHeader className="pb-0 px-5 pt-4">
+            <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Deuda por Proveedor</CardTitle>
+            <p className="text-[10px] text-muted-foreground">Top 5 proveedores con mayor saldo pendiente</p>
+          </CardHeader>
+          <CardContent className="px-2 pb-3">
+            {topCreditors.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-12 text-center">Sin proveedores con deuda</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={topCreditors} layout="vertical" margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+                  <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} />
+                  <YAxis dataKey="name" type="category" tick={{ ...AXIS_TICK, fill: 'hsl(var(--foreground))', fontWeight: 500 }} width={80} />
+                  <Tooltip content={<TooltipCard formatter={fmt} />} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                  <Bar dataKey="amount" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`${data.name}: ${fmt(data.amount)}`)} style={{ cursor: 'pointer' }}>
+                    {topCreditors.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+        <CardHeader className="pb-2 px-5 pt-4">
+          <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Facturas Pendientes con Proveedores</CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-4">
+          {loading ? (
+            <div className="text-center py-8 text-sm text-muted-foreground">Cargando...</div>
+          ) : pending.length === 0 ? (
+            <div className="text-center py-8 text-sm text-muted-foreground"><CheckCircle2 className="size-8 mx-auto mb-2 text-emerald-500/50" /><p>No hay facturas pendientes de pago.</p></div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead><tr className="border-b border-border text-muted-foreground">
+                  <th className="text-left py-2 font-bold uppercase tracking-wider">Proveedor</th>
+                  <th className="text-left py-2 font-bold uppercase tracking-wider">Factura</th>
+                  <th className="text-left py-2 font-bold uppercase tracking-wider">Vencimiento</th>
+                  <th className="text-right py-2 font-bold uppercase tracking-wider">Total</th>
+                  <th className="text-right py-2 font-bold uppercase tracking-wider">Retenciones</th>
+                  <th className="text-right py-2 font-bold uppercase tracking-wider">Saldo</th>
+                  <th className="text-center py-2 font-bold uppercase tracking-wider">Estado</th>
+                </tr></thead>
+                <tbody>
+                  {pending.map((inv: any) => {
+                    const due = inv.dueDate ? new Date(inv.dueDate) : null
+                    const daysOverdue = due ? Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)) : 0
+                    return (
+                      <tr key={inv.id} className="border-b border-border/20">
+                        <td className="py-2 font-medium text-foreground">{inv.supplier?.name || inv.supplierName || inv.supplier?.businessName || '—'}</td>
+                        <td className="py-2 font-mono text-primary">{inv.number || inv.code || '—'}</td>
+                        <td className="py-2 text-muted-foreground">{due ? due.toLocaleDateString('es-NI') : '—'}</td>
+                        <td className="py-2 text-right font-mono text-foreground">{fmt(Number(inv.total || 0))}</td>
+                        <td className="py-2 text-right font-mono text-amber-500">{fmt(Number(inv.withholdingTotal || 0))}</td>
+                        <td className="py-2 text-right font-black text-foreground">{fmt(Number(inv.balanceDue || inv.total || 0))}</td>
+                        <td className="py-2 text-center">
+                          {daysOverdue > 0 ? <Badge variant="destructive" className="text-[9px]">{daysOverdue}d vencido</Badge> : <Badge variant="secondary" className="text-[9px]">Al día</Badge>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

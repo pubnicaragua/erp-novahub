@@ -17,7 +17,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell, LabelList
 } from 'recharts';
 
@@ -1079,18 +1079,25 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
             {monthlyData.length === 0 ? (
               <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Sin datos para el rango seleccionado</div>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={monthlyData} barGap={4}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.3} />
-                  <XAxis dataKey="month" tick={{fontSize:11, fill:'#6b7280'}} />
-                  <YAxis tick={{fontSize:11, fill:'#6b7280'}} />
-                  <Tooltip contentStyle={{background:'#ffffff', border:'1px solid #e5e7eb', borderRadius:'8px', fontSize:'12px'}} formatter={(v:any) => `${sym}${Number(v).toLocaleString()}`} />
-                  {(viewType !== 'solo-gastos') && <Bar dataKey="ingresos" fill="#10b981" radius={[4,4,0,0]} name="Ingresos">
-                    <LabelList dataKey="ingresos" position="top" formatter={(v: number) => v > 0 ? `${sym}${v.toLocaleString(undefined,{maximumFractionDigits:0})}` : ''} style={{ fontSize: 10, fill: '#10b981', fontWeight: 700 }} />
-                  </Bar>}
-                  {(viewType !== 'solo-ingresos') && <Bar dataKey="gastos" fill="#ef4444" radius={[4,4,0,0]} name="Gastos">
-                    <LabelList dataKey="gastos" position="top" formatter={(v: number) => v > 0 ? `${sym}${v.toLocaleString(undefined,{maximumFractionDigits:0})}` : ''} style={{ fontSize: 10, fill: '#ef4444', fontWeight: 700 }} />
-                  </Bar>}
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={monthlyData} barGap={4} margin={{ top: 12, right: 16, left: -8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                  <XAxis dataKey="month" tick={{fontSize:11, fill:'#6b7280', fontWeight:500}} tickLine={false} axisLine={false} />
+                  <YAxis tick={{fontSize:11, fill:'#6b7280', fontWeight:500}} tickLine={false} axisLine={false} tickFormatter={(v: number) => sym + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'K' : v.toFixed(0))} width={56} />
+                  <Tooltip content={({active, payload, label}: any) => {
+                    if (!active || !payload?.length) return null
+                    return (
+                      <div style={{background:'#ffffff', border:'1px solid #e5e7eb', borderRadius:12, padding:'10px 14px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)'}}>
+                        <p style={{fontWeight:700, fontSize:12, marginBottom:4, color:'#111827'}}>{label}</p>
+                        {payload.map((entry: any, i: number) => (
+                          <p key={i} style={{fontSize:11, color:entry.color, fontWeight:600, margin:0}}>{entry.name}: {sym}{Number(entry.value).toLocaleString(undefined,{minimumFractionDigits:2})}</p>
+                        ))}
+                      </div>
+                    )
+                  }} cursor={{fill:'rgba(0,0,0,0.03)'}} />
+                  <Legend verticalAlign="bottom" height={28} formatter={(value:string) => <span style={{color:'hsl(var(--foreground))', fontWeight:600, fontSize:11}}>{value}</span>} />
+                  {(viewType !== 'solo-gastos') && <Bar dataKey="ingresos" fill="#10b981" radius={[5,5,0,0]} maxBarSize={32} name="Ingresos" />}
+                  {(viewType !== 'solo-ingresos') && <Bar dataKey="gastos" fill="#ef4444" radius={[5,5,0,0]} maxBarSize={32} name="Gastos" />}
                 </BarChart>
               </ResponsiveContainer>
             )}

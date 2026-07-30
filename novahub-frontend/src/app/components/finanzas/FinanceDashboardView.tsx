@@ -1,37 +1,20 @@
-import { useMemo } from 'react';
-import type { LucideIcon } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
 import {
-  Activity,
-  ArrowDownRight,
-  ArrowUpRight,
-  BarChart3,
-  CalendarClock,
-  CircleAlert,
-  CircleCheck,
-  Info,
-  Percent,
-  Scale,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
+  TrendingUp, TrendingDown, DollarSign, Landmark,
+  AlertTriangle, CalendarClock, BarChart3, ArrowUpRight, ArrowDownRight, Wallet,
 } from 'lucide-react';
 import {
-  Area,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
+  Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, ComposedChart, Line, Legend, Cell,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Badge } from '../ui/badge';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { invoicesService } from '../../services/ventas.service';
+import { supplierInvoicesService } from '../../services/compras.service';
+import { contabilidadService } from '../../services/contabilidad.service';
+import { toast } from 'sonner';
 
-interface FinanceDashboardViewProps {
+interface Props {
   incomes: any[];
   expenses: any[];
   recurringExpenses: any[];
@@ -39,683 +22,285 @@ interface FinanceDashboardViewProps {
   accounts?: any[];
 }
 
-type MetricTone = 'positive' | 'negative' | 'neutral';
+const AXIS_TICK = { fontSize: 11, fill: '#9ca3af', fontWeight: 500 }
+const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899']
 
-interface MetricCardProps {
-  title: string;
-  value: string;
-  description: string;
-  icon: LucideIcon;
-  tone: MetricTone;
-  trend: number | null;
-  trendLabel: string;
-  positiveIsGood?: boolean;
-}
-
-const metricToneStyles: Record<MetricTone, { icon: string; value: string; surface: string }> = {
-  positive: {
-    icon: 'bg-emerald-500/10 text-emerald-500',
-    value: 'text-emerald-500',
-    surface: 'hover:border-emerald-500/30',
-  },
-  negative: {
-    icon: 'bg-rose-500/10 text-rose-500',
-    value: 'text-rose-500',
-    surface: 'hover:border-rose-500/30',
-  },
-  neutral: {
-    icon: 'bg-primary/10 text-primary',
-    value: 'text-foreground',
-    surface: 'hover:border-primary/30',
-  },
-};
-
-function MetricCard({
-  title,
-  value,
-  description,
-  icon: Icon,
-  tone,
-  trend,
-  trendLabel,
-  positiveIsGood = true,
-}: MetricCardProps) {
-  const styles = metricToneStyles[tone];
-  const trendIsUp = trend !== null && trend > 0;
-  const trendIsGood = trend === null || trend === 0
-    ? null
-    : positiveIsGood
-      ? trend > 0
-      : trend < 0;
-
+function TooltipCard({ active, payload, label, formatter }: any) {
+  if (!active || !payload?.length) return null
   return (
-    <Card
-      className={`group border-border/60 bg-card/65 shadow-none transition-colors duration-200 ${styles.surface}`}
-    >
-      <CardContent className="p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-muted-foreground">{title}</p>
-            <p className={`mt-2 truncate text-2xl font-semibold tracking-tight tabular-nums ${styles.value}`}>
-              {value}
-            </p>
-          </div>
-          <div className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${styles.icon}`}>
-            <Icon className="size-4.5" aria-hidden="true" />
-          </div>
-        </div>
-
-        <div className="mt-4 flex min-h-5 items-center justify-between gap-3 text-[11px]">
-          <span className="truncate text-muted-foreground">{description}</span>
-          {trend === null ? (
-            <span className="shrink-0 text-muted-foreground">Sin comparación</span>
-          ) : (
-            <span
-              className={`inline-flex shrink-0 items-center gap-1 font-semibold tabular-nums ${
-                trendIsGood === null
-                  ? 'text-muted-foreground'
-                  : trendIsGood
-                    ? 'text-emerald-500'
-                    : 'text-rose-500'
-              }`}
-              aria-label={`${Math.abs(trend).toFixed(1)} por ciento ${trendIsUp ? 'más' : 'menos'} ${trendLabel}`}
-            >
-              {trendIsUp ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
-              {Math.abs(trend).toFixed(1)}%
-            </span>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
+    <div style={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 10, padding: '10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+      <p style={{ fontWeight: 700, fontSize: 12, marginBottom: 4, color: 'hsl(var(--foreground))' }}>{label}</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} style={{ fontSize: 11, color: entry.color, fontWeight: 600, margin: 0 }}>
+          {entry.name}: {formatter ? formatter(entry.value) : entry.value}
+        </p>
+      ))}
+    </div>
+  )
 }
 
-const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, accounts }: Props) {
+  const { displayCurrency, convertAmount } = useCurrency();
+  const sym = displayCurrency === 'USD' ? '$' : 'C$';
 
-const percentChange = (current: number, previous: number) => {
-  if (previous === 0) return current === 0 ? 0 : null;
-  const change = ((current - previous) / Math.abs(previous)) * 100;
-  return Math.abs(change) > 500 ? null : change;
-};
+  const [salesInvoices, setSalesInvoices] = useState<any[]>([]);
+  const [supplierInvoices, setSupplierInvoices] = useState<any[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
 
-const humanizeCategory = (value: string) =>
-  value
-    .replace(/_/g, ' ')
-    .toLocaleLowerCase('es-NI')
-    .replace(/(^|\s)\S/g, (letter) => letter.toLocaleUpperCase('es-NI'));
+  useEffect(() => {
+    invoicesService.getAll().then((res: any) => setSalesInvoices(res?.data || res || [])).catch(() => {});
+    supplierInvoicesService.getAll().then((res: any) => setSupplierInvoices(res?.data || res || [])).catch(() => {});
+    contabilidadService.getChartOfAccounts().then((res: any) => {
+      const all = res?.data || res || [];
+      setBankAccounts(all.filter((a: any) => ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) || String(a.name || '').toUpperCase().includes('CAJA') || String(a.name || '').toUpperCase().includes('BANCO')));
+    }).catch(() => {});
+  }, []);
 
-export function FinanceDashboardView({
-  incomes,
-  expenses,
-  recurringExpenses,
-  recurringIncomes = [],
-  accounts = [],
-}: FinanceDashboardViewProps) {
-  const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
-  const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const totalIncome = useMemo(() => incomes.reduce((a, i) => a + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0), [incomes, convertAmount]);
+  const totalExpense = useMemo(() => expenses.reduce((a, e) => a + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0), [expenses, convertAmount]);
+  const netCashFlow = totalIncome - totalExpense;
+  const marginPct = totalIncome > 0 ? ((netCashFlow / totalIncome) * 100) : 0;
 
-  const totalIncomes = incomes.reduce(
-    (total, item) => total + convertAmount(item.amount || 0, item.currency, item.exchangeRate),
-    0,
+  const totalCxc = useMemo(() => salesInvoices.reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [salesInvoices]);
+  const totalCxp = useMemo(() => supplierInvoices.reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [supplierInvoices]);
+  const cxcOverdue = useMemo(() => salesInvoices.filter((inv: any) => {
+    const due = inv.dueDate ? new Date(inv.dueDate) : null;
+    return due && due < new Date() && Number(inv.balanceDue || inv.total || 0) > 0;
+  }).reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [salesInvoices]);
+  const cxpOverdue = useMemo(() => supplierInvoices.filter((inv: any) => {
+    const due = inv.dueDate ? new Date(inv.dueDate) : null;
+    return due && due < new Date() && Number(inv.balanceDue || inv.total || 0) > 0;
+  }).reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [supplierInvoices]);
+  const bankBalance = useMemo(() => bankAccounts.reduce((a, acc: any) => a + Number(acc.balance || 0), 0), [bankAccounts]);
+
+  const activeRecurringExpenses = useMemo(() => recurringExpenses.filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringExpenses]);
+  const activeRecurringIncomes = useMemo(() => (recurringIncomes || []).filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringIncomes]);
+  const monthlyRecurring = useMemo(() =>
+    activeRecurringExpenses.reduce((a, r) => a + convertAmount(r.amount || 0, r.currency, r.exchangeRate), 0),
+    [activeRecurringExpenses, convertAmount]
   );
-  const totalExpenses = expenses.reduce(
-    (total, item) => total + convertAmount(item.amount || 0, item.currency, item.exchangeRate),
-    0,
+  const monthlyRecurringIncome = useMemo(() =>
+    activeRecurringIncomes.reduce((a, r) => a + convertAmount(r.amount || 0, r.currency, r.exchangeRate), 0),
+    [activeRecurringIncomes, convertAmount]
   );
-  const totalRecurringExpenses = recurringExpenses.reduce(
-    (total, item) => total + convertAmount(item.amount || 0, item.currency, item.exchangeRate),
-    0,
-  );
-  const totalRecurringIncomes = recurringIncomes.reduce(
-    (total, item) => total + convertAmount(item.amount || 0, item.currency, item.exchangeRate),
-    0,
-  );
-
-  const netUtility = totalIncomes - totalExpenses;
-  const margin = totalIncomes > 0 ? (netUtility / totalIncomes) * 100 : 0;
-  const expenseToIncomeRatio = totalIncomes > 0 ? (totalExpenses / totalIncomes) * 100 : 0;
-  const netRecurringFlow = totalRecurringIncomes - totalRecurringExpenses;
-  const recurringCoverage = totalRecurringExpenses > 0
-    ? (totalRecurringIncomes / totalRecurringExpenses) * 100
-    : totalRecurringIncomes > 0
-      ? 100
-      : 0;
-  const activeAccounts = accounts.filter((account) => {
-    const status = String(account.status || '').toUpperCase();
-    return account.isActive !== false && status !== 'INACTIVE' && status !== 'CLOSED';
-  }).length;
+  const next7d = monthlyRecurring * (7 / 30);
+  const next15d = monthlyRecurring * (15 / 30);
+  const next30d = monthlyRecurring;
+  const projected30 = netCashFlow + monthlyRecurringIncome - monthlyRecurring;
+  const projected60 = projected30 + monthlyRecurringIncome - monthlyRecurring;
+  const projected90 = projected60 + monthlyRecurringIncome - monthlyRecurring;
 
   const monthlyData = useMemo(() => {
-    const now = new Date();
-    const data: Array<{
-      mes: string;
-      monthIndex: number;
-      year: number;
-      ingresos: number;
-      gastos: number;
-      balance: number;
-    }> = [];
+    const months: Record<string, { income: number; expense: number; net: number }> = {};
+    for (const i of incomes) { const m = i.date ? i.date.substring(0, 7) : 'unknown'; months[m] = months[m] || { income: 0, expense: 0, net: 0 }; months[m].income += convertAmount(i.amount || 0, i.currency, i.exchangeRate); }
+    for (const e of expenses) { const m = e.date ? e.date.substring(0, 7) : 'unknown'; months[m] = months[m] || { income: 0, expense: 0, net: 0 }; months[m].expense += convertAmount(e.amount || 0, e.currency, e.exchangeRate); }
+    return Object.entries(months).sort(([a], [b]) => a.localeCompare(b)).map(([month, d]) => ({ month, ...d, net: d.income - d.expense }));
+  }, [incomes, expenses, convertAmount]);
 
-    for (let offset = 5; offset >= 0; offset -= 1) {
-      const monthDate = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-      const monthIndex = monthDate.getMonth();
-      const year = monthDate.getFullYear();
+  const agingData = useMemo(() => {
+    const ranges = [{ label: '0-30 días', min: 0, max: 30 }, { label: '31-60 días', min: 31, max: 60 }, { label: '61-90 días', min: 61, max: 90 }, { label: '+90 días', min: 91, max: Infinity }];
+    return ranges.map(r => {
+      const cxcAmt = salesInvoices.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= r.min && days <= r.max && Number(inv.balanceDue || inv.total || 0) > 0; }).reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0);
+      const cxpAmt = supplierInvoices.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= r.min && days <= r.max && Number(inv.balanceDue || inv.total || 0) > 0; }).reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0);
+      return { label: r.label, cxc: cxcAmt, cxp: cxpAmt };
+    });
+  }, [salesInvoices, supplierInvoices]);
 
-      const monthIncomes = incomes.reduce((total, item) => {
-        const itemDate = new Date(item.date || item.createdAt);
-        if (Number.isNaN(itemDate.getTime()) || itemDate.getMonth() !== monthIndex || itemDate.getFullYear() !== year) {
-          return total;
-        }
-        return total + convertAmount(item.amount || 0, item.currency, item.exchangeRate);
-      }, 0);
-
-      const monthExpenses = expenses.reduce((total, item) => {
-        const itemDate = new Date(item.date || item.createdAt);
-        if (Number.isNaN(itemDate.getTime()) || itemDate.getMonth() !== monthIndex || itemDate.getFullYear() !== year) {
-          return total;
-        }
-        return total + convertAmount(item.amount || 0, item.currency, item.exchangeRate);
-      }, 0);
-
-      data.push({
-        mes: monthNames[monthIndex],
-        monthIndex,
-        year,
-        ingresos: Math.round(monthIncomes),
-        gastos: Math.round(monthExpenses),
-        balance: Math.round(monthIncomes - monthExpenses),
-      });
-    }
-
-    return data;
-  }, [convertAmount, expenses, incomes]);
-
-  const activeMonths = monthlyData.filter((month) => month.ingresos > 0 || month.gastos > 0);
-  const comparableMonths = monthlyData
-    .slice(0, -1)
-    .filter((month) => month.ingresos > 0 || month.gastos > 0);
-  const latestMonth = comparableMonths.at(-1);
-  const previousMonth = comparableMonths.at(-2);
-
-  const incomeTrend = latestMonth && previousMonth
-    ? percentChange(latestMonth.ingresos, previousMonth.ingresos)
-    : null;
-  const expenseTrend = latestMonth && previousMonth
-    ? percentChange(latestMonth.gastos, previousMonth.gastos)
-    : null;
-  const utilityTrend = latestMonth && previousMonth
-    ? percentChange(latestMonth.balance, previousMonth.balance)
-    : null;
-  const comparisonLabel = previousMonth ? `vs. ${previousMonth.mes} (mes cerrado)` : 'vs. periodo anterior';
+  const projectData = useMemo(() => {
+    const last = monthlyData.length > 0 ? monthlyData[monthlyData.length - 1] : null;
+    const base = last ? last.net + monthlyRecurringIncome - monthlyRecurring : 0;
+    return [{ label: 'Actual', amount: base }, { label: '30d', amount: projected30 }, { label: '60d', amount: projected60 }, { label: '90d', amount: projected90 }];
+  }, [monthlyData, projected30, projected60, projected90, monthlyRecurringIncome, monthlyRecurring]);
 
   const categoryData = useMemo(() => {
-    const categoryTotals: Record<string, number> = {};
+    const cats: Record<string, number> = {};
+    for (const e of expenses) { const cat = e.category || 'OTROS'; cats[cat] = (cats[cat] || 0) + convertAmount(e.amount || 0, e.currency, e.exchangeRate); }
+    return Object.entries(cats).sort(([, a], [, b]) => b - a).slice(0, 6).map(([name, value]) => ({ name, value }));
+  }, [expenses, convertAmount]);
 
-    expenses.forEach((expense) => {
-      const category = humanizeCategory(String(expense.category || 'Otros'));
-      categoryTotals[category] = (categoryTotals[category] || 0)
-        + convertAmount(expense.amount || 0, expense.currency, expense.exchangeRate);
-    });
-
-    return Object.entries(categoryTotals)
-      .map(([name, value]) => ({
-        name,
-        value: Math.round(value),
-        share: totalExpenses > 0 ? (value / totalExpenses) * 100 : 0,
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
-  }, [convertAmount, expenses, totalExpenses]);
-
-  const completedActiveMonths = monthlyData
-    .slice(0, -1)
-    .filter((month) => month.ingresos > 0 || month.gastos > 0);
-  const baselineMonths = (completedActiveMonths.length > 0 ? completedActiveMonths : activeMonths).slice(-3);
-  const averageHistoricalIncome = baselineMonths.length > 0
-    ? baselineMonths.reduce((total, month) => total + month.ingresos, 0) / baselineMonths.length
-    : 0;
-  const averageHistoricalExpense = baselineMonths.length > 0
-    ? baselineMonths.reduce((total, month) => total + month.gastos, 0) / baselineMonths.length
-    : 0;
-  const projectedIncome = Math.max(averageHistoricalIncome, totalRecurringIncomes);
-  const projectedExpense = Math.max(averageHistoricalExpense, totalRecurringExpenses);
-  const projectedNet = projectedIncome - projectedExpense;
-
-  const projectionData = useMemo(() => {
-    const now = new Date();
-    const history = monthlyData.map((month) => ({
-      mes: month.mes,
-      ingresos: month.ingresos,
-      gastos: month.gastos,
-      forecastBalance: null as number | null,
-      confidence: null as [number, number] | null,
-    }));
-
-    if (history.length > 0) {
-      const lastHistoryPoint = history[history.length - 1];
-      lastHistoryPoint.forecastBalance = monthlyData[monthlyData.length - 1].balance;
-      lastHistoryPoint.confidence = [monthlyData[monthlyData.length - 1].balance, monthlyData[monthlyData.length - 1].balance];
-    }
-
-    const uncertainty = Math.max(Math.abs(projectedNet) * 0.2, (projectedIncome + projectedExpense) * 0.04);
-    const forecast = Array.from({ length: 3 }, (_, index) => {
-      const monthDate = new Date(now.getFullYear(), now.getMonth() + index + 1, 1);
-      return {
-        mes: `${monthNames[monthDate.getMonth()]} est.`,
-        ingresos: null,
-        gastos: null,
-        forecastBalance: Math.round(projectedNet),
-        confidence: [Math.round(projectedNet - uncertainty), Math.round(projectedNet + uncertainty)] as [number, number],
-      };
-    });
-
-    return [...history, ...forecast];
-  }, [monthlyData, projectedExpense, projectedIncome, projectedNet]);
-
-  const topCategory = categoryData[0];
-  const signals = [
-    margin < 0
-      ? {
-          tone: 'critical' as const,
-          title: 'Resultado operativo negativo',
-          description: 'Los gastos superan los ingresos registrados.',
-        }
-      : margin < 15
-        ? {
-            tone: 'warning' as const,
-            title: 'Margen ajustado',
-            description: `${margin.toFixed(1)}% de margen; conviene revisar los gastos de mayor peso.`,
-          }
-        : {
-            tone: 'healthy' as const,
-            title: 'Margen en rango saludable',
-            description: `${margin.toFixed(1)}% de los ingresos queda como utilidad.`,
-          },
-    netRecurringFlow < 0
-      ? {
-          tone: 'warning' as const,
-          title: 'Compromisos recurrentes sin cobertura',
-          description: `Faltan ${formatConvertedAmount(Math.abs(netRecurringFlow), displayCurrency)} por ciclo.`,
-        }
-      : {
-          tone: 'healthy' as const,
-          title: 'Flujo recurrente cubierto',
-          description: `Cobertura estimada de ${recurringCoverage.toFixed(0)}%.`,
-        },
-    topCategory && topCategory.share >= 40
-      ? {
-          tone: 'warning' as const,
-          title: 'Gasto concentrado',
-          description: `${topCategory.name} representa ${topCategory.share.toFixed(0)}% del gasto total.`,
-        }
-      : {
-          tone: 'info' as const,
-          title: 'Distribución de gasto estable',
-          description: topCategory
-            ? `La categoría principal concentra ${topCategory.share.toFixed(0)}%.`
-            : 'Aún no hay gastos suficientes para analizar concentración.',
-        },
-    activeMonths.length < 3
-      ? {
-          tone: 'info' as const,
-          title: 'Proyección con confianza limitada',
-          description: 'Se necesitan al menos tres meses con actividad para una base más sólida.',
-        }
-      : {
-          tone: 'healthy' as const,
-          title: 'Base histórica disponible',
-          description: `La estimación usa ${baselineMonths.length} meses recientes con actividad.`,
-        },
-  ];
-
-  const fmtShort = (value: number) => {
-    if (Math.abs(value) >= 1_000_000) return `${currencySymbol}${(value / 1_000_000).toFixed(1)}M`;
-    if (Math.abs(value) >= 1_000) return `${currencySymbol}${(value / 1_000).toFixed(1)}k`;
-    return `${currencySymbol}${value.toLocaleString('es-NI', { maximumFractionDigits: 0 })}`;
-  };
-
-  const chartTooltipStyle = {
-    backgroundColor: 'var(--popover)',
-    border: '1px solid var(--border)',
-    borderRadius: '12px',
-    color: 'var(--popover-foreground)',
-    boxShadow: '0 14px 34px rgba(0, 0, 0, 0.16)',
-    fontSize: '12px',
+  const fmt = (n: number) => sym + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtShort = (n: number) => {
+    if (Math.abs(n) >= 1_000_000) return sym + (n / 1_000_000).toFixed(1) + 'M';
+    if (Math.abs(n) >= 1_000) return sym + (n / 1_000).toFixed(1) + 'K';
+    return sym + n.toLocaleString(undefined, { minimumFractionDigits: 0 });
   };
 
   return (
-    <section className="space-y-5" aria-labelledby="finance-dashboard-title" data-testid="finance-dashboard">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 id="finance-dashboard-title" className="text-xl font-semibold tracking-tight">
-            Resumen financiero
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Una lectura rápida del rendimiento actual, los compromisos y la tendencia de caja.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground">
-          <span className="rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1.5">
-            Tendencia: últimos 6 meses
-          </span>
-          {activeAccounts > 0 && (
-            <span className="rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1.5">
-              {activeAccounts} {activeAccounts === 1 ? 'cuenta activa' : 'cuentas activas'}
-            </span>
-          )}
-        </div>
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+        <KpiCard icon={Landmark} label="Saldo Disponible" value={fmt(bankBalance)} />
+        <KpiCard icon={TrendingUp} label="Ingresos Cobrados" value={fmt(totalIncome)} />
+        <KpiCard icon={TrendingDown} label="Pagos Realizados" value={fmt(totalExpense)} />
+        <KpiCard icon={DollarSign} label="Flujo Neto" value={fmt(netCashFlow)} />
+        <KpiCard icon={BarChart3} label="Total por Cobrar" value={fmt(totalCxc)} sub={`${cxcOverdue > 0 ? fmt(cxcOverdue) + ' vencido' : 'Sin vencidos'}`} />
+        <KpiCard icon={BarChart3} label="Total por Pagar" value={fmt(totalCxp)} sub={`${cxpOverdue > 0 ? fmt(cxpOverdue) + ' vencido' : 'Sin vencidos'}`} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="finance-kpi-grid">
-        <MetricCard
-          title="Ingresos"
-          value={formatConvertedAmount(totalIncomes, displayCurrency)}
-          description={`${incomes.length} transacciones registradas`}
-          icon={TrendingUp}
-          tone="positive"
-          trend={incomeTrend}
-          trendLabel={comparisonLabel}
-        />
-        <MetricCard
-          title="Gastos"
-          value={formatConvertedAmount(totalExpenses, displayCurrency)}
-          description={`${expenses.length} transacciones registradas`}
-          icon={TrendingDown}
-          tone="negative"
-          trend={expenseTrend}
-          trendLabel={comparisonLabel}
-          positiveIsGood={false}
-        />
-        <MetricCard
-          title="Utilidad neta"
-          value={formatConvertedAmount(netUtility, displayCurrency)}
-          description="Ingresos menos gastos"
-          icon={Scale}
-          tone={netUtility >= 0 ? 'positive' : 'negative'}
-          trend={utilityTrend}
-          trendLabel={comparisonLabel}
-        />
-        <MetricCard
-          title="Margen"
-          value={`${margin.toFixed(1)}%`}
-          description={`${expenseToIncomeRatio.toFixed(1)}% se destina a gastos`}
-          icon={Percent}
-          tone="neutral"
-          trend={null}
-          trendLabel=""
-        />
-      </div>
-
-      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.8fr)]">
-        <Card className="min-w-0 border-border/60 bg-card/65 shadow-none" data-testid="cashflow-projection-chart">
-          <CardHeader className="gap-3 pb-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                <BarChart3 className="size-4 text-primary" aria-hidden="true" />
-                Flujo real y proyección
-              </CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Historial mensual y estimación base para los próximos 3 meses.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-medium text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-sm bg-emerald-500" />Ingresos</span>
-              <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-sm bg-rose-400" />Gastos</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-3 bg-amber-500" />Proyección neta</span>
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+          <CardHeader className="pb-2 px-5 pt-4">
+            <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Cobros vs Pagos por Mes</CardTitle>
+            <p className="text-[10px] text-muted-foreground">Barras: ingresos (verde) y gastos (rojo). Línea naranja: resultado neto.</p>
           </CardHeader>
-          <CardContent>
-            <div className="h-[330px] min-w-0 w-full pt-2">
-              {activeMonths.length > 0 || totalRecurringExpenses > 0 || totalRecurringIncomes > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={projectionData} margin={{ top: 16, right: 8, bottom: 0, left: 0 }}>
-                    <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 5" opacity={0.75} />
-                    <XAxis
-                      dataKey="mes"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11, fontWeight: 500 }}
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
-                      tickFormatter={fmtShort}
-                      width={54}
-                    />
-                    <Tooltip
-                      contentStyle={chartTooltipStyle}
-                      labelStyle={{ color: 'var(--popover-foreground)', fontWeight: 600 }}
-                      formatter={(value: any, name: string) => {
-                        if (Array.isArray(value)) {
-                          return [`${fmtShort(Number(value[0]))} – ${fmtShort(Number(value[1]))}`, 'Rango estimado'];
-                        }
-                        const names: Record<string, string> = {
-                          ingresos: 'Ingresos',
-                          gastos: 'Gastos',
-                          forecastBalance: 'Flujo neto estimado',
-                        };
-                        return [fmtShort(Number(value)), names[name] || name];
-                      }}
-                    />
-                    <ReferenceLine
-                      x={monthlyData.at(-1)?.mes}
-                      stroke="var(--muted-foreground)"
-                      strokeDasharray="3 4"
-                      opacity={0.55}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="confidence"
-                      stroke="none"
-                      fill="#f59e0b"
-                      fillOpacity={0.12}
-                      connectNulls
-                    />
-                    <Bar dataKey="ingresos" fill="#10b981" radius={[5, 5, 0, 0]} maxBarSize={24} />
-                    <Bar dataKey="gastos" fill="#fb7185" radius={[5, 5, 0, 0]} maxBarSize={24} />
-                    <Line
-                      type="monotone"
-                      dataKey="forecastBalance"
-                      stroke="#f59e0b"
-                      strokeWidth={2.5}
-                      strokeDasharray="6 5"
-                      dot={{ r: 3, fill: '#f59e0b', strokeWidth: 0 }}
-                      connectNulls
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-center text-muted-foreground">
-                  <div>
-                    <BarChart3 className="mx-auto mb-3 size-9 opacity-35" />
-                    <p className="text-sm font-medium text-foreground">Aún no hay una tendencia que proyectar</p>
-                    <p className="mt-1 text-xs">Registra ingresos y gastos para construir el histórico.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="mt-2 flex flex-col gap-1 border-t border-border/50 pt-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>Base: promedio de hasta 3 meses recientes + compromisos recurrentes.</span>
-              <span className="font-medium tabular-nums text-foreground">
-                Flujo mensual estimado: {formatConvertedAmount(projectedNet, displayCurrency)}
-              </span>
-            </div>
+          <CardContent className="px-2 pb-3">
+            <ResponsiveContainer width="100%" height={320}>
+              <ComposedChart data={monthlyData} margin={{ top: 8, right: 16, left: -8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="incG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.9} /><stop offset="100%" stopColor="#10b981" stopOpacity={0.6} /></linearGradient>
+                  <linearGradient id="expG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef4444" stopOpacity={0.9} /><stop offset="100%" stopColor="#ef4444" stopOpacity={0.6} /></linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                <XAxis dataKey="month" tick={AXIS_TICK} tickLine={false} axisLine={false} />
+                <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={56} />
+                <Tooltip content={<TooltipCard formatter={fmt} />} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <Legend verticalAlign="bottom" height={28} formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))', fontWeight: 600, fontSize: 11 }}>{value}</span>} />
+                <Bar dataKey="income" name="Ingresos" fill="url(#incG)" radius={[5, 5, 0, 0]} maxBarSize={36} onClick={(data: any) => toast.info(`Ingresos ${data.month}: ${fmt(data.income)}`)} style={{ cursor: 'pointer' }} />
+                <Bar dataKey="expense" name="Gastos" fill="url(#expG)" radius={[5, 5, 0, 0]} maxBarSize={36} onClick={(data: any) => toast.info(`Gastos ${data.month}: ${fmt(data.expense)}`)} style={{ cursor: 'pointer' }} />
+                <Line dataKey="net" name="Resultado Neto" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b', strokeWidth: 0 }} connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        <Card className="min-w-0 border-border/60 bg-card/65 shadow-none" data-testid="expense-category-chart">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <TrendingDown className="size-4 text-rose-500" aria-hidden="true" />
-              Gastos por categoría
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">Las cinco categorías con mayor peso.</p>
+        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+          <CardHeader className="pb-2 px-5 pt-4">
+            <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Flujo de Caja Proyectado</CardTitle>
+            <p className="text-[10px] text-muted-foreground">Proyección a 30, 60 y 90 días según recurrentes</p>
           </CardHeader>
-          <CardContent>
-            <div className="h-[300px] min-w-0 w-full">
-              {categoryData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={categoryData}
-                    layout="vertical"
-                    margin={{ top: 8, right: 16, bottom: 0, left: 0 }}
-                  >
-                    <CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 5" opacity={0.65} />
-                    <XAxis
-                      type="number"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
-                      tickFormatter={fmtShort}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      axisLine={false}
-                      tickLine={false}
-                      width={92}
-                      tick={{ fill: 'var(--foreground)', fontSize: 10, fontWeight: 500 }}
-                    />
-                    <Tooltip
-                      contentStyle={chartTooltipStyle}
-                      labelStyle={{ color: 'var(--popover-foreground)', fontWeight: 600 }}
-                      formatter={(value: any) => [fmtShort(Number(value)), 'Gasto']}
-                    />
-                    <Bar dataKey="value" fill="var(--primary)" radius={[0, 6, 6, 0]} maxBarSize={24} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-center text-muted-foreground">
-                  <div>
-                    <TrendingDown className="mx-auto mb-3 size-9 opacity-35" />
-                    <p className="text-sm font-medium text-foreground">Sin gastos registrados</p>
-                    <p className="mt-1 text-xs">Las categorías aparecerán aquí.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-            {topCategory && (
-              <div className="rounded-xl bg-muted/35 px-3 py-2.5 text-xs">
-                <span className="text-muted-foreground">Mayor concentración</span>
-                <div className="mt-1 flex items-center justify-between gap-3">
-                  <span className="truncate font-medium">{topCategory.name}</span>
-                  <span className="shrink-0 font-semibold tabular-nums">{topCategory.share.toFixed(1)}%</span>
-                </div>
-              </div>
+          <CardContent className="px-2 pb-3">
+            <ResponsiveContainer width="100%" height={320}>
+              <ComposedChart data={projectData} margin={{ top: 8, right: 16, left: -8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="projG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#06b6d4" stopOpacity={0.25} /><stop offset="100%" stopColor="#06b6d4" stopOpacity={0} /></linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} />
+                <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={56} />
+                <Tooltip content={<TooltipCard formatter={fmt} />} cursor={{ stroke: '#06b6d4', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <Area dataKey="amount" fill="url(#projG)" stroke="#06b6d4" strokeWidth={2.5} type="monotone" dot={{ r: 4, fill: '#06b6d4', strokeWidth: 0 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2 rounded-2xl border-border/40 bg-card shadow-sm">
+          <CardHeader className="pb-2 px-5 pt-4">
+            <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">CxC y CxP por Vencimiento</CardTitle>
+          </CardHeader>
+          <CardContent className="px-2 pb-3">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={agingData} layout="vertical" margin={{ top: 8, right: 16, left: -8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+                <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} />
+                <YAxis dataKey="label" type="category" tick={{ ...AXIS_TICK, fill: 'hsl(var(--foreground))', fontWeight: 600 }} width={88} />
+                <Tooltip content={<TooltipCard formatter={fmt} />} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <Legend verticalAlign="bottom" height={28} formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))', fontWeight: 600, fontSize: 11 }}>{value}</span>} />
+                <Bar dataKey="cxc" name="Por Cobrar" fill="#10b981" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`CxC ${data.label}: ${fmt(data.cxc)}`)} style={{ cursor: 'pointer' }} />
+                <Bar dataKey="cxp" name="Por Pagar" fill="#ef4444" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`CxP ${data.label}: ${fmt(data.cxp)}`)} style={{ cursor: 'pointer' }} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+          <CardHeader className="pb-2 px-5 pt-4">
+            <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Gastos por Categoría</CardTitle>
+          </CardHeader>
+          <CardContent className="px-2 pb-3">
+            {categoryData.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-12 text-center">Sin datos de gastos</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={categoryData} layout="vertical" margin={{ top: 4, right: 16, left: -8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+                  <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} />
+                  <YAxis dataKey="name" type="category" tick={{ ...AXIS_TICK, fill: 'hsl(var(--foreground))', fontWeight: 500 }} width={88} />
+                  <Tooltip content={<TooltipCard formatter={fmt} />} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                  <Bar dataKey="value" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`Gastos ${data.name}: ${fmt(data.value)}`)} style={{ cursor: 'pointer' }}>
+                    {categoryData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Card className="border-border/60 bg-card/65 shadow-none" data-testid="recurring-summary">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <CalendarClock className="size-4 text-primary" aria-hidden="true" />
-              Flujo recurrente
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">Ingresos comprometidos frente a obligaciones periódicas.</p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+          <CardHeader className="pb-2 px-5 pt-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-xs font-black uppercase tracking-tight text-foreground">Últimos Ingresos</CardTitle>
+              <Badge variant="secondary" className="text-[9px]">{incomes.length} total</Badge>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-muted/20 p-4 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Flujo neto por ciclo</p>
-                <p className={`mt-1 text-2xl font-semibold tracking-tight tabular-nums ${netRecurringFlow >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  {formatConvertedAmount(netRecurringFlow, displayCurrency)}
-                </p>
-              </div>
-              <div className="text-left sm:text-right">
-                <p className="text-xs text-muted-foreground">Cobertura</p>
-                <p className="mt-1 font-semibold tabular-nums">{recurringCoverage.toFixed(0)}%</p>
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>Cobertura de compromisos</span>
-                <span className="tabular-nums">{Math.min(recurringCoverage, 100).toFixed(0)}%</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className={`h-full rounded-full transition-[width] duration-500 ${recurringCoverage >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                  style={{ width: `${Math.max(0, Math.min(recurringCoverage, 100))}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-border/50 p-3">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <ArrowUpRight className="size-3.5 text-emerald-500" /> Ingresos recurrentes
+          <CardContent className="px-5 pb-4">
+            {incomes.length === 0 ? (
+              <div className="text-center py-10 text-xs text-muted-foreground"><TrendingUp className="size-6 mx-auto mb-2 text-muted-foreground/30" />Sin ingresos registrados</div>
+            ) : (
+              incomes.slice(0, 5).map((inc: any) => (
+                <div key={inc.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0 group hover:bg-muted/30 -mx-2 px-2 rounded-lg transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="size-7 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0"><ArrowUpRight className="size-3.5 text-emerald-500" /></div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground truncate">{inc.description || inc.source || 'Ingreso'}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{inc.category} · {inc.date ? new Date(inc.date).toLocaleDateString('es-NI') : ''}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-black text-emerald-500 shrink-0 ml-2">{fmt(convertAmount(inc.amount || 0, inc.currency, inc.exchangeRate))}</span>
                 </div>
-                <p className="mt-2 font-semibold tabular-nums text-emerald-500">
-                  {formatConvertedAmount(totalRecurringIncomes, displayCurrency)}
-                </p>
-                <p className="mt-1 text-[10px] text-muted-foreground">
-                  {recurringIncomes.length} {recurringIncomes.length === 1 ? 'compromiso' : 'compromisos'}
-                </p>
-              </div>
-              <div className="rounded-xl border border-border/50 p-3">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <ArrowDownRight className="size-3.5 text-rose-500" /> Gastos recurrentes
-                </div>
-                <p className="mt-2 font-semibold tabular-nums text-rose-500">
-                  {formatConvertedAmount(totalRecurringExpenses, displayCurrency)}
-                </p>
-                <p className="mt-1 text-[10px] text-muted-foreground">
-                  {recurringExpenses.length} {recurringExpenses.length === 1 ? 'compromiso' : 'compromisos'}
-                </p>
-              </div>
-            </div>
+              ))
+            )}
           </CardContent>
         </Card>
-
-        <Card className="border-border/60 bg-card/65 shadow-none" data-testid="financial-signals">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <Activity className="size-4 text-primary" aria-hidden="true" />
-              Señales financieras
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">Lecturas que merecen atención según los datos actuales.</p>
+        <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
+          <CardHeader className="pb-2 px-5 pt-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-xs font-black uppercase tracking-tight text-foreground">Últimos Gastos</CardTitle>
+              <Badge variant="secondary" className="text-[9px]">{expenses.length} total</Badge>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-2.5">
-            {signals.map((signal, index) => {
-              const Icon = signal.tone === 'healthy'
-                ? CircleCheck
-                : signal.tone === 'info'
-                  ? Info
-                  : CircleAlert;
-              const styles = signal.tone === 'healthy'
-                ? 'bg-emerald-500/8 text-emerald-500'
-                : signal.tone === 'critical'
-                  ? 'bg-rose-500/8 text-rose-500'
-                  : signal.tone === 'warning'
-                    ? 'bg-amber-500/8 text-amber-500'
-                    : 'bg-primary/8 text-primary';
-
-              return (
-                <div key={`${signal.title}-${index}`} className="flex gap-3 rounded-xl border border-border/45 p-3">
-                  <div className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg ${styles}`}>
-                    <Icon className="size-3.5" aria-hidden="true" />
+          <CardContent className="px-5 pb-4">
+            {expenses.length === 0 ? (
+              <div className="text-center py-10 text-xs text-muted-foreground"><TrendingDown className="size-6 mx-auto mb-2 text-muted-foreground/30" />Sin gastos registrados</div>
+            ) : (
+              expenses.slice(0, 5).map((exp: any) => (
+                <div key={exp.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0 group hover:bg-muted/30 -mx-2 px-2 rounded-lg transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="size-7 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0"><ArrowDownRight className="size-3.5 text-rose-500" /></div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground truncate">{exp.description || exp.source || 'Gasto'}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{exp.category} · {exp.date ? new Date(exp.date).toLocaleDateString('es-NI') : ''}</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-foreground">{signal.title}</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{signal.description}</p>
-                  </div>
+                  <span className="text-xs font-black text-rose-500 shrink-0 ml-2">{fmt(convertAmount(exp.amount || 0, exp.currency, exp.exchangeRate))}</span>
                 </div>
-              );
-            })}
+              ))
+            )}
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
 
-      <div className="flex items-start gap-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
-        <Info className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
-        <span>
-          La proyección es una estimación orientativa basada en el histórico reciente y los registros recurrentes; no sustituye un presupuesto aprobado.
-        </span>
-      </div>
-    </section>
+function KpiCard({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) {
+  return (
+    <Card className="rounded-xl border-border/40 bg-card shadow-sm">
+      <CardContent className="p-3">
+        <div className="flex items-start justify-between">
+          <div className="space-y-0.5 min-w-0 flex-1">
+            <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground truncate">{label}</p>
+            <p className="text-sm font-black tabular-nums text-foreground truncate">{value}</p>
+            {sub && <p className="text-[7px] text-muted-foreground/60 truncate">{sub}</p>}
+          </div>
+          <div className="p-1.5 rounded-lg bg-primary/10 text-primary shrink-0 ml-1">
+            <Icon className="size-3.5" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

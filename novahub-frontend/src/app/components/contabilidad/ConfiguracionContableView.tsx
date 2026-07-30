@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { BankAccountsView } from './BankAccountsView'
+import { TaxCatalogView } from './TaxCatalogView'
 import { contabilidadService } from '../../services/contabilidad.service'
 import { CHART_ACCOUNT_CSV_HEADERS, csvRowsToText, downloadCsv, templateRows } from '../../utils/chartOfAccountsCsv'
 
@@ -835,6 +836,8 @@ export function ConfiguracionContableView() {
       </Card>
 
       <BankAccountsView />
+
+      <TaxCatalogView />
 
       {/* Import / Export CSV */}
       <Card>

@@ -8,6 +8,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
 import { Combobox } from '../ui/Combobox';
+import { TaxDetail } from '../ui/TaxSelector';
 import { purchaseOrdersService, suppliersService } from '../../services/compras.service';
 import { inventoryService } from '../../services/inventario.service';
 import { storageService } from '../../services/storage.service';
@@ -796,39 +797,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                         placeholder="0"
                       />
                     </div>
-                    <div className="col-span-1">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Tipo IVA</p>
-                      <select
-                        disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                        value={item.taxType || 'GRAVADO'}
-                        onChange={(e) => handleItemChange(idx, 'taxType', e.target.value)}
-                        className="h-8 w-full rounded-md border border-input bg-background px-1 text-[10px] font-bold"
-                      >
-                        <option value="GRAVADO">Gravado</option>
-                        <option value="EXENTO">Exento</option>
-                        <option value="NO_GRAVADO">No Gravado</option>
-                      </select>
-                    </div>
-                    <div className="col-span-1">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Retención</p>
-                      <select
-                        disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                        value={item.withholdingType || 'NONE'}
-                        onChange={(e) => handleItemChange(idx, 'withholdingType', e.target.value)}
-                        className="h-8 w-full rounded-md border border-input bg-background px-1 text-[10px] font-bold"
-                      >
-                        <option value="NONE">Sin retención</option>
-                        <option value="IR_1">IR 1%</option>
-                        <option value="IR_2">IR 2%</option>
-                        <option value="IR_5">IR 5%</option>
-                        <option value="IR_10">IR 10%</option>
-                        <option value="IR_15">IR 15%</option>
-                        <option value="IR_20">IR 20%</option>
-                        <option value="IR_25">IR 25%</option>
-                        <option value="IVA_1">IVA 1%</option>
-                        <option value="IVA_2">IVA 2%</option>
-                        <option value="IVA_3">IVA 3%</option>
-                      </select>
+                    <div className="col-span-3">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Impuestos y Retenciones</p>
+                      <TaxDetail
+                        item={item}
+                        onItemChange={(field, value) => handleItemChange(idx, field, value)}
+                        lineTotal={Number(item.quantity || 0) * Number(item.unitPrice || 0)}
+                      />
                     </div>
                   </div>
 
@@ -838,11 +813,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                     <span className="text-sm font-black tabular-nums">
                       {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.quantity * item.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
-                    {item.taxType === 'GRAVADO' && (
+                    {(item.taxType && item.taxType !== 'EXENTO' && item.taxType !== 'EXONERADO' && item.taxType !== 'NO_SUJETO' && item.taxType !== '') && (
                       <>
                         <span className="text-[9px] font-black uppercase tracking-widest text-rose-500/60">IVA</span>
                         <span className="text-xs font-black tabular-nums text-rose-500">
-                          {localDoc.currency === 'USD' ? '$' : 'C$'} {Number((Number(item.quantity||0) * Number(item.unitPrice||0)) * (Number(item.taxRate||15) / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.taxAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </>
                     )}

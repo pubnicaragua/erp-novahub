@@ -112,4 +112,11 @@ export const contabilidadService = {
   createExpenseCategory: (data: any) => api.post<any>('/accounting/expense-categories', data),
   updateExpenseCategory: (id: string, data: any) => api.put<any>(`/accounting/expense-categories/${id}`, data),
   deleteExpenseCategory: (id: string) => api.delete(`/accounting/expense-categories/${id}`),
+
+  // Tax Catalog
+  getTaxCatalog: (type?: string) => api.get<any[]>('/accounting/tax-catalog', { params: { type } }),
+  createTaxCatalogEntry: (data: any) => api.post<any>('/accounting/tax-catalog', data),
+  updateTaxCatalogEntry: (id: string, data: any) => api.put<any>(`/accounting/tax-catalog/${id}`, data),
+  deleteTaxCatalogEntry: (id: string) => api.delete(`/accounting/tax-catalog/${id}`),
+  seedDefaultTaxCatalog: () => api.post<any>('/accounting/tax-catalog/seed', {}),
 };

@@ -49,12 +49,11 @@ export const INVENTORY_SUBMODULES: Submodule[] = [
 
 // Submódulos de Finanzas
 export const FINANCIAL_SUBMODULES: Submodule[] = [
-  { id: 'FINANCIAL_DASHBOARD', label: 'Dashboard', description: 'Dashboard y Estadísticas' },
-  { id: 'FINANCIAL_INCOMES', label: 'Ingresos', description: 'Registro de ingresos' },
-  { id: 'FINANCIAL_EXPENSES', label: 'Gastos', description: 'Registro de egresos' },
-  { id: 'FINANCIAL_EXPENSES_REC', label: 'Gastos Recurrentes', description: 'Programación de gastos' },
-  { id: 'FINANCIAL_INCOMES_REC', label: 'Ingresos Recurrentes', description: 'Programación de ingresos' },
-  { id: 'FINANCIAL_BALANCE', label: 'Balance General', description: 'Reportes y balance' },
+  { id: 'FINANCIAL_DASHBOARD', label: 'Resumen Financiero', description: 'Dashboard y métricas clave' },
+  { id: 'FINANCIAL_INCOMES', label: 'Ingresos', description: 'Ingresos manuales y CxC' },
+  { id: 'FINANCIAL_EXPENSES', label: 'Gastos', description: 'Gastos directos y CxP' },
+  { id: 'FINANCIAL_EXPENSES_REC', label: 'Mov. Recurrentes', description: 'Ingresos y gastos programados' },
+  { id: 'FINANCIAL_BALANCE', label: 'Balance General', description: 'Balance General' },
 ];
 
 // Submódulos de Recursos Humanos

@@ -15,6 +15,7 @@ import { inventoryService } from '../../services/inventario.service';
 import type { PurchaseReceipt, Supplier, PurchaseOrder, Warehouse } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
+import { TaxTypeSelect } from '../ui/TaxSelector';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -524,16 +525,15 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
                     </div>
                     <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Tipo IVA</p>
-                      <select
-                        disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
-                        value={item.taxType || 'GRAVADO'}
-                        onChange={(e) => handleItemChange(idx, 'taxType', e.target.value)}
-                        className="h-8 w-full rounded-md border border-input bg-background px-1 text-[10px] font-bold"
-                      >
-                        <option value="GRAVADO">Gravado</option>
-                        <option value="EXENTO">Exento</option>
-                        <option value="NO_GRAVADO">No Gravado</option>
-                      </select>
+                      <TaxTypeSelect
+                        type="TAX"
+                        value={item.taxType || ''}
+                        onChange={(v) => {
+                          handleItemChange(idx, 'taxType', v)
+                          if (v === 'GRAVADO_15' || v === 'GRAVADO') { handleItemChange(idx, 'taxRate', 15) }
+                          else { handleItemChange(idx, 'taxRate', 0) }
+                        }}
+                      />
                     </div>
                     <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Bodega</p>
@@ -568,24 +568,19 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
                         ))}
                     </select>
                     <div className="flex items-center gap-2 ml-2">
-                      <select
-                        disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
+                      <TaxTypeSelect
+                        type="WITHHOLDING"
                         value={item.withholdingType || 'NONE'}
-                        onChange={(e) => handleItemChange(idx, 'withholdingType', e.target.value)}
-                        className="h-7 rounded-md border border-input bg-background px-1 text-[10px] font-bold"
-                      >
-                        <option value="NONE">Sin ret.</option>
-                        <option value="IR_1">IR 1%</option>
-                        <option value="IR_2">IR 2%</option>
-                        <option value="IR_5">IR 5%</option>
-                        <option value="IR_10">IR 10%</option>
-                        <option value="IR_15">IR 15%</option>
-                        <option value="IR_20">IR 20%</option>
-                        <option value="IR_25">IR 25%</option>
-                        <option value="IVA_1">IVA 1%</option>
-                        <option value="IVA_2">IVA 2%</option>
-                        <option value="IVA_3">IVA 3%</option>
-                      </select>
+                        onChange={(v) => {
+                          handleItemChange(idx, 'withholdingType', v)
+                          if (v !== 'NONE') {
+                            const rates: Record<string, number> = { IR_1:1, IR_2:2, IR_5:5, IR_10:10, IR_15:15, IR_20:20, IR_25:25, IVA_1:1, IVA_2:2, IVA_3:3, IR_BIENES_2:2, IR_SERVICIOS_2:2, IR_BIENES_1:1, IR_HONORARIOS_10:10, IR_ALQUILERES_15:15, IR_OTROS_20:20 }
+                            handleItemChange(idx, 'withholdingRate', rates[v] || 0)
+                          } else {
+                            handleItemChange(idx, 'withholdingRate', 0)
+                          }
+                        }}
+                      />
                       <span className="text-xs font-black tabular-nums">
                         {localDoc.currency === 'USD' ? '$' : 'C$'} {Number((item.unitPrice||0) * (item.quantityReceived||0)).toLocaleString()}
                       </span>

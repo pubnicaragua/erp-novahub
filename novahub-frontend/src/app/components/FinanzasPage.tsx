@@ -2,13 +2,19 @@ import { cn } from './ui/utils';
 import { useState, useEffect } from 'react';
 import { 
   DollarSign, TrendingUp, TrendingDown, BarChart3, 
-  CalendarClock, Landmark, RotateCcw
+  CalendarClock, Landmark, RotateCcw, Wallet,
+  AlertTriangle, Calendar,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { FinanceDashboardView } from './finanzas/FinanceDashboardView';
 import { FinanceTableView } from './finanzas/FinanceTableView';
 import { FinanceBalanceView } from './finanzas/FinanceBalanceView';
+import { FinanceCashView } from './finanzas/FinanceCashView';
+import { FinanceReceivablesView } from './finanzas/FinanceReceivablesView';
+import { FinancePayablesView } from './finanzas/FinancePayablesView';
+import { FinanceCalendarView } from './finanzas/FinanceCalendarView';
+import { FinanceGeneralBalanceView } from './finanzas/FinanceGeneralBalanceView';
 import { accountsService, incomeService, expensesService, recurringExpensesService, recurringIncomesService } from '../services/finanzas.service';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
@@ -35,18 +41,20 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     return user.enabledModules.includes('FINANCIAL') && !hasSpecificSubmodules;
   };
 
-  // Map sidebar submodule IDs to tab values
   const subModuleToTab: Record<string, string> = { 
-    'dashboard-fin': 'dashboard',
+    'resumen-financiero': 'resumen',
+    'caja-bancos': 'caja-bancos',
+    'cuentas-cobrar': 'cuentas-cobrar',
+    'cuentas-pagar': 'cuentas-pagar',
     'ingresos': 'ingresos', 
     'egresos': 'gastos', 
-    'gastos-recurrentes-fin': 'gastos-rec', 
-    'gastos-recurrentes': 'gastos-rec', 
-    'ingresos-recurrentes': 'ingresos-rec',
-    'balance': 'balance' 
+    'movimientos-recurrentes': 'recurrentes',
+    'calendario-financiero': 'calendario',
+    'analisis-ingresos-gastos': 'analisis',
+    'balance-general': 'balance-general',
   };
   
-  const [activeTab, setActiveTab] = useState(() => activeSubModule ? (subModuleToTab[activeSubModule] || 'dashboard') : 'dashboard');
+  const [activeTab, setActiveTab] = useState(() => activeSubModule ? (subModuleToTab[activeSubModule] || 'resumen') : 'resumen');
   const [incomes, setIncomes] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<any[]>([]);
@@ -76,7 +84,6 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
   const findAccountByPreferredTypes = (preferredTypes: string[]) => {
     const activeAccounts = accounts.filter((acc) => acc?.isActive !== false);
-
     return (
       activeAccounts.find((acc) => preferredTypes.includes(getAccountType(acc))) ||
       activeAccounts.find((acc) => getAccountType(acc) === 'ASSET') ||
@@ -95,29 +102,17 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     const payload = {
       code: accountKind === 'INCOME' ? `ING-${suffix}` : `GAS-${suffix}`,
       name: accountKind === 'INCOME' ? 'Ingresos Generales' : 'Gastos Generales',
-      // El backend valida el enum AccountType de Prisma en mayúsculas.
-      // Mantenerlo así evita un 400 al crear la primera cuenta del tenant.
       type: accountKind as any,
     };
 
     const createdResponse = await accountsService.create(payload);
     const createdAccount = normalizeItemResponse(createdResponse);
-
-    if (!createdAccount?.id) {
-      throw new Error('No se pudo crear una cuenta contable por defecto');
-    }
-
+    if (!createdAccount?.id) throw new Error('No se pudo crear una cuenta contable por defecto');
     setAccounts((prev) => [createdAccount, ...prev]);
-    toast.success(
-      accountKind === 'INCOME'
-        ? 'Se creó una cuenta de ingresos por defecto'
-        : 'Se creó una cuenta de gastos por defecto',
-    );
-
+    toast.success(accountKind === 'INCOME' ? 'Se creó una cuenta de ingresos por defecto' : 'Se creó una cuenta de gastos por defecto');
     return createdAccount;
   };
 
-  // Sync tab when activeSubModule changes from sidebar
   useEffect(() => {
     if (activeSubModule && subModuleToTab[activeSubModule]) {
       if (activeTab !== subModuleToTab[activeSubModule]) {
@@ -128,16 +123,11 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    // Find the reverse mapping to update sidebar
     const subModule = Object.keys(subModuleToTab).find(key => subModuleToTab[key] === value) || value;
-    if (onSubModuleChange) {
-      onSubModuleChange(subModule);
-    }
+    if (onSubModuleChange) onSubModuleChange(subModule);
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
@@ -150,26 +140,15 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
         recurringIncomesService.getAll(),
       ]);
 
-      const incomesData = incRes.status === 'fulfilled' ? normalizeListResponse(incRes.value) : [];
-      const expensesData = expRes.status === 'fulfilled' ? normalizeListResponse(expRes.value) : [];
-      const recurringData = rexpRes.status === 'fulfilled' ? normalizeListResponse(rexpRes.value) : [];
-      const accountsData = accRes.status === 'fulfilled' ? normalizeListResponse(accRes.value) : [];
-      const recurringIncomesData = rincRes.status === 'fulfilled' ? normalizeListResponse(rincRes.value) : [];
-
-      setIncomes(incomesData);
-      setExpenses(expensesData);
-      setRecurringExpenses(recurringData);
-      setAccounts(accountsData);
-      setRecurringIncomes(recurringIncomesData);
+      setIncomes(incRes.status === 'fulfilled' ? normalizeListResponse(incRes.value) : []);
+      setExpenses(expRes.status === 'fulfilled' ? normalizeListResponse(expRes.value) : []);
+      setRecurringExpenses(rexpRes.status === 'fulfilled' ? normalizeListResponse(rexpRes.value) : []);
+      setAccounts(accRes.status === 'fulfilled' ? normalizeListResponse(accRes.value) : []);
+      setRecurringIncomes(rincRes.status === 'fulfilled' ? normalizeListResponse(rincRes.value) : []);
 
       if ([incRes, expRes, rexpRes, accRes].every((res) => res.status === 'rejected')) {
         toast.error('Error al cargar datos financieros');
       }
-
-      if (incRes.status === 'rejected') console.error('Error fetching income:', incRes.reason);
-      if (expRes.status === 'rejected') console.error('Error fetching expenses:', expRes.reason);
-      if (rexpRes.status === 'rejected') console.error('Error fetching recurring expenses:', rexpRes.reason);
-      if (accRes.status === 'rejected') console.error('Error fetching accounts:', accRes.reason);
     } catch (error) {
       console.error('Error fetching finance data:', error);
       toast.error('Error al cargar datos financieros');
@@ -199,7 +178,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   ];
 
   const RECURRING_COLUMNS = [
-    { key: 'createdAt', label: 'fecha registro', type: 'datetime' as const, editable: false },
+    { key: 'createdAt', label: 'fecha', type: 'datetime' as const, editable: false },
     { key: 'source', label: 'origen', type: 'text' as const, editable: true },
     { key: 'description', label: 'descripcion', type: 'text' as const, editable: true },
     { key: 'frequency', label: 'frecuencia', type: 'select' as const, editable: true, options: [
@@ -209,164 +188,109 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     { key: 'amount', label: 'monto', type: 'currency' as const, editable: true },
     { key: 'category', label: 'categoria', type: 'select' as const, editable: true },
     { key: 'status', label: 'estado', type: 'select' as const, editable: true, options: [
-      { value: 'ACTIVE', label: 'Activo' }, { value: 'PAUSED', label: 'Inactivo' },
+      { value: 'ACTIVE', label: 'Activo' }, { value: 'PAUSED', label: 'Pausado' },
     ] },
   ];
-
-  const RECURRING_INCOME_COLUMNS = [
-    { key: 'createdAt', label: 'fecha registro', type: 'datetime' as const, editable: false },
-    { key: 'source', label: 'origen', type: 'text' as const, editable: true },
-    { key: 'description', label: 'descripcion', type: 'text' as const, editable: true },
-    { key: 'frequency', label: 'frecuencia', type: 'select' as const, editable: true, options: [
-      { value: 'DAILY', label: 'Diario' }, { value: 'WEEKLY', label: 'Semanal' }, { value: 'BIWEEKLY', label: 'Quincenal' },
-      { value: 'MONTHLY', label: 'Mensual' }, { value: 'QUARTERLY', label: 'Trimestral' }, { value: 'SEMIANNUAL', label: 'Semestral' }, { value: 'YEARLY', label: 'Anual' },
-    ] },
-    { key: 'amount', label: 'monto', type: 'currency' as const, editable: true },
-    { key: 'category', label: 'categoria', type: 'select' as const, editable: true },
-    { key: 'status', label: 'estado', type: 'select' as const, editable: true, options: [
-      { value: 'ACTIVE', label: 'Activo' }, { value: 'PAUSED', label: 'Inactivo' },
-    ] },
-  ];
-
-  const handleUpdateIncome = async (id: string, updates: any) => {
-    await incomeService.update(id, updates);
-    setIncomes(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
-  };
 
   const handleUpdateExpense = async (id: string, updates: any) => {
-    if (id.startsWith('pm-')) {
-      toast.error('Los pagos de facturas deben gestionarse desde el módulo de Compras');
+    const existing = fExpenses.find((e: any) => e.id === id);
+    if (existing && !['Manual', 'manual', '', null, undefined].includes(existing.source)) {
+      toast.error('No se puede editar un registro generado automáticamente');
       return;
     }
     await expensesService.update(id, updates);
     setExpenses(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
   };
 
-  const handleUpdateRecurring = async (id: string, updates: any) => {
-    await recurringExpensesService.update(id, updates);
-    setRecurringExpenses(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+  const handleUpdateIncome = async (id: string, updates: any) => {
+    const existing = fIncomes.find((i: any) => i.id === id);
+    if (existing && !['Manual', 'manual', '', null, undefined].includes(existing.source)) {
+      toast.error('No se puede editar un ingreso generado automáticamente');
+      return;
+    }
+    await incomeService.update(id, updates);
+    setIncomes(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
   };
 
-  const handleUpdateRecurringIncome = async (id: string, updates: any) => {
-    await recurringIncomesService.update(id, updates);
-    setRecurringIncomes(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+  const handleUpdateRecurring = async (id: string, updates: any) => {
+    const isIncome = recurringIncomes.some(r => r.id === id);
+    if (isIncome) {
+      await recurringIncomesService.update(id, updates);
+      setRecurringIncomes(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+    } else {
+      await recurringExpensesService.update(id, updates);
+      setRecurringExpenses(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+    }
+  };
+
+  const handleAddRecurring = async (type: 'EXPENSE' | 'INCOME') => {
+    try {
+      const defaultAccount = await ensureDefaultAccount(type === 'INCOME' ? 'INCOME' : 'EXPENSE');
+      const payload: any = {
+        source: type === 'INCOME' ? 'Nuevo Ingreso Recurrente' : 'Nuevo Gasto Recurrente',
+        description: '',
+        frequency: 'MONTHLY',
+        amount: 0,
+        startDate: new Date().toISOString(),
+        accountId: defaultAccount.id,
+        status: 'ACTIVE',
+        category: 'OTROS',
+        currency: 'NIO' as any,
+        exchangeRate: globalRate,
+      };
+      if (type === 'INCOME') {
+        const res = await recurringIncomesService.create(payload);
+        setRecurringIncomes([res, ...recurringIncomes]);
+      } else {
+        const res = await recurringExpensesService.create(payload);
+        setRecurringExpenses([res, ...recurringExpenses]);
+      }
+      toast.success(`Nuevo movimiento ${type === 'INCOME' ? 'de ingreso' : 'de gasto'} recurrente añadido`);
+    } catch (error) {
+      toast.error('Error al crear movimiento recurrente');
+    }
   };
 
   const handleAddIncome = async () => {
     try {
       const defaultAccount = await ensureDefaultAccount('INCOME');
-
-      const newItem = {
-        source: 'Nuevo Ingreso',
-        description: '',
-        amount: 0,
-        date: new Date().toISOString(),
-        accountId: defaultAccount.id,
-        category: 'OTROS',
-        currency: 'NIO' as any,
-        exchangeRate: globalRate,
-        notes: '',
-      };
+      const newItem = { source: 'Manual', description: '', amount: 0, date: new Date().toISOString(), accountId: defaultAccount.id, category: 'OTROS', currency: 'NIO' as any, exchangeRate: globalRate, notes: '' };
       const res = await incomeService.create(newItem);
       setIncomes([res, ...incomes]);
-      toast.success('Nueva fila de ingreso añadida');
-    } catch (error) {
-      toast.error('Error al crear ingreso');
-    }
+      toast.success('Nuevo ingreso añadido');
+    } catch (error) { toast.error('Error al crear ingreso'); }
   };
 
   const handleAddExpense = async () => {
     try {
       const defaultAccount = await ensureDefaultAccount('EXPENSE');
-
-      const newItem = {
-        source: 'Manual',
-        description: 'Nuevo Gasto',
-        category: 'OTROS',
-        amount: 0,
-        date: new Date().toISOString(),
-        accountId: defaultAccount.id,
-        currency: 'NIO' as any,
-        exchangeRate: globalRate,
-        status: 'PENDING' as any,
-        notes: '',
-      };
+      const newItem = { source: 'Manual', description: 'Nuevo Gasto', category: 'OTROS', amount: 0, date: new Date().toISOString(), accountId: defaultAccount.id, currency: 'NIO' as any, exchangeRate: globalRate, status: 'PENDING' as any, notes: '' };
       const res = await expensesService.create(newItem);
       setExpenses([res, ...expenses]);
-      toast.success('Nueva fila de gasto añadida');
-    } catch (error) {
-      toast.error('Error al crear gasto');
-    }
-  };
-
-  const handleAddRecurring = async () => {
-    try {
-      const defaultAccount = await ensureDefaultAccount('EXPENSE');
-
-      const newItem = {
-        description: 'Nuevo Gasto Recurrente',
-        source: 'Manual',
-        frequency: 'monthly' as const,
-        amount: 0,
-        startDate: new Date().toISOString(),
-        accountId: defaultAccount.id,
-        status: 'active' as const,
-        category: 'OTROS',
-        currency: 'NIO' as any,
-        exchangeRate: globalRate,
-      };
-      const res = await recurringExpensesService.create(newItem);
-      setRecurringExpenses([res, ...recurringExpenses]);
-      // Also refresh expenses since createRecurringExpense auto-generates first expense
-      try {
-        const expRes = await expensesService.getAll();
-        setExpenses(normalizeListResponse(expRes));
-      } catch {}
-      toast.success('Nuevo gasto recurrente añadido (primer gasto generado automáticamente)');
-    } catch (error) {
-      toast.error('Error al crear gasto recurrente');
-    }
-  };
-
-  const handleAddRecurringIncome = async () => {
-    try {
-      const defaultAccount = await ensureDefaultAccount('INCOME');
-
-      const newItem = {
-        source: 'Nuevo Ingreso Recurrente',
-        description: '',
-        frequency: 'monthly' as const,
-        amount: 0,
-        startDate: new Date().toISOString(),
-        accountId: defaultAccount.id,
-        status: 'active' as const,
-        category: 'OTROS',
-        currency: 'NIO' as any,
-        exchangeRate: globalRate,
-      };
-      const res = await recurringIncomesService.create(newItem);
-      setRecurringIncomes([res, ...recurringIncomes]);
-      // Also refresh incomes since createRecurringIncome auto-generates first income
-      try {
-        const incRes = await incomeService.getAll();
-        setIncomes(normalizeListResponse(incRes));
-      } catch {}
-      toast.success('Nuevo ingreso recurrente añadido (primer ingreso generado automáticamente)');
-    } catch (error) {
-      toast.error('Error al crear ingreso recurrente');
-    }
+      toast.success('Nuevo gasto añadido');
+    } catch (error) { toast.error('Error al crear gasto'); }
   };
 
   const totalIncome = fIncomes.reduce((acc, i) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0);
   const totalExpense = fExpenses.reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
-  const balanceSymbol = displayCurrency === 'USD' ? '$' : 'C$';
 
-  // Shared tab trigger class matching RH pattern — uses primary theme color
   const tabTriggerClass = "flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all";
+
+  const tabs = [
+    { id: 'resumen', label: 'Resumen', icon: BarChart3, module: 'FINANCIAL_DASHBOARD' },
+    { id: 'caja-bancos', label: 'Caja y Bancos', icon: Landmark, module: 'FINANCIAL_DASHBOARD' },
+    { id: 'cuentas-cobrar', label: 'CxC', icon: TrendingUp, module: 'FINANCIAL_INCOMES' },
+    { id: 'cuentas-pagar', label: 'CxP', icon: TrendingDown, module: 'FINANCIAL_EXPENSES' },
+    { id: 'ingresos', label: 'Ingresos', icon: TrendingUp, module: 'FINANCIAL_INCOMES' },
+    { id: 'gastos', label: 'Gastos', icon: Wallet, module: 'FINANCIAL_EXPENSES' },
+    { id: 'recurrentes', label: 'Recurrentes', icon: RotateCcw, module: 'FINANCIAL_EXPENSES_REC' },
+    { id: 'calendario', label: 'Calendario', icon: CalendarClock, module: 'FINANCIAL_DASHBOARD' },
+    { id: 'analisis', label: 'Análisis', icon: BarChart3, module: 'FINANCIAL_BALANCE' },
+    { id: 'balance-general', label: 'Balance Gral', icon: Landmark, module: 'FINANCIAL_BALANCE' },
+  ];
 
   return (
     <div className="mx-auto w-full max-w-[1700px] space-y-4 p-4 pb-20 sm:p-6 md:p-10">
-      {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
@@ -378,7 +302,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
             </h1>
             <div className="flex items-center gap-2 mt-2">
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                {fIncomes.length} ingresos · {fExpenses.length} gastos
+                {totalIncome.toLocaleString()} ingresos · {totalExpense.toLocaleString()} gastos
               </Badge>
               {isRestricted && (
                 <Badge variant="outline" className="border-amber-500/30 text-amber-600 bg-amber-500/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
@@ -391,17 +315,9 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
         <BranchScopeFilter className="ml-auto" showLabel={false} />
       </div>
 
-      {/* Main Navigation Tabs — matches RH pattern with primary theme colors */}
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
         <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
-          {[
-            { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'FINANCIAL_DASHBOARD' },
-            { id: 'ingresos', label: 'Ingresos', icon: TrendingUp, module: 'FINANCIAL_INCOMES' },
-            { id: 'gastos', label: 'Gastos', icon: TrendingDown, module: 'FINANCIAL_EXPENSES' },
-            { id: 'gastos-rec', label: 'Gastos Rec.', icon: CalendarClock, module: 'FINANCIAL_EXPENSES_REC' },
-            { id: 'ingresos-rec', label: 'Ingresos Rec.', icon: RotateCcw, module: 'FINANCIAL_INCOMES_REC' },
-            { id: 'balance', label: 'Balance', icon: Landmark, module: 'FINANCIAL_BALANCE' }
-          ].map((tab) => {
+          {tabs.map((tab) => {
             if (!hasAccess(tab.module)) return null;
             return (
               <TabsTrigger key={tab.id} value={tab.id} className={tabTriggerClass}>
@@ -412,12 +328,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
           })}
         </TabsList>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="mt-4 min-h-[600px]"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-4 min-h-[600px]">
           {loading ? (
             <div className="flex items-center justify-center h-96">
               <div className="flex flex-col items-center gap-4">
@@ -430,127 +341,130 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
             </div>
           ) : (
             <>
-              <TabsContent value="dashboard" className="m-0" asChild>
-                <motion.div 
-                  initial={{ opacity: 0, y: 16 }} 
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-                >
+              <TabsContent value="resumen" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <FinanceDashboardView incomes={fIncomes} expenses={fExpenses} recurringExpenses={fRecurringExpenses} recurringIncomes={fRecurringIncomes} accounts={fAccounts} />
                 </motion.div>
               </TabsContent>
 
+              <TabsContent value="caja-bancos" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                  <FinanceCashView />
+                </motion.div>
+              </TabsContent>
+
+              <TabsContent value="cuentas-cobrar" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                  <FinanceReceivablesView />
+                </motion.div>
+              </TabsContent>
+
+              <TabsContent value="cuentas-pagar" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                  <FinancePayablesView />
+                </motion.div>
+              </TabsContent>
+
               <TabsContent value="ingresos" className="m-0" asChild>
-                <motion.div 
-                  initial={{ opacity: 0, y: 16 }} 
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-                >
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <FinanceTableView 
-                    title="Libro de Ingresos Directos"
-                    data={fIncomes}
+                    title="Ingresos"
+                    subtitle="Datos consolidados de ingresos. Los registros automáticos (Ventas) son solo lectura."
+                    data={fIncomes.map((i: any) => ({ ...i, isPayment: !['Manual', 'manual', '', null, undefined].includes(i.source) }))}
                     columns={INCOME_COLUMNS}
                     onUpdate={handleUpdateIncome}
                     onAdd={handleAddIncome}
-                    onDelete={async (id) => {
-                      await incomeService.delete(id);
-                      setIncomes(prev => prev.filter(i => i.id !== id));
-                      toast.success('Ingreso eliminado');
-                    }}
+                    onDelete={async (id) => { await incomeService.delete(id); setIncomes(prev => prev.filter(i => i.id !== id)); toast.success('Ingreso eliminado'); }}
                     loading={loading}
-                    canCreate={canPerform('FINANCIAL_INCOMES', 'create')}
+                    canCreate={false}
                     canEdit={canPerform('FINANCIAL_INCOMES', 'edit')}
-                    canDelete={canPerform('FINANCIAL_INCOMES', 'delete')}
+                    canDelete={false}
                   />
                 </motion.div>
               </TabsContent>
 
               <TabsContent value="gastos" className="m-0" asChild>
-                <motion.div 
-                  initial={{ opacity: 0, y: 16 }} 
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-                >
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <FinanceTableView 
-                    title="Control de Egresos Operativos"
-                    data={fExpenses}
+                    title="Gastos"
+                    subtitle="Datos consolidados de egresos. Los registros automáticos (Compras, Nómina) son solo lectura."
+                    data={fExpenses.map((e: any) => ({ ...e, isPayment: !['Manual', 'manual', '', null, undefined].includes(e.source) }))}
                     columns={EXPENSE_COLUMNS}
                     onUpdate={handleUpdateExpense}
                     onAdd={handleAddExpense}
                     onDelete={async (id) => {
-                      if (id.startsWith('pm-')) {
-                        toast.error('Los pagos de facturas no pueden eliminarse desde aquí. Use el módulo de Compras.');
-                        return;
-                      }
-                      await expensesService.delete(id);
-                      setExpenses(prev => prev.filter(e => e.id !== id));
-                      toast.success('Gasto eliminado');
+                      const item = fExpenses.find((e: any) => e.id === id);
+                      if (item && !['Manual', 'manual', '', null, undefined].includes(item.source)) { toast.error('No se puede eliminar un registro generado automáticamente'); return; }
+                      await expensesService.delete(id); setExpenses(prev => prev.filter(e => e.id !== id)); toast.success('Gasto eliminado');
                     }}
                     loading={loading}
-                    canCreate={canPerform('FINANCIAL_EXPENSES', 'create')}
+                    canCreate={false}
                     canEdit={canPerform('FINANCIAL_EXPENSES', 'edit')}
-                    canDelete={canPerform('FINANCIAL_EXPENSES', 'delete')}
+                    canDelete={false}
                   />
                 </motion.div>
               </TabsContent>
 
-              <TabsContent value="gastos-rec" className="m-0" asChild>
-                <motion.div 
-                  initial={{ opacity: 0, y: 16 }} 
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-                >
-                  <FinanceTableView 
-                    title="Configuración de Gastos Periódicos"
-                    data={fRecurringExpenses}
-                    columns={RECURRING_COLUMNS}
-                    onUpdate={handleUpdateRecurring}
-                    onAdd={handleAddRecurring}
-                    onDelete={async (id) => {
-                      await recurringExpensesService.delete(id);
-                      setRecurringExpenses(prev => prev.filter(r => r.id !== id));
-                      toast.success('Gasto recurrente eliminado');
-                    }}
-                    loading={loading}
-                    canCreate={canPerform('FINANCIAL_EXPENSES_REC', 'create')}
-                    canEdit={canPerform('FINANCIAL_EXPENSES_REC', 'edit')}
-                    canDelete={canPerform('FINANCIAL_EXPENSES_REC', 'delete')}
-                  />
+              <TabsContent value="recurrentes" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-black uppercase tracking-tight">Movimientos Recurrentes</h3>
+                        <p className="text-xs text-muted-foreground">Plantillas de compromisos programados. No afectan totales hasta generar el movimiento real.</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Ingresos Recurrentes ({fRecurringIncomes.length})</p>
+                        <FinanceTableView 
+                          title=""
+                          data={fRecurringIncomes.map((r: any) => ({ ...r, isPayment: true }))}
+                          columns={RECURRING_COLUMNS}
+                          onUpdate={handleUpdateRecurring}
+                          onAdd={() => handleAddRecurring('INCOME')}
+                          onDelete={async (id) => { await recurringIncomesService.delete(id); setRecurringIncomes(prev => prev.filter(r => r.id !== id)); toast.success('Eliminado'); }}
+                          loading={loading}
+                          canCreate={false}
+                          canEdit={false}
+                          canDelete={false}
+                        />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-rose-600 mb-2">Gastos Recurrentes ({fRecurringExpenses.length})</p>
+                        <FinanceTableView 
+                          title=""
+                          data={fRecurringExpenses.map((r: any) => ({ ...r, isPayment: true }))}
+                          columns={RECURRING_COLUMNS}
+                          onUpdate={handleUpdateRecurring}
+                          onAdd={() => handleAddRecurring('EXPENSE')}
+                          onDelete={async (id) => { await recurringExpensesService.delete(id); setRecurringExpenses(prev => prev.filter(r => r.id !== id)); toast.success('Eliminado'); }}
+                          loading={loading}
+                          canCreate={false}
+                          canEdit={false}
+                          canDelete={false}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </motion.div>
               </TabsContent>
 
-              <TabsContent value="ingresos-rec" className="m-0" asChild>
-                <motion.div 
-                  initial={{ opacity: 0, y: 16 }} 
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-                >
-                  <FinanceTableView 
-                    title="Configuración de Ingresos Recurrentes"
-                    data={fRecurringIncomes}
-                    columns={RECURRING_INCOME_COLUMNS}
-                    onUpdate={handleUpdateRecurringIncome}
-                    onAdd={handleAddRecurringIncome}
-                    onDelete={async (id) => {
-                      await recurringIncomesService.delete(id);
-                      setRecurringIncomes(prev => prev.filter(r => r.id !== id));
-                      toast.success('Ingreso recurrente eliminado');
-                    }}
-                    loading={loading}
-                    canCreate={canPerform('FINANCIAL_INCOMES_REC', 'create')}
-                    canEdit={canPerform('FINANCIAL_INCOMES_REC', 'edit')}
-                    canDelete={canPerform('FINANCIAL_INCOMES_REC', 'delete')}
-                  />
+              <TabsContent value="calendario" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                  <FinanceCalendarView recurringExpenses={fRecurringExpenses} recurringIncomes={fRecurringIncomes} />
                 </motion.div>
               </TabsContent>
 
-              <TabsContent value="balance" className="m-0" asChild>
-                <motion.div 
-                  initial={{ opacity: 0, y: 16 }} 
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-                >
+              <TabsContent value="analisis" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <FinanceBalanceView incomes={fIncomes} expenses={fExpenses} recurringIncomes={fRecurringIncomes} recurringExpenses={fRecurringExpenses} />
+                </motion.div>
+              </TabsContent>
+
+              <TabsContent value="balance-general" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                  <FinanceGeneralBalanceView incomes={fIncomes} expenses={fExpenses} accounts={fAccounts} />
                 </motion.div>
               </TabsContent>
             </>

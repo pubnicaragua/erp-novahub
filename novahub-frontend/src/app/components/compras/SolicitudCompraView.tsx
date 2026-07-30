@@ -214,6 +214,7 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
           productId: item.productId, description: item.description,
           quantity: item.quantity, observations: item.observations || undefined,
           currentStock: item.currentStock, minStock: item.minStock,
+          warehouseId: createForm.warehouseId,
         })),
       };
       await purchaseRequestsService.create(payload as any);

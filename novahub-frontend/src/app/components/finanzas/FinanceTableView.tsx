@@ -43,6 +43,7 @@ interface FinanceTableViewProps {
   onAdd: () => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   title: string;
+  subtitle?: string;
   loading?: boolean;
   canCreate?: boolean;
   canEdit?: boolean;
@@ -56,6 +57,7 @@ export function FinanceTableView({
   onAdd,
   onDelete,
   title,
+  subtitle,
   loading,
   canCreate = true,
   canEdit = true,
@@ -445,6 +447,7 @@ export function FinanceTableView({
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
         <div className="flex items-center gap-3 shrink-0">
           <h3 className="text-lg md:text-xl font-black uppercase tracking-tight text-foreground">{title}</h3>
+          {subtitle && <p className="text-xs text-muted-foreground max-w-md">{subtitle}</p>}
           <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-primary/30 text-primary hidden sm:inline-flex">LIVE SYNC</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-3 lg:justify-end">
