@@ -12,6 +12,7 @@ import { useCurrency } from '../../../contexts/CurrencyContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { generateSessionSummaryPDF } from '../../../utils/pdfGenerator';
+import { formatSalesAmount } from '../../../utils/salesPriceList';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -158,7 +159,7 @@ export function SesionActivaStep({
         finalAmountNIO: contadoNIO,
         finalAmountUSD: contadoUSD,
         denominations: denoms,
-        notes: diferencia !== 0 ? `Diferencia de ${symbol} ${diferencia.toFixed(2)}` : 'Cuadre exacto',
+        notes: diferencia !== 0 ? `Diferencia de ${symbol} ${formatSalesAmount(diferencia)}` : 'Cuadre exacto',
         countAttempt: latestCount?.attempt,
       });
       setIsCloseAlertOpen(false);
@@ -234,8 +235,8 @@ export function SesionActivaStep({
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fondo Inicial</p>
-              <p className="text-xl font-black font-mono">{symbol} {fondoInicialConverted.toFixed(2)}</p>
-              <p className="text-[9px] text-muted-foreground mt-0.5">C$ {fondoInicialNIO.toFixed(2)} | $ {fondoInicialUSD.toFixed(2)}</p>
+              <p className="text-xl font-black font-mono">{symbol} {formatSalesAmount(fondoInicialConverted)}</p>
+              <p className="text-[9px] text-muted-foreground mt-0.5">C$ {formatSalesAmount(fondoInicialNIO)} | $ {formatSalesAmount(fondoInicialUSD)}</p>
             </div>
           </CardContent>
         </Card>
@@ -248,7 +249,7 @@ export function SesionActivaStep({
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ventas Totales</p>
-              <p className="text-xl font-black font-mono">{symbol} {ventasConverted.toFixed(2)}</p>
+              <p className="text-xl font-black font-mono">{symbol} {formatSalesAmount(ventasConverted)}</p>
             </div>
           </CardContent>
         </Card>
@@ -261,7 +262,7 @@ export function SesionActivaStep({
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Gastos Registrados</p>
-              <p className="text-xl font-black font-mono">{symbol} {gastosConverted.toFixed(2)}</p>
+              <p className="text-xl font-black font-mono">{symbol} {formatSalesAmount(gastosConverted)}</p>
             </div>
           </CardContent>
         </Card>
@@ -274,8 +275,8 @@ export function SesionActivaStep({
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Saldo Esperado</p>
-              <p className="text-xl font-black font-mono text-emerald-500">{symbol} {totalExpectedConverted.toFixed(2)}</p>
-              <p className="text-[9px] text-emerald-600 mt-0.5">C$ {expectedNIO.toFixed(2)} | $ {expectedUSD.toFixed(2)}</p>
+              <p className="text-xl font-black font-mono text-emerald-500">{symbol} {formatSalesAmount(totalExpectedConverted)}</p>
+              <p className="text-[9px] text-emerald-600 mt-0.5">C$ {formatSalesAmount(expectedNIO)} | $ {formatSalesAmount(expectedUSD)}</p>
             </div>
           </CardContent>
         </Card>
@@ -372,9 +373,9 @@ export function SesionActivaStep({
                   </div>
                   {showSystemAmounts && (
                     <div className={`min-w-0 text-right font-mono text-sm font-bold flex flex-col items-end justify-center whitespace-nowrap ${log.type === 'EXIT' ? 'text-destructive' : log.type === 'OPEN' ? 'text-muted-foreground' : 'text-emerald-500'}`}>
-                      <span>{log.type === 'EXIT' ? '-' : '+'}{symbol} {logConverted.toFixed(2)}</span>
+                      <span>{log.type === 'EXIT' ? '-' : '+'}{symbol} {formatSalesAmount(logConverted)}</span>
                       <span className="text-[9px] opacity-70 font-normal mt-0.5 whitespace-nowrap">
-                        C$ {logNIO.toFixed(2)} | $ {logUSD.toFixed(2)}
+                        C$ {formatSalesAmount(logNIO)} | $ {formatSalesAmount(logUSD)}
                       </span>
                     </div>
                   )}
@@ -409,15 +410,15 @@ export function SesionActivaStep({
           
           <div className="mt-6 p-4 bg-muted/20 border border-border/50 rounded-xl text-center space-y-1">
             <div className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Efectivo Contado (Equivalente {isUSD ? 'USD' : 'NIO'})</div>
-            <div className="text-2xl font-black font-mono">{symbol} {totalContadoConverted.toFixed(2)}</div>
-            <div className="text-xs text-muted-foreground mt-1">C$ {contadoNIO.toFixed(2)} | $ {contadoUSD.toFixed(2)}</div>
+            <div className="text-2xl font-black font-mono">{symbol} {formatSalesAmount(totalContadoConverted)}</div>
+            <div className="text-xs text-muted-foreground mt-1">C$ {formatSalesAmount(contadoNIO)} | $ {formatSalesAmount(contadoUSD)}</div>
           </div>
 
           {showSystemAmounts && (
             <div className={`p-4 border rounded-xl text-center space-y-1 transition-colors ${diferencia === 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-destructive/10 border-destructive/20'}`}>
               <div className={`text-[10px] uppercase font-black tracking-widest ${diferencia === 0 ? 'text-emerald-600' : 'text-destructive'}`}>Diferencia VS Sistema</div>
               <div className={`text-xl font-black font-mono ${diferencia === 0 ? 'text-emerald-600' : 'text-destructive'}`}>
-                {symbol} {diferencia > 0 ? '+' : ''}{diferencia.toFixed(2)}
+                {symbol} {diferencia > 0 ? '+' : ''}{formatSalesAmount(diferencia)}
               </div>
             </div>
           )}

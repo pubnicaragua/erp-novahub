@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, ChevronLeft, FileDown, History, MessageCircle, Loader2
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, Ban, ChevronLeft, FileDown, History, MessageCircle, Loader2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -19,7 +19,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
+import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
+import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -36,6 +39,9 @@ interface FacturasViewProps {
   onClearTargetInvoiceId?: () => void;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
+  dateFrom?: string;
+  dateTo?: string;
+  onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
 }
 
 // Todos los estados posibles (para visualización en badges)
@@ -48,16 +54,7 @@ const statusOptions = [
   { label: 'Parcial', value: 'PARTIAL', color: 'bg-blue-500/10 text-blue-500' },
 ];
 
-// Solo los estados que el usuario puede asignar manualmente (PARTIAL es auto-gestionado por pagos)
-const editableStatusOptions = [
-  { label: 'Borrador', value: 'DRAFT', color: 'bg-slate-500/10 text-slate-500' },
-  { label: 'Pendiente', value: 'PENDING', color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Pagada', value: 'PAID', color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Vencida', value: 'OVERDUE', color: 'bg-orange-500/10 text-orange-500' },
-  { label: 'Anulada', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
-];
-
-export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange }: FacturasViewProps) {
+export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: FacturasViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -69,7 +66,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [localDoc, setLocalDoc] = useState<any>(null);
   const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
-  const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
+  const findProductForItem = (item: any) => products.find((product: any) => product.id === item?.productId)
+    || products.find((product: any) => product.code && (product.code === item?.code || product.code === item?.productCode))
+    || products.find((product: any) => String(product.name || '').trim().toLowerCase() === String(item?.description || '').trim().toLowerCase());
+  const resolveItemType = (item: any) => item.itemType || (findProductForItem(item)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
   const getItemCatalog = (item: any) => {
     const catalog = resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog;
     if (!item?.productId || catalog.some((product) => product.id === item.productId)) return catalog;
@@ -82,6 +82,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [auditInvoiceId, setAuditInvoiceId] = useState<string | null>(null);
   const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
 
+  const getCustomerPriceListId = (customerId?: string | null) => {
+    const customer = customers.find((entry: any) => entry.id === customerId);
+    return customer?.priceListId || (customer as any)?.priceList?.id || null;
+  };
+
   const getCustomerPhone = (): string | null => {
     if (!localDoc?.customerId) return null;
     const customer = customers.find((c: any) => c.id === localDoc.customerId);
@@ -93,7 +98,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     if (!phone) { toast.error('El cliente no tiene número de teléfono registrado'); return; }
     const digits = phone.replace(/\D/g, '');
     const phoneWithCode = digits.length === 8 ? '505' + digits : (digits.startsWith('505') ? digits : '505' + digits);
-    const text = encodeURIComponent(`Hola ${localDoc?.customer?.name || ''}, te compartimos la factura ${localDoc?.number} por un total de ${localDoc?.currency === 'USD' ? '$' : 'C$'}${Number(localDoc?.total || 0).toLocaleString()}.`);
+    const text = encodeURIComponent(`Hola ${localDoc?.customer?.name || ''}, te compartimos la factura ${localDoc?.number} por un total de ${localDoc?.currency === 'USD' ? '$' : 'C$'}${formatSalesAmount(localDoc?.total)}.`);
     window.open(`https://wa.me/${phoneWithCode}?text=${text}`, '_blank');
   };
 
@@ -119,6 +124,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     });
   };
 
+  // La factura no tiene una columna propia para el modo de cargos. Se conserva
+  // mediante los campos del documento: cargos en las líneas significan
+  // "Por producto"; cargos solo en el encabezado significan "Global".
+  const inferPricingMode = (doc: any): 'global' | 'individual' => (
+    (doc?.items || []).some((line: any) =>
+      Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0 || Number(line.irRate || 0) !== 0,
+    ) ? 'individual' : 'global'
+  );
+
   // Helper para mostrar la fecha sin desfase de zona horaria (UTC-local)
   const formatDateSafe = (dateStr: string) => {
     if (!dateStr) return 'N/A';
@@ -132,7 +146,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     if (invoiceDraft) {
       setIsCreating(true);
       setEditingId(null);
-      setLocalDoc({ paymentMethod: 'CASH', accountId: '', ...JSON.parse(JSON.stringify(invoiceDraft)) });
+      const draftSnapshot = { paymentMethod: 'CASH', accountId: '', ...JSON.parse(JSON.stringify(invoiceDraft)) };
+      setLocalDoc(draftSnapshot);
+      setPricingMode(inferPricingMode(draftSnapshot));
 
       const sub = Number(invoiceDraft.subtotal || 0);
       if (sub > 0) {
@@ -150,7 +166,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     } else if (editingId) {
       const inv = data.find(x => x.id === editingId);
       if (inv) {
-        setLocalDoc(JSON.parse(JSON.stringify(inv)));
+        const invoiceSnapshot = JSON.parse(JSON.stringify(inv));
+        setLocalDoc(invoiceSnapshot);
+        setPricingMode(inferPricingMode(invoiceSnapshot));
         const sub = Number(inv.subtotal || 0);
         if (sub > 0) {
           const dRate = (Number(inv.discountAmount || 0) / sub) * 100;
@@ -193,8 +211,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const handlePayInvoice = async (invoice: Invoice, closeDetail = false) => {
     const invoiceStatus = String(invoice.status || '').toUpperCase();
     if (invoiceStatus === 'PAID') return;
-    if (!['PENDING', 'PARTIAL', 'OVERDUE'].includes(invoiceStatus)) {
-      toast.error('Solo se pueden pagar facturas emitidas y pendientes de pago');
+    if (!['DRAFT', 'PENDING', 'PARTIAL', 'OVERDUE'].includes(invoiceStatus)) {
+      toast.error('Solo se pueden pagar facturas en borrador o emitidas');
       return;
     }
 
@@ -203,9 +221,21 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error('La factura no tiene saldo pendiente');
       return;
     }
+    if (invoiceStatus === 'DRAFT' && !invoice.accountId) {
+      toast.error('La factura necesita una cuenta contable de venta antes de cobrarla');
+      return;
+    }
 
     try {
       setPayingInvoiceId(invoice.id);
+      if (invoiceStatus === 'DRAFT') {
+        // Formalizar el borrador antes del cobro para que se descuente stock,
+        // se genere el asiento de venta y luego el pago pueda conciliarse.
+        await invoicesService.update(invoice.id, {
+          status: 'PENDING',
+          items: (invoice as any).items || [],
+        } as any);
+      }
       await paymentsService.create({
         customerId: invoice.customerId,
         invoiceId: invoice.id,
@@ -231,38 +261,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error(Array.isArray(msg) ? msg[0] : msg);
     } finally {
       setPayingInvoiceId(null);
-    }
-  };
-
-  const handleStatusChange = async (newStatus: string, invoiceId?: string, currentInvoiceData?: Invoice) => {
-    const targetId = invoiceId || localDoc?.id;
-    const targetDoc = currentInvoiceData || localDoc;
-    if (!targetId || !targetDoc) return;
-
-    const upperStatus = newStatus.toUpperCase();
-    const statusLabel = statusOptions.find(o => o.value === upperStatus)?.label || newStatus;
-
-    try {
-      if (upperStatus === 'PAID') {
-        // El backend registra el cobro, actualiza la factura y genera los movimientos financieros/contables dentro de una transacción.
-        await handlePayInvoice(targetDoc as Invoice, true);
-        return;
-      } else {
-        // DRAFT, PENDING, CANCELLED, OVERDUE, REFUNDED: enviar SOLO el campo status
-        await invoicesService.update(targetId.toString(), { status: upperStatus } as any);
-      }
-      
-      // Sincronizar UI local
-      if (localDoc && localDoc.id === targetId) {
-        setLocalDoc({ ...localDoc, status: upperStatus });
-      }
-
-      toast.success(`Estado actualizado: ${statusLabel}`);
-      await onRefresh();
-    } catch (e: any) {
-      console.error('Error in status transition:', e);
-      const msg = e.response?.data?.message || e.message || '';
-      toast.error(`Error al cambiar a ${statusLabel}: ${Array.isArray(msg) ? msg[0] : msg}`);
     }
   };
 
@@ -302,12 +300,19 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error('Agrega al menos un producto');
       return;
     }
+    if (emitir) {
+      const priceMessage = getMissingSalesPriceMessage(localDoc.items);
+      if (priceMessage) {
+        toast.error(priceMessage);
+        return;
+      }
+    }
     if (emitir && !localDoc.accountId) {
       toast.error('Selecciona la cuenta contable de la venta antes de emitir');
       return;
     }
     const serialRows = (localDoc.items || []).filter((item: any) => {
-      const p = products.find((x: any) => x.id === item.productId);
+      const p = findProductForItem(item);
       return isSerialTracked(p);
     });
     const seenSerials = new Set<string>();
@@ -342,7 +347,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
     const serialNotes = serialRows.length > 0
       ? `\n[SERIALES]\n${serialRows.map((row: any) => {
-          const prod = products.find((p: any) => p.id === row.productId);
+          const prod = findProductForItem(row);
           const wh = warehouses.find((w: any) => w.id === row.warehouseId);
           return `${prod?.code || row.productId} (${wh?.name || 'Sin almacén'}): ${(row.serialNumbers || []).join(', ')}`;
         }).join('\n')}`
@@ -362,6 +367,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           currency: localDoc.currency,
           exchangeRate: Number(localDoc.exchangeRate || globalRate),
           warehouseId: (localDoc as any).warehouseId || warehouses[0]?.id || undefined,
+          priceListId: localDoc.priceListId || undefined,
           items: localDoc.items.map((item: any) => ({
             productId: item.productId || undefined,
             warehouseId: item.warehouseId || undefined,
@@ -370,6 +376,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             unitPrice: Number(item.unitPrice || 0),
             taxRate: Number(item.taxRate || 0),
             discount: Number(item.discount || 0),
+            priceListId: item.priceListId || undefined,
             total: Number(item.total || 0),
           })),
           subtotal: Number(localDoc.subtotal || 0),
@@ -377,7 +384,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           discountAmount: Number(localDoc.discountAmount || 0),
           total: Number(localDoc.total || 0),
           status: emitir ? 'PENDING' : 'DRAFT',
-          autoPay: emitir,
           paymentMethod: localDoc.paymentMethod || 'CASH',
           accountId: localDoc.accountId || undefined,
           notes: finalNotes,
@@ -478,10 +484,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     {
       key: 'status',
       header: 'Estado',
-      width: '130px',
-      editable: canPerform('SALES_INVOICES', 'edit'),
-      type: 'select',
-      options: editableStatusOptions,
+      width: '110px',
       render: (val) => {
         const opt = statusOptions.find(o => o.value === (val || '').toUpperCase());
         return (
@@ -534,7 +537,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
-    const statusOpt = statusOptions.find(o => o.value === (localDoc?.status || '').toUpperCase());
     const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED'].includes(String(localDoc?.status || '').toUpperCase());
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
@@ -579,23 +581,20 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                    <Input value={localDoc?.number || ''} onChange={(e) => setLocalDoc({ ...localDoc, number: e.target.value })} className="h-8 text-xs font-black uppercase" disabled={isInvoiceLocked} />
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  {isCreating ? (
-                    <span className="text-xs font-black px-2 py-0.5 rounded-lg bg-muted/20 text-muted-foreground">Nuevo</span>
-                  ) : (
-                    <select disabled={isInvoiceLocked} value={(localDoc?.status || '').toUpperCase()} onChange={(e) => handleStatusChange(e.target.value)} className={`h-8 rounded-md border border-input px-2 text-xs font-bold uppercase ${statusOpt?.color || 'bg-background'}`}>
-                      {editableStatusOptions.map(o => ( <option key={o.value} value={o.value}>{o.label}</option> ))}
-                    </select>
-                  )}
-                </div>
-                <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox
                     options={customers
                       .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))}
                     value={localDoc?.customerId || ''}
-                    onChange={(val) => { setLocalDoc({ ...localDoc, customerId: val }); if (!isCreating) handleUpdate(localDoc!.id, { customerId: val }); }}
+                    onChange={(val) => {
+                      const priceListId = getCustomerPriceListId(val);
+                      const items = (localDoc.items || []).map((item: any) => item.productId
+                        ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false }
+                        : { ...item, priceListId });
+                      setLocalDoc({ ...localDoc, customerId: val, priceListId, items });
+                      if (!isCreating) handleUpdate(localDoc!.id, { customerId: val, priceListId, items });
+                    }}
                     placeholder="Seleccionar Cliente"
                     disabled={isInvoiceLocked}
                   />
@@ -710,7 +709,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               </div>
               <div className="space-y-3">
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">Subtotal</span>
-                  <div className="flex min-w-0 items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="number" min="0" value={Number(localDoc?.subtotal || 0).toFixed(2)} readOnly className="h-8 w-24 max-w-full text-right font-bold bg-muted/20" /></div></div>
+                  <div className="flex min-w-0 items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="text" value={formatSalesAmount(localDoc?.subtotal)} readOnly className="h-8 w-24 max-w-full text-right font-bold bg-muted/20" /></div></div>
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">Descuento</span>
                   <div className="flex min-w-0 flex-wrap items-center gap-2 text-rose-500">
                     <div className="flex items-center mr-2">{pricingMode === 'global' ? <Input type="number" min="0" max="100" value={localRates.dRate || ''} placeholder="0" onChange={(e) => {
@@ -718,7 +717,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       const calc = recalcTotals(localDoc?.items || [], newRate, localRates.tRate);
                       setLocalDoc({ ...localDoc, ...calc });
                      }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" disabled={isInvoiceLocked} /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
-                    -{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.discountAmount || 0).toFixed(2)}
+                    -{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.discountAmount)}
                   </div></div>
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">IVA</span>
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -730,14 +729,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         setLocalDoc({ ...localDoc, ...calc });
                        }} disabled={isInvoiceLocked} /> Aplicar
                     </label>}
-                    {localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.taxAmount || 0).toFixed(2)}
+                    {localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.taxAmount)}
                   </div></div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black">Total</span>
                   <div className="flex flex-col items-end">
-                    <span className="text-primary font-black text-lg">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(localDoc?.total || 0).toFixed(2)}</span>
-                    {localDoc?.currency === 'USD' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ C$ {(Number(localDoc?.total || 0) * (localDoc?.exchangeRate || globalRate)).toFixed(2)}</p>}
-                    {localDoc?.currency === 'NIO' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ $ {(Number(localDoc?.total || 0) / (localDoc?.exchangeRate || globalRate)).toFixed(2)}</p>}
+                    <span className="text-primary font-black text-lg">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.total)}</span>
+                    {localDoc?.currency === 'USD' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ C$ {formatSalesAmount(Number(localDoc?.total || 0) * (localDoc?.exchangeRate || globalRate))}</p>}
+                    {localDoc?.currency === 'NIO' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ $ {formatSalesAmount(Number(localDoc?.total || 0) / (localDoc?.exchangeRate || globalRate))}</p>}
                   </div>
                 </div>
               </div>
@@ -768,10 +767,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div className={cn("min-w-0 xl:col-span-6", pricingMode === 'individual' && "xl:col-span-5")}>
-                    <Combobox
-                      options={getItemCatalog(item).map(p => ({ label: `${String(p.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code || ''} - ${p.name}`, value: p.id }))}
-                      value={item.productId || ''}
-                      onChange={(val) => {
+                    <div className="flex min-w-0 flex-wrap items-center gap-1">
+                      <div className="min-w-0 flex-1">
+                        <Combobox
+                          options={getItemCatalog(item).map(p => ({ label: `${String(p.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code || ''} - ${p.name}`, value: p.id }))}
+                          value={item.productId || ''}
+                          onChange={(val) => {
                         const newItems = [...(localDoc.items || [])];
                         const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
                         newItems[idx] = { ...newItems[idx], productId: val, warehouseId: '', serialNumbers: [] };
@@ -786,14 +787,40 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         if (!isCreating) {
                           handleUpdate(localDoc!.id, { items: newItems, ...calc });
                         }
-                      }}
-                       placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
-                       disabled={isInvoiceLocked}
-                    />
+                          }}
+                          placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
+                          disabled={isInvoiceLocked}
+                        />
+                      </div>
+                      <SalesLinePriceListSelect
+                        productId={item.productId}
+                        productCode={products.find((product) => product.id === item.productId)?.code || (item as any).code}
+                        productName={item.description}
+                        itemType={item.itemType}
+                        value={item.priceListId}
+                        defaultPriceListId={localDoc?.priceListId || getCustomerPriceListId(localDoc?.customerId)}
+                        currency={localDoc?.currency}
+                        exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
+                        disabled={isInvoiceLocked}
+                        onChange={(priceListId, result, source) => {
+                          const nextItems = [...(localDoc.items || [])] as any[];
+                          nextItems[idx] = {
+                            ...nextItems[idx],
+                            priceListId,
+                            unitPrice: result.unitPrice ?? 0,
+                            total: Number(nextItems[idx].quantity || 1) * Number(result.unitPrice ?? 0),
+                            priceMissing: result.priceMissing,
+                          };
+                          const calc = recalcTotals(nextItems, localRates.dRate, localRates.tRate);
+                          setLocalDoc({ ...localDoc, ...calc, priceListId, items: calc.items } as any);
+                          if (!isCreating && source !== 'initial') void handleUpdate(localDoc!.id, { ...calc, priceListId, items: calc.items } as any);
+                        }}
+                      />
+                    </div>
                     {item.productId && (
                       <div className="mt-1 flex items-center gap-2 px-1">
                         {(() => {
-                          const p = products.find(x => x.id === item.productId);
+                          const p = findProductForItem(item);
                           if (!p) return null;
                           const stock = Number(p.stock || 0);
                           return (
@@ -804,15 +831,13 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                               )}>
                                 STOCK: {stock}
                               </Badge>
-                              <span className="text-[9px] font-bold text-muted-foreground/60 uppercase">
-                                Costo: {formatConvertedAmount(Number(p.costPrice || 0), 'NIO')} | Venta: {formatConvertedAmount(Number(p.salePrice || 0), 'NIO')}
-                              </span>
+                              {item.priceMissing && <PriceMissingBadge />}
                             </>
                           );
                         })()}
                       </div>
                     )}
-                    {item.productId && isSerialTracked(products.find(x => x.id === item.productId)) && (
+                    {item.productId && isSerialTracked(findProductForItem(item)) && (
                       <div className="mt-2 space-y-2 rounded-md border border-border/50 p-2 bg-muted/10">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                           <div>
@@ -890,10 +915,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     </div>
                   )}
                   <div className={cn("min-w-0 xl:col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
-                    <Input type="number" min="0" max={Number(products.find(x => x.id === item.productId)?.stock || 1000000)} value={Number(item.quantity) || ''} placeholder="0"
+                    <Input type="number" min="0" max={Number(findProductForItem(item)?.stock || 1000000)} value={Number(item.quantity) || ''} placeholder="0"
                       onChange={(e) => {
                         let newQty = Number(e.target.value);
-                        const p = products.find(x => x.id === item.productId);
+                        const p = findProductForItem(item);
                         if (p && newQty > Number(p.stock || 0)) {
                           toast.warning(`Stock insuficiente. Disponible: ${p.stock}`, { id: `stock-warn-${idx}` });
                           newQty = Number(p.stock || 0);
@@ -907,13 +932,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           const calc = recalcTotals(localDoc.items || [], localRates.dRate, localRates.tRate);
                           handleUpdate(localDoc!.id, { items: localDoc.items, ...calc });
                         }
-                       }} className="h-8 w-full text-xs text-right" disabled={Boolean(item.productId && isSerialTracked(products.find(x => x.id === item.productId))) || isInvoiceLocked} />
+                       }} className="h-8 w-full text-xs text-right" disabled={Boolean(item.productId && isSerialTracked(findProductForItem(item))) || isInvoiceLocked} />
                   </div>
                   <div className="col-span-2">
-                    <Input type="number" min="0" value={Number(item.unitPrice) || ''} placeholder="0"
+                    <Input type="text" inputMode="decimal" min="0" value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)} placeholder="0"
                       onChange={(e) => {
                         const newItems = [...(localDoc.items || [])];
-                        newItems[idx] = { ...newItems[idx], unitPrice: Number(e.target.value), total: Number(newItems[idx].quantity || 1) * Number(e.target.value) };
+                        const unitPrice = Number(String(e.target.value).replace(/,/g, '')) || 0;
+                        newItems[idx] = { ...newItems[idx], unitPrice, total: Number(newItems[idx].quantity || 1) * unitPrice };
                         const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
                         setLocalDoc({ ...localDoc, items: newItems, ...calc });
                       }} onBlur={() => {
@@ -924,7 +950,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                        }} className="h-8 w-full text-xs text-right" disabled={isInvoiceLocked} />
                   </div>
                   <div className="flex min-w-0 items-center justify-between gap-2 text-right xl:col-span-2">
-                    <span className="text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'} {Number(item.total || 0).toFixed(2)}</span>
+                    <span className="text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(item.total)}</span>
                      <Button type="button" variant="ghost" size="icon" disabled={isInvoiceLocked} className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => {
                       const newItems = [...(localDoc.items || [])]; newItems.splice(idx, 1);
                       const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
@@ -980,7 +1006,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Control de Facturación</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de recaudos masivos sin fricción.</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input
@@ -997,19 +1024,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             )}
           </div>
         </div>
-
         <EditableDataTable
           data={filtered}
           pagination={pagination}
         columns={columns}
-        onRowUpdate={async (id, updates) => {
-          if (updates.status) {
-            const row = data.find(r => r.id === id);
-            await handleStatusChange(updates.status, id.toString(), row);
-          } else {
-            await handleUpdate(id, updates);
-          }
-        }}
+        showHorizontalControls
+        actionsWidth="w-52"
+        fitContent
+        onRowUpdate={async (id, updates) => { await handleUpdate(id, updates); }}
         onBulkDelete={async (ids) => {
             await Promise.all(ids.map(id => invoicesService.cancel(id.toString(), 'Anulación masiva')));
             toast.success(`${ids.length} Facturas anuladas`);
@@ -1041,7 +1063,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 )}
                 <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                 {canPerform('SALES_INVOICES', 'delete') && row.status !== 'CANCELLED' && (
-                  <Button title="Anular" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
+                  <Button title="Cancelar factura" aria-label="Cancelar factura" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>
                 )}
               </div>
           )}
@@ -1051,9 +1073,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       <ConfirmDialog
         open={pendingCancelId !== null}
         onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
-        title={"¿Anular factura?"}
+        title={"¿Cancelar factura?"}
         description="La factura quedará cancelada y no afectará reportes financieros. Esta acción no se puede deshacer."
-        confirmLabel="Anular Factura"
+        confirmLabel="Cancelar factura"
         variant="destructive"
         loading={cancelLoading}
         disabled={!cancelReason.trim()}
@@ -1076,7 +1098,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         }}
       >
         <div className="mt-4">
-          <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
+          <label className="text-sm font-medium text-foreground mb-1 block">Motivo de cancelación *</label>
           <textarea
             className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
             rows={3}

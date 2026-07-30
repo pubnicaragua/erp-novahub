@@ -19,6 +19,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { generateRecurringInvoicePDF } from '../../utils/pdfGenerator';
 import { recurringExpensesService } from '../../services/finanzas.service';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
+import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
+import { SalesIrSelector } from './SalesIrSelector';
+import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
@@ -28,6 +32,9 @@ interface FacturasRecurrentesViewProps {
   products?: Product[];
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
+  dateFrom?: string;
+  dateTo?: string;
+  onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
 }
 
 const statusOptions = [
@@ -76,7 +83,7 @@ const calculateNextInvoiceDate = (frequency: string, startDate: string) => {
   return next.toISOString();
 };
 
-export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [], pagination, onSearchChange }: FacturasRecurrentesViewProps) {
+export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: FacturasRecurrentesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -85,7 +92,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0 });
+  const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
   const productCatalog = products.filter((product) => product.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((product) => product.itemType === 'SERVICE');
@@ -106,12 +113,12 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       const r = data.find(x => x.id === editingId);
       if (r) {
         setLocalDoc(JSON.parse(JSON.stringify(r)));
-        setLocalRates(calculateRates(r));
+        setLocalRates({ ...calculateRates(r), irRate: Number((r as any).irRate || 0), irTaxId: (r as any).irTaxId || '' });
         setPricingMode((r.items || []).some((item: any) => Number(item.discount || 0) > 0 || Number(item.taxRate || 0) > 0) ? 'individual' : 'global');
       }
     } else if (!isCreating) {
       setLocalDoc(null);
-      setLocalRates({ dRate: 0, tRate: 0 });
+      setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
     }
   }, [editingId]);
 
@@ -163,7 +170,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       total: 0,
       accountId: '',
     });
-    setLocalRates({ dRate: 0, tRate: 0 });
+    setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
     setPricingMode('global');
   };
 
@@ -187,7 +194,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       const taxRate = mode === 'individual' ? Math.max(0, Number(item.taxRate || 0)) : 0;
       const discount = gross * discountRate / 100;
       const tax = (gross - discount) * taxRate / 100;
-      return { ...item, discount: discountRate, taxRate, total: gross - discount + tax };
+      const irRate = mode === 'individual' ? Math.max(0, Number(item.irRate || 0)) : 0;
+      const irAmount = (gross - discount) * irRate / 100;
+      return { ...item, discount: discountRate, taxRate, irRate, irAmount, total: gross - discount + tax - irAmount };
     });
     const subtotal = normalizedItems.reduce((acc: number, it: any) => acc + Number(it.quantity || 0) * Number(it.unitPrice || 0), 0);
     const discountAmount = mode === 'global' ? subtotal * Number(rates.dRate || 0) / 100 : normalizedItems.reduce((acc: number, it: any) => {
@@ -198,13 +207,16 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       const gross = Number(it.quantity || 0) * Number(it.unitPrice || 0);
       return acc + (gross - gross * Number(it.discount || 0) / 100) * Number(it.taxRate || 0) / 100;
     }, 0);
-    return { items: normalizedItems, subtotal, discountAmount, taxAmount, total: base + taxAmount };
+    const irAmount = mode === 'global' ? base * Number(rates.irRate || 0) / 100 : normalizedItems.reduce((acc: number, it: any) => acc + Number(it.irAmount || 0), 0);
+    return { items: normalizedItems, subtotal, discountAmount, taxAmount, irRate: Number(rates.irRate || 0), irAmount, total: base + taxAmount - irAmount };
   };
 
   const handleSave = async () => {
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
     if (!localDoc.accountId) { toast.error('Selecciona la cuenta contable de ingresos'); return; }
+    const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
+    if (priceMessage) { toast.error(priceMessage); return; }
     const saveToastId = toast.loading(isCreating ? 'Creando factura recurrente...' : 'Guardando cambios...');
     const normalizedStartDate = toIsoDate(localDoc.startDate);
     const normalizedEndDate = localDoc.endDate ? toIsoDate(localDoc.endDate) : undefined;
@@ -213,6 +225,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       const resolvedItemType = String(item.itemType || (item.productId ? 'PRODUCT' : 'SERVICE')).toUpperCase();
       return {
       productId: item.productId || undefined,
+      priceListId: item.priceListId || undefined,
       itemType: resolvedItemType,
       serviceName: resolvedItemType === 'SERVICE' ? (item.serviceName || item.description || '') : undefined,
       description: item.description || item.serviceName || '',
@@ -234,6 +247,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           nextInvoiceDate: calculatedNextInvoiceDate,
           currency: localDoc.currency,
           exchangeRate: localDoc.exchangeRate || globalRate,
+          priceListId: localDoc.priceListId || undefined,
           items: normalizedItems,
           subtotal: localDoc.subtotal,
           discountAmount: localDoc.discountAmount,
@@ -309,7 +323,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           {formatConvertedAmount(Number(val || 0), (row as any).currency, (row as any).exchangeRate)}
         </span>
       ) },
-    { key: 'status', header: 'Estado', width: '130px', render: (val) => { const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
+    { key: 'status', header: 'Estado', width: '110px', render: (val) => { const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
       return <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none", opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>; } },
     { key: 'nextInvoiceDate', header: 'Próxima Fecha', render: (val) => <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground"><Calendar className="size-3" />{formatDateSafe(val)}</div> },
   ];
@@ -385,7 +399,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                       .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))} 
                     value={localDoc?.customerId || ''} 
-                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val })} 
+                    onChange={(val) => { const customer = customers?.find((entry) => entry.id === val); const priceListId = customer?.priceListId || null; const items = (localDoc?.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); setLocalDoc({ ...localDoc, customerId: val, priceListId, items }); }}
                     placeholder="Seleccionar Cliente" 
                   /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
@@ -489,7 +503,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="flex flex-wrap gap-2">
-              {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" onClick={() => {
+              {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => {
                 const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', serviceName: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, total: 0 }];
                 setLocalDoc({ ...localDoc, items: newItems });
               }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border border-primary/20"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
@@ -522,7 +536,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                       {resolveItemType(item) === 'SERVICE' ? 'Servicio' : 'Producto'}
                     </label>
                   </div>
-                  <div className="col-span-3">
+                  <div className="col-span-3 min-w-0">
                     {resolveItemType(item) === 'SERVICE' ? (
                       <div className="space-y-1">
                         <Combobox
@@ -534,9 +548,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                             const baseSalePrice = Number(service?.salePrice ?? service?.price ?? 0);
                             const unitPrice = localDoc?.currency === 'USD' ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1) : baseSalePrice;
                             ni[idx] = { ...ni[idx], itemType: 'SERVICE', productId: val, serviceName: service?.name || ni[idx].serviceName || '', description: service?.name || ni[idx].description || '', unitPrice, total: Number(ni[idx].quantity || 1) * unitPrice };
-                            const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc });
+                            const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc });
                           }}
                           placeholder="Seleccionar servicio..."
+                          disabled={!localDoc?.customerId}
                         />
                         {!item.productId && <Input
                           value={item.serviceName || item.description || ''}
@@ -548,17 +563,34 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                           className="h-8 text-xs"
                           placeholder="O escribir servicio personalizado"
                         />}
+                        <SalesLinePriceListSelect
+                          productId={item.productId}
+                          productCode={serviceCatalog.find((product) => product.id === item.productId)?.code || item.code}
+                          productName={item.description}
+                          itemType={item.itemType}
+                          value={item.priceListId}
+                          defaultPriceListId={localDoc?.priceListId}
+                          currency={localDoc?.currency}
+                          exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
+                          onChange={(priceListId, result) => {
+                            const ni = [...(localDoc.items || [])] as any[];
+                            ni[idx] = { ...ni[idx], priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing };
+                            const calc = recalcTotals(ni);
+                            setLocalDoc({ ...localDoc, ...calc, priceListId });
+                          }}
+                        />
                       </div>
                     ) : (
-                      <Combobox options={productCatalog.map(p => ({ label: `Producto · ${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
+                      <div className="flex min-w-0 items-center gap-2"><div className="min-w-0 flex-1"><Combobox options={productCatalog.map(p => ({ label: `Producto · ${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
                         onChange={(val) => { const ni = [...(localDoc.items || [])]; const prod = productCatalog.find(p => p.id === val);
                           const baseSalePrice = Number(prod?.salePrice ?? prod?.price ?? 0);
                           const unitPrice = localDoc?.currency === 'USD' ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1) : baseSalePrice;
                           ni[idx] = { ...ni[idx], itemType: 'PRODUCT', productId: val, description: prod?.name || '', unitPrice, total: Number(ni[idx].quantity || 1) * unitPrice };
-                          const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }} placeholder="Seleccionar producto..." />
+                          const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }} placeholder="Seleccionar producto..." /></div><SalesLinePriceListSelect productId={item.productId} productCode={productCatalog.find((product) => product.id === item.productId)?.code || item.code} value={item.priceListId} defaultPriceListId={localDoc?.priceListId} currency={localDoc?.currency} exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)} onChange={(priceListId, result) => { const ni = [...(localDoc.items || [])] as any[]; ni[idx] = { ...ni[idx], priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing }; const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc, priceListId }); }} /></div>
                     )}
+                    {item.priceMissing && <PriceMissingBadge className="mt-1" />}
                   </div>
-                  {pricingMode === 'individual' && <div className="col-span-3 flex items-end gap-2 text-[10px] xl:col-span-3">
+                  {pricingMode === 'individual' && <div className="col-span-3 flex min-w-0 flex-wrap items-end gap-1.5 text-[10px] xl:col-span-3">
                     <label className="flex h-8 items-center gap-1 rounded-md bg-muted/30 px-2 font-black"><input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
                       const ni = [...(localDoc.items || [])];
                       ni[idx] = { ...ni[idx], taxRate: event.target.checked ? 15 : 0 };
@@ -573,16 +605,17 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                       setLocalDoc({ ...localDoc, ...recalculated });
                       if (!isCreating) void handleUpdate(localDoc!.id, recalculated as any);
                     }} className="h-8 min-w-0 flex-1 text-right text-xs" />
+                    <SalesIrSelector value={item.irTaxId} rate={Number(item.irRate || 0)} compact onChange={(option) => { const ni = [...(localDoc.items || [])] as any[]; ni[idx] = { ...ni[idx], irRate: Number(option?.rate || 0), irTaxId: option?.id || null }; const recalculated = recalcTotals(ni, 'individual'); setLocalDoc({ ...localDoc, ...recalculated }); }} />
                   </div>}
                   <div className="col-span-2"><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };
-                    const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }} className="h-8 text-xs text-right" /></div>
-                  <div className="col-span-2"><Input type="number" min="0" value={Number(item.unitPrice) || ''} onChange={(e) => {
+                      const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }} /></div>
+                  <div className="col-span-2"><Input type="text" value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)} readOnly className="bg-muted/20 text-right" onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
-                    const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }} className="h-8 text-xs text-right" /></div>
+                      const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }} /></div>
                   <div className="col-span-2 text-right"><span className="text-xs font-black">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
                   <div className="col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
-                    onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, items: ni, ...calc }); }}><Trash2 className="size-3" /></Button></div>
+                    onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }}><Trash2 className="size-3" /></Button></div>
                 </div>
               ))}
               {(!localDoc.items || localDoc.items.length === 0) && <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">Sin ítems. Haz clic en "Agregar Item".</div>}
@@ -610,7 +643,8 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground">Facturación Recurrente</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de contratos, igualas y servicios por suscripción.</p></div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar suscripción..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('SALES_RECURRING', 'create') && (
@@ -622,7 +656,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         <EditableDataTable data={filtered}
           pagination={pagination}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}
-          columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+          columns={columns} onRowUpdate={handleUpdate} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           actions={(row) => (
             <div className="flex items-center gap-1">
                {canPerform('SALES_RECURRING', 'edit') && (

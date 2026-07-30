@@ -10,6 +10,7 @@ import { Input } from '../ui/input';
 import { toast } from 'sonner';
 import { cajaService, type DashboardData } from '../../services/caja.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { formatSalesAmount } from '../../utils/salesPriceList';
 
 export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onNavigateToFacturacion?: () => void, registerId?: string }) {
   const { displayCurrency, exchangeRate: globalRate } = useCurrency();
@@ -20,7 +21,7 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
     const isUSD = displayCurrency === 'USD';
     const symbol = isUSD ? '$' : 'C$';
     const converted = isUSD ? value / globalRate : value;
-    return `${symbol} ${Number(converted).toLocaleString('en-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${symbol} ${formatSalesAmount(converted)}`;
   }, [displayCurrency, globalRate]);
   const getTodayDateString = () => {
     const today = new Date();

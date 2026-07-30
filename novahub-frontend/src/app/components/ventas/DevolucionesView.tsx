@@ -17,6 +17,10 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
+import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
+import { SalesIrSelector } from './SalesIrSelector';
+import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 
 interface DevolucionesViewProps {
   data: SalesReturn[];
@@ -27,6 +31,9 @@ interface DevolucionesViewProps {
   products?: Product[];
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
+  dateFrom?: string;
+  dateTo?: string;
+  onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
 }
 
 const statusOptions = [
@@ -36,7 +43,7 @@ const statusOptions = [
   { label: 'Rechazada',  value: 'REJECTED',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [], pagination, onSearchChange }: DevolucionesViewProps) {
+export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: DevolucionesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -79,7 +86,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     });
   };
 
-  const recalcTotal = (items: any[]) => items.reduce((acc: number, it: any) => acc + Number(it.total || 0), 0);
+  const recalcTotal = (items: any[]) => items.reduce((acc: number, it: any) => { const gross = Number(it.quantity || 0) * Number(it.unitPrice || 0); const discount = gross * Number(it.discount || 0) / 100; const net = gross - discount; const tax = net * Number(it.taxRate || 0) / 100; const ir = net * Number(it.irRate || 0) / 100; return acc + net + tax - ir; }, 0);
 
   const handleSave = async () => {
     if (!localDoc) return;
@@ -87,6 +94,8 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     if (!localDoc.invoiceId) { toast.error('Selecciona la factura de origen'); return; }
     if (!localDoc.reason.trim()) { toast.error('Ingresa la razón de la devolución'); return; }
     if (!localDoc.accountId) { toast.error('Selecciona la cuenta contable de la devolución'); return; }
+    const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
+    if (priceMessage) { toast.error(priceMessage); return; }
     const saveToastId = toast.loading(isCreating ? 'Creando devolución...' : 'Guardando cambios...');
     try {
       if (isCreating) {
@@ -100,12 +109,14 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             description: item.description || '',
             quantity: Number(item.quantity || 1),
             unitPrice: Number(item.unitPrice || 0),
+            priceListId: item.priceListId || undefined,
             total: Number(item.total || 0),
           })),
           total: localDoc.total,
           status: 'PENDING',
           currency: localDoc.currency || displayCurrency,
           exchangeRate: localDoc.exchangeRate || globalRate,
+          priceListId: localDoc.priceListId || undefined,
           accountId: localDoc.accountId,
         } as any);
         toast.success('Devolución registrada', { id: saveToastId });
@@ -160,7 +171,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     { key: 'invoice', header: 'Factura Origen', render: (_, row) => <span className="text-xs font-bold text-blue-500">{row.invoice?.number || 'N/A'}</span> },
     { key: 'date', header: 'Fecha', render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span> },
     { key: 'total', header: 'Total', width: '130px', render: (val, row) => <span className="text-[13px] font-black tabular-nums text-rose-500">{formatConvertedAmount(Number(val||0), (row as any).currency, (row as any).exchangeRate)}</span> },
-    { key: 'status', header: 'Estado', width: '130px', render: (val) => {
+    { key: 'status', header: 'Estado', width: '110px', render: (val) => {
       const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
       return <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none", opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>; } },
   ];
@@ -217,7 +228,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                       .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))} 
                     value={localDoc?.customerId || ''} 
-                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} 
+                    onChange={(val) => { const customer = customers?.find((entry) => entry.id === val); const priceListId = customer?.priceListId || null; const items = (localDoc?.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); setLocalDoc({ ...localDoc, customerId: val, priceListId, items, invoiceId: '' }); }}
                     placeholder="Seleccionar Cliente" 
                   /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Factura Origen</p>
@@ -264,7 +275,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos Devueltos</p>
               <div className="flex flex-wrap gap-2">
-              {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" onClick={() => {
+              {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => {
                 const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }];
                 setLocalDoc({ ...localDoc, items: newItems });
               }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
@@ -272,21 +283,22 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className="col-span-5">Descripción</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div><div className="col-span-1"></div>
+                <div className="col-span-4">Descripción</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div><div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
-                  <div className="col-span-5"><Combobox options={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).map(p => ({ label: `${resolveItemType(item) === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
+                  <div className="col-span-5"><div className="flex min-w-0 items-center gap-2"><div className="min-w-0 flex-1"><Combobox options={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).map(p => ({ label: `${resolveItemType(item) === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
                     onChange={(val) => { const ni = [...(localDoc.items || [])]; const prod = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
-                      const unitPrice = Number(prod?.salePrice ?? prod?.price ?? 0);
+                    const unitPrice = Number(prod?.salePrice ?? prod?.price ?? 0);
                       ni[idx] = { ...ni[idx], productId: val, description: prod?.name || '', unitPrice, total: Number(ni[idx].quantity || 1) * unitPrice };
-                    setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'} /></div>
+                    setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'} /></div><SalesLinePriceListSelect productId={item.productId} productCode={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find((product) => product.id === item.productId)?.code || item.code} value={item.priceListId} defaultPriceListId={localDoc?.priceListId} currency={localDoc?.currency} exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)} onChange={(priceListId, result) => { const ni = [...(localDoc.items || [])] as any[]; ni[idx] = { ...ni[idx], priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, total: Number(ni[idx].quantity || 1) * Number(result.unitPrice || 0) }; setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni), priceListId }); }} /><SalesIrSelector value={item.irTaxId} rate={Number(item.irRate || 0)} compact onChange={(option) => { const next = [...(localDoc.items || [])] as any[]; next[idx] = { ...next[idx], irRate: Number(option?.rate || 0), irTaxId: option?.id || null }; setLocalDoc({ ...localDoc, items: next, total: recalcTotal(next) }); }} /></div></div>
+                    {item.priceMissing && <PriceMissingBadge className="mt-1" />}
                   <div className="col-span-2"><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };
-                    setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-8 text-xs text-right" /></div>
-                  <div className="col-span-2"><Input type="number" min="0" value={Number(item.unitPrice) || ''} onChange={(e) => {
+                      setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} /></div>
+                  <div className="col-span-2"><Input type="text" value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)} readOnly className="bg-muted/20 text-right" onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
-                    setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} className="h-8 text-xs text-right" /></div>
+                      setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} /></div>
                   <div className="col-span-2 text-right"><span className="text-xs font-black text-rose-500">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
                   <div className="col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
                     onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }}><Trash2 className="size-3" /></Button></div>
@@ -315,7 +327,8 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground">Devoluciones de Venta</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de retornos y aprobación de mercancía.</p></div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar devolución..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('SALES_RETURNS', 'create') && (
@@ -327,7 +340,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         <EditableDataTable data={filtered}
           pagination={pagination}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error'); } }}
-          columns={columns} onRowUpdate={async () => {}} isLoading={loading}
+          columns={columns} onRowUpdate={async () => {}} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           actions={(row) => (
             <div className="flex items-center gap-1">
                {canPerform('SALES_RETURNS', 'edit') && (row.status||'').toUpperCase() === 'PENDING' && (

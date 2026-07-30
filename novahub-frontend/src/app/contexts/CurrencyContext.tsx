@@ -153,7 +153,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   ): string => {
     const converted = convertAmount(amount, sourceCurrency, sourceExchangeRate);
     const symbol = displayCurrency === 'USD' ? '$' : 'C$';
-    return `${symbol} ${converted.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${symbol} ${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatAmount = (

@@ -15,7 +15,7 @@ import { Checkbox } from './checkbox';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './dialog';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import type { SalesPaginationControls } from '../../types';
 
@@ -66,7 +66,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   showClearSelection = true,
   onAddRow,
   pagination,
-  actionsWidth = 'w-60',
+  actionsWidth = 'w-32',
   fitContent = false,
   layoutMode = 'responsive',
   showHorizontalControls = false,
@@ -93,6 +93,22 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const tableMinWidth = fitContent
     ? columns.reduce((total, column) => total + (Number.parseInt(String(column.width || ''), 10) || 140), 0) + (showSelection ? 48 : 0) + actionColumnWidth
     : undefined;
+
+  const getColumnScrollTargets = useCallback(() => {
+    const element = tableScrollRef.current;
+    if (!element) return [0];
+
+    let offset = showSelection ? 48 : 0;
+    const boundaries = [0];
+    columns.forEach((column) => {
+      offset += Number.parseFloat(String(column.width || '140')) || 140;
+      boundaries.push(offset);
+    });
+
+    const maxScroll = Math.max(0, element.scrollWidth - element.clientWidth);
+    boundaries.push(maxScroll);
+    return [...new Set(boundaries)].sort((a, b) => a - b);
+  }, [columns, showSelection]);
 
   useEffect(() => {
     setData(initialData);
@@ -121,9 +137,12 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const scrollTable = (direction: 'left' | 'right') => {
     const element = tableScrollRef.current;
     if (!element) return;
-    const amount = direction === 'right' ? 460 : -460;
-    const nextPosition = Math.max(0, Math.min(element.scrollWidth - element.clientWidth, element.scrollLeft + amount));
-    element.scrollLeft = nextPosition;
+    const targets = getColumnScrollTargets();
+    const currentPosition = element.scrollLeft;
+    const nextPosition = direction === 'right'
+      ? targets.find((target) => target > currentPosition + 4) ?? targets[targets.length - 1]
+      : [...targets].reverse().find((target) => target < currentPosition - 4) ?? targets[0];
+    element.scrollTo({ left: nextPosition, behavior: 'smooth' });
   };
 
   useEffect(() => {
@@ -350,7 +369,10 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       </AnimatePresence>
 
       <div
-        className={cn(layoutMode === 'cards' ? 'hidden' : 'block', 'w-full max-w-full rounded-2xl border border-border/50 bg-card/30 backdrop-blur-sm')}
+        className={cn(
+          layoutMode === 'cards' ? 'hidden' : layoutMode === 'responsive' ? 'hidden xl:block' : 'block',
+          'w-full min-w-0 max-w-full rounded-2xl border border-border/50 bg-card/30 backdrop-blur-sm'
+        )}
         onMouseEnter={() => { pointerInsideTable.current = true; }}
         onMouseLeave={() => { pointerInsideTable.current = false; }}
       >
@@ -369,13 +391,13 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           onKeyDownCapture={handleTableKeyDown}
           onMouseDown={() => tableScrollRef.current?.focus({ preventScroll: true })}
           aria-label="Tabla desplazable. Usa las flechas izquierda y derecha del teclado para moverte."
-          className="w-full max-w-full overflow-x-auto overflow-y-hidden outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
         <Table
-          containerClassName={fitContent ? 'w-max min-w-full overflow-visible' : undefined}
-          containerStyle={tableMinWidth ? { width: `${tableMinWidth}px`, maxWidth: 'none' } : undefined}
-          style={tableMinWidth ? { width: `${tableMinWidth}px`, minWidth: `${tableMinWidth}px`, maxWidth: `${tableMinWidth}px` } : undefined}
-          className={cn(fitContent ? 'w-max min-w-full' : 'w-full min-w-max', 'table-fixed')}
+          containerClassName={fitContent ? 'w-full min-w-0 max-w-none overflow-visible' : undefined}
+          containerStyle={tableMinWidth ? { width: `max(100%, ${tableMinWidth}px)`, maxWidth: 'none' } : undefined}
+          style={tableMinWidth ? { width: '100%', minWidth: `${tableMinWidth}px`, maxWidth: 'none' } : undefined}
+          className={cn(fitContent ? 'w-full min-w-full' : 'w-full min-w-max', 'table-fixed')}
         >
           <colgroup>
             {showSelection && <col style={{ width: '48px' }} />}
@@ -401,7 +423,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   {col.header}
                 </TableHead>
               ))}
-              <TableHead data-actions-column="true" className={cn('sticky right-0 z-30 h-12 whitespace-nowrap bg-card/60 backdrop-blur-md pr-3 text-right text-[10px] font-black uppercase tracking-widest text-muted-foreground/60', actionsWidth)}>
+              <TableHead data-actions-column="true" className={cn('h-12 whitespace-nowrap pr-3 text-right align-middle text-[10px] font-black uppercase tracking-widest text-muted-foreground/60', actionsWidth)}>
                 Acciones
               </TableHead>
             </TableRow>
@@ -447,7 +469,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                           <div className="absolute inset-0 z-10 p-1 flex items-center bg-background border-2 border-primary shadow-xl">
                             {col.type === 'select' ? (
                               <select
-                                value={editValue}
+                                value={editValue ?? ''}
                                 onChange={(e) => {
                                   const newVal = e.target.value;
                                   setEditValue(newVal);
@@ -492,7 +514,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       </TableCell>
                     );
                   })}
-                  <TableCell data-actions-column="true" className={cn('sticky right-0 z-20 h-14 overflow-visible whitespace-nowrap bg-background group-hover:bg-muted/20 transition-colors pr-2 text-right pointer-events-auto', isSelected && 'bg-primary/5 group-hover:bg-primary/10', actionsWidth)}>
+                  <TableCell data-actions-column="true" className={cn('h-14 min-w-0 max-w-full overflow-hidden whitespace-nowrap pr-2 text-right align-middle transition-colors pointer-events-auto', actionsWidth)}>
                     <div className="relative z-30 flex min-w-max flex-nowrap items-center justify-end gap-1 overflow-visible whitespace-nowrap transition-all pointer-events-auto">
                       {actions ? actions(row) : (
                         onRowDelete && (
@@ -527,7 +549,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         </div>
       </div>
 
-      <div className={cn(layoutMode === 'table' ? 'hidden' : 'space-y-3', layoutMode === 'responsive' && 'xl:hidden')}>
+      <div className={cn(layoutMode === 'table' ? 'hidden' : 'grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))]', layoutMode === 'responsive' && 'xl:hidden')}>
         {data.map((row) => {
           const rowId = row[idField];
           const isSelected = selectedIds.has(rowId);
@@ -629,6 +651,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-3xl p-0">
           <DialogHeader className="border-b border-border/40 px-5 py-4">
             <DialogTitle className="text-base font-black">Acciones del registro</DialogTitle>
+            <DialogDescription className="sr-only">Acciones disponibles para el registro seleccionado</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2 p-4" onClick={() => setMobileActionsRow(null)}>
             {mobileActionsRow && actions?.(mobileActionsRow)}

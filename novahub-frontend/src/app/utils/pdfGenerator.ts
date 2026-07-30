@@ -161,6 +161,13 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
     doc.text(formatAmount(Number(estimate.taxAmount), estimate.currency, estimate.exchangeRate), rightX, currentY, { align: 'right' });
     currentY += 7;
   }
+
+  // IR: se muestra únicamente el monto retenido, nunca el nombre ni el porcentaje.
+  if (Number((estimate as any).irAmount || 0) > 0) {
+    doc.text('IR:', labelX, currentY);
+    doc.text(`-${formatAmount(Number((estimate as any).irAmount), estimate.currency, estimate.exchangeRate)}`, rightX, currentY, { align: 'right' });
+    currentY += 7;
+  }
   
   // Total Line
   doc.setDrawColor(226, 232, 240);

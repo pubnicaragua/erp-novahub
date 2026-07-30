@@ -193,8 +193,7 @@ const createUserObject = (apiPayload: any): User => {
     'FINANCING': 'financiamiento-pyme',
     'LEGAL': 'asesoria-legal',
     'HR_TRAINING': 'centro-capacitacion',
-    'SUPPORT_TECH': 'soporte-tecnico',
-    'NOVACHAT': 'novachat'
+    'SUPPORT_TECH': 'soporte-tecnico'
   };
 
   const defaultPermissions = getPermissionsByRole(role);

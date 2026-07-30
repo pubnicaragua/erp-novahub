@@ -7,6 +7,7 @@ import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Pagination, PaginationContent, PaginationItem } from '../ui/pagination';
 import { toast } from 'sonner';
@@ -142,9 +143,8 @@ function ImportPreviewPage({
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-xl border">
-        <div className="min-w-[1320px]">
-          <Table>
+      <HorizontalTableScroller className="min-h-0 flex-1" label="Desplazamiento horizontal · columna por columna">
+          <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="min-w-[1320px]">
             <TableHeader className="sticky top-0 z-10 bg-muted shadow-sm">
               <TableRow>
                 <TableHead className="w-8 text-[10px] uppercase"></TableHead>
@@ -220,8 +220,7 @@ function ImportPreviewPage({
               ))}
             </TableBody>
           </Table>
-        </div>
-      </div>
+      </HorizontalTableScroller>
 
       {importing && <div className="h-2 w-full overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${importProgress}%` }} /></div>}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">

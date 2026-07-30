@@ -110,6 +110,10 @@ export interface Estimate {
   number: string;
   customerId: string;
   customer?: Customer;
+  priceListId?: string;
+  irRate?: number;
+  irTaxId?: string | null;
+  irAmount?: number;
   warehouseId?: string;
   date: string;
   expiryDate: string;
@@ -137,6 +141,10 @@ export interface EstimateItem {
   unitPrice: number;
   taxRate: number;
   discount: number;
+  irRate?: number;
+  irTaxId?: string | null;
+  irAmount?: number;
+  priceListId?: string | null;
   total: number;
 }
 
@@ -147,6 +155,10 @@ export interface SalesOrder {
   number: string;
   customerId: string;
   customer?: Customer;
+  priceListId?: string;
+  irRate?: number;
+  irTaxId?: string | null;
+  irAmount?: number;
   estimateId?: string;
   date: string;
   expectedDelivery?: string;
@@ -184,6 +196,10 @@ export interface SalesOrderItem {
   unitPrice: number;
   taxRate: number;
   discount: number;
+  irRate?: number;
+  irTaxId?: string | null;
+  irAmount?: number;
+  priceListId?: string | null;
   total: number;
 }
 
@@ -194,6 +210,10 @@ export interface Invoice {
   number: string;
   customerId: string;
   customer?: Customer;
+  priceListId?: string;
+  irRate?: number;
+  irTaxId?: string | null;
+  irAmount?: number;
   salesOrderId?: string;
   warehouseId?: string;
   date: string;
@@ -228,6 +248,10 @@ export interface InvoiceItem {
   unitPrice: number;
   taxRate: number;
   discount: number;
+  irRate?: number;
+  irTaxId?: string | null;
+  irAmount?: number;
+  priceListId?: string | null;
   total: number;
 }
 
@@ -237,6 +261,10 @@ export interface RecurringInvoice {
   tenantId: string;
   customerId: string;
   customer?: Customer;
+  priceListId?: string;
+  irRate?: number;
+  irTaxId?: string | null;
+  irAmount?: number;
   frequency: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
   startDate: string;
   endDate?: string;
@@ -270,6 +298,10 @@ export interface RecurringInvoiceItem {
   unitPrice: number;
   taxRate: number;
   discount?: number;
+  irRate?: number;
+  irTaxId?: string | null;
+  irAmount?: number;
+  priceListId?: string | null;
   total: number;
 }
 
@@ -303,9 +335,16 @@ export interface SalesReturn {
   number: string;
   customerId: string;
   customer?: Customer;
+  priceListId?: string;
+  irRate?: number;
+  irTaxId?: string | null;
+  irAmount?: number;
   invoiceId: string;
   invoice?: Invoice;
   date: string;
+  subtotal?: number;
+  taxAmount?: number;
+  discountAmount?: number;
   total: number;
   reason: string;
   accountId?: string;
@@ -322,6 +361,12 @@ export interface SalesReturnItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  taxRate?: number;
+  discount?: number;
+  irRate?: number;
+  irTaxId?: string | null;
+  irAmount?: number;
+  priceListId?: string | null;
   total: number;
 }
 
@@ -332,9 +377,16 @@ export interface CreditNote {
   number: string;
   customerId: string;
   customer?: Customer;
+  priceListId?: string;
+  irRate?: number;
+  irTaxId?: string | null;
+  irAmount?: number;
   invoiceId?: string;
   salesReturnId?: string;
   date: string;
+  subtotal?: number;
+  taxAmount?: number;
+  discountAmount?: number;
   total: number;
   status: 'draft' | 'issued' | 'applied' | 'voided';
   reason: string;
@@ -350,6 +402,12 @@ export interface CreditNoteItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  taxRate?: number;
+  discount?: number;
+  irRate?: number;
+  irTaxId?: string | null;
+  irAmount?: number;
+  priceListId?: string | null;
   total: number;
 }
 

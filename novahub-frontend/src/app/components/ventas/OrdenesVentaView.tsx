@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Search, TrendingUp, Clock, FilePlus, Package, Eye, Trash2, ChevronLeft
+  ClipboardList, Plus, Search, TrendingUp, Clock, FilePlus, Package, Eye, Ban, ChevronLeft, Trash2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -19,7 +19,10 @@ import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { FileDown } from 'lucide-react';
+import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
+import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -33,6 +36,9 @@ interface OrdenesVentaViewProps {
   employees?: Employee[];
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
+  dateFrom?: string;
+  dateTo?: string;
+  onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
 }
 
 const statusOptions = [
@@ -45,18 +51,41 @@ const statusOptions = [
   { label: 'Cancelada',      value: 'CANCELLED',   color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], employees = [], pagination, onSearchChange }: OrdenesVentaViewProps) {
+export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<SalesOrder | null>(null);
   const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
   const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
+  const findProductForItem = (item: any) => {
+    const itemCode = String(item?.productCode || item?.code || '').trim().toLowerCase();
+    const itemName = String(item?.description || '').trim().toLowerCase();
+    return products.find((product) => product.id === item?.productId)
+      || (itemCode ? products.find((product) => String(product.code || '').trim().toLowerCase() === itemCode) : undefined)
+      || (itemName ? products.find((product) => String(product.name || '').trim().toLowerCase() === itemName) : undefined);
+  };
+  const getLineProductOptions = (item: any) => {
+    const itemType = resolveItemType(item);
+    const catalog = itemType === 'SERVICE' ? serviceCatalog : productCatalog;
+    const options = catalog.map((product) => ({
+      label: `${itemType === 'SERVICE' ? 'Servicio' : 'Producto'} · ${product.code} - ${product.name}`,
+      value: product.id,
+    }));
+    const hasSelectedOption = Boolean(item.productId) && options.some((option) => option.value === item.productId);
+    if (item.productId && !hasSelectedOption && String(item.description || '').trim()) {
+      options.unshift({
+        label: `${itemType === 'SERVICE' ? 'Servicio' : 'Producto'} · ${item.description}`,
+        value: item.productId,
+      });
+    }
+    return options;
+  };
   const [invoicingOrderId, setInvoicingOrderId] = useState<string | null>(null);
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
 
@@ -82,6 +111,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       toast.error('La orden debe contener al menos un producto o servicio');
       return;
     }
+    const priceMessage = getMissingSalesPriceMessage(orderForConversion.items);
+    if (priceMessage) {
+      toast.error(priceMessage);
+      return;
+    }
     if (!orderForConversion.accountId) {
       toast.error('Asigna la cuenta contable de la venta antes de facturar la orden');
       return;
@@ -92,12 +126,12 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         return;
       }
       if (item.productId) {
-        const product = products.find((entry) => entry.id === item.productId);
-        if (!product || String(product.status || '').toUpperCase() === 'INACTIVE') {
+        const product = findProductForItem(item);
+        if (product && String(product.status || '').toUpperCase() === 'INACTIVE') {
           toast.error(`El producto ${item.description} ya no está disponible`);
           return;
         }
-        if (product.itemType !== 'SERVICE' && Number(product.stock) < Number(item.quantity)) {
+        if (product && product.itemType !== 'SERVICE' && Number(product.stock) < Number(item.quantity)) {
           toast.error(`Stock insuficiente para ${item.description}`);
           return;
         }
@@ -109,7 +143,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     }
     setInvoicingOrderId(order.id);
     try {
-      await onGenerateInvoice(orderForConversion);
+      const currentStatus = String(orderForConversion.status || '').toUpperCase();
+      if (!['CONFIRMED', 'SHIPPED'].includes(currentStatus)) {
+        await salesOrdersService.update(order.id, { status: 'CONFIRMED' as any });
+      }
+      await onGenerateInvoice({ ...orderForConversion, status: 'confirmed' as any });
       await onRefresh();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo abrir la factura');
@@ -118,14 +156,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     }
   };
 
-  useEffect(() => {
-    if (editingId) {
-      const e = data.find(x => x.id === editingId);
-      setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
-    } else {
-      setLocalDoc(null);
-    }
-  }, [editingId, data]);
+  // NOTE: intentionally NOT listening to data changes here.
+  // Resetting localDoc on every server refresh would re-mount SalesLinePriceListSelect
+  // (because deleteMany+create gives items new IDs), resetting the appliedRef and
+  // causing an infinite PATCH loop. localDoc is only reset when editingId changes.
+  // See the useEffect below (line ~207) for the single source of truth.
 
   useEffect(() => {
     if (!targetOrderId) return;
@@ -160,6 +195,51 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     }
   };
 
+  const buildOrderStatusPayload = (status: 'DRAFT' | 'CONFIRMED') => ({
+    number: localDoc?.number,
+    customerId: localDoc?.customerId || null,
+    sellerEmployeeId: localDoc?.sellerEmployeeId || null,
+    commissionType: localDoc?.commissionType,
+    commissionRate: localDoc?.commissionRate || 0,
+    commissionAmount: localDoc?.commissionAmount || 0,
+    priceListId: localDoc?.priceListId || null,
+    date: localDoc?.date,
+    expectedDelivery: localDoc?.expectedDelivery || null,
+    subtotal: localDoc?.subtotal,
+    taxAmount: localDoc?.taxAmount,
+    discountAmount: localDoc?.discountAmount,
+    irRate: localDoc?.irRate || 0,
+    irTaxId: localDoc?.irTaxId || null,
+    irAmount: localDoc?.irAmount || 0,
+    total: localDoc?.total,
+    currency: localDoc?.currency,
+    exchangeRate: localDoc?.exchangeRate,
+    baseTotal: localDoc?.baseTotal,
+    accountId: localDoc?.accountId || null,
+    warehouseId: localDoc?.warehouseId || null,
+    notes: localDoc?.notes,
+    items: localDoc?.items || [],
+    status,
+  } as Partial<SalesOrder>);
+
+  const handleSaveOrder = async (status: 'DRAFT' | 'CONFIRMED') => {
+    if (!localDoc) return;
+    if (status === 'CONFIRMED') {
+      const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
+      if (priceMessage) {
+        toast.error(priceMessage);
+        return;
+      }
+    }
+    try {
+      await handleUpdate(localDoc.id, buildOrderStatusPayload(status));
+      setEditingId(null);
+      toast.success(status === 'CONFIRMED' ? 'Orden confirmada' : 'Orden guardada como borrador');
+    } catch {
+      // handleUpdate already shows the error
+    }
+  };
+
   const calculateRates = (doc: any) => {
     const sub = Number(doc?.subtotal || 0);
     if (sub === 0) return { dRate: 0, tRate: 0 };
@@ -188,7 +268,17 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount };
   };
 
-  const formatNumber2 = (value: number) => Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const recalculateGlobalPricing = (items: any[]) => {
+    const normalizedItems = items.map((line: any) => ({ ...line, total: Number(line.quantity || 0) * Number(line.unitPrice || 0) }));
+    const subtotal = normalizedItems.reduce((sum: number, line: any) => sum + Number(line.total || 0), 0);
+    const discountAmount = subtotal * (Number(localRates.dRate || 0) / 100);
+    const base = subtotal - discountAmount;
+    const taxAmount = base * (Number(localRates.tRate || 0) / 100);
+    return { items: normalizedItems, subtotal, discountAmount, taxAmount, total: base + taxAmount };
+  };
+
+
+  const formatNumber2 = (value: number) => formatSalesAmount(value);
   const priceInCurrency = (basePrice: number, currency: string, rate: number) => currency === 'USD' ? basePrice / (rate || 1) : basePrice;
 
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0 });
@@ -197,7 +287,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     if (editingId) {
       const e = data.find(x => x.id === editingId);
       setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
-      if (e) setLocalRates(calculateRates(e));
+      if (e) {
+        setLocalRates(calculateRates(e));
+        setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0 || Number(line.irRate || 0) !== 0) ? 'individual' : 'global');
+      }
     } else {
       setLocalDoc(null);
       setLocalRates({ dRate: 0, tRate: 0 });
@@ -205,14 +298,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   }, [editingId]); // Intentionally removed 'data' to prevent server-refreshes from destroying mid-edit local states
 
   const handleAddOrder = async () => {
-    if (!customers || customers.length === 0) {
-      toast.error('Debe registrar al menos un cliente primero');
-      return;
-    }
     const createToastId = toast.loading('Creando orden de venta...');
     try {
       const newOrd = await salesOrdersService.create({
-        customerId: customers[0].id,
+        // No customerId — el usuario lo elige en el formulario
         date: new Date().toISOString(),
         expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
         discountAmount: 0,
@@ -279,12 +368,12 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     { 
       key: 'status', 
       header: 'Estado', 
-      width: '175px',
-      editable: canPerform('SALES_ORDERS', 'edit'),
+      width: '135px',
+      editable: false,
       type: 'select',
       options: statusOptions,
       render: (val) => {
-        const opt = statusOptions.find(o => o.value === val);
+        const opt = statusOptions.find(o => o.value === String(val || '').toUpperCase());
         return (
           <Badge variant="outline" className={cn(
             "whitespace-nowrap text-[9px] font-black uppercase tracking-wider px-2 py-0.5 border-none shadow-none",
@@ -328,7 +417,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   ];
 
   if (editingId && localDoc) {
-    const statusOpt = statusOptions.find(o => o.value === (localDoc?.status || '').toUpperCase());
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -345,11 +433,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             {canPerform('SALES_ORDERS', 'edit') && (
               <>
                 <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => { handleUpdate(localDoc!.id, { status: 'DRAFT' as any }); setEditingId(null); }}>
+                  onClick={() => void handleSaveOrder('DRAFT')}>
                   Guardar Borrador
                 </Button>
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => { handleUpdate(localDoc!.id, { status: 'CONFIRMED' as any }); setEditingId(null); toast.success('Orden confirmada'); }}>
+                  onClick={() => void handleSaveOrder('CONFIRMED')}>
                   Confirmar Orden
                 </Button>
               </>
@@ -419,9 +507,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   />
                   {!localDoc?.sellerEmployeeId && <p className="text-[9px] text-muted-foreground/60 mt-0.5 italic">Selecciona un empleado primero</p>}
                 </div>
-                <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span>
-                </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
@@ -430,8 +515,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))}
                     value={localDoc?.customerId || ''}
                     onChange={(val) => {
-                      setLocalDoc({ ...localDoc, customerId: val });
-                      void handleUpdate(localDoc!.id, { customerId: val });
+                      const customer = customers.find((entry) => entry.id === val);
+                      const priceListId = customer?.priceListId || null;
+                      const items = (localDoc?.items || []).map((item: any) => item.productId
+                        ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false }
+                        : { ...item, priceListId });
+                      setLocalDoc({ ...localDoc, customerId: val, priceListId, items } as any);
+                      void handleUpdate(localDoc!.id, { customerId: val, priceListId, items } as any);
                     }}
                     placeholder="Seleccionar Cliente"
                   />
@@ -499,13 +589,19 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>
               <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-muted/10 p-2 text-[10px] font-black uppercase tracking-widest">
                 <span className="text-muted-foreground">Aplicar impuestos/descuentos:</span>
-                <Button type="button" size="sm" variant={pricingMode === 'global' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { const items = (localDoc.items || []).map((line: any) => ({ ...line, taxRate: 0, discount: 0 })); setPricingMode('global'); setLocalDoc({ ...localDoc, items } as any); void handleUpdate(localDoc!.id, { items } as any); }}>Global</Button>
+                <Button type="button" size="sm" variant={pricingMode === 'global' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => {
+                  const items = (localDoc.items || []).map((line: any) => ({ ...line, taxRate: 0, discount: 0, irRate: 0, irTaxId: null, irAmount: 0 }));
+                  const recalculated = recalculateGlobalPricing(items);
+                  setPricingMode('global');
+                  setLocalDoc({ ...localDoc, ...recalculated } as any);
+                  void handleUpdate(localDoc.id, recalculated as any);
+                }}>Global</Button>
                 <Button type="button" size="sm" variant={pricingMode === 'individual' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { setPricingMode('individual'); setLocalRates({ dRate: 0, tRate: 0 }); }}>Por producto</Button>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <div className="flex items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="number" min="0" value={Number(localDoc?.subtotal || 0).toFixed(2)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div>
+                  <div className="flex items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="text" value={formatSalesAmount(localDoc?.subtotal)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Descuento</span>
@@ -559,7 +655,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   <div className="flex flex-col items-end">
                     <div className="flex items-center gap-2 text-primary font-black">
                       {localDoc?.currency === 'USD' ? '$' : 'C$'} 
-                      <Input type="number" value={Number(localDoc?.total || 0).toFixed(2)} readOnly className="w-28 h-8 text-right font-black text-primary bg-muted/20" />
+                      <Input type="text" value={formatSalesAmount(localDoc?.total)} readOnly className="w-28 h-8 text-right font-black text-primary bg-muted/20" />
                     </div>
                     {localDoc?.currency === 'USD' && (
                       <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">
@@ -601,33 +697,72 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} data-item-layout="standard" className={cn('sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0', pricingMode === 'individual' && 'pricing-individual')}>
                   <div className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
-                    <Combobox 
-                      options={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).map(p => ({ label: `${resolveItemType(item) === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code} - ${p.name}`, value: p.id }))}
-                      value={item.productId || ''}
-                      onChange={(val) => {
-                        const newItems = [...(localDoc.items || [])] as any[];
-                        const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
-                        newItems[idx].productId = val;
-                        if (selectedProd) {
-                          newItems[idx].description = selectedProd.name;
-                          const baseSalePrice = Number(selectedProd.salePrice ?? selectedProd.price ?? 0);
-                          newItems[idx].unitPrice = priceInCurrency(baseSalePrice, localDoc?.currency || 'NIO', Number(localDoc?.exchangeRate || globalRate || 1));
-                          newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
-                        } else {
-                          newItems[idx].description = 'Producto Customizado';
-                          newItems[idx].unitPrice = 0;
-                          newItems[idx].total = 0;
-                        }
-                        const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
-                        const dAmount = newSubtotal * (localRates.dRate / 100);
-                        const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
-                        setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                        void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                      }}
-                      placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
-                    />
+                    <div className="flex min-w-0 flex-wrap items-center gap-1">
+                      <div className="min-w-0 flex-1">
+                        <Combobox 
+                          options={getLineProductOptions(item)}
+                          value={item.productId || ''}
+                          onChange={(val) => {
+                            const newItems = [...(localDoc.items || [])] as any[];
+                            const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
+                            newItems[idx].productId = val;
+                            if (selectedProd) {
+                              newItems[idx].description = selectedProd.name;
+                              const baseSalePrice = Number(selectedProd.salePrice ?? selectedProd.price ?? 0);
+                              newItems[idx].unitPrice = priceInCurrency(baseSalePrice, localDoc?.currency || 'NIO', Number(localDoc?.exchangeRate || globalRate || 1));
+                              newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
+                            } else {
+                              newItems[idx].description = 'Producto Customizado';
+                              newItems[idx].unitPrice = 0;
+                              newItems[idx].total = 0;
+                            }
+                            const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
+                            const dAmount = newSubtotal * (localRates.dRate / 100);
+                            const base = newSubtotal - dAmount;
+                            const tAmount = base * (localRates.tRate / 100);
+                            const newTotal = base + tAmount;
+                            setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
+                            void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
+                          }}
+                          placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
+                          disabled={!localDoc?.customerId}
+                        />
+                      </div>
+                      <SalesLinePriceListSelect 
+                        productId={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.id || item.productId} 
+                        productCode={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.code || item.code} 
+                        itemType={item.itemType}
+                        value={item.priceListId} 
+                        defaultPriceListId={localDoc?.priceListId} 
+                        currency={localDoc?.currency} 
+                        exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)} 
+                        onChange={(priceListId, result) => { 
+                          const currentItem = localDoc?.items?.[idx];
+                          // Guarda de idempotencia: no actualizar si el precio ya está aplicado
+                          if (
+                            currentItem &&
+                            currentItem.priceListId === priceListId &&
+                            Math.abs(Number(currentItem.unitPrice || 0) - Number(result.unitPrice || 0)) < 0.01 &&
+                            !!currentItem.priceMissing === !!result.priceMissing
+                          ) return;
+                          const nextItems = [...(localDoc.items || [])] as any[]; 
+                          nextItems[idx] = { 
+                            ...nextItems[idx],
+                            productId: (productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.id || nextItems[idx].productId,
+                            priceListId, 
+                            unitPrice: result.unitPrice ?? 0, 
+                            total: Number(nextItems[idx].quantity || 1) * Number(result.unitPrice ?? 0),
+                            priceMissing: result.priceMissing 
+                          }; 
+                          const next = pricingMode === 'individual' ? recalculateIndividualPricing(nextItems) : recalculateGlobalPricing(nextItems); 
+                          // Solo actualiza estado local — sin handleUpdate para evitar el loop
+                          // PATCH → onRefresh → deleteMany+create → IDs cambian → re-mount → loop
+                          // El precio se persiste en el próximo save explícito (cantidad, guardar borrador, etc.)
+                          setLocalDoc({ ...localDoc, ...next } as any); 
+                        }} 
+                      />
+                    </div>
+
                     {item.productId && (
                       <div className="mt-1 flex min-h-4 flex-wrap items-center gap-x-2 gap-y-1 px-1">
                         {(() => {
@@ -642,9 +777,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                               )}>
                                 STOCK: {stock}
                               </Badge>
-                              <span className="text-[9px] font-bold text-muted-foreground/60 uppercase">
-                                Costo: {formatConvertedAmount(Number(p.costPrice || 0), 'NIO')} | Venta: {formatConvertedAmount(Number(p.salePrice || 0), 'NIO')}
-                              </span>
+                              {item.priceMissing && <PriceMissingBadge />}
                             </>
                           );
                         })()}
@@ -722,13 +855,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   </div>
                   <div className="col-span-2 min-w-0">
                     <Input 
-                      type="number" 
                       min="0"
-                      value={item.unitPrice === undefined || item.unitPrice === null ? '' : Number(item.unitPrice).toFixed(2)} 
+                      type="text"
+                      value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)} 
                       placeholder="0"
                       onChange={(e) => {
                         const newItems = [...(localDoc.items || [])] as any[];
-                        newItems[idx].unitPrice = Number(e.target.value);
+                        newItems[idx].unitPrice = Number(String(e.target.value).replace(/,/g, ''));
                         newItems[idx].total = Number(newItems[idx].quantity || 0) * Number(newItems[idx].unitPrice);
                         const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
                         const dAmount = newSubtotal * (localRates.dRate / 100);
@@ -744,7 +877,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     />
                   </div>
                   <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black w-16 text-right">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(item.total || 0))}</span>
+                    <span className="text-xs font-black w-16 text-right">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(item.total)}</span>
                     <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => {
                         const newItems = [...(localDoc.items || [])] as any[];
                         newItems.splice(idx, 1);
@@ -805,7 +938,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Órdenes de Venta</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Órdenes confirmadas listas para preparación y facturación.</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input 
@@ -822,43 +956,52 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             )}
           </div>
         </div>
-
         <EditableDataTable 
           data={filtered}
           pagination={pagination}
-          onBulkDelete={async (ids) => {
-            try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await salesOrdersService.delete(id as string);
-              }
-              toast.success('Elementos eliminados');
-              onRefresh();
-            } catch (e: any) {
-              toast.error('Error al eliminar');
-            }
-          }}
+          showHorizontalControls
+          actionsWidth="w-44"
+          fitContent
           columns={columns}
           onRowUpdate={handleUpdate}
           isLoading={loading}
           actions={(row) => (
-            <div className="flex items-center gap-1">
+            <div className="flex min-w-max items-center justify-end gap-2 pr-1">
                 {canPerform('SALES_INVOICES', 'create') && (row.status || '').toUpperCase() !== 'CANCELLED' && !row.invoiceId && !row.invoiceNumber && (
                   <Button 
-                    title="Generar Factura" 
+                    type="button"
+                    title="Aprobar y enviar a Factura" 
+                    aria-label="Aprobar y enviar a Factura"
                     onClick={() => void handleInvoiceOrder(row)}
                     disabled={invoicingOrderId === row.id}
                     variant="ghost" 
                     size="icon" 
-                    className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
+                    className="size-8 shrink-0 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
                   >
                     <FilePlus className={cn('size-4', invoicingOrderId === row.id && 'animate-pulse')} />
                   </Button>
                 )}
-                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-                <Button title="Exportar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch (e: any) { console.error(e) } }}><FileDown className="size-4" /></Button>
-                {canPerform('SALES_ORDERS', 'delete') && (
-                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                <Button type="button" title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button type="button" title="Exportar PDF" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch (e: any) { console.error(e) } }}><FileDown className="size-4" /></Button>
+                {canPerform('SALES_ORDERS', 'delete') &&
+                  !['CANCELLED', 'DELIVERED'].includes(String(row.status || '').toUpperCase()) &&
+                  !row.invoiceId && !row.invoiceNumber && (
+                  <Button
+                    type="button"
+                    title="Cancelar orden"
+                    aria-label="Cancelar orden"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setPendingCancelId(row.id);
+                    }}
+                  >
+                    <Ban className="size-4" />
+                  </Button>
                 )}
              </div>
            )}
@@ -866,29 +1009,31 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
        </div>
 
       <ConfirmDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-        title="¿Eliminar orden de venta?"
-        description="¿Estás seguro de que deseas eliminar este registro permanentemente? Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
+        open={pendingCancelId !== null}
+        onOpenChange={(open) => { if (!open && !cancelLoading) setPendingCancelId(null); }}
+        title="¿Cancelar orden de venta?"
+        description="La orden quedará cancelada y ya no podrá continuar al proceso de facturación."
+        confirmLabel="Cancelar orden"
         variant="destructive"
-        loading={deleteLoading}
+        loading={cancelLoading}
         onConfirm={async () => {
-          if (!pendingDeleteId) return;
+          if (!pendingCancelId) return;
           try {
-            setDeleteLoading(true);
-            await salesOrdersService.delete(pendingDeleteId);
-            toast.success('Registro eliminado');
-            if (editingId === pendingDeleteId) setEditingId(null);
-            onRefresh();
+            setCancelLoading(true);
+            await salesOrdersService.update(pendingCancelId, { status: 'cancelled' });
+            toast.success('Orden cancelada');
+            if (editingId === pendingCancelId) setEditingId(null);
+            await onRefresh();
           } catch (error: any) {
-            toast.error(error?.message || 'Error al eliminar');
+            const message = error?.response?.data?.message || error?.message || 'Error al cancelar la orden';
+            toast.error(Array.isArray(message) ? message.join(', ') : message);
           } finally {
-            setDeleteLoading(false);
-            setPendingDeleteId(null);
+            setCancelLoading(false);
+            setPendingCancelId(null);
           }
         }}
       />
+
     </div>
   );
 }

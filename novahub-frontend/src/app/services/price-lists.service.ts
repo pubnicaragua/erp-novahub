@@ -12,6 +12,7 @@ export interface PriceList {
 
 export interface PriceListItem {
   id: string;
+  priceListId: string;
   productId: string;
   price: number;
   currency: string;

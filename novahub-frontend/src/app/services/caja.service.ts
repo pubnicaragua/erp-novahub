@@ -106,6 +106,7 @@ export interface PosCustomer {
   taxId?: string;
   email?: string;
   phone?: string;
+  priceListId?: string | null;
 }
 
 export interface PosInvoiceItem {
@@ -113,6 +114,9 @@ export interface PosInvoiceItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  priceListId?: string;
+  irRate?: number;
+  irTaxId?: string | null;
 }
 
 export interface PosInvoice {
@@ -136,6 +140,7 @@ export interface PotentialDuplicateSale {
   number: string;
   date: string;
   total: number;
+  irAmount?: number;
   currency: string;
   customerName: string;
   registerName: string;
@@ -268,6 +273,9 @@ export const cajaService = {
     customCustomerName?: string;
     date: string;
     discountPercent?: number;
+    irRate?: number;
+    irTaxId?: string | null;
+    priceListId?: string;
     items: PosInvoiceItem[];
     includeTax?: boolean;
     currency: 'NIO' | 'USD';

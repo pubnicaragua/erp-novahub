@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { 
-  Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Upload, Download, CircleX, Settings2, Check, CircleHelp
+  Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Pencil, Upload, Download, Ban, CircleX, Settings2, Check, CircleHelp
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -45,12 +45,31 @@ type CustomerDraft = {
   country: string;
   creditLimit: string;
   notes: string;
+  status: 'ACTIVE' | 'INACTIVE';
 };
 
 const emptyCustomerDraft = (): CustomerDraft => ({
   name: '', type: 'individual', fiscalRegime: '', priceListId: '',
   taxId: '', ruc: '', email: '', phone: '', address: '', city: '', department: '',
-  country: 'Nicaragua', creditLimit: '', notes: '',
+  country: 'Nicaragua', creditLimit: '', notes: '', status: 'ACTIVE',
+});
+
+const customerToDraft = (customer: Customer): CustomerDraft => ({
+  name: customer.name || '',
+  type: String(customer.type || '').toUpperCase() === 'COMPANY' ? 'company' : 'individual',
+  fiscalRegime: customer.fiscalRegime || '',
+  priceListId: customer.priceListId || customer.priceList?.id || '',
+  taxId: customer.taxId || '',
+  ruc: customer.ruc || '',
+  email: customer.email || '',
+  phone: customer.phone || '',
+  address: customer.address || '',
+  city: customer.city || '',
+  department: customer.department || '',
+  country: customer.country || 'Nicaragua',
+  creditLimit: customer.creditLimit === undefined || customer.creditLimit === null ? '' : String(customer.creditLimit),
+  notes: customer.notes || '',
+  status: String(customer.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
 });
 
 const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
@@ -80,6 +99,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const [importResult, setImportResult] = useState<CustomerImportResult | null>(null);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [editCustomer, setEditCustomer] = useState<CustomerDraft>(emptyCustomerDraft);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>(['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'balance', 'status']);
   const [creating, setCreating] = useState(false);
@@ -106,7 +129,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     const seenEmails = new Set<string>();
     const seenTaxIds = new Set<string>();
     return rows.map((row) => {
-      const next = { ...row, error: undefined, warning: undefined };
+      const next: CustomerImportRow = { ...row, error: undefined, warning: undefined };
       const email = row.email.trim().toLowerCase();
       const identifiers = [row.taxId, row.ruc].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
       const priceListMatch = row.priceListCode && priceLists.some((list) => list.code.toLowerCase() === row.priceListCode.trim().toLowerCase() || list.name.toLowerCase() === row.priceListCode.trim().toLowerCase());
@@ -125,7 +148,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
 
   const downloadTemplate = () => {
     const headers = ['Nombre', 'Tipo', 'Cédula', 'RUC', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'Departamento', 'País', 'Régimen fiscal', 'Límite de crédito', 'Lista de precios', 'Estado', 'Notas'];
-    const example = ['Cliente Ejemplo', 'INDIVIDUAL', '001-010190-1000A', 'J0310000000000', 'cliente@correo.com', '8888-8888', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', 'Nicaragua', 'Régimen general', 0, priceLists[0]?.code || '', 'ACTIVE', ''];
+    const example = ['Cliente Ejemplo', 'PARTICULAR', '001-010190-1000A', '', 'cliente@correo.com', '8888-8888', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', 'Nicaragua', 'Régimen general', 0, priceLists[0]?.code || '', 'ACTIVO', ''];
     const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
     const guide = XLSX.utils.aoa_to_sheet([
@@ -133,13 +156,13 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       ['La importación puede ejecutarse varias veces. Cada cliente válido recibirá un número automático del sistema. No agregues código o número de cliente.'],
       ['Campo', 'Regla'],
       ['Nombre', 'Obligatorio. Identifica a la persona natural o jurídica.'],
-      ['Tipo', 'Usa INDIVIDUAL para particular o COMPANY para empresa. Si eliges empresa, el RUC es obligatorio.'],
+      ['Tipo', 'Usa PARTICULAR para una persona o EMPRESA para una empresa. Si eliges empresa, el RUC es obligatorio.'],
       ['Cédula y RUC', 'La Cédula identifica a un particular. El RUC es obligatorio para una empresa.'],
       ['Contacto y ubicación', 'Completa correo, teléfono, dirección, ciudad, departamento y país cuando aplique.'],
       ['Régimen fiscal', 'Opcional. Ejemplo: Régimen general, cuota fija o exento.'],
       ['Lista de precios', 'Opcional. Usa el código o nombre de una lista existente. Si no existe, se mostrará un aviso y se importará sin asignación.'],
       ['Límite de crédito', 'Opcional. Usa un número mayor o igual a cero. La cuenta por cobrar se calcula con las operaciones registradas.'],
-      ['Estado', 'Usa ACTIVE o INACTIVE. Los clientes inactivos no podrán utilizarse en nuevas operaciones.'],
+      ['Estado', 'Usa ACTIVO o INACTIVO. Los clientes inactivos no podrán utilizarse en nuevas operaciones.'],
       ['Previsualización', 'Después de cargar el archivo, abre la previsualización para corregir datos. Los errores se omiten; los avisos no bloquean la importación.'],
     ]);
     guide['!cols'] = [{ wch: 28 }, { wch: 110 }];
@@ -152,6 +175,9 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
 
   const readImportFile = async (file: File) => {
     try {
+      if (!/\.(xlsx|xls)$/i.test(file.name)) {
+        throw new Error('Solo se permiten archivos Excel (.xlsx o .xls)');
+      }
       const workbook = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
       const sheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === 'clientes') || workbook.SheetNames[0];
       const raw = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
@@ -162,8 +188,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         headers.forEach((header: string, index: number) => { source[header] = values[index] ?? ''; });
         const row = emptyImportRow();
         row.name = String(getCell(source, ['nombre', 'name', 'cliente']) || '').trim();
-        const type = String(getCell(source, ['tipo', 'type']) || 'INDIVIDUAL').toUpperCase();
-        row.type = type.includes('COMPANY') || type.includes('EMPRESA') || type.includes('JURIDICA') ? 'COMPANY' : 'INDIVIDUAL';
+        const type = normalizeHeader(getCell(source, ['tipo', 'type']) || 'particular');
+        row.type = type.includes('company') || type.includes('empresa') || type.includes('juridica') ? 'COMPANY' : 'INDIVIDUAL';
         row.fiscalRegime = String(getCell(source, ['regimenfiscal', 'regimen', 'fiscalregime']) || '').trim();
         const priceListValue = String(getCell(source, ['listadeprecios', 'lista', 'priceList', 'priceListCode']) || '').trim();
         row.priceListCode = priceLists.find((list) => list.code.toLowerCase() === priceListValue.toLowerCase() || list.name.toLowerCase() === priceListValue.toLowerCase())?.code || priceListValue;
@@ -177,7 +203,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         row.country = String(getCell(source, ['pais', 'country']) || 'Nicaragua').trim();
         const creditLimit = getCell(source, ['limitedecredito', 'creditlimit', 'limite']);
         row.creditLimit = creditLimit === '' || creditLimit === undefined ? '' : Number(creditLimit);
-        row.status = String(getCell(source, ['estado', 'status']) || 'ACTIVE').toUpperCase().includes('INACT') ? 'INACTIVE' : 'ACTIVE';
+        const status = normalizeHeader(getCell(source, ['estado', 'status']) || 'activo');
+        row.status = status.includes('inactiv') ? 'INACTIVE' : 'ACTIVE';
         row.notes = String(getCell(source, ['notas', 'notes', 'observaciones']) || '').trim();
         return row;
       });
@@ -205,7 +232,13 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     let timer: ReturnType<typeof setInterval> | null = null;
     try {
       timer = setInterval(() => setImportProgress((current) => Math.min(92, current + 3)), 180);
-      const result = await customersService.importMassive({ rows: validRows.map(({ error: _error, warning: _warning, ...row }) => row) });
+      const result = await customersService.importMassive({
+        rows: validRows.map(({ error: _error, warning: _warning, ...row }) => ({
+          ...row,
+          type: row.type === 'COMPANY' ? 'company' : 'individual',
+          creditLimit: row.creditLimit === '' ? undefined : row.creditLimit,
+        })),
+      });
       if (timer) clearInterval(timer);
       setImportProgress(100);
       setImportResult(result);
@@ -243,6 +276,19 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       const currentCustomer = data.find((customer) => String(customer.id) === String(id));
       const nextType = String(updates.type ?? currentCustomer?.type ?? '').toUpperCase();
       const nextRuc = String(updates.ruc ?? currentCustomer?.ruc ?? '').trim();
+      const nextIdentifiers = [updates.taxId ?? currentCustomer?.taxId, updates.ruc ?? currentCustomer?.ruc]
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean);
+      const duplicateCustomer = data.find((customer) => {
+        if (String(customer.id) === String(id)) return false;
+        const customerIdentifiers = [customer.taxId, customer.ruc]
+          .map((value) => String(value || '').trim().toLowerCase())
+          .filter(Boolean);
+        return nextIdentifiers.some((identifier) => customerIdentifiers.includes(identifier));
+      });
+      if (duplicateCustomer) {
+        throw new Error(`La cédula o el RUC ya está registrado en el cliente ${duplicateCustomer.name}.`);
+      }
       if (nextType === 'COMPANY' && !nextRuc) {
         throw new Error('El RUC es obligatorio para una empresa');
       }
@@ -270,9 +316,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     country: draft.country.trim() || undefined,
     creditLimit: draft.creditLimit === '' ? undefined : Number(draft.creditLimit),
     notes: draft.notes.trim() || undefined,
+    status: draft.status,
   });
 
-  const validateCustomerDraft = (draft: CustomerDraft) => {
+  const validateCustomerDraft = (draft: CustomerDraft, excludeCustomerId?: string) => {
     if (!draft.name.trim()) {
       toast.error('El nombre del cliente es obligatorio');
       return false;
@@ -285,11 +332,43 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       toast.error('El RUC es obligatorio para una empresa');
       return false;
     }
+    const identifiers = [draft.taxId, draft.ruc].map((value) => value.trim().toLowerCase()).filter(Boolean);
+    const duplicateCustomer = data.find((customer) => {
+      if (excludeCustomerId && String(customer.id) === String(excludeCustomerId)) return false;
+      const customerIdentifiers = [customer.taxId, customer.ruc]
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean);
+      return identifiers.some((identifier) => customerIdentifiers.includes(identifier));
+    });
+    if (duplicateCustomer) {
+      toast.error(`La cédula o el RUC ya está registrado en el cliente ${duplicateCustomer.name}.`);
+      return false;
+    }
     if (draft.creditLimit !== '' && (!Number.isFinite(Number(draft.creditLimit)) || Number(draft.creditLimit) < 0)) {
       toast.error('El límite de crédito debe ser un número mayor o igual a cero');
       return false;
     }
     return true;
+  };
+
+  const openEditCustomer = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setEditCustomer(customerToDraft(customer));
+    setEditOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingCustomer || !validateCustomerDraft(editCustomer, editingCustomer.id)) return;
+    setSavingEdit(true);
+    try {
+      await handleUpdate(editingCustomer.id, buildCustomerPayload(editCustomer));
+      setEditOpen(false);
+      setEditingCustomer(null);
+    } catch {
+      // handleUpdate already displays the server or validation error.
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const handleAddPendingCustomer = () => {
@@ -342,7 +421,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { 
       key: 'code', 
       header: 'ID / Código', 
-      width: '120px',
+      width: '110px',
       render: (val, row) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val || row.id.slice(0, 8)}</span>
     },
     { 
@@ -355,7 +434,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { 
       key: 'type', 
       header: 'Tipo', 
-      width: '120px',
+      width: '110px',
       editable: canPerform('SALES_CLIENTS', 'edit'),
       type: 'select',
       options: [
@@ -396,6 +475,14 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       key: 'priceListId',
       header: 'Lista de precios',
       width: '165px',
+      editable: canPerform('SALES_CLIENTS', 'edit'),
+      type: 'select',
+      options: [
+        { label: 'Sin lista asignada', value: '' },
+        ...priceLists
+          .filter((list) => list.isActive !== false)
+          .map((list) => ({ label: list.name, value: list.id })),
+      ],
       render: (_val, row) => <span className="text-xs font-bold text-primary">{row.priceList?.name || 'Sin asignar'}</span>,
     },
     { key: 'email', header: 'Correo', width: '185px', editable: canPerform('SALES_CLIENTS', 'edit') },
@@ -418,7 +505,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { 
       key: 'status', 
       header: 'Estado', 
-      width: '120px',
+      width: '110px',
       editable: canPerform('SALES_CLIENTS', 'edit'),
       type: 'select',
       options: [
@@ -553,7 +640,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               isLoading={loading}
               pagination={pagination}
               showClearSelection={false}
-              actionsWidth="w-24"
+              actionsWidth="w-28"
               fitContent
               layoutMode={layoutMode}
               showHorizontalControls
@@ -561,7 +648,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 <div className="flex items-center gap-1">
                    <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomerDetail(row)}><Eye className="size-4" /></Button>
                    {canPerform('SALES_CLIENTS', 'edit') && (
-                     <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Anular cliente'} className={cn('size-8 rounded-lg transition-colors', String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'hover:bg-emerald-500/10 hover:text-emerald-500' : 'hover:bg-amber-500/10 hover:text-amber-500')} onClick={() => setPendingStatusChange(row)}><CircleX className="size-4" /></Button>
+                     <Button variant="ghost" size="icon" title="Editar cliente" aria-label="Editar cliente" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => openEditCustomer(row)}><Pencil className="size-4" /></Button>
+                   )}
+                   {canPerform('SALES_CLIENTS', 'edit') && (
+                     <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Inactivar cliente'} className={cn('size-8 rounded-lg transition-colors', String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'hover:bg-emerald-500/10 hover:text-emerald-500' : 'hover:bg-amber-500/10 hover:text-amber-500')} onClick={() => setPendingStatusChange(row)}><Ban className="size-4" /></Button>
                    )}
                 </div>
               )}
@@ -572,7 +662,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                   className="h-8 text-[10px] font-black uppercase tracking-wider text-amber-600 hover:bg-amber-500/10"
                   onClick={() => setPendingBulkDeactivateIds(selectedIds)}
                 >
-                  <CircleX className="mr-2 size-3" /> Desactivar clientes
+                  <Ban className="mr-2 size-3" /> Desactivar clientes
                 </Button>
               )}
             />
@@ -718,12 +808,57 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         </DialogContent>
       </Dialog>
 
+      <Dialog open={editOpen} onOpenChange={(open) => { if (!open && !savingEdit) { setEditOpen(false); setEditingCustomer(null); } }}>
+        <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,1200px)] !flex-col overflow-hidden rounded-3xl p-0">
+          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
+            <DialogTitle className="text-xl font-black uppercase tracking-tight">Editar cliente</DialogTitle>
+            <DialogDescription>Actualiza la información del cliente. La cédula y el RUC deben ser únicos en el sistema.</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
+            <section className="space-y-3">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">El código del cliente no se puede modificar.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="space-y-1.5 sm:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={editCustomer.name} onChange={(e) => setEditCustomer({ ...editCustomer, name: e.target.value })} placeholder="Nombre del particular o empresa" className="h-11 rounded-xl" autoFocus /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo *</label><select value={editCustomer.type} onChange={(e) => setEditCustomer({ ...editCustomer, type: e.target.value as CustomerDraft['type'] })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="individual">Particular</option><option value="company">Empresa</option></select></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cédula</label><Input value={editCustomer.taxId} onChange={(e) => setEditCustomer({ ...editCustomer, taxId: e.target.value })} placeholder="001-010190-1000A" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC</label><Input value={editCustomer.ruc} onChange={(e) => setEditCustomer({ ...editCustomer, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><select value={editCustomer.status} onChange={(e) => setEditCustomer({ ...editCustomer, status: e.target.value as CustomerDraft['status'] })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></div>
+              </div>
+            </section>
+            <section className="space-y-3 border-t border-border/40 pt-5">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Contacto y ubicación</h3><p className="text-xs text-muted-foreground">Mantén actualizados los datos de contacto del cliente.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Correo</label><Input type="email" value={editCustomer.email} onChange={(e) => setEditCustomer({ ...editCustomer, email: e.target.value })} placeholder="correo@ejemplo.com" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Teléfono</label><Input value={editCustomer.phone} onChange={(e) => setEditCustomer({ ...editCustomer, phone: e.target.value })} placeholder="8888-8888" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dirección</label><Input value={editCustomer.address} onChange={(e) => setEditCustomer({ ...editCustomer, address: e.target.value })} placeholder="Calle, número y referencias" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ciudad</label><Input value={editCustomer.city} onChange={(e) => setEditCustomer({ ...editCustomer, city: e.target.value })} placeholder="Ciudad" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Departamento</label><Input value={editCustomer.department} onChange={(e) => setEditCustomer({ ...editCustomer, department: e.target.value })} placeholder="Departamento" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</label><Input value={editCustomer.country} onChange={(e) => setEditCustomer({ ...editCustomer, country: e.target.value })} placeholder="País" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5 sm:col-span-2 xl:col-span-3"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</label><textarea value={editCustomer.notes} onChange={(e) => setEditCustomer({ ...editCustomer, notes: e.target.value })} placeholder="Observaciones opcionales" className="min-h-20 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary" /></div>
+              </div>
+            </section>
+            <section className="space-y-3 border-t border-border/40 pt-5">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Condiciones comerciales</h3><p className="text-xs text-muted-foreground">Estos cambios quedan registrados en el historial del cliente.</p></div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Régimen fiscal</label><Input value={editCustomer.fiscalRegime} onChange={(e) => setEditCustomer({ ...editCustomer, fiscalRegime: e.target.value })} placeholder="Régimen general" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito</label><Input type="number" min="0" value={editCustomer.creditLimit} onChange={(e) => setEditCustomer({ ...editCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista de precios</label><select value={editCustomer.priceListId} onChange={(e) => setEditCustomer({ ...editCustomer, priceListId: e.target.value })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="">Sin lista asignada</option>{priceLists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}</select></div>
+              </div>
+            </section>
+          </div>
+          <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7">
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={savingEdit} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
+            <Button onClick={handleSaveEdit} disabled={savingEdit} className="w-full rounded-xl font-bold sm:w-auto">{savingEdit ? 'Guardando...' : 'Guardar cambios'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) { setImportRows([]); setImportFile(null); } setImportOpen(open); }}>
         <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar clientes</DialogTitle><DialogDescription>Carga una plantilla Excel o CSV. Luego abre la previsualización completa para corregir los datos antes de crear los clientes.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar clientes</DialogTitle><DialogDescription>Carga una plantilla Excel. Luego abre la previsualización completa para corregir los datos antes de crear los clientes.</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">El número de cliente lo asigna automáticamente el sistema. La importación puede repetirse; los correos e identificaciones duplicadas se marcarán como errores. Los avisos, como una lista de precios inexistente, no bloquean las filas.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
-            <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo de clientes</label><Input type="file" accept=".xlsx,.xls,.csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); }} />{importFile && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p>}</div>
+            <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel de clientes</label><Input type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); }} />{importFile && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos del cliente, sin código.</li><li>Carga el archivo; el sistema lo prepara sin mostrar cambios todavía.</li><li>Presiona “Previsualizar clientes” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; los clientes válidos recibirán su número automático.</li></ol></div>
           </div>
           <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={() => { setImportOpen(false); setImportPreviewOpen(true); }}>Previsualizar clientes</Button>}</DialogFooter>

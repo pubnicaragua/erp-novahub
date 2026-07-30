@@ -2,6 +2,7 @@ import React from 'react';
 import { Label } from '../../ui/label';
 import { Input } from '../../ui/input';
 import { Minus, Plus, ChevronDown, ChevronRight } from 'lucide-react';
+import { formatSalesAmount } from '../../../utils/salesPriceList';
 
 export const NIO_BILLS = [1000, 500, 200, 100, 50, 20, 10];
 export const NIO_COINS = [10, 5, 1, 0.50, 0.25];
@@ -60,7 +61,7 @@ export function DenominationCounter({
             {collapsed ? <ChevronRight className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
             <span className="font-bold text-sm tracking-widest">{isNIO ? 'CÓRDOBAS (NIO)' : 'DÓLARES (USD)'}</span>
           </div>
-          <span className="font-mono text-sm font-bold text-muted-foreground">{prefix} {total.toFixed(2)}</span>
+          <span className="font-mono text-sm font-bold text-muted-foreground">{prefix} {formatSalesAmount(total)}</span>
         </div>
         
         {!collapsed && (

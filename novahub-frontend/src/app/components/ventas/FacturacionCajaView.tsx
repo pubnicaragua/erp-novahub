@@ -16,6 +16,7 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ProductThumbnail } from '../ui/ProductImage';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../ui/utils';
 import {
   cajaService,
@@ -36,11 +37,18 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { brandingService } from '../../services/branding.service';
 import { createIdempotencyKey } from '../../services/api';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
+import { priceListsService, type PriceList } from '../../services/price-lists.service';
+import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
+import { SalesIrSelector } from './SalesIrSelector';
+import { formatSalesAmount, getMissingSalesPriceMessage, getSalesUnitPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
   lineTotal: number;
   taxRate: number;
+  irRate?: number;
+  irTaxId?: string | null;
+  priceListId?: string;
 }
 
 interface CartSession {
@@ -55,6 +63,7 @@ interface InvoiceSummary {
   subtotal: number;
   tax: number;
   discount: number;
+  ir: number;
   total: number;
 }
 
@@ -89,7 +98,7 @@ function escapeTicketHtml(value: unknown) {
 function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: PosPaymentLine[], currency: PaymentCurrency, exchangeRate: number, companyName: string) {
   const win = window.open('', '_blank', 'width=420,height=700');
   if (!win) return;
-  const money = (value: number) => `${currency === 'USD' ? '$' : 'C$'} ${value.toFixed(2)}`;
+  const money = (value: number) => `${currency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(value)}`;
   const paidDisplay = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const paidLocal = paidDisplay * (currency === 'USD' ? exchangeRate : 1);
   const changeLocal = Math.max(0, paidLocal - Number(invoice.total));
@@ -101,7 +110,7 @@ function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: PosPaym
   const discount = Number(invoice.discountAmount || 0);
   const totalRecibidoHtml = payments.length > 1 ? `<div class="row"><span>Total recibido</span><span>${money(paidDisplay)}</span></div>` : '';
   const registerCode = invoice.register?.code || 'N/D';
-  win.document.write(`<html><head><title>${escapeTicketHtml(invoice.number)}</title><style>@page{size:80mm auto;margin:0}body{width:72mm;margin:4mm auto;font:11px monospace;color:#000}h2{text-align:center;margin:0 0 5px;font-size:16px}h3{text-align:center;margin:0 0 8px;font-size:11px;font-weight:normal}.center{text-align:center}.row{display:flex;justify-content:space-between;gap:8px;margin:3px 0}.line{border-top:1px dashed #000;margin:8px 0}.item{margin:5px 0}.item .row{font-size:10px}.totals{margin-top:6px}.total{font-size:14px;font-weight:bold}.label{font-weight:bold;margin-top:7px}.muted{font-size:10px}.footer{text-align:center;margin-top:14px;font-size:10px}</style></head><body><h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3><div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Caja: ${escapeTicketHtml(registerCode)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div><div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${changeLocal.toFixed(2)}</span></div></div><div class="footer">Gracias por su compra</div></body></html>`);
+  win.document.write(`<html><head><title>${escapeTicketHtml(invoice.number)}</title><style>@page{size:80mm auto;margin:0}body{width:72mm;margin:4mm auto;font:11px monospace;color:#000}h2{text-align:center;margin:0 0 5px;font-size:16px}h3{text-align:center;margin:0 0 8px;font-size:11px;font-weight:normal}.center{text-align:center}.row{display:flex;justify-content:space-between;gap:8px;margin:3px 0}.line{border-top:1px dashed #000;margin:8px 0}.item{margin:5px 0}.item .row{font-size:10px}.totals{margin-top:6px}.total{font-size:14px;font-weight:bold}.label{font-weight:bold;margin-top:7px}.muted{font-size:10px}.footer{text-align:center;margin-top:14px;font-size:10px}</style></head><body><h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3><div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Caja: ${escapeTicketHtml(registerCode)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div><div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${formatSalesAmount(changeLocal)}</span></div></div><div class="footer">Gracias por su compra</div></body></html>`);
   win.document.close();
   // Esperar a que el documento se pinte evita que Chrome abra una vista previa en blanco.
   window.setTimeout(() => {
@@ -199,18 +208,21 @@ function normalizeDiscountPercent(value: string) {
 function calculateInvoiceSummary(
   cart: CartItem[],
   discountPercent: number,
-  includeTax: boolean
+  includeTax: boolean,
+  irRate = 0,
 ): InvoiceSummary {
   const subtotal = cart.reduce((sum, item) => sum + item.lineTotal, 0);
   const discount = subtotal * (discountPercent / 100);
   const taxableSubtotal = Math.max(0, subtotal - discount);
   const tax = includeTax ? taxableSubtotal * (NICARAGUA_IVA_RATE / 100) : 0;
+  const ir = taxableSubtotal * (irRate / 100);
 
   return {
     subtotal,
     tax,
     discount,
-    total: subtotal + tax - discount,
+    ir,
+    total: subtotal + tax - discount - ir,
   };
 }
 
@@ -220,6 +232,9 @@ function buildInvoiceItems(cart: CartItem[]): PosInvoiceItem[] {
     description: item.description,
     quantity: item.quantity,
     unitPrice: item.unitPrice,
+    priceListId: item.priceListId,
+    irRate: item.irRate,
+    irTaxId: item.irTaxId,
   }));
 }
 
@@ -233,6 +248,7 @@ interface FacturacionCajaViewProps {
 
 export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCajaViewProps) {
   const { formatConvertedAmount: formatCurrency } = useCurrency();
+  const { user } = useAuth();
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [registerAvailability, setRegisterAvailability] = useState<CashRegisterAvailability | null>(null);
   const [products, setProducts] = useState<PosProduct[]>([]);
@@ -245,8 +261,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
 
   const [selectedRegisterId, setSelectedRegisterId] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(undefined);
+  const [priceLists, setPriceLists] = useState<PriceList[]>([]);
+  const [priceListItems, setPriceListItems] = useState<Array<{ priceListId: string; productId: string; price: number; currency: string; exchangeRate: number; basePrice: number }>>([]);
+  const [selectedPriceListId, setSelectedPriceListId] = useState('');
   const [emitDate, setEmitDate] = useState(getTodayInputDate());
   const [discountPercent, setDiscountPercent] = useState(0);
+  const [irRate, setIrRate] = useState(0);
+  const [irTaxId, setIrTaxId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState('');
   const [catalogItemFilter, setCatalogItemFilter] = useState<CatalogItemFilter>('ALL');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -269,6 +290,35 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const [showAddCustomer, setShowAddCustomer] = useState(false);
 
   const cartSessions = useRef<Map<string, CartSession>>(new Map());
+
+  useEffect(() => {
+    if (!user?.tenantId) return;
+    setPriceLists([]);
+    setPriceListItems([]);
+    setSelectedPriceListId('');
+    let active = true;
+    void Promise.all([priceListsService.getAll(), priceListsService.getMatrix()]).then(([lists, matrix]) => {
+      if (!active) return;
+      const normalizedLists = Array.isArray(lists) ? lists : ((lists as any)?.data || []);
+      const normalizedMatrix = unwrapSalesPriceListMatrix(matrix);
+      setPriceLists(normalizedLists);
+      setPriceListItems(normalizedMatrix.items.map((item) => ({
+        priceListId: String(item.priceListId),
+        productId: String(item.productId),
+        price: Number(item.price),
+        currency: String(item.currency || 'NIO'),
+        exchangeRate: Number(item.exchangeRate || 1),
+        basePrice: Number(item.basePrice),
+      })));
+      setSelectedPriceListId((current) => current || normalizedLists.find((list: PriceList) => list.isDefault)?.id || normalizedLists[0]?.id || '');
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [user?.tenantId]);
+
+  const getConfiguredPrice = (priceListId: string, productId: string) => {
+    const entry = priceListItems.find((item) => sameSalesId(item.priceListId, priceListId) && sameSalesId(item.productId, productId));
+    return entry ? getSalesUnitPrice(entry, paymentCurrency, Number(activeSession?.exchangeRateUSD || 1)) : undefined;
+  };
 
   const handleRegisterChange = (newRegisterId: string, skipSave = false) => {
     // Guardar sesión de la caja actual
@@ -432,6 +482,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   };
 
   const addItem = (product: PosProduct) => {
+    const configuredPrice = getConfiguredPrice(selectedPriceListId, product.id);
+    if (configuredPrice === undefined) {
+      toast.error(`El producto "${product.name}" no tiene precio configurado en la lista seleccionada.`);
+      return;
+    }
     setCart((prev) => {
       const existing = prev.find((i) => i.productId === product.id);
       const globalQty = getGlobalCartQuantity(product.id);
@@ -475,10 +530,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
           productId: product.id,
           description: product.name,
           quantity: 1,
-          unitPrice: product.salePrice,
+          unitPrice: configuredPrice,
+          priceListId: selectedPriceListId,
+          priceMissing: false,
           // El IVA del POS es la regla fiscal nacional, no el valor del catálogo.
           taxRate: NICARAGUA_IVA_RATE,
-          lineTotal: calculateLineTotal(1, product.salePrice),
+          lineTotal: calculateLineTotal(1, configuredPrice),
         },
       ];
     });
@@ -513,16 +570,22 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   };
 
   const summary = useMemo(
-    () => calculateInvoiceSummary(cart, discountPercent, includeTax),
-    [cart, discountPercent, includeTax],
+    () => calculateInvoiceSummary(cart, discountPercent, includeTax, irRate),
+    [cart, discountPercent, includeTax, irRate],
   );
 
   const selectedRegister = registers.find((r) => r.id === selectedRegisterId);
 
   const handleCustomerChange = (value: string) => {
-    setSelectedCustomerId(
-      value === GENERAL_CUSTOMER_SELECT_VALUE ? undefined : value,
-    );
+    const customerId = value === GENERAL_CUSTOMER_SELECT_VALUE ? undefined : value;
+    const customer = customers.find((item) => item.id === customerId);
+    const nextListId = customer?.priceListId || priceLists.find((list) => list.isDefault)?.id || priceLists[0]?.id || '';
+    setSelectedCustomerId(customerId);
+    setSelectedPriceListId(nextListId);
+    setCart((current) => current.map((item) => {
+      const price = getConfiguredPrice(nextListId, item.productId);
+                        return price === undefined ? { ...item, priceListId: nextListId, unitPrice: 0, lineTotal: 0, priceMissing: true } : { ...item, priceListId: nextListId, unitPrice: price, lineTotal: calculateLineTotal(item.quantity, price), priceMissing: false };
+    }));
   };
 
   const handlePay = () => {
@@ -540,6 +603,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       toast.error('La caja no tiene una sesión activa');
       return;
     }
+    const priceMessage = getMissingSalesPriceMessage(cart);
+    if (priceMessage) {
+      toast.error(priceMessage);
+      return;
+    }
     setPayments([{ method: 'CASH', amount: 0 }]);
     setPaymentCurrency('NIO');
     setCreatedInvoice(null);
@@ -552,6 +620,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const submitPayment = async (confirmedDuplicate = false) => {
     if (submittingRef.current) return;
     if (!activeSession) return;
+    const priceMessage = getMissingSalesPriceMessage(cart);
+    if (priceMessage) {
+      toast.error(priceMessage);
+      return;
+    }
     const totalInPaymentCurrency = paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total;
     const received = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     if (received + 0.005 < totalInPaymentCurrency) {
@@ -576,6 +649,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         customCustomerName: selectedCustomerId ? undefined : GENERAL_CUSTOMER_NAME,
         date: emitDate,
         discountPercent: discountPercent || undefined,
+        irRate: irRate || undefined,
+        irTaxId: irTaxId || undefined,
+        priceListId: selectedPriceListId || undefined,
         items: buildInvoiceItems(cart),
         includeTax,
         currency: paymentCurrency,
@@ -822,6 +898,19 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                       className="!h-11 rounded-xl text-sm font-normal"
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Lista de precios</Label>
+                    <Select value={selectedPriceListId} onValueChange={(value) => {
+                      setSelectedPriceListId(value);
+                      setCart((current) => current.map((item) => {
+                        const price = getConfiguredPrice(value, item.productId);
+                        return price === undefined ? { ...item, priceListId: value, unitPrice: 0, lineTotal: 0, priceMissing: true } : { ...item, priceListId: value, unitPrice: price, lineTotal: calculateLineTotal(item.quantity, price), priceMissing: false };
+                      }));
+                    }} disabled={isRegisterDisabled || !priceLists.length}>
+                      <SelectTrigger className="!h-11 rounded-xl"><SelectValue placeholder="Seleccionar lista" /></SelectTrigger>
+                      <SelectContent>{priceLists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-1.5" data-tour="pos-date">
                     <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Fecha de Emisión</Label>
                     <Input type="date" value={emitDate} onChange={(e) => setEmitDate(e.target.value)} disabled={isRegisterDisabled} className="!h-11 !py-0 rounded-xl w-full flex items-center justify-between" />
@@ -1028,7 +1117,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                       <tbody className="divide-y divide-border/20">
                         {cart.map((item) => (
                           <tr key={item.productId} className="hover:bg-muted/20 transition-colors">
-                            <td className="px-3 py-2 font-bold">{item.description}</td>
+                            <td className="px-3 py-2 font-bold"><div className="flex min-w-0 flex-wrap items-center gap-2"><span className="min-w-0 flex-1">{item.description}</span><SalesLinePriceListSelect productId={item.productId} productCode={productsById.get(item.productId)?.code} itemType={productsById.get(item.productId)?.itemType} value={item.priceListId} defaultPriceListId={selectedPriceListId} currency={paymentCurrency} exchangeRate={Number(activeSession?.exchangeRateUSD || 1)} disabled={isRegisterDisabled} onChange={(priceListId, result) => { setCart((current) => current.map((line) => line.productId === item.productId ? { ...line, priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, lineTotal: calculateLineTotal(line.quantity, result.unitPrice || 0) } : line)); }} /><SalesIrSelector value={item.irTaxId} rate={Number(item.irRate || 0)} compact disabled={isRegisterDisabled} onChange={(option) => { setCart((current) => current.map((line) => line.productId === item.productId ? { ...line, irTaxId: option?.id || null, irRate: Number(option?.rate || 0) } : line)); }} />{item.priceMissing && <PriceMissingBadge className="basis-full" />}</div></td>
                             <td data-actions-column="compact" className="px-3 py-2 text-center">
                               <Input
                                 type="number"
@@ -1082,7 +1171,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                     disabled={isRegisterDisabled}
                   />
                 </div>
-                <div className="flex items-center justify-between pt-2">
+                  <div className="flex items-center justify-between pt-2">
                   <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Incluir IVA</Label>
                   <Switch checked={includeTax} onCheckedChange={setIncludeTax} disabled={isRegisterDisabled} />
                 </div>
@@ -1190,7 +1279,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                   {createdPaymentLines.map((payment, index) => (
                     <div key={`${payment.method}-${index}`} className="flex justify-between gap-3">
                       <span>{payment.method === 'CASH' ? 'Efectivo' : payment.method === 'CARD' ? 'Tarjeta' : 'Transferencia'}</span>
-                      <span className="font-mono font-bold">{paymentCurrency === 'USD' ? '$' : 'C$'} {Number(payment.amount).toFixed(2)}</span>
+                      <span className="font-mono font-bold">{paymentCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(payment.amount)}</span>
                     </div>
                   ))}
                 </div>
@@ -1200,8 +1289,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                 <p className="mt-2 text-2xl font-black text-primary">{formatCurrency(Number(createdInvoice.total))}</p>
                 {Number(createdInvoice.discountAmount) > 0 && <p className="mt-1 text-[11px] text-rose-600">Descuento: - {formatCurrency(Number(createdInvoice.discountAmount))}</p>}
                 <p className="mt-1 text-[11px] text-muted-foreground">IVA: {formatCurrency(Number(createdInvoice.taxAmount))}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Recibido: {paymentCurrency === 'USD' ? '$' : 'C$'} {createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0), 0).toFixed(2)}</p>
-                <p className="text-[11px] font-bold text-emerald-600">Cambio: C$ {Math.max(0, createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) * (paymentCurrency === 'USD' ? createdExchangeRate : 1) - Number(createdInvoice.total)).toFixed(2)}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Recibido: {paymentCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0), 0))}</p>
+                <p className="text-[11px] font-bold text-emerald-600">Cambio: C$ {formatSalesAmount(Math.max(0, createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) * (paymentCurrency === 'USD' ? createdExchangeRate : 1) - Number(createdInvoice.total)))}</p>
               </div>
             </div>
 
@@ -1235,15 +1324,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                   <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="rounded-xl bg-primary/10 p-3">
                       <span className="text-xs text-primary font-bold">Total a cobrar</span>
-                      <div className="text-xl font-black text-primary">{paymentCurrency === 'USD' ? '$' : 'C$'} {totalToPay.toFixed(2)}</div>
+                      <div className="text-xl font-black text-primary">{paymentCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(totalToPay)}</div>
                     </div>
                     <div className="rounded-xl bg-muted/40 p-3 border border-border/50">
                       <span className="text-xs text-muted-foreground">Total pagado</span>
-                      <div className="text-xl font-black">{paymentCurrency === 'USD' ? '$' : 'C$'} {totalPaid.toFixed(2)}</div>
+                      <div className="text-xl font-black">{paymentCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(totalPaid)}</div>
                     </div>
                     <div className={cn("rounded-xl p-3 border", changeLocal > 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-muted/20 border-border/30 text-muted-foreground")}>
                       <span className="text-xs font-bold">Cambio a entregar</span>
-                      <div className="text-xl font-black">C$ {changeLocal.toFixed(2)}</div>
+                      <div className="text-xl font-black">C$ {formatSalesAmount(changeLocal)}</div>
                     </div>
                   </div>
 
@@ -1316,7 +1405,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
             <div key={match.id} className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs">
               <div className="flex items-center justify-between gap-2 font-bold">
                 <span>{match.number}</span>
-                <span>{match.currency === 'USD' ? '$' : 'C$'} {Number(match.total).toFixed(2)}</span>
+                <span>{match.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(match.total)}</span>
               </div>
               <p className="mt-1 text-muted-foreground">{match.customerName} · {match.registerName}</p>
               <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-300">Coincidencias: {match.matchedCriteria.join(', ')}</p>

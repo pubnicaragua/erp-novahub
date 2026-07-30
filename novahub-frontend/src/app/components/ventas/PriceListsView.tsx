@@ -9,11 +9,13 @@ import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 import { toast } from 'sonner';
 import { priceListsService, type PriceListItem } from '../../services/price-lists.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { formatSalesAmount } from '../../utils/salesPriceList';
 
 interface PriceListsViewProps { products?: any[]; onRefresh?: () => void; isSidebarCollapsed?: boolean; }
 type ImportRow = { code: string; name: string; cost: number | ''; prices: Record<string, number | ''>; error?: string };
@@ -103,11 +105,11 @@ function PriceImportPreviewPage({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto rounded-2xl border bg-card shadow-sm">
-          <Table className="min-w-[1050px]">
+        <HorizontalTableScroller className="min-h-0 flex-1" label="Desplazamiento horizontal · columna por columna">
+          <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="min-w-[1050px]">
             <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
               <TableRow>
-                <TableHead className="w-12 text-center">Estado</TableHead>
+                <TableHead className="w-20 min-w-20 whitespace-nowrap text-center">Estado</TableHead>
                 <TableHead className="w-44">Código / SKU</TableHead>
                 <TableHead className="min-w-64">Producto</TableHead>
                 <TableHead className="w-36 text-right">Costo</TableHead>
@@ -129,7 +131,7 @@ function PriceImportPreviewPage({
             </TableBody>
           </Table>
           {!rows.length && <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene filas para actualizar.</div>}
-        </div>
+        </HorizontalTableScroller>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <Button variant="outline" onClick={onBack} disabled={importing}>Volver a la carga</Button>
@@ -294,13 +296,13 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
     return baseCurrency === 'USD' ? base * Number(exchangeRate || 1) : base / Number(exchangeRate || 1);
   };
 
-  const formatDisplayPrice = (basePrice: number) => `${displayCurrency === 'USD' ? '$' : 'C$'} ${convertBaseToDisplay(basePrice).toFixed(2)}`;
+  const formatDisplayPrice = (basePrice: number) => `${displayCurrency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(convertBaseToDisplay(basePrice))}`;
 
   const beginEditProduct = (productId: string) => {
     const byList = itemsByProduct.get(productId);
     const values = Object.fromEntries(visibleLists.map((list) => {
       const item = byList?.get(list.id);
-      return [list.id, item ? convertBaseToDisplay(Number(item.basePrice)).toFixed(2) : ''];
+      return [list.id, item ? formatSalesAmount(convertBaseToDisplay(Number(item.basePrice))) : ''];
     }));
     setEditingPrices((current) => ({ ...current, [productId]: values }));
     setEditingProductIds((current) => new Set(current).add(productId));

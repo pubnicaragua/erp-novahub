@@ -35,9 +35,74 @@ const actionLabels: Record<string, string> = {
 };
 
 const detailKeyLabels: Record<string, string> = {
+  id: 'Identificador',
+  number: 'Número',
+  customerId: 'Cliente',
+  customerName: 'Nombre del cliente',
+  customerEmail: 'Correo del cliente',
+  customerPhone: 'Teléfono del cliente',
+  warehouseId: 'Almacén',
+  warehouseName: 'Nombre del almacén',
+  salesOrderId: 'Orden de venta',
+  estimateId: 'Cotización',
+  invoiceId: 'Factura',
+  creditNoteId: 'Nota de crédito',
+  paymentId: 'Pago',
+  productId: 'Producto',
+  itemId: 'Artículo',
+  employeeId: 'Empleado',
+  sellerEmployeeId: 'Vendedor',
+  sellerName: 'Nombre del vendedor',
+  accountId: 'Cuenta contable',
+  clientTenantId: 'Empresa',
+  registerId: 'Caja',
+  sessionId: 'Sesión',
+  date: 'Fecha',
+  dueDate: 'Fecha de vencimiento',
+  expectedDelivery: 'Entrega esperada',
+  invoicedAt: 'Fecha de facturación',
+  createdAt: 'Fecha de creación',
+  updatedAt: 'Fecha de actualización',
+  createdById: 'Creado por',
+  updatedById: 'Actualizado por',
+  subtotal: 'Subtotal',
+  taxAmount: 'Impuesto',
+  discountAmount: 'Descuento',
+  total: 'Total',
+  baseTotal: 'Total base',
+  amountPaid: 'Monto pagado',
+  balance: 'Saldo',
+  currency: 'Moneda',
+  exchangeRate: 'Tasa de cambio',
+  notes: 'Notas',
+  items: 'Artículos',
+  itemCount: 'Cantidad de artículos',
+  priceListId: 'Lista de precios',
+  commission: 'Comisión',
+  commissionRate: 'Tasa de comisión',
+  commissionType: 'Tipo de comisión',
+  commissionAmount: 'Monto de comisión',
+  seller: 'Vendedor',
+  customer: 'Cliente',
+  warehouse: 'Almacén',
+  code: 'Código',
+  type: 'Tipo',
+  email: 'Correo electrónico',
+  phone: 'Teléfono',
+  address: 'Dirección',
+  taxId: 'Identificación fiscal',
+  ruc: 'RUC',
+  fiscalRegime: 'Régimen fiscal',
+  creditLimit: 'Límite de crédito',
+  previousStatus: 'Estado anterior',
+  newStatus: 'Estado nuevo',
+  source: 'Origen',
+  price_list: 'Lista de precios',
+  commercial_changes: 'Cambios comerciales',
+  bulk_import: 'Importación masiva',
+  fieldsUpdated: 'Campos actualizados',
   fromOrder: 'Orden de venta de origen',
   fromEstimate: 'Cotización de origen',
-  number: 'Número',
   status: 'Estado',
   reason: 'Motivo',
   amount: 'Monto',
@@ -62,6 +127,40 @@ const detailValueLabels: Record<string, string> = {
   SHIPPED: 'Enviada',
   OVERDUE: 'Vencida',
   EARNED: 'Devengada',
+  ACTIVE: 'Activo',
+  INACTIVE: 'Inactivo',
+  PENDING_REVIEW: 'Pendiente de revisión',
+  IN_PROGRESS: 'En proceso',
+  DELIVERED: 'Entregada',
+  SENT: 'Enviada',
+  APPROVED: 'Aprobada',
+  REJECTED: 'Rechazada',
+  PROCESSED: 'Procesada',
+  ISSUED: 'Emitida',
+  APPLIED: 'Aplicada',
+  VOIDED: 'Anulada',
+  PAUSED: 'Pausada',
+  EXPIRED: 'Finalizada',
+  COMPLETED: 'Completada',
+  OPEN: 'Abierto',
+  RESOLVED: 'Resuelto',
+  IN_REVIEW: 'En revisión',
+  DISBURSED: 'Desembolsado',
+  RECEIVED: 'Recibida',
+  REFUNDED: 'Reembolsada',
+  AVAILABLE: 'Disponible',
+  IN_STOCK: 'En existencia',
+  PRODUCT: 'Producto',
+  SERVICE: 'Servicio',
+  CASH: 'Efectivo',
+  CARD: 'Tarjeta',
+  TRANSFER: 'Transferencia',
+  CHECK: 'Cheque',
+  PERCENTAGE: 'Porcentaje',
+  FIXED: 'Monto fijo',
+  true: 'Sí',
+  false: 'No',
+  BULK_IMPORT: 'Importación masiva',
 };
 
 export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = 'Historial de Cambios' }: AuditHistoryModalProps) {
@@ -95,17 +194,21 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
     }
   };
 
-  const translateKey = (key: string) => detailKeyLabels[key] || key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
+  const translateKey = (key: string) => detailKeyLabels[key] || detailValueLabels[key] || key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
 
-  const translateValue = (value: unknown): string => {
+  const translateValue = (value: unknown, contextKey?: string): string => {
     if (value === null || value === undefined || value === '') return '—';
-    if (Array.isArray(value)) return value.map(translateValue).join(', ');
+    if (Array.isArray(value)) return value.map((item) => translateValue(item, contextKey)).join(', ');
     if (typeof value === 'object') {
       return Object.entries(value as Record<string, unknown>)
-        .map(([key, nestedValue]) => `${translateKey(key)}: ${translateValue(nestedValue)}`)
+        .map(([key, nestedValue]) => `${translateKey(key)}: ${translateValue(nestedValue, key)}`)
         .join(' · ');
     }
-    return detailValueLabels[String(value)] || String(value);
+    const stringValue = String(value);
+    if (contextKey === 'fields_updated' || contextKey === 'fieldsUpdated') {
+      return stringValue.split(',').map((field) => translateKey(field.trim())).join(', ');
+    }
+    return detailValueLabels[stringValue] || detailKeyLabels[stringValue] || stringValue;
   };
 
   return (
@@ -175,8 +278,8 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
                                 {typeof detailsObj === 'object' ? (
                                   <ul className="list-disc list-inside space-y-1">
                                     {Object.entries(detailsObj).map(([key, value]) => (
-                                      <li key={key}>
-                                        <span className="font-bold text-foreground">{translateKey(key)}:</span> {translateValue(value)}
+                                        <li key={key}>
+                                          <span className="font-bold text-foreground">{translateKey(key)}:</span> {translateValue(value, key)}
                                       </li>
                                     ))}
                                   </ul>

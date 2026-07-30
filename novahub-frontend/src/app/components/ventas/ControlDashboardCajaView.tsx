@@ -19,6 +19,7 @@ import { CajaSetupGuide } from './caja/CajaSetupGuide';
 import { getApiErrorMessage } from '../../services/api';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
+import { formatSalesAmount } from '../../utils/salesPriceList';
 
 type SectionType = 'dashboard' | 'session' | 'history';
 
@@ -308,17 +309,17 @@ export function ControlDashboardCajaView({
                               <p className="text-xs font-bold text-amber-600">Importes ocultos</p>
                             ) : <>
                               <p className="text-xs text-muted-foreground">Inicial</p>
-                              <p className="font-mono font-bold">{symbol} {initialConverted.toFixed(2)}</p>
-                              <p className="text-[9px] text-muted-foreground mt-0.5 font-normal">C$ {initialNIO.toFixed(2)} | $ {initialUSD.toFixed(2)}</p>
+                              <p className="font-mono font-bold">{symbol} {formatSalesAmount(initialConverted)}</p>
+                              <p className="text-[9px] text-muted-foreground mt-0.5 font-normal">C$ {formatSalesAmount(initialNIO)} | $ {formatSalesAmount(initialUSD)}</p>
                             </>}
                           </div>
                           {h.status === 'CLOSED' && (
                             <div className="ml-0 flex w-full min-w-0 items-center justify-between border-t border-border/30 pt-2 text-left sm:ml-4 sm:w-auto sm:flex-col sm:items-end sm:justify-start sm:border-t-0 sm:pt-0 sm:text-right">
                               <p className="text-xs text-muted-foreground">Diferencia</p>
                               <p className={`font-mono font-bold ${diffConverted < 0 ? 'text-red-500' : diffConverted > 0 ? 'text-green-500' : 'text-emerald-500'}`}>
-                                {symbol} {diffConverted > 0 ? '+' : ''}{diffConverted.toFixed(2)}
+                                {symbol} {diffConverted > 0 ? '+' : ''}{formatSalesAmount(diffConverted)}
                               </p>
-                              <p className={`text-[9px] mt-0.5 font-normal ${diffConverted < 0 ? 'text-red-400/70' : diffConverted > 0 ? 'text-green-400/70' : 'text-emerald-400/70'}`}>C$ {diffNIO.toFixed(2)} | $ {diffUSD.toFixed(2)}</p>
+                              <p className={`text-[9px] mt-0.5 font-normal ${diffConverted < 0 ? 'text-red-400/70' : diffConverted > 0 ? 'text-green-400/70' : 'text-emerald-400/70'}`}>C$ {formatSalesAmount(diffNIO)} | $ {formatSalesAmount(diffUSD)}</p>
                             </div>
                           )}
                         </div>
@@ -344,8 +345,8 @@ export function ControlDashboardCajaView({
                                     <div className="bg-muted/50 p-4 rounded-xl mb-2 flex items-center justify-between">
                                       <span className="font-bold text-muted-foreground text-sm uppercase tracking-wider">Fondo Inicial</span>
                                       <div className="text-right">
-                                        <div className="font-mono font-black text-lg">{symbol} {initialConverted.toFixed(2)}</div>
-                                        <div className="text-[10px] text-muted-foreground">C$ {initialNIO.toFixed(2)} | $ {initialUSD.toFixed(2)}</div>
+                                        <div className="font-mono font-black text-lg">{symbol} {formatSalesAmount(initialConverted)}</div>
+                                        <div className="text-[10px] text-muted-foreground">C$ {formatSalesAmount(initialNIO)} | $ {formatSalesAmount(initialUSD)}</div>
                                       </div>
                                     </div>
 
@@ -358,7 +359,7 @@ export function ControlDashboardCajaView({
                                             {d.currency === 'NIO' ? 'C$' : '$'} {d.value} x {d.quantity}
                                           </div>
                                           <div className="font-mono text-right font-medium">
-                                            {Number(d.subtotal).toFixed(2)}
+                                            {formatSalesAmount(d.subtotal)}
                                           </div>
                                         </Fragment>
                                       ))}
@@ -389,32 +390,32 @@ export function ControlDashboardCajaView({
                                         <div className="flex items-center justify-between border-b border-border/50 pb-2">
                                           <span className="text-sm font-medium text-muted-foreground">Fondo Inicial</span>
                                           <div className="text-right">
-                                            <div className="font-mono font-bold">{symbol} {initialConverted.toFixed(2)}</div>
-                                            <div className="text-[10px] text-muted-foreground">C$ {initialNIO.toFixed(2)} | $ {initialUSD.toFixed(2)}</div>
+                                            <div className="font-mono font-bold">{symbol} {formatSalesAmount(initialConverted)}</div>
+                                            <div className="text-[10px] text-muted-foreground">C$ {formatSalesAmount(initialNIO)} | $ {formatSalesAmount(initialUSD)}</div>
                                           </div>
                                         </div>
                                         <div className="flex items-center justify-between border-b border-border/50 pb-2">
                                           <span className="text-sm font-medium text-muted-foreground">Esperado en Sistema</span>
                                           <div className="text-right">
-                                            <div className="font-mono font-bold">{symbol} {expectedConverted.toFixed(2)}</div>
-                                            <div className="text-[10px] text-muted-foreground">C$ {expectedNIO.toFixed(2)} | $ {expectedUSD.toFixed(2)}</div>
+                                            <div className="font-mono font-bold">{symbol} {formatSalesAmount(expectedConverted)}</div>
+                                            <div className="text-[10px] text-muted-foreground">C$ {formatSalesAmount(expectedNIO)} | $ {formatSalesAmount(expectedUSD)}</div>
                                           </div>
                                         </div>
                                         <div className="flex items-center justify-between border-b border-border/50 pb-2">
                                           <span className="text-sm font-medium text-muted-foreground">Físico Contado (Arqueo)</span>
                                           <div className="text-right">
-                                            <div className="font-mono font-bold">{symbol} {finalConverted.toFixed(2)}</div>
-                                            <div className="text-[10px] text-muted-foreground">C$ {finalNIO.toFixed(2)} | $ {finalUSD.toFixed(2)}</div>
+                                            <div className="font-mono font-bold">{symbol} {formatSalesAmount(finalConverted)}</div>
+                                            <div className="text-[10px] text-muted-foreground">C$ {formatSalesAmount(finalNIO)} | $ {formatSalesAmount(finalUSD)}</div>
                                           </div>
                                         </div>
                                         <div className="flex items-center justify-between pt-1">
                                           <span className="text-sm font-black uppercase tracking-wider">Diferencia</span>
                                           <div className="text-right">
                                             <div className={`font-mono font-black text-lg ${diffConverted < 0 ? 'text-destructive' : diffConverted > 0 ? 'text-emerald-500' : 'text-emerald-500'}`}>
-                                              {symbol} {diffConverted > 0 ? '+' : ''}{diffConverted.toFixed(2)}
+                                              {symbol} {diffConverted > 0 ? '+' : ''}{formatSalesAmount(diffConverted)}
                                             </div>
                                             <div className={`text-[10px] ${diffConverted < 0 ? 'text-destructive/70' : diffConverted > 0 ? 'text-emerald-500/70' : 'text-emerald-500/70'}`}>
-                                              C$ {diffNIO.toFixed(2)} | $ {diffUSD.toFixed(2)}
+                                              C$ {formatSalesAmount(diffNIO)} | $ {formatSalesAmount(diffUSD)}
                                             </div>
                                           </div>
                                         </div>
@@ -429,7 +430,7 @@ export function ControlDashboardCajaView({
                                               {d.currency === 'NIO' ? 'C$' : '$'} {d.value} x {d.quantity}
                                             </div>
                                             <div className="font-mono text-right font-medium">
-                                              {Number(d.subtotal).toFixed(2)}
+                                              {formatSalesAmount(d.subtotal)}
                                             </div>
                                           </Fragment>
                                         ))}
@@ -461,8 +462,8 @@ export function ControlDashboardCajaView({
                                           <p className="text-[10px] text-muted-foreground">{attempt.capturedBy?.name || 'Usuario'} · {attempt.createdAt ? new Date(attempt.createdAt).toLocaleString() : ''}</p>
                                         </div>
                                         <div className="text-right font-mono">
-                                          <p className="font-bold">{symbol} {countedConverted.toFixed(2)}</p>
-                                          <p className={attemptDiffConverted < 0 ? 'text-destructive' : 'text-emerald-500'}>Dif. {attemptDiffConverted > 0 ? '+' : ''}{attemptDiffConverted.toFixed(2)}</p>
+                                          <p className="font-bold">{symbol} {formatSalesAmount(countedConverted)}</p>
+                                          <p className={attemptDiffConverted < 0 ? 'text-destructive' : 'text-emerald-500'}>Dif. {attemptDiffConverted > 0 ? '+' : ''}{formatSalesAmount(attemptDiffConverted)}</p>
                                         </div>
                                       </div>
                                     </div>
@@ -491,9 +492,9 @@ export function ControlDashboardCajaView({
                                     </div>
                                     {!isBlindBeforeCount && (
                                       <div className={`font-mono font-bold text-right flex flex-col items-end justify-center ${log.type === 'EXIT' ? 'text-red-500' : 'text-green-500'}`}>
-                                        <span>{log.type === 'EXIT' ? '-' : '+'}{symbol} {logConverted.toFixed(2)}</span>
+                                        <span>{log.type === 'EXIT' ? '-' : '+'}{symbol} {formatSalesAmount(logConverted)}</span>
                                         <span className={`text-[9px] font-normal mt-0.5 ${log.type === 'EXIT' ? 'text-red-400/70' : 'text-green-400/70'}`}>
-                                          C$ {logNIO.toFixed(2)} | $ {logUSD.toFixed(2)}
+                                          C$ {formatSalesAmount(logNIO)} | $ {formatSalesAmount(logUSD)}
                                         </span>
                                       </div>
                                     )}

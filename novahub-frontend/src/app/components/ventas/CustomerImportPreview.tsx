@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 
 export type CustomerImportRow = {
   name: string;
@@ -42,7 +43,7 @@ interface CustomerImportPreviewProps {
   onDone: () => void;
 }
 
-const fieldClass = 'h-9 min-w-32 rounded-lg border-border/70 bg-background/70 text-xs';
+const fieldClass = 'h-9 w-full min-w-0 rounded-lg border-border/70 bg-background/70 text-xs';
 
 export function CustomerImportPreview({
   rows,
@@ -91,26 +92,26 @@ export function CustomerImportPreview({
           <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Código automático</Badge><Badge variant="secondary">Importación repetible</Badge><Badge variant="secondary">Avisos no bloquean</Badge></div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto rounded-2xl border bg-card shadow-sm">
-          <Table className="min-w-[1900px]">
+        <HorizontalTableScroller className="min-h-0 flex-1" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
+          <Table containerClassName="overflow-visible" containerStyle={{ width: '3100px', minWidth: '3100px', maxWidth: 'none' }} className="w-[3100px] min-w-[3100px]">
             <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
               <TableRow>
-                <TableHead className="w-12 text-center">Estado</TableHead>
-                <TableHead className="min-w-56">Nombre *</TableHead>
-                <TableHead className="w-36">Tipo *</TableHead>
-                <TableHead className="min-w-40">Régimen fiscal</TableHead>
-                <TableHead className="min-w-44">Lista de precios</TableHead>
-                <TableHead className="min-w-36">Cédula</TableHead>
-                <TableHead className="min-w-32">RUC</TableHead>
-                <TableHead className="min-w-52">Correo</TableHead>
-                <TableHead className="min-w-36">Teléfono</TableHead>
-                <TableHead className="min-w-52">Dirección</TableHead>
-                <TableHead className="min-w-32">Ciudad</TableHead>
-                <TableHead className="min-w-40">Departamento</TableHead>
-                <TableHead className="min-w-32">País</TableHead>
-                <TableHead className="w-36 text-right">Límite crédito</TableHead>
-                <TableHead className="w-32">Estado</TableHead>
-                <TableHead className="min-w-64">Validación</TableHead>
+                <TableHead className="w-20 min-w-20 whitespace-nowrap text-center">Estado</TableHead>
+                <TableHead className="w-72 min-w-72 whitespace-nowrap">Nombre *</TableHead>
+                <TableHead className="w-40 min-w-40 whitespace-nowrap">Tipo *</TableHead>
+                <TableHead className="w-48 min-w-48 whitespace-nowrap">Régimen fiscal</TableHead>
+                <TableHead className="w-56 min-w-56 whitespace-nowrap">Lista de precios</TableHead>
+                <TableHead className="w-48 min-w-48 whitespace-nowrap">Cédula</TableHead>
+                <TableHead className="w-44 min-w-44 whitespace-nowrap">RUC</TableHead>
+                <TableHead className="w-64 min-w-64 whitespace-nowrap">Correo</TableHead>
+                <TableHead className="w-44 min-w-44 whitespace-nowrap">Teléfono</TableHead>
+                <TableHead className="w-72 min-w-72 whitespace-nowrap">Dirección</TableHead>
+                <TableHead className="w-40 min-w-40 whitespace-nowrap">Ciudad</TableHead>
+                <TableHead className="w-48 min-w-48 whitespace-nowrap">Departamento</TableHead>
+                <TableHead className="w-40 min-w-40 whitespace-nowrap">País</TableHead>
+                <TableHead className="w-44 min-w-44 whitespace-nowrap text-right">Límite crédito</TableHead>
+                <TableHead className="w-36 min-w-36 whitespace-nowrap">Estado</TableHead>
+                <TableHead className="w-72 min-w-72 whitespace-nowrap">Validación</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -129,7 +130,7 @@ export function CustomerImportPreview({
                   <TableCell><Input className={fieldClass} value={row.city} onChange={(event) => onRowUpdate(index, 'city', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Input className={fieldClass} value={row.department} onChange={(event) => onRowUpdate(index, 'department', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Input className={fieldClass} value={row.country} onChange={(event) => onRowUpdate(index, 'country', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className="h-9 w-32 rounded-lg border-border/70 bg-background/70 text-right text-xs" type="number" min="0" value={row.creditLimit} onChange={(event) => onRowUpdate(index, 'creditLimit', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className="h-9 w-full min-w-0 rounded-lg border-border/70 bg-background/70 text-right text-xs" type="number" min="0" value={row.creditLimit} onChange={(event) => onRowUpdate(index, 'creditLimit', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><select className={fieldClass} value={row.status} onChange={(event) => onRowUpdate(index, 'status', event.target.value)} disabled={importing}><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></TableCell>
                   <TableCell className={row.error ? 'text-xs font-medium text-rose-600' : row.warning ? 'text-xs font-medium text-amber-600' : 'text-xs text-emerald-600'}>{row.error || row.warning || 'Correcto'}</TableCell>
                 </TableRow>
@@ -137,7 +138,7 @@ export function CustomerImportPreview({
             </TableBody>
           </Table>
           {!rows.length && <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
-        </div>
+        </HorizontalTableScroller>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <Button variant="outline" onClick={onBack} disabled={importing}><ArrowLeft className="mr-2 size-4" /> Volver a la carga</Button>
