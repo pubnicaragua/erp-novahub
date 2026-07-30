@@ -30,6 +30,7 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { inventoryService } from '../services/inventario.service';
 import { motion } from 'motion/react';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
+import { BranchScopeFilter } from './ui/BranchScopeFilter';
 
 const INVENTORY_SECTIONS = [
   { id: 'dashboard',       label: 'Resumen',         icon: Package,   requiredModules: ['INVENTORY_DASHBOARD'] },
@@ -228,6 +229,12 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             Exportar
           </Button>
         </div>
+      </div>
+
+      {/* Branch Scope Filter */}
+      <div className="flex items-center justify-between mb-4">
+        <BranchScopeFilter />
+        <div />
       </div>
 
       {/* Main Navigation Tabs */}

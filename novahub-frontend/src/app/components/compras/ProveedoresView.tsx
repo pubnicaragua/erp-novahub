@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, FileDown, Info } from 'lucide-react';
+import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, FileDown, Info, Ban } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -200,10 +200,10 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
   const columns: ColumnDef<Supplier>[] = [
     { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('proveedores', 'edit') },
     { key: 'name',        header: 'Nombre',    editable: canPerform('proveedores', 'edit') },
-    { key: 'contactName', header: 'direccion',  editable: canPerform('proveedores', 'edit') },
+    { key: 'contactName', header: 'Contacto',  editable: canPerform('proveedores', 'edit') },
     { key: 'email',       header: 'Email',     editable: canPerform('proveedores', 'edit') },
     { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('proveedores', 'edit') },
-    { key: 'balance', header: 'Saldo', width: '130px',
+    { key: 'balance', header: 'Saldo', width: '170px',
       render: (val) => <span className="font-black text-rose-500 tabular-nums">{formatConvertedAmount(val || 0, 'NIO')}</span>
     },
     { key: 'status', header: 'Estado', width: '120px', editable: canPerform('proveedores', 'edit'), type: 'select', options: statusOptions,
@@ -218,14 +218,23 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
     try { 
       const sanitized: any = { ...updates };
       if (sanitized.email === '') sanitized.email = undefined;
-      
+      if (sanitized.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitized.email)) {
+        toast.error('Correo electrónico inválido. Ingresa un email con formato válido (ej: proveedor@correo.com)');
+        throw new Error('Email inválido');
+      }
       await suppliersService.update(id as string, sanitized); 
       toast.success('Proveedor actualizado'); 
       onRefresh(); 
     }
     catch (e: any) { 
-      toast.error('Error al actualizar: ' + (e.response?.data?.message || e.message)); 
-      throw e; // To trigger rollback in EditableDataTable
+      if (e.message === 'Email inválido') throw e;
+      const msg = e?.response?.data?.message || e?.message || '';
+      if (msg.toLowerCase().includes('email') || msg.toLowerCase().includes('correo')) {
+        toast.error('Correo electrónico inválido. Verifica el formato del email ingresado.');
+      } else {
+        toast.error('Error al actualizar: ' + msg);
+      }
+      throw e;
     }
   };
 
@@ -308,20 +317,22 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
         </div>
         <EditableDataTable data={filteredAndSorted} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           onAddRow={canPerform('proveedores', 'create') ? handleAdd : undefined}
+          bulkActions={(ids) => (
+            <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider"
+              onClick={async () => {
+                await Promise.all(ids.map(id => handleUpdate(id, { isActive: false } as any)));
+                toast.success(`${ids.length} proveedor(es) desactivado(s)`);
+                onRefresh();
+              }}
+            >
+              <Ban className="size-3 mr-2" /> Desactivar {ids.length}
+            </Button>
+          )}
           actions={(row) => (
             <div className="flex gap-1">
               <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierForHistory(row)}><Eye className="size-4" /></Button>
-              <Button title="Recalcular Saldo" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={async () => {
-                try {
-                  const result = await suppliersService.recalculateBalance(row.id);
-                  toast.success(`Saldo recalculado: ${formatConvertedAmount(result.newBalance, 'NIO')}`);
-                  onRefresh();
-                } catch (e: any) {
-                  toast.error('Error al recalcular: ' + (e.response?.data?.message || e.message));
-                }
-              }}><RefreshCw className="size-4" /></Button>
-              {canPerform('proveedores', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+              {row.isActive !== false && canPerform('proveedores', 'delete') && (
+                <Button title="Desactivar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
               )}
             </div>
           )}
@@ -331,25 +342,20 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
       <ConfirmDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-        title="¿Eliminar proveedor?"
-        description="Si el proveedor tiene transacciones activas (facturas, órdenes de compra, pagos), no se podrá eliminar."
-        confirmLabel="Eliminar"
+        title="¿Desactivar proveedor?"
+        description="El proveedor quedará inactivo y no aparecerá en selecciones futuras."
+        confirmLabel="Desactivar"
         variant="destructive"
         loading={deleteLoading}
         onConfirm={async () => {
           if (!pendingDeleteId) return;
           try {
             setDeleteLoading(true);
-            await suppliersService.delete(pendingDeleteId);
-            toast.success('Proveedor eliminado correctamente');
+            await suppliersService.update(pendingDeleteId, { isActive: false } as any);
+            toast.success('Proveedor desactivado correctamente');
             onRefresh();
           } catch (error: any) {
-            const msg = error?.response?.data?.message || error?.message || '';
-            if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
-              toast.error('No se puede eliminar: este proveedor tiene transacciones activas (órdenes, facturas, pagos, etc.)');
-            } else {
-              toast.error(`Error al eliminar proveedor: ${msg}`);
-            }
+            toast.error(`Error al desactivar proveedor: ${error?.response?.data?.message || error?.message || ''}`);
           } finally {
             setDeleteLoading(false);
             setPendingDeleteId(null);

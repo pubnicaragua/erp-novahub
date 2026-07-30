@@ -94,10 +94,14 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
     
     try {
+      const creditCurrency = localDoc.currency || displayCurrency;
+      const creditRate = creditCurrency === 'NIO' ? 1 : (localDoc.exchangeRate || 1);
       const finalDoc = {
-          ...localDoc, 
+          ...localDoc,
           total: recalculatedTotal,
-          currency: displayCurrency === 'USD' ? 'USD' : 'NIO'
+          currency: creditCurrency,
+          exchangeRate: creditRate,
+          baseTotal: creditCurrency === 'NIO' ? recalculatedTotal : recalculatedTotal * creditRate,
       };
       if (editingId === 'NEW') {
         await vendorCreditsService.create(finalDoc as any);
@@ -218,6 +222,33 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
                     {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
+                  <select
+                    disabled={isNew ? !canPerform('PURCHASES_RETURNS', 'create') : !canPerform('PURCHASES_RETURNS', 'edit')}
+                    value={localDoc.currency || displayCurrency}
+                    onChange={(e) => {
+                      const newCurrency = e.target.value;
+                      setLocalDoc({
+                        ...localDoc,
+                        currency: newCurrency as any,
+                        exchangeRate: newCurrency === 'NIO' ? 1 : (localDoc.exchangeRate || 1),
+                      });
+                    }}
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                    <option value="NIO">C$ (NIO)</option>
+                    <option value="USD">$ (USD)</option>
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">T.C.</p>
+                  <Input
+                    disabled={isNew ? !canPerform('PURCHASES_RETURNS', 'create') : !canPerform('PURCHASES_RETURNS', 'edit') || localDoc.currency === 'NIO'}
+                    type="number" min="0" step="0.01"
+                    value={localDoc.exchangeRate || 1}
+                    onChange={(e) => setLocalDoc({ ...localDoc, exchangeRate: Number(e.target.value) })}
+                    className="h-8 text-xs font-bold tabular-nums" />
+                </div>
                 <div className="md:col-span-4">
                   <p className="text-[10px] text-muted-foreground mb-1">Razón / Concepto</p>
                   <Input 
@@ -225,7 +256,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
                     value={localDoc.reason || ''} 
                     onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })} 
                     className="h-8 text-xs" 
-                    placeholder="Ej. Devolución de mercadería" 
+                    placeholder="Ej. Devolución de mercadería, descuento comercial, bonificación" 
                   />
                 </div>
               </div>

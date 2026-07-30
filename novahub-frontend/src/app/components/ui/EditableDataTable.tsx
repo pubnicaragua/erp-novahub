@@ -320,11 +320,6 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               <span className="text-xs font-black uppercase tracking-widest text-primary/60">
                 {selectedIds.size} Seleccionados
               </span>
-              {showClearSelection && (
-                <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider" onClick={() => setSelectedIds(new Set())}>
-                  <Eraser className="size-3 mr-2" /> Despejar
-                </Button>
-              )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
                {bulkActions && bulkActions(Array.from(selectedIds))}
@@ -497,7 +492,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       </TableCell>
                     );
                   })}
-                  <TableCell data-actions-column="true" className={cn('sticky right-0 z-20 h-14 overflow-visible whitespace-nowrap bg-card/60 backdrop-blur-md group-hover:bg-muted/20 transition-colors pr-2 text-right pointer-events-auto', isSelected && 'bg-primary/5 group-hover:bg-primary/10', actionsWidth)}>
+                  <TableCell data-actions-column="true" className={cn('sticky right-0 z-20 h-14 overflow-visible whitespace-nowrap bg-background group-hover:bg-muted/20 transition-colors pr-2 text-right pointer-events-auto', isSelected && 'bg-primary/5 group-hover:bg-primary/10', actionsWidth)}>
                     <div className="relative z-30 flex min-w-max flex-nowrap items-center justify-end gap-1 overflow-visible whitespace-nowrap transition-all pointer-events-auto">
                       {actions ? actions(row) : (
                         onRowDelete && (

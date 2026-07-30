@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput, Download, FileText
+  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput, Download, FileText, X
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -51,9 +51,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseOrder> | null>(null);
-  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
 
   useEffect(() => {
     suppliersService.getAll().then(res => {
@@ -92,15 +93,16 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
          const found = data.find(x => x.id === editingId);
          setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
       }
-      setEvidenceFile(null);
+      setEvidenceFiles([]);
     } else {
       setLocalDoc(null);
-      setEvidenceFile(null);
+      setEvidenceFiles([]);
     }
   }, [editingId, data, globalRate]);
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filtered = data.filter(o => {
+    if (statusFilter !== 'ALL' && (o.status || '').toUpperCase() !== statusFilter) return false;
     if (!normalizedSearchTerm) return true;
     const haystack = [
       o.number,
@@ -198,23 +200,28 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       })),
     };
 
-    if (evidenceFile) {
-      const isImage = evidenceFile.type.startsWith('image/');
-      if (isImage && evidenceFile.size > MAX_EVIDENCE_IMAGE_BYTES) {
-        return toast.error('La imagen es muy pesada. Máximo 2MB');
+    if (evidenceFiles.length > 0) {
+      const uploaded: { url: string; name: string; type: string; size: number }[] = [];
+      for (const file of evidenceFiles) {
+        const isImage = file.type.startsWith('image/');
+        if (isImage && file.size > MAX_EVIDENCE_IMAGE_BYTES) {
+          return toast.error(`La imagen "${file.name}" es muy pesada. Máximo 2MB`);
+        }
+        if (!isImage && file.size > MAX_EVIDENCE_FILE_BYTES) {
+          return toast.error(`El archivo "${file.name}" es muy pesado. Máximo 10MB`);
+        }
+        try {
+          const evidence = await storageService.uploadFile('purchase-evidence', file, { folder: 'ordenes' });
+          uploaded.push({ url: evidence.uri, name: file.name, type: file.type, size: file.size });
+        } catch {
+          return toast.error(`No se pudo procesar el archivo "${file.name}"`);
+        }
       }
-      if (!isImage && evidenceFile.size > MAX_EVIDENCE_FILE_BYTES) {
-        return toast.error('El archivo es muy pesado. Máximo 10MB');
-      }
-      try {
-        const evidence = await storageService.uploadFile('purchase-evidence', evidenceFile, { folder: 'ordenes' });
-        cleanedDoc.evidenceFileUrl = evidence.uri;
-        cleanedDoc.evidenceFileName = evidenceFile.name;
-        cleanedDoc.evidenceFileType = evidenceFile.type;
-        cleanedDoc.evidenceFileSize = evidenceFile.size;
-      } catch {
-        return toast.error('No se pudo procesar el archivo adjunto');
-      }
+      cleanedDoc.evidenceFiles = uploaded;
+      cleanedDoc.evidenceFileUrl = uploaded[0]?.url;
+      cleanedDoc.evidenceFileName = uploaded[0]?.name;
+      cleanedDoc.evidenceFileType = uploaded[0]?.type;
+      cleanedDoc.evidenceFileSize = uploaded[0]?.size;
     }
     
     try {
@@ -226,10 +233,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
         toast.success('Orden guardada');
       }
       setEditingId(null);
-      setEvidenceFile(null);
+      setEvidenceFiles([]);
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la orden de compra');
+      const msg = e?.response?.data?.message || e?.message || '';
+      if (msg.toLowerCase().includes('no existe') || e?.response?.status === 404) {
+        toast.error('Uno de los productos seleccionados ya no está disponible o fue eliminado. Verifica los ítems e intenta de nuevo.');
+      } else {
+        toast.error(msg || 'Error al guardar la orden de compra');
+      }
     }
   };
 
@@ -582,15 +594,37 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                   <Input
                     disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                     type="file"
+                    multiple
                     accept=".pdf,.xlsx,.xls,image/*"
-                    onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      setEvidenceFiles(prev => [...prev, ...files]);
+                    }}
                     className="h-8 text-xs"
                   />
                   <p className="mt-1 text-[10px] text-muted-foreground">Imágenes max 2MB. Otros archivos max 10MB.</p>
-                  {(evidenceFile || localDoc.evidenceFileName) && (
-                    <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-primary">
-                      <FileText className="size-3" />
-                      {evidenceFile?.name || localDoc.evidenceFileName}
+                  {evidenceFiles.length > 0 && (
+                    <div className="mt-2 space-y-1.5">
+                      {evidenceFiles.map((file, i) => (
+                        <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border/30">
+                          {file.type.startsWith('image/') ? (
+                            <img src={URL.createObjectURL(file)} alt={file.name} className="size-8 rounded object-cover border border-border/50" />
+                          ) : (
+                            <FileText className="size-4 text-primary shrink-0" />
+                          )}
+                          <span className="text-[10px] font-bold text-foreground truncate flex-1">{file.name}</span>
+                          <span className="text-[9px] text-muted-foreground shrink-0">{(file.size / 1024).toFixed(0)} KB</span>
+                          <Button variant="ghost" size="icon" className="size-6 shrink-0 text-rose-500 hover:bg-rose-500/10" onClick={() => setEvidenceFiles(prev => prev.filter((_, j) => j !== i))}>
+                            <X className="size-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {evidenceFiles.length === 0 && localDoc.evidenceFileName && (
+                    <div className="mt-2 flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border/30">
+                      <FileText className="size-4 text-primary shrink-0" />
+                      <span className="text-[10px] font-bold text-foreground truncate flex-1">{localDoc.evidenceFileName}</span>
                     </div>
                   )}
                 </div>
@@ -728,32 +762,14 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                         placeholder="Categoría"
                       />
                     </div>
-                    <div className="col-span-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">
-                        Stock actual
-                        {item.currentStock !== undefined && (
-                          <span className="ml-1 text-primary font-black">{Number(item.currentStock).toLocaleString()}</span>
+                    <div className="col-span-1">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Stock actual</p>
+                      <div className="h-8 flex items-center">
+                        {item.currentStock !== undefined ? (
+                          <span className="text-xs font-black text-primary tabular-nums">{Number(item.currentStock).toLocaleString()}</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/40">—</span>
                         )}
-                      </p>
-                      <div className="flex items-center gap-1.5">
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={!!item.stockApplies}
-                            onChange={(e) => handleItemChange(idx, 'stockApplies', e.target.checked)}
-                            disabled={localDoc.purchaseType === 'SERVICE' || (isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit'))}
-                            className="accent-primary size-3"
-                          />
-                        </label>
-                        <Input
-                          disabled={!item.stockApplies || (isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit'))}
-                          type="number"
-                          min="0"
-                          value={item.stock === 0 ? '' : (item.stock ?? '')}
-                          onChange={(e) => handleItemChange(idx, 'stock', e.target.value)}
-                          className="h-8 text-xs text-right"
-                          placeholder="-"
-                        />
                       </div>
                     </div>
                     <div className="col-span-1">
@@ -858,9 +874,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     0,
   );
   const kpis = [
-    { title: 'Total Ordenes',   value: data.length,                                                                     icon: ClipboardList, color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Por Aprobar',     value: data.filter(o => (o.status||'').toUpperCase() === 'PENDING').length,                 icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
-    { title: 'Aprobadas',       value: data.filter(o => (o.status||'').toUpperCase() === 'APPROVED').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Total Ordenes',   value: data.length,                                                                     icon: ClipboardList, color: 'text-blue-500',    bg: 'bg-blue-500/10',    filter: 'ALL' },
+    { title: 'Por Aprobar',     value: data.filter(o => (o.status||'').toUpperCase() === 'PENDING').length,                 icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10',    filter: 'PENDING' },
+    { title: 'Aprobadas',       value: data.filter(o => (o.status||'').toUpperCase() === 'APPROVED').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10',  filter: 'APPROVED' },
     {
       title: `Monto Total (${displayCurrency})`,
       value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${totalAmountInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
@@ -872,14 +888,14 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {kpis.map((k, i) => (
-          <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
-            <CardContent className="p-5"><div className="flex items-center gap-4">
-              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
-            </div></CardContent>
-          </Card>
+          <button key={i} type="button" onClick={() => setStatusFilter(k.filter)}
+            className={cn('rounded-xl border p-4 text-left transition-all', statusFilter === k.filter ? 'border-primary bg-primary/5' : 'border-border/50 bg-card hover:bg-muted/50 shadow-sm')}>
+            <div className={cn('p-3 rounded-xl inline-flex mb-3', k.bg, k.color)}><k.icon className="size-5" /></div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p>
+            <p className="text-2xl font-black tabular-nums mt-0.5">{k.value}</p>
+          </button>
         ))}
       </div>
       <div className="flex flex-col gap-4">

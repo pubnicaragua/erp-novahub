@@ -1,15 +1,16 @@
 import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar, LabelList } from 'recharts';
+import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar, LabelList, LineChart, Line, ReferenceLine } from 'recharts';
 import { invoicesService, paymentsService, customersService } from '../../services/ventas.service';
 import { inventoryService } from '../../services/inventario.service';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, PieChart as PieChartIcon, Users, Truck, ShoppingBag, Wallet, CreditCard } from 'lucide-react';
+import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, PieChart as PieChartIcon, Users, Eye, Clock } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
@@ -72,6 +73,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [detailModal, setDetailModal] = useState<{ type: 'customer' | 'product'; data: any } | null>(null);
 
   const fmtShort = (v: number) => {
     const converted = convertAmount(v, 'NIO');
@@ -124,6 +126,8 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   const prevTotalBilled = useMemo(() => pInv.reduce((acc, i) => acc + (i.currency === 'USD' ? Number(i.total || 0) * (i.exchangeRate || exchangeRate) : Number(i.total || 0)), 0), [pInv, exchangeRate]);
   
   const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + (p.currency === 'USD' ? Number(p.amount || 0) * (p.exchangeRate || exchangeRate) : Number(p.amount || 0)), 0), [fPay, exchangeRate]);
+  const totalPending = useMemo(() => Math.max(0, totalBilled - totalPaid), [totalBilled, totalPaid]);
+
   const totalCost = useMemo(() => fInv.reduce((acc, i) => {
     const cost = Number(i.totalCost || Number(i.total || 0) * 0.4);
     return acc + (i.currency === 'USD' ? cost * (i.exchangeRate || exchangeRate) : cost);
@@ -148,13 +152,36 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 5);
   }, [fInv, exchangeRate]);
 
-  const topProducts = useMemo(() => {
-    return [...products].map(p => {
-      const price = Number(p.salePrice || 0);
-      const cost = Number(p.costPrice || price * 0.4);
-      return { name: p.name, margin: price - cost };
-    }).sort((a,b) => b.margin - a.margin).slice(0, 5);
-  }, [products]);
+  const topProductsByQty = useMemo(() => {
+    const qtyMap: Record<string, { name: string; qty: number; revenue: number }> = {};
+    fInv.forEach(inv => {
+      (inv.items || []).forEach((item: any) => {
+        const name = item.product?.name || item.description || 'Producto';
+        const q = Number(item.quantity || 0);
+        const rev = (inv.currency === 'USD' ? Number(item.total || 0) * (inv.exchangeRate || exchangeRate) : Number(item.total || 0));
+        if (!qtyMap[name]) qtyMap[name] = { name, qty: 0, revenue: 0 };
+        qtyMap[name].qty += q;
+        qtyMap[name].revenue += rev;
+      });
+    });
+    if (Object.keys(qtyMap).length === 0) {
+      return [...products].slice(0, 5).map(p => ({ name: p.name, qty: 0, revenue: 0 }));
+    }
+    return Object.values(qtyMap).sort((a, b) => b.qty - a.qty).slice(0, 5);
+  }, [fInv, products, exchangeRate]);
+
+  const catComposition = useMemo(() => {
+    const catMap: Record<string, number> = {};
+    fInv.forEach(inv => {
+      const cat = inv.category || inv.type || 'General';
+      const val = inv.currency === 'USD' ? Number(inv.total || 0) * (inv.exchangeRate || exchangeRate) : Number(inv.total || 0);
+      catMap[cat] = (catMap[cat] || 0) + val;
+    });
+    return Object.entries(catMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+  }, [fInv, exchangeRate]);
 
   // ── Charts ──
   const monthlyData = useMemo(() => {
@@ -191,6 +218,25 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
       cumulative += d.facturado;
       return { mes: d.mes, ventas: cumulative };
     });
+  }, [monthlyData]);
+
+  const projectionData = useMemo(() => {
+    if (monthlyData.length < 3) return monthlyData.map(d => ({ ...d, projection: null }));
+    const recent = monthlyData.slice(-3);
+    const avgGrowth = recent.reduce((sum, d, i) => {
+      if (i === 0) return sum;
+      const prev = recent[i - 1].facturado || 1;
+      return sum + ((d.facturado - prev) / prev);
+    }, 0) / Math.max(recent.length - 1, 1);
+    const lastVal = monthlyData[monthlyData.length - 1].facturado;
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const nextMonthIdx = (new Date().getMonth() + 1) % 12;
+    const proj = [];
+    for (let i = 1; i <= 3; i++) {
+      const val = Math.round(lastVal * Math.pow(1 + avgGrowth, i));
+      proj.push({ mes: `Est. ${monthNames[(nextMonthIdx + i - 1) % 12]}`, projection: val, facturado: null, cobrado: null });
+    }
+    return [...monthlyData.map(d => ({ ...d, projection: null })), ...proj];
   }, [monthlyData]);
 
   useImperativeHandle(ref, () => ({
@@ -288,7 +334,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         };
 
         renderTop('Top 5 Clientes', topCustomers, [59, 130, 246], false);
-        renderTop('Top 5 Productos (Márgenes)', topProducts, [168, 85, 247], true);
+        renderTop('Top 5 Productos Más Vendidos', topProductsByQty, [168, 85, 247], true);
 
         const pageCount = (doc as any).internal.getNumberOfPages();
         for (let i = 1; i <= pageCount; i++) {
@@ -396,7 +442,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         };
 
         renderTopTable('Top 5 Clientes', topCustomers, 'FF3B82F6', false);
-        renderTopTable('Top 5 Productos (Márgenes)', topProducts, 'FFA855F7', true);
+        renderTopTable('Top 5 Productos Más Vendidos', topProductsByQty, 'FFA855F7', true);
 
         const buffer = await wb.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -418,7 +464,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       {/* ═══ KPI Cards (Dashboard Style) ═══ */}
-      <div id="sales-report-kpis" className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div id="sales-report-kpis" className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         {/* Facturación */}
         <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
           <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><ShoppingCart className="size-10" /></div>
@@ -479,32 +525,43 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
             <p className="text-[10px] text-muted-foreground mt-0.5">Valor medio por venta</p>
           </CardContent>
         </Card>
+
+        {/* Saldo Pendiente */}
+        <Card className="border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Clock className="size-10" /></div>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+              <Clock className="size-3.5 text-rose-500" /> Saldo Pendiente
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-black text-rose-500">{formatConvertedAmount(totalPending, 'NIO')}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Por cobrar de clientes</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* ═══ Charts Row ═══ */}
+      {/* ═══ Charts Row: Proyección + Composición ═══ */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card id="sales-chart-bar" className="lg:col-span-2 border-border/50">
+        <Card id="sales-chart-projection" className="lg:col-span-2 border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <BarChart3 className="size-4 text-primary" /> Facturación vs Cobranza
+              <TrendingUp className="size-4 text-primary" /> Proyección de Ventas
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[320px] w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyData} barGap={6}>
+                <LineChart data={projectionData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
                   <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11, fontWeight: 600 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
-                  <Tooltip cursor={{ fill: 'rgba(0,0,0,0.04)' }} contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
                   <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 700 }} />
-                  <Bar dataKey="facturado" name="Facturado" fill="#3b82f6" radius={[6, 6, 0, 0]}>
-                    <LabelList dataKey="facturado" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 9, fill: '#3b82f6', fontWeight: 700 }} />
-                  </Bar>
-                  <Bar dataKey="cobrado" name="Cobrado" fill="#10b981" radius={[6, 6, 0, 0]}>
-                    <LabelList dataKey="cobrado" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 9, fill: '#10b981', fontWeight: 700 }} />
-                  </Bar>
-                </BarChart>
+                  <ReferenceLine x={projectionData.filter(d => d.projection === null).slice(-1)[0]?.mes} stroke="#f59e0b" strokeDasharray="6 3" label={{ value: 'Proyección', position: 'top', style: { fontSize: '10px', fill: '#f59e0b', fontWeight: 700 } }} />
+                  <Line type="monotone" dataKey="facturado" name="Facturado" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, fill: '#3b82f6' }} connectNulls />
+                  <Line type="monotone" dataKey="projection" name="Estimado" stroke="#f59e0b" strokeWidth={3} strokeDasharray="6 3" dot={{ r: 4, fill: '#f59e0b' }} connectNulls />
+                </LineChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
@@ -521,28 +578,29 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={[
-                      { name: 'Nuevos', value: customers.length * 100 }, 
-                      { name: 'Recurrentes', value: fInv.length * 50 } 
-                    ]}
+                    data={catComposition.length > 0 ? catComposition : [{ name: 'Sin datos', value: 1 }]}
                     innerRadius={60}
                     outerRadius={90}
                     paddingAngle={5}
                     dataKey="value"
                   >
-                    <Cell fill="#3b82f6" />
-                    <Cell fill="#8b5cf6" />
+                    {(catComposition.length > 0 ? catComposition : [{ name: 'Sin datos', value: 1 }]).map((_, idx) => (
+                      <Cell key={idx} fill={['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#6b7280'][idx % 6]} />
+                    ))}
                   </Pie>
-                  <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
-                  <Legend verticalAlign="bottom" height={36}/>
+                  <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} formatter={(v: number) => formatConvertedAmount(v, 'NIO')} />
+                  <Legend verticalAlign="bottom" height={36} />
                 </PieChart>
               </ResponsiveContainer>
+              {catComposition.length === 0 && (
+                <p className="text-center text-[10px] text-muted-foreground mt-2">Selecciona un período con facturas para ver la composición</p>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ═══ Evolution & Health ═══ */}
+      {/* ═══ Evolution & Billing Comparison ═══ */}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card id="sales-chart-trend" className="border-border/50">
           <CardHeader className="pb-2">
@@ -571,35 +629,67 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           </CardContent>
         </Card>
 
-        <Card id="sales-health-card" className="border-border/50">
+        <Card id="sales-chart-bar" className="border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <Users className="size-4 text-primary" /> Salud de Cartera
+              <BarChart3 className="size-4 text-primary" /> Facturación vs Cobranza
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6 pt-4">
-             <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
-                   <p className="text-[10px] font-bold text-muted-foreground uppercase">Nuevos Clientes</p>
-                   <p className="text-2xl font-black text-emerald-500">{customers.length}</p>
-                </div>
-                <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/10">
-                   <p className="text-[10px] font-bold text-muted-foreground uppercase">Ventas/Cliente</p>
-                   <p className="text-2xl font-black text-orange-500">{(fInv.length / Math.max(customers.length, 1)).toFixed(1)}</p>
-                </div>
-             </div>
-             <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10 flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-blue-500/10">
-                   <ShoppingCart className="size-5 text-blue-500" />
-                </div>
-                <div>
-                   <p className="text-xs font-bold text-blue-500 uppercase">Frecuencia de Venta</p>
-                   <p className="text-[10px] text-muted-foreground">Promedio histórico de {fInv.length} facturas en el periodo.</p>
-                </div>
-             </div>
+          <CardContent>
+            <div className="h-[200px] w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData} barGap={6}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
+                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11, fontWeight: 600 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
+                  <Tooltip cursor={{ fill: 'rgba(0,0,0,0.04)' }} contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 700 }} />
+                  <Bar dataKey="facturado" name="Facturado" fill="#3b82f6" radius={[6, 6, 0, 0]}>
+                    <LabelList dataKey="facturado" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 8, fill: '#3b82f6', fontWeight: 700 }} />
+                  </Bar>
+                  <Bar dataKey="cobrado" name="Cobrado" fill="#10b981" radius={[6, 6, 0, 0]}>
+                    <LabelList dataKey="cobrado" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 8, fill: '#10b981', fontWeight: 700 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* ═══ Health Card ═══ */}
+      <Card id="sales-health-card" className="border-border/50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+            <Users className="size-4 text-primary" /> Salud de Cartera
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-4">
+            <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase">Nuevos Clientes</p>
+              <p className="text-2xl font-black text-emerald-500">{customers.length}</p>
+            </div>
+            <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/10">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase">Ventas/Cliente</p>
+              <p className="text-2xl font-black text-orange-500">{(fInv.length / Math.max(customers.length, 1)).toFixed(1)}</p>
+            </div>
+            <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase">Ticket Promedio</p>
+              <p className="text-2xl font-black text-blue-500">{formatConvertedAmount(fInv.length > 0 ? totalBilled / fInv.length : 0, 'NIO')}</p>
+            </div>
+            <div className="p-4 rounded-xl bg-violet-500/5 border border-violet-500/10 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-violet-500/10">
+                <ShoppingCart className="size-4 text-violet-500" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-violet-500 uppercase">Facturas</p>
+                <p className="text-lg font-black text-violet-500">{fInv.length}</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ═══ Top Items ═══ */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -612,47 +702,113 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           </CardHeader>
           <CardContent className="space-y-2">
             {topCustomers.map((c: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-blue-500/5 border border-blue-500/10 hover:bg-blue-500/10 transition-colors gap-4">
+              <button
+                key={idx}
+                onClick={() => setDetailModal({ type: 'customer', data: c })}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-blue-500/5 border border-blue-500/10 hover:bg-blue-500/10 hover:border-blue-500/30 transition-all cursor-pointer gap-4 text-left"
+              >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="size-7 rounded-lg bg-blue-500/20 flex items-center justify-center text-[10px] font-black text-blue-600 shrink-0">
                     #{idx + 1}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold truncate">{c.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">Cliente Preferencial</p>
+                    <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
+                      {formatConvertedAmount(Number(c.value), 'NIO')} · {(fInv.filter(i => i.customer === c.name || i.client === c.name).length)} facturas
+                    </p>
                   </div>
                 </div>
-                <span className="text-sm font-black text-blue-500 shrink-0">{formatConvertedAmount(Number(c.value), 'NIO')}</span>
-              </div>
+                <Eye className="size-4 text-blue-400 shrink-0 opacity-50" />
+              </button>
             ))}
           </CardContent>
         </Card>
 
-        {/* Top Productos */}
+        {/* Top Productos Más Vendidos */}
         <Card id="top-products-card" className="border-purple-500/20 min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <ShoppingCart className="size-4 text-purple-500" /> Top 5 Productos
+              <ShoppingCart className="size-4 text-purple-500" /> Top 5 Productos Más Vendidos
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {topProducts.map((p: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-purple-500/5 border border-purple-500/10 hover:bg-purple-500/10 transition-colors gap-4">
+            {topProductsByQty.map((p: any, idx: number) => (
+              <button
+                key={idx}
+                onClick={() => setDetailModal({ type: 'product', data: p })}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-purple-500/5 border border-purple-500/10 hover:bg-purple-500/10 hover:border-purple-500/30 transition-all cursor-pointer gap-4 text-left"
+              >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="size-7 rounded-lg bg-purple-500/20 flex items-center justify-center text-[10px] font-black text-purple-600 shrink-0">
                     #{idx + 1}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold truncate">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">Margen: {formatConvertedAmount(p.margin, 'NIO')}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{p.qty} unidades · {formatConvertedAmount(p.revenue, 'NIO')}</p>
                   </div>
                 </div>
-                <span className="text-sm font-black text-purple-500 shrink-0">TOP {idx + 1}</span>
-              </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-black text-purple-500">{p.qty} uds.</span>
+                  <Eye className="size-4 text-purple-400 shrink-0 opacity-50" />
+                </div>
+              </button>
             ))}
           </CardContent>
         </Card>
       </div>
+
+      {/* ═══ Detail Modal ═══ */}
+      <Dialog open={!!detailModal} onOpenChange={(open) => { if (!open) setDetailModal(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {detailModal?.type === 'customer' ? <Users className="size-4" /> : <ShoppingCart className="size-4" />}
+              {detailModal?.type === 'customer' ? 'Detalle del Cliente' : 'Detalle del Producto'}
+            </DialogTitle>
+            <DialogDescription>
+              {detailModal?.type === 'customer' ? 'Información del cliente y su historial de compras.' : 'Rendimiento del producto en el período seleccionado.'}
+            </DialogDescription>
+          </DialogHeader>
+          {detailModal?.type === 'customer' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10">
+                <p className="text-sm font-black">{detailModal.data.name}</p>
+                <p className="text-xs text-muted-foreground">Total facturado: {formatConvertedAmount(Number(detailModal.data.value), 'NIO')}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10 text-center">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase">Facturas</p>
+                  <p className="text-xl font-black text-emerald-500">
+                    {fInv.filter(i => i.customer === detailModal.data.name || i.client === detailModal.data.name).length}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10 text-center">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase">Ranking</p>
+                  <p className="text-xl font-black text-orange-500">#{topCustomers.findIndex(c => c.name === detailModal.data.name) + 1}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {detailModal?.type === 'product' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-purple-500/5 border border-purple-500/10">
+                <p className="text-sm font-black">{detailModal.data.name}</p>
+                <p className="text-xs text-muted-foreground">Producto más vendido del período</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10 text-center">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase">Unidades</p>
+                  <p className="text-xl font-black text-emerald-500">{detailModal.data.qty}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/10 text-center">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase">Ingresos</p>
+                  <p className="text-xl font-black text-blue-500">{formatConvertedAmount(detailModal.data.revenue, 'NIO')}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 });

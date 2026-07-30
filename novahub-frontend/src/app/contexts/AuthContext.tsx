@@ -62,6 +62,14 @@ export interface User {
   isPlatformAdmin: boolean;
   isTenantUser: boolean;
   isTenantAdmin: boolean;
+  branchIds?: string[];
+}
+
+export interface BranchInfo {
+  id: string;
+  name: string;
+  code: string;
+  location?: string;
 }
 
 interface AuthContextType {
@@ -80,6 +88,9 @@ interface AuthContextType {
   switchIdentity: (userId: string) => Promise<void>;
   refreshEnabledModules: () => Promise<void>;
   isLoading: boolean;
+  userBranches: BranchInfo[];
+  selectedBranchId: string | null;
+  setSelectedBranchId: (id: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -178,7 +189,12 @@ const createUserObject = (apiPayload: any): User => {
     'NOVACHAT': 'novachat',
     'NOTIFICATIONS': 'notificaciones',
     'REPORTS': 'reportes',
-    'TICKETS': 'tickets'
+    'TICKETS': 'tickets',
+    'FINANCING': 'financiamiento-pyme',
+    'LEGAL': 'asesoria-legal',
+    'HR_TRAINING': 'centro-capacitacion',
+    'SUPPORT_TECH': 'soporte-tecnico',
+    'NOVACHAT': 'novachat'
   };
 
   const defaultPermissions = getPermissionsByRole(role);
@@ -266,12 +282,29 @@ const createUserObject = (apiPayload: any): User => {
     isPlatformAdmin,
     isTenantUser: !isPlatformAdmin,
     isTenantAdmin: role === 'admin' && !isPlatformAdmin,
+    branchIds: apiUser.branchIds || apiUser.branchAccess?.map((b: any) => b.id) || undefined,
   };
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [userBranches, setUserBranches] = useState<BranchInfo[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+
+  const fetchBranches = useCallback(async () => {
+    try {
+      const res = await api.get<any>('/auth/me/branches');
+      const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+      const mapped = list.map((b: any) => ({ id: b.id, name: b.name, code: b.code, location: b.location }));
+      setUserBranches(mapped);
+      if (mapped.length === 1) {
+        setSelectedBranchId(mapped[0].id);
+      }
+    } catch {
+      setUserBranches([]);
+    }
+  }, []);
 
   const isAuthenticated = user !== null;
 
@@ -288,6 +321,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const me = await api.get<any>('/auth/profile');
           setUser(createUserObject(me));
+          fetchBranches();
         } catch {
           // Backward compatibility with backends that still use switch-context for session restore.
           const payload = JSON.parse(atob(token.split('.')[1]));
@@ -300,6 +334,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
           localStorage.setItem('nh-auth-token', response.access_token);
           setUser(createUserObject(response.user));
+          fetchBranches();
         }
       } catch (error) {
         console.error('Error restoring session:', error);
@@ -462,8 +497,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     let permission = findPermission(normalizedModule);
     if (!permission) {
-      const parentModule = Object.entries(parentByGranularPrefix).find(([prefix]) => upperModule.startsWith(prefix))?.[1];
-      if (parentModule) permission = findPermission(parentModule);
+      const moduleEnumMap: Record<string, string> = {
+        'inventario': 'INVENTORY',
+        'ventas': 'SALES',
+        'compras': 'PURCHASES',
+        'finanzas': 'FINANCIAL',
+        'rh': 'HR',
+        'proyectos': 'PROJECTS',
+        'clientes': 'CLIENTS',
+        'proveedores': 'PROVIDERS',
+        'herramientas': 'TOOLS',
+        'actividades': 'ACTIVITIES',
+        'documentos': 'DOCUMENTS',
+        'notificaciones': 'NOTIFICATIONS',
+        'reportes': 'REPORTS',
+        'tickets': 'TICKETS',
+        'contabilidad': 'ACCOUNTING',
+        'financiamiento-pyme': 'FINANCING',
+        'asesoria-legal': 'LEGAL',
+        'centro-capacitacion': 'HR_TRAINING',
+        'soporte-tecnico': 'SUPPORT_TECH',
+        'novachat': 'NOVACHAT',
+      };
+      const mappedModule = Object.entries(moduleEnumMap).find(([, v]) => v === normalizedModule)?.[0];
+      if (mappedModule) permission = findPermission(mappedModule);
+      if (!permission) {
+        const parentModule = Object.entries(parentByGranularPrefix).find(([prefix]) => upperModule.startsWith(prefix))?.[1];
+        if (parentModule) permission = findPermission(parentModule);
+      }
     }
 
     if (!permission) return false;
@@ -482,15 +543,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       localStorage.setItem('nh-auth-token', response.access_token);
       setUser(createUserObject(response.user));
+      fetchBranches();
     } catch (error: any) {
       throw new Error(error.message || 'Error al iniciar sesión. Verifica tus credenciales.');
     }
-  }, []);
+  }, [fetchBranches]);
 
   const setSession = useCallback((token: string, userData: any) => {
     localStorage.setItem('nh-auth-token', token);
     setUser(createUserObject(userData));
-  }, []);
+    fetchBranches();
+  }, [fetchBranches]);
 
   const logout = useCallback(() => {
     setUser(null);
@@ -529,7 +592,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.tenantId]);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, setSession, logout, switchIdentity, refreshEnabledModules, isLoading }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, setSession, logout, switchIdentity, refreshEnabledModules, isLoading, userBranches, selectedBranchId, setSelectedBranchId }}>
       {isLoading ? (
         <div className="min-h-screen flex items-center justify-center bg-background">
           <div className="flex flex-col items-center gap-4">

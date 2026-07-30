@@ -26,10 +26,11 @@ interface Props {
 }
 
 const methodOpts = [
-  { label: 'Transferencia', value: 'TRANSFER' },
-  { label: 'Efectivo',      value: 'CASH' },
-  { label: 'Cheque',        value: 'CHECK' },
-  { label: 'Tarjeta',       value: 'CARD' },
+  { label: 'Transferencia',   value: 'TRANSFER' },
+  { label: 'Efectivo',        value: 'CASH' },
+  { label: 'Cheque',          value: 'CHECK' },
+  { label: 'Tarjeta',         value: 'CARD' },
+  { label: 'Otro',            value: 'OTHER' },
 ];
 
 export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], draftPaymentFromInvoice, onDraftConsumed }: Props) {
@@ -45,6 +46,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [isMixed, setIsMixed] = useState(false);
 
   const normalizeMethod = (method?: string): 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER' => {
     const normalized = String(method || 'TRANSFER').toUpperCase();
@@ -79,6 +81,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
 
   useEffect(() => {
     if (editingId) {
+      setIsMixed(false);
       if (editingId === 'NEW') {
          const prefilled = draftPaymentFromInvoice || {};
          setLocalDoc({
@@ -235,6 +238,17 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         ...localDoc,
         method: normalizeMethod(localDoc.method as any),
       } as any;
+      if (isMixed) {
+        const nioAmount = Number((localDoc as any).amountNio || 0);
+        const usdAmount = Number((localDoc as any).amountUsd || 0);
+        const rate = localDoc.exchangeRate || globalRate;
+        payload.amount = nioAmount + (usdAmount * rate);
+        payload.currency = 'NIO';
+        payload.baseAmount = payload.amount;
+        payload.notes = [(localDoc.notes || ''), `Pago mixto: C$${nioAmount.toFixed(2)} + $${usdAmount.toFixed(2)} (TC ${rate})`].filter(Boolean).join(' | ');
+        delete payload.amountNio;
+        delete payload.amountUsd;
+      }
       if (editingId === 'NEW') {
         const created = await paymentsService.create(payload);
         const createdPayment = (created as any)?.data || created;
@@ -404,40 +418,112 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
 
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 flex flex-col justify-center h-full space-y-4">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Monto Pagado</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Monto Pagado</p>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={isMixed} onChange={(e) => setIsMixed(e.target.checked)}
+                    className="rounded border-border/50 accent-primary"
+                    disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')} />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Pago Mixto NIO+USD</span>
+                </label>
+              </div>
               <div className="space-y-4">
-                <div className="flex justify-between items-center text-sm border-b border-border/50 pb-4">
-                   <div className="w-1/2">
-                      <p className="text-[10px] text-muted-foreground mb-1">Moneda de Pago</p>
-                        <select 
-                          disabled
-                          value={localDoc.currency || displayCurrency}
-                          onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
-                          className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
-                        >
-                        <option value={localDoc.currency || displayCurrency}>{localDoc.currency || displayCurrency}</option>
-                        </select>
+                {isMixed ? (
+                  <>
+                    <div className="flex items-end gap-3 border-b border-border/50 pb-4">
+                      <div className="flex-1">
+                        <p className="text-[10px] text-muted-foreground mb-1">Monto en NIO (C$)</p>
+                        <Input
+                          disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                          type="number" min="0"
+                          value={(localDoc as any).amountNio ?? ''}
+                          onChange={(e) => setLocalDoc({ ...localDoc, ...({ amountNio: Number(e.target.value) } as any) })}
+                          className="h-10 text-xl font-black tabular-nums text-right" placeholder="0.00" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[10px] text-muted-foreground mb-1">Monto en USD ($)</p>
+                        <Input
+                          disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                          type="number" min="0"
+                          value={(localDoc as any).amountUsd ?? ''}
+                          onChange={(e) => setLocalDoc({ ...localDoc, ...({ amountUsd: Number(e.target.value) } as any) })}
+                          className="h-10 text-xl font-black tabular-nums text-right" placeholder="0.00" />
+                      </div>
                     </div>
-                   <div className="w-1/2 flex flex-col items-end">
-                      <p className="text-[10px] text-muted-foreground mb-1">Monto de Salida</p>
-                      <Input 
+                    <div className="flex justify-between items-center">
+                      <span className="font-black uppercase text-xs tracking-widest">Tasa de Cambio</span>
+                      <Input
                         disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                        type="number" 
-                        min="0" 
-                        value={localDoc.amount || ''} 
-                        onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })} 
-                        className="h-10 text-xl font-black text-emerald-500 text-right w-full max-w-[150px]" 
-                        placeholder="0.00" 
-                      />
-                   </div>
-                </div>
-                
-                <div className="flex justify-between items-center text-base pt-2">
-                  <span className="font-black uppercase text-xs tracking-widest">Base Estimada</span>
-                  <span className="font-black text-muted-foreground tabular-nums text-right">
-                     {localDoc.currency === 'USD' ? `C$ ${(Number(localDoc.amount||0) * (localDoc.exchangeRate || globalRate)).toLocaleString()}` : `$ ${(Number(localDoc.amount||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}`}
-                  </span>
-                </div>
+                        type="number" min="0" step="0.01"
+                        value={localDoc.exchangeRate || globalRate}
+                        onChange={(e) => setLocalDoc({ ...localDoc, exchangeRate: Number(e.target.value) })}
+                        className="h-8 text-xs font-bold text-right w-28 tabular-nums" />
+                    </div>
+                    <div className="flex justify-between items-center text-base pt-2 border-t border-border/50">
+                      <span className="font-black uppercase text-xs tracking-widest">Total en C$</span>
+                      <span className="font-black text-lg text-primary tabular-nums">
+                        C$ {(Number((localDoc as any).amountNio || 0) + Number((localDoc as any).amountUsd || 0) * (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground">Total en USD</span>
+                      <span className="font-bold tabular-nums">
+                        $ {(Number((localDoc as any).amountUsd || 0) + Number((localDoc as any).amountNio || 0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between items-center text-sm border-b border-border/50 pb-4">
+                      <div className="w-1/3">
+                        <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
+                        <select
+                          disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                          value={localDoc.currency || displayCurrency}
+                          onChange={(e) => {
+                            const newCurrency = e.target.value;
+                            const rate = localDoc.exchangeRate || globalRate;
+                            setLocalDoc({
+                              ...localDoc,
+                              currency: newCurrency as any,
+                              exchangeRate: newCurrency === 'NIO' ? 1 : rate,
+                            });
+                          }}
+                          className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                          <option value="NIO">C$ (NIO)</option>
+                          <option value="USD">$ (USD)</option>
+                        </select>
+                      </div>
+                      <div className="w-1/4">
+                        <p className="text-[10px] text-muted-foreground mb-1">T.C.</p>
+                        <Input
+                          disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit') || localDoc.currency === 'NIO'}
+                          type="number" min="0" step="0.01"
+                          value={localDoc.exchangeRate || globalRate}
+                          onChange={(e) => setLocalDoc({ ...localDoc, exchangeRate: Number(e.target.value) })}
+                          className="h-8 text-xs font-bold text-right tabular-nums" />
+                      </div>
+                      <div className="w-1/3 flex flex-col items-end">
+                        <p className="text-[10px] text-muted-foreground mb-1">Monto</p>
+                        <Input
+                          disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                          type="number" min="0"
+                          value={localDoc.amount || ''}
+                          onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })}
+                          className="h-10 text-xl font-black text-emerald-500 text-right w-full tabular-nums"
+                          placeholder="0.00" />
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center text-base pt-2">
+                      <span className="font-black uppercase text-xs tracking-widest">Base Estimada</span>
+                      <span className="font-black text-muted-foreground tabular-nums text-right">
+                        {localDoc.currency === 'USD'
+                          ? `C$ ${(Number(localDoc.amount || 0) * (localDoc.exchangeRate || globalRate)).toLocaleString()}`
+                          : `$ ${(Number(localDoc.amount || 0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

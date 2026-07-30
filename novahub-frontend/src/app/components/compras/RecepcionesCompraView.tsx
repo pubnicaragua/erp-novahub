@@ -112,7 +112,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
           {rechazados.length > 0 && <span className="text-[9px] font-black text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded-full">{rechazados.length} recha.</span>}
         </div>;
       } },
-    { key: 'status',    header: 'Estado',      width: '130px', editable: canPerform('PURCHASES_RECEIPTS', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status',    header: 'Estado',      width: '130px', editable: false, type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -645,6 +645,12 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
+                const receipt = data.find(r => r.id === id);
+                const st = String(receipt?.status||'').toUpperCase();
+                if (st !== 'PENDING' && st !== '') {
+                  toast.error(`No se puede eliminar la recepción "${receipt?.number||id}" porque ya está ${statusOpts.find(s=>s.value===st)?.label?.toLowerCase()||'procesada'}. Solo se anulan.`);
+                  continue;
+                }
                 await purchaseReceiptsService.delete(id as string);
               }
               toast.success('Elementos eliminados');
@@ -657,9 +663,15 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
             <div className="flex gap-1">
               <Button title={canPerform('PURCHASES_RECEIPTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
               <PurchaseAuditButton entity="PURCHASE_RECEIPT" entityId={row.id} title="Auditoria de la Recepcion" />
-              {canPerform('PURCHASES_RECEIPTS', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
-              )}
+              {canPerform('PURCHASES_RECEIPTS', 'delete') && (() => {
+                const st = String(row.status||'').toUpperCase();
+                const isDeletable = st === 'PENDING' || st === '';
+                return isDeletable ? (
+                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                ) : (
+                  <Button title="Las recepciones procesadas solo se anulan, no se eliminan" variant="ghost" size="icon" className="size-8 rounded-lg opacity-30 cursor-not-allowed" disabled><Trash2 className="size-4" /></Button>
+                );
+              })()}
             </div>
           )}
         />

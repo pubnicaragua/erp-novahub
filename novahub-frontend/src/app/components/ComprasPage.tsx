@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import {
   ShoppingCart, Truck, Wallet, CalendarClock,
   ClipboardList, PackageCheck, FileInput, RotateCcw,
-  Banknote, BadgeDollarSign, ChevronRight,
-  ClipboardPen, ClipboardCheck,
+  Banknote, BadgeDollarSign,
+  ClipboardPen,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
@@ -12,17 +12,19 @@ import { cn } from './ui/utils';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
+import { useBranchScope } from '../hooks/useBranchScope';
+import { BranchScopeFilter } from './ui/BranchScopeFilter';
 import {
   suppliersService, expensesService, recurringExpensesService,
   purchaseOrdersService, purchaseReceiptsService,
   supplierInvoicesService, recurringSupplierInvoicesService,
   paymentsMadeService, supplierCreditsService,
-  purchaseRequestsService, purchaseManagementService,
+  purchaseRequestsService,
 } from '../services/compras.service';
 import type {
   Supplier, Expense, RecurringExpense, PurchaseOrder,
   PurchaseReceipt, SupplierInvoice, RecurringSupplierInvoice,
-  PaymentMade, SupplierCredit, PurchaseRequest, PurchaseManagement,
+  PaymentMade, SupplierCredit, PurchaseRequest,
 } from '../types';
 
 import { ProveedoresView }         from './compras/ProveedoresView';
@@ -35,11 +37,9 @@ import { FacturasProveedorRecView } from './compras/FacturasProveedorRecView';
 import { PagosRealizadosView }     from './compras/PagosRealizadosView';
 import { CreditosProveedorView }   from './compras/CreditosProveedorView';
 import { SolicitudCompraView }     from './compras/SolicitudCompraView';
-import { GestionCompraView }       from './compras/GestionCompraView';
 
 const COMPRAS_SECTIONS = [
   { id: 'solicitudes',   label: 'Solicitudes',         icon: ClipboardPen,   description: 'Solicitudes de compra', requiredModules: ['PURCHASES_REQUESTS', 'PURCHASES'] },
-  { id: 'gestion',       label: 'Gestión Compra',      icon: ClipboardCheck, description: 'Gestión y aprobación', requiredModules: ['PURCHASES_QUOTES', 'PURCHASES'] },
   { id: 'proveedores',   label: 'Proveedores',          icon: Truck,          description: 'Directorio de proveedores', requiredModules: ['PURCHASES_PROVIDERS', 'PURCHASES'] },
   { id: 'gastos',        label: 'Gastos',               icon: Wallet,         description: 'Registro de gastos', requiredModules: ['PURCHASES_EXPENSES', 'PURCHASES'] },
   { id: 'gastos-rec',    label: 'Gastos Recurrentes',   icon: CalendarClock,  description: 'Gastos fijos periódicos', requiredModules: ['PURCHASES_EXPENSES_REC', 'PURCHASES'] },
@@ -67,18 +67,16 @@ type ComprasData = {
   pagos:         PaymentMade[];
   creditos:      SupplierCredit[];
   solicitudes:   PurchaseRequest[];
-  gestion:       PurchaseManagement[];
 };
 
 export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageProps) {
   const { user } = useAuth();
+  const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const normalize = (s?: string) => {
     if (!s) return 'solicitudes';
     const map: Record<string, string> = {
       'solicitudes': 'solicitudes',
       'solicitudes-compra': 'solicitudes',
-      'gestion': 'gestion',
-      'gestion-compra': 'gestion',
       'proveedores': 'proveedores',
       'gastos': 'gastos',
       'gastos-recurrentes': 'gastos-rec',
@@ -100,7 +98,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const [data, setData] = useState<ComprasData>({
     proveedores: [], gastos: [], gastosRec: [], ordenes: [],
     recepciones: [], facturasProv: [], facturasRec: [], pagos: [], creditos: [],
-    solicitudes: [], gestion: [],
+    solicitudes: [],
   });
 
   const handleConvertToInvoice = (draft: any) => {
@@ -136,7 +134,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [sup, exp, expRec, ord, rec, inv, invRec, pay, cred, req, mgmt] = await Promise.all([
+      const [sup, exp, expRec, ord, rec, inv, invRec, pay, cred, req] = await Promise.all([
         suppliersService.getAll().catch(() => []),
         expensesService.getAll().catch(() => []),
         recurringExpensesService.getAll().catch(() => []),
@@ -147,7 +145,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
         paymentsMadeService.getAll().catch(() => []),
         supplierCreditsService.getAll().catch(() => []),
         purchaseRequestsService.getAll().catch(() => []),
-        purchaseManagementService.getAll().catch(() => []),
       ]);
       setData({
         proveedores:   toArr(sup),
@@ -160,7 +157,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
         pagos:         toArr(pay),
         creditos:      toArr(cred),
         solicitudes:   toArr(req),
-        gestion:       toArr(mgmt),
       });
     } catch (e: any) {
       toast.error('Error al cargar módulo de Compras');
@@ -169,7 +165,18 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
     }
   };
 
-  const current = COMPRAS_SECTIONS.find(s => s.id === activeSection) || COMPRAS_SECTIONS[0];
+  const filteredData = {
+    proveedores: filterByBranch(data.proveedores),
+    gastos: filterByBranch(data.gastos),
+    gastosRec: filterByBranch(data.gastosRec),
+    ordenes: filterByBranch(data.ordenes),
+    recepciones: filterByBranch(data.recepciones),
+    facturasProv: filterByBranch(data.facturasProv),
+    facturasRec: filterByBranch(data.facturasRec),
+    pagos: filterByBranch(data.pagos),
+    creditos: filterByBranch(data.creditos),
+    solicitudes: filterByBranch(data.solicitudes),
+  };
 
   return (
     <div className="purchases-module flex min-w-0 flex-1 overflow-x-hidden bg-background w-full">
@@ -188,11 +195,15 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                   <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
                     {data.proveedores.length} proveedores · {data.ordenes.length} órdenes
                   </Badge>
+                  {isRestricted && (
+                    <Badge variant="outline" className="border-amber-500/30 text-amber-600 bg-amber-500/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+                      {accessibleBranches.length} sucursal(es)
+                    </Badge>
+                  )}
                 </div>
               </div>
             </div>
-            
-            
+            <BranchScopeFilter className="ml-auto" showLabel={false} />
           </div>
 
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); }}>
@@ -232,33 +243,32 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                    exit={{ opacity: 0, y: -10 }}
                    transition={{ duration: 0.2 }}
                  >
-                    {section.id === 'solicitudes'  && <SolicitudCompraView  {...commonProps} data={data.solicitudes} />}
-                    {section.id === 'gestion'      && <GestionCompraView    {...commonProps} data={data.gestion} />}
-                    {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={data.proveedores} />}
-                    {section.id === 'gastos'        && <GastosView         {...commonProps} data={data.gastos} />}
-                    {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} data={data.gastosRec} />}
-                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} data={data.ordenes} supplierInvoices={data.facturasProv} onConvertToInvoice={handleConvertToInvoice} />}
-                     {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} data={data.recepciones} onConvertToInvoice={handleConvertToInvoice} />}
+                    {section.id === 'solicitudes'  && <SolicitudCompraView  {...commonProps} data={filteredData.solicitudes} />}
+                    {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={filteredData.proveedores} />}
+                    {section.id === 'gastos'        && <GastosView         {...commonProps} data={filteredData.gastos} />}
+                    {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} data={filteredData.gastosRec} />}
+                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} data={filteredData.ordenes} supplierInvoices={filteredData.facturasProv} onConvertToInvoice={handleConvertToInvoice} />}
+                     {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} data={filteredData.recepciones} onConvertToInvoice={handleConvertToInvoice} />}
                    {section.id === 'facturas-prov' && (
                      <FacturasProveedorView
                        {...commonProps}
-                       data={data.facturasProv}
+                       data={filteredData.facturasProv}
                        draftInvoiceFromOrder={draftInvoiceFromOrder}
                        onDraftConsumed={() => setDraftInvoiceFromOrder(null)}
                        onRegisterPaymentFromInvoice={handleRegisterPaymentFromInvoice}
                      />
                    )}
-                   {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} data={data.facturasRec} />}
+                   {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} data={filteredData.facturasRec} />}
                    {section.id === 'pagos'         && (
                     <PagosRealizadosView
                       {...commonProps}
-                      data={data.pagos}
-                      supplierInvoices={data.facturasProv}
+                      data={filteredData.pagos}
+                      supplierInvoices={filteredData.facturasProv}
                       draftPaymentFromInvoice={draftPaymentFromInvoice}
                       onDraftConsumed={() => setDraftPaymentFromInvoice(null)}
                     />
                    )}
-                   {section.id === 'creditos'      && <CreditosProveedorView {...commonProps} data={data.creditos} />}
+                   {section.id === 'creditos'      && <CreditosProveedorView {...commonProps} data={filteredData.creditos} />}
                  </motion.div>
                );
             })}

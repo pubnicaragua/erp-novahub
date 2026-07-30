@@ -15,6 +15,8 @@ import { Switch } from '../ui/switch'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { toast } from 'sonner'
+import { ChevronDown, ChevronUp } from 'lucide-react'
+import { BankAccountsView } from './BankAccountsView'
 import { contabilidadService } from '../../services/contabilidad.service'
 import { CHART_ACCOUNT_CSV_HEADERS, csvRowsToText, downloadCsv, templateRows } from '../../utils/chartOfAccountsCsv'
 
@@ -776,6 +778,64 @@ export function ConfiguracionContableView() {
         </CardContent>
       </Card>
 
+      {/* Tipo detallados de Cuentas */}
+      <Card>
+        <CardHeader className="pb-3 px-5 pt-4">
+          <div className="flex items-center gap-2">
+            <BookOpen className="size-4 text-primary" />
+            <CardTitle className="text-sm font-black uppercase tracking-tight">Tipo detallados de Cuentas</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="px-5 pb-4 space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Subtipos de cuenta y su tipo de detalle asignado a cada cuenta del catálogo.
+          </p>
+          <div className="overflow-x-auto rounded-xl border border-border/30">
+            <table className="w-full text-[11px]">
+              <thead className="bg-muted/30">
+                <tr className="border-b border-border/20">
+                  <th className="text-left px-3 py-2 font-bold text-muted-foreground">Subtipo de cuenta</th>
+                  <th className="text-left px-3 py-2 font-bold text-muted-foreground">Nombre</th>
+                  <th className="text-left px-3 py-2 font-bold text-muted-foreground">Tipo detalle</th>
+                  <th className="text-center px-3 py-2 font-bold text-muted-foreground">Activo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allAccounts.length === 0 ? (
+                  <tr><td colSpan={4} className="text-center py-8 text-muted-foreground text-xs">No hay cuentas contables</td></tr>
+                ) : allAccounts.slice(0, 50).map((acc, i) => (
+                  <tr key={i} className="border-b border-border/10 hover:bg-muted/10">
+                    <td className="px-3 py-1.5">
+                      <Badge variant="outline" className="text-[9px]">
+                        {acc.subtype === 'MAIN_GROUP' ? 'Grupo principal' : acc.subtype === 'GROUP' ? 'Grupo' : acc.subtype === 'DETAIL_ACCOUNT' ? 'Cuenta de detalle' : 'Subcuenta'}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-1.5 font-medium">{acc.code} - {acc.name}</td>
+                    <td className="px-3 py-1.5">
+                      <Badge variant="outline" className="text-[9px]">
+                        {acc.detailType === 'BALANCE_SHEET' ? 'Balance General' : 'Estado de Resultados'}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-1.5 text-center">
+                      <Badge variant={acc.isActive !== false ? 'default' : 'secondary'} className="text-[9px]">
+                        {acc.isActive !== false ? 'Sí' : 'No'}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {allAccounts.length > 50 && (
+              <p className="text-center text-[10px] text-muted-foreground py-2 border-t border-border/10">
+                Mostrando 50 de {allAccounts.length} cuentas
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <BankAccountsView />
+
       {/* Import / Export CSV */}
       <Card>
         <CardHeader className="pb-3 px-5 pt-4">
@@ -804,12 +864,4 @@ export function ConfiguracionContableView() {
       </Card>
     </div>
   )
-}
-
-function ChevronDown({ className }: { className?: string }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
-}
-
-function ChevronUp({ className }: { className?: string }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m18 15-6-6-6 6"/></svg>
 }

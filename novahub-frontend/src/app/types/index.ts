@@ -587,6 +587,9 @@ export interface SupplierCredit {
   supplierInvoiceId?: string;
   date: string;
   total: number;
+  currency?: string;
+  exchangeRate?: number;
+  baseTotal?: number;
   status: 'draft' | 'issued' | 'applied' | 'voided';
   reason: string;
   items: SupplierCreditItem[];

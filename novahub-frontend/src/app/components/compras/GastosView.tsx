@@ -54,6 +54,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('all');
   const [specificDate, setSpecificDate] = useState<Date | undefined>(undefined);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
@@ -67,7 +68,19 @@ export function GastosView({ data, loading, onRefresh }: Props) {
       const list = Array.isArray(res) ? res : (res as any).data || [];
       setSuppliers(list);
     }).catch();
-
+    contabilidadService.getChartOfAccounts(true).then(res => {
+      const tree = Array.isArray(res) ? res : (res as any)?.data || [];
+      const flatten = (items: any[]): any[] => {
+        const result: any[] = [];
+        for (const item of items) {
+          const { children, ...rest } = item;
+          result.push(rest);
+          if (Array.isArray(children) && children.length > 0) result.push(...flatten(children));
+        }
+        return result;
+      };
+      setAccounts(flatten(tree));
+    }).catch();
   }, []);
 
   useEffect(() => {
@@ -120,16 +133,6 @@ export function GastosView({ data, loading, onRefresh }: Props) {
       const selected = specificDate ? new Date(specificDate.getFullYear(), specificDate.getMonth(), specificDate.getDate()) : null;
       const value = selected ? selected.getTime() : null;
       return { from: value, to: value };
-    }
-    if (datePreset === 'last4') {
-      const from = new Date(today);
-      from.setDate(from.getDate() - 3);
-      return { from: from.getTime(), to: end };
-    }
-    if (datePreset === 'last9') {
-      const from = new Date(today);
-      from.setDate(from.getDate() - 8);
-      return { from: from.getTime(), to: end };
     }
     if (datePreset === 'month') {
       const from = new Date(today);
@@ -383,7 +386,6 @@ export function GastosView({ data, loading, onRefresh }: Props) {
     };
     delete (cleanedDoc as any).account;
     delete (cleanedDoc as any).supplier;
-    delete (cleanedDoc as any).accountId;
 
     if (localDoc.category === 'OTRO' && !String(localDoc.categoryCustom || '').trim()) {
       return toast.error('Debes especificar la categoría cuando eliges OTRO');
@@ -561,6 +563,20 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                       ))}
                     </select>
                   </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1">Cuenta Contable (Gasto)</p>
+                    <select
+                      disabled={!canMutate}
+                      value={localDoc.accountId || ''}
+                      onChange={(e) => setLocalDoc({ ...localDoc, accountId: e.target.value })}
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold"
+                    >
+                      <option value="">Seleccionar cuenta GL...</option>
+                      {accounts.map((a: any) => (
+                        <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   {String(localDoc.category || '').toUpperCase() === 'OTRO' && (
                     <div className="col-span-2">
                       <p className="text-[10px] text-muted-foreground mb-1">Categoría personalizada</p>
@@ -721,12 +737,10 @@ export function GastosView({ data, loading, onRefresh }: Props) {
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight">Gastos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Egresos operativos y administrativos</p></div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/60 p-1">
-              <Button variant={datePreset === 'last4' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('last4')}>4 días</Button>
-              <Button variant={datePreset === 'last9' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('last9')}>9 días</Button>
-              <Button variant={datePreset === 'month' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('month')}>Mes</Button>
-              <Button variant={datePreset === 'year' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('year')}>Año</Button>
-            </div>
+        <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/60 p-1">
+          <Button variant={datePreset === 'month' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('month')}>Último mes</Button>
+          <Button variant={datePreset === 'year' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('year')}>Último año</Button>
+        </div>
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant={datePreset === 'specific' ? 'default' : 'outline'} className="h-10 rounded-xl text-[10px] font-black uppercase tracking-widest gap-2">

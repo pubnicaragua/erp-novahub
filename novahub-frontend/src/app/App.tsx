@@ -7,8 +7,10 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { LoginPage } from './components/LoginPage';
 import { RegisterTenantPage } from './components/auth/RegisterTenantPage';
+import { TrialExpiredPage } from './components/auth/TrialExpiredPage';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
+import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
 
 const OverviewDashboard = lazy(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })));
 const PartnerDashboard = lazy(() => import('./components/PartnerDashboard').then(m => ({ default: m.PartnerDashboard })));
@@ -147,7 +149,7 @@ function DashboardLayout() {
       if (user?.role === 'partner') {
         return <PartnerDashboard onNavigate={handleNavigate} />;
       }
-      return <OverviewDashboard onNavigate={handleNavigate} onOverview={handleOverview} />;
+      return <ModuleErrorBoundary moduleName="Dashboard"><OverviewDashboard onNavigate={handleNavigate} onOverview={handleOverview} /></ModuleErrorBoundary>;
     }
 
     if (!hasAccess(activeModule as Module)) {
@@ -162,10 +164,10 @@ function DashboardLayout() {
     }
 
     switch (activeModule) {
-      case 'inventario': return <InventarioPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'ventas': return <VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'compras': return <ComprasPage activeSubModule={activeSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'finanzas': return <FinanzasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
+      case 'inventario': return <ModuleErrorBoundary moduleName="Inventario"><InventarioPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
+      case 'ventas': return <ModuleErrorBoundary moduleName="Ventas"><VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
+      case 'compras': return <ModuleErrorBoundary moduleName="Compras"><ComprasPage activeSubModule={activeSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
+      case 'finanzas': return <ModuleErrorBoundary moduleName="Finanzas"><FinanzasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'clientes': return <ClientesPage />;
       case 'proveedores': return <ProveedoresPage />;
@@ -175,8 +177,8 @@ function DashboardLayout() {
       case 'notificaciones': return <NotificacionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'transferencias': return <TransferenciasPage />;
       case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'roles': return <ConfiguracionPage initialTab="roles" />;
-      case 'configuracion': return <ConfiguracionPage initialTab={activeSubModule || 'branding'} />;
+      case 'roles': return <ModuleErrorBoundary moduleName="Roles"><ConfiguracionPage initialTab="roles" /></ModuleErrorBoundary>;
+      case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} /></ModuleErrorBoundary>;
       case 'suscripciones': return <SuscripcionesPage />;
       case 'schema': return <PrismaSchemaPage />;
       case 'financiamiento-pyme': return <FinanciamientoPymePage />;
@@ -186,7 +188,7 @@ function DashboardLayout() {
       case 'dashboard-cxc': return <DashboardCxc />;
       case 'asesoria-legal': return <AsesoriaLegalPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'novachat': return <NovaChatView />;
-      default: return <OverviewDashboard onNavigate={handleNavigate} />;
+      default: return <ModuleErrorBoundary moduleName="Dashboard"><OverviewDashboard onNavigate={handleNavigate} /></ModuleErrorBoundary>;
     }
   };
 
@@ -220,8 +222,20 @@ function DashboardLayout() {
 }
 
 function AppContent() {
-  const { isAuthenticated, login } = useAuth();
+  const { isAuthenticated, login, logout } = useAuth();
   const location = useLocation();
+  const [trialExpired, setTrialExpired] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.code === 'TRIAL_EXPIRED') {
+        setTrialExpired(true);
+      }
+    };
+    window.addEventListener('trial-expired', handler);
+    return () => window.removeEventListener('trial-expired', handler);
+  }, []);
 
   useEffect(() => {
     const isDark = localStorage.getItem('erp-theme-mode') === 'light' ? false : true;
@@ -253,6 +267,15 @@ function AppContent() {
 
   return (
     <>
+      {trialExpired && (
+        <TrialExpiredPage
+          onLogout={() => {
+            localStorage.removeItem('nh-auth-token');
+            logout?.();
+            window.location.reload();
+          }}
+        />
+      )}
       <DashboardLayout />
       <Toaster position="top-right" />
     </>

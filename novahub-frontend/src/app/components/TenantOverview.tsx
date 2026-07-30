@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, Variants } from 'motion/react';
 import {
   DollarSign, TrendingDown, ShoppingCart, Target,
@@ -39,9 +39,11 @@ const itemVariants: Variants = {
 };
 
 const PERIODS = [
+  { value: 'today', label: 'Hoy' },
   { value: 'month', label: 'Este Mes' },
   { value: 'quarter', label: 'Este Trimestre' },
   { value: 'year', label: 'Este Año' },
+  { value: 'custom', label: 'Rango por fechas' },
 ];
 
 const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -61,6 +63,8 @@ const statusLabel: Record<string, string> = {
 export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOverviewProps) {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [cajaData, setCajaData] = useState<any>(null);
   const [prevData, setPrevData] = useState<any>(null);
   const [setupSummary, setSetupSummary] = useState<ImplementationSetupSummary | null>(null);
@@ -72,41 +76,32 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
 
   const fmt = (amount: number) => formatConvertedAmount(amount);
 
-  useEffect(() => {
-    loadData();
-    const onVisible = () => { if (document.visibilityState === 'visible') loadData(); };
-    const onFocus = () => loadData();
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', onFocus);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [period, user?.enabledModules]);
+  const loadDataRef = useRef<() => void>();
+  const mountedRef = useRef(true);
+  const pollCountRef = useRef(0);
 
-  useEffect(() => {
-    if (setupSummary && !setupSummary.isComplete && !skipSetup) {
-      const id = setInterval(() => loadData(), 4000);
-      return () => clearInterval(id);
-    }
-  }, [setupSummary?.isComplete, skipSetup]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const force = setupSummary === null || !setupSummary.isComplete;
       const setup = await getImplementationSetupSummary(force, user?.enabledModules);
+      if (!mountedRef.current) return;
       setSetupSummary(setup);
 
       if (!setup.isComplete && !skipSetup) {
         setCajaData(null);
         setPrevData(null);
+        if (mountedRef.current) setLoading(false);
         return;
       }
 
+      const effectivePeriod = period === 'custom' ? 'month' : period;
+      const params = period === 'custom'
+        ? { startDate: dateFrom || undefined, endDate: dateTo || undefined }
+        : {};
       const [current, prev] = await Promise.all([
         Promise.race([
-          cajaService.getDashboard(period),
+          cajaService.getDashboard(effectivePeriod, undefined, params.startDate, params.endDate),
           new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000)),
         ]).catch(() => null),
         Promise.race([
@@ -114,17 +109,62 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
           new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000)),
         ]).catch(() => null),
       ]);
+      if (!mountedRef.current) return;
       setCajaData(current);
       setPrevData(prev);
       setDataLoadError(current === null);
     } catch {
+      if (!mountedRef.current) return;
       setCajaData(null);
       setPrevData(null);
       setDataLoadError(true);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  };
+  }, [period, skipSetup, dateFrom, dateTo]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    loadDataRef.current = loadData;
+    loadData();
+
+    let focusTimer: ReturnType<typeof setTimeout>;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        clearTimeout(focusTimer);
+        focusTimer = setTimeout(() => loadDataRef.current?.(), 30000);
+      }
+    };
+    const onFocus = () => {
+      clearTimeout(focusTimer);
+      focusTimer = setTimeout(() => loadDataRef.current?.(), 30000);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      mountedRef.current = false;
+      clearTimeout(focusTimer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [loadData]);
+
+  useEffect(() => {
+    if (setupSummary && !setupSummary.isComplete && !skipSetup) {
+      pollCountRef.current = 0;
+      const fn = () => {
+        if (!mountedRef.current) return;
+        pollCountRef.current++;
+        const delay = Math.min(4000 * Math.pow(1.5, pollCountRef.current), 30000);
+        setTimeout(() => {
+          if (!mountedRef.current) return;
+          loadDataRef.current?.();
+          fn();
+        }, delay);
+      };
+      fn();
+    }
+  }, [setupSummary?.isComplete, skipSetup]);
 
   const handleExport = async () => {
     if (!cajaData) { toast.error('No hay datos para exportar'); return; }
@@ -353,8 +393,11 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
             Supervisa el rendimiento en tiempo real, descubre nuevas oportunidades y toma decisiones estratégicas con nuestra visión analítica de 360°.
           </p>
         </div>
-        <div className="flex items-center gap-2 z-10 shrink-0">
-          <Select value={period} onValueChange={setPeriod}>
+        <div className="flex items-center gap-2 z-10 shrink-0 flex-wrap">
+          <Select value={period} onValueChange={(val) => {
+            setPeriod(val);
+            if (val !== 'custom') { setDateFrom(''); setDateTo(''); }
+          }}>
             <SelectTrigger className="w-44 rounded-xl border-border/50 bg-card text-xs font-bold uppercase tracking-widest">
               <SelectValue />
             </SelectTrigger>
@@ -364,6 +407,15 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
               ))}
             </SelectContent>
           </Select>
+          {period === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                className="h-8 rounded-xl border border-border/50 bg-card px-3 text-xs font-bold" />
+              <span className="text-[10px] text-muted-foreground">a</span>
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                className="h-8 rounded-xl border border-border/50 bg-card px-3 text-xs font-bold" />
+            </div>
+          )}
           {setupSummary && !setupSummary.isComplete && (
             <Button
               variant="outline"

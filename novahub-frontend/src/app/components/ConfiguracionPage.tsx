@@ -32,6 +32,7 @@ import { type RoleManagement, type Permission } from '../types';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
 import { modulePricingService, type ModulePriceItem } from '../services/module-pricing.service';
 import { CountriesView } from './admin/CountriesView';
+import { SucursalesView } from './inventory/SucursalesView';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -639,6 +640,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
   const [, setIsLoadingModules] = useState(false);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [sucursalModalOpen, setSucursalModalOpen] = useState(false);
 
   useEffect(() => {
     if (scenario === 'superadmin') {
@@ -659,7 +662,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     if (user?.tenantId && canViewRoles) {
       fetchRoles();
     }
-    if (user?.tenantId) fetchEnabledModules();
+    if (user?.tenantId) {
+      fetchEnabledModules();
+      fetchWarehouses();
+    }
   }, [user?.tenantId, canViewRoles]);
 
   const fetchRoles = async () => {
@@ -681,6 +687,14 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     } finally {
       setIsLoadingRoles(false);
     }
+  };
+
+  const fetchWarehouses = async () => {
+    try {
+      const res: any = await api.get('/warehouses');
+      const list = Array.isArray(res) ? res : (res as any)?.data || [];
+      setWarehouses(list);
+    } catch { /* ignore */ }
   };
 
   const fetchEnabledModules = async () => {
@@ -1373,6 +1387,34 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               </CardContent>
             </Card>
           </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mt-6">
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 font-black"><Building2 className="size-5 text-primary" />Sucursales</CardTitle>
+                    <CardDescription>Gestiona las sucursales de tu empresa</CardDescription>
+                  </div>
+                  <Button onClick={() => setSucursalModalOpen(true)} className="rounded-xl gap-2 font-black text-xs uppercase tracking-widest h-10">
+                    <Plus className="size-4" />Crear Sucursal
+                  </Button>
+                </div>
+              </CardHeader>
+            </Card>
+          </motion.div>
+
+          <Dialog open={sucursalModalOpen} onOpenChange={setSucursalModalOpen}>
+            <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogTitle>Sucursales</DialogTitle>
+              <SucursalesView
+                warehouses={warehouses}
+                onRefresh={() => {}}
+                isModal
+                autoOpenCreate
+              />
+            </DialogContent>
+          </Dialog>
 
           {/* Role Edit Dialog */}
           <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>

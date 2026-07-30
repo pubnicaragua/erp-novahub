@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { 
-  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download, Banknote
+  FileStack, Plus, Search, Eye, Trash2, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download, Banknote, Upload, FileDown, Info
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -40,6 +42,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -49,6 +52,10 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<SupplierInvoice> | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
   const generateSupplierInvoiceNumber = () => `INV-${Date.now().toString().slice(-6)}`;
 
   useEffect(() => {
@@ -100,8 +107,103 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     setEditingId('NEW');
   };
 
+  const parseXlsx = async (file: File): Promise<Record<string, string>[]> => {
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    if (data.length < 2) return [];
+    const headers = (data[0] || []).map((h: any) => String(h).toLowerCase().trim());
+    return data.slice(1).map((row: any[]) => {
+      const obj: Record<string, string> = {};
+      headers.forEach((h, idx) => { obj[h] = row[idx] !== undefined ? String(row[idx]).trim() : ''; });
+      return obj;
+    });
+  };
+
+  const normalizeStatus = (raw: string) => {
+    const s = String(raw || '').trim().toUpperCase();
+    if (['PENDING', 'PARTIAL', 'PAID', 'OVERDUE', 'REFUNDED'].includes(s)) return s;
+    return 'PENDING';
+  };
+
+  const downloadTemplate = () => {
+    const wb = XLSX.utils.book_new();
+    const data = [
+      ['number', 'supplier', 'date', 'dueDate', 'currency', 'status', 'description', 'quantity', 'unitPrice', 'total'],
+      ['FAC-001', 'Proveedor Ejemplo', '2026-01-15', '2026-02-15', 'NIO', 'PENDING', 'Servicio de consultoría', '1', '15000', '15000'],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = data[0].map(() => ({ wch: 18 }));
+    XLSX.utils.book_append_sheet(wb, ws, 'Facturas');
+    XLSX.writeFile(wb, 'plantilla_facturas_proveedor.xlsx');
+    toast.success('Plantilla descargada');
+  };
+
+  const handleImport = async () => {
+    if (!importFile) return toast.error('Selecciona un archivo Excel');
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const rows = await parseXlsx(importFile);
+      if (rows.length === 0) { toast.error('El archivo no contiene filas'); return; }
+      let created = 0, skipped = 0;
+      const errors: string[] = [];
+      for (let idx = 0; idx < rows.length; idx++) {
+        const row = rows[idx];
+        const rowNum = idx + 2;
+        const supplierName = String(row.supplier || row.proveedor || '').trim();
+        const supplier = suppliers.find(s => s.name.toLowerCase() === supplierName.toLowerCase());
+        if (!supplier) { skipped++; errors.push(`Fila ${rowNum}: proveedor "${supplierName}" no encontrado`); continue; }
+        const description = String(row.description || row.descripcion || '').trim();
+        const qty = Number(String(row.quantity || row.cantidad || '1').replace(',', '.'));
+        const unitPrice = Number(String(row.unitprice || row.preciounitario || row.price || row.precio || '0').replace(',', '.'));
+        const total = Number(String(row.total || '0').replace(',', '.'));
+        if (!description) { skipped++; errors.push(`Fila ${rowNum}: descripción del item es obligatoria`); continue; }
+        if (total <= 0 && unitPrice <= 0) { skipped++; errors.push(`Fila ${rowNum}: total o precio unitario inválido`); continue; }
+        const finalTotal = total > 0 ? total : qty * unitPrice;
+        const dateRaw = String(row.date || row.fecha || '').trim();
+        const dateParsed = dateRaw ? new Date(dateRaw) : new Date();
+        const date = Number.isNaN(dateParsed.getTime()) ? new Date().toISOString() : dateParsed.toISOString();
+        const dueDateRaw = String(row.duedate || row.fechavencimiento || row.fechaven || '').trim();
+        const dueDateParsed = dueDateRaw ? new Date(dueDateRaw) : new Date(Date.now() + 30 * 86400000);
+        const dueDate = Number.isNaN(dueDateParsed.getTime()) ? new Date(Date.now() + 30 * 86400000).toISOString() : dueDateParsed.toISOString();
+        const currency = String(row.currency || row.moneda || 'NIO').trim().toUpperCase() === 'USD' ? 'USD' : 'NIO';
+        const status = normalizeStatus(String(row.status || row.estado || 'PENDING'));
+        try {
+          await billsService.create({
+            supplierId: supplier.id,
+            number: String(row.number || row.numero || `IMP-${Date.now()}-${idx}`).trim(),
+            date, dueDate, currency, exchangeRate: globalRate, status,
+            subtotal: finalTotal,
+            taxAmount: 0,
+            withholdingTotal: 0,
+            withholdingBase: 0,
+            total: finalTotal,
+            items: [{ description, quantity: Math.max(qty, 1), unitPrice: Math.max(unitPrice, finalTotal), taxType: 'GRAVADO', taxRate: 0, taxBase: 0, taxAmount: 0, withholdingType: 'NONE', withholdingRate: 0, withholdingBase: 0, accountId: null, costCenterId: null, total: finalTotal }],
+          } as any);
+          created++;
+        } catch (e: any) {
+          skipped++;
+          errors.push(`Fila ${rowNum}: ${e?.response?.data?.message || e?.message || 'error al crear'}`);
+        }
+      }
+      setImportResult({ total: rows.length, created, skipped, errors: errors.slice(0, 12) });
+      if (created > 0) onRefresh();
+      toast.success(`Importación finalizada: ${created} creadas, ${skipped} omitidas`);
+    } catch (error: any) {
+      toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filtered = data.filter((b) => {
+    const st = (b.status || '').toUpperCase();
+    if (statusFilter === 'PENDING') { if (st !== 'PENDING' && st !== 'PARTIAL') return false; }
+    else if (statusFilter === 'OVERDUE') { if (st !== 'OVERDUE') return false; }
+    else if (statusFilter === 'PAID') { if (st !== 'PAID') return false; }
     if (!normalizedSearchTerm) return true;
     const haystack = [
       b.number,
@@ -260,6 +362,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
+    if (!String(localDoc?.number || '').trim()) return toast.error('Debe ingresar el número de factura');
     if (isPayingStatus(String(localDoc.status || '')) && !isSupplierActive(localDoc.supplierId)) {
       return toast.error('No se puede registrar pago en facturas de proveedores inactivos');
     }
@@ -436,7 +539,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     };
     
     return (
-      <div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300">
+      <><div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setLocalDoc(null); }} className="rounded-full">
@@ -462,12 +565,18 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                  <Download className="size-3 mr-2" /> Descargar
                </Button>
              )}
-               {!isNew && canPerform('PURCHASES_INVOICES', 'delete') && (
-                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                   onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
-                   <Trash2 className="size-3 mr-2" /> Anular
-                 </Button>
-               )}
+                {!isNew && (
+                  <Button variant="outline" className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
+                    onClick={() => setImportOpen(true)}>
+                    <Upload className="size-3 mr-2" /> Importar
+                  </Button>
+                )}
+                {!isNew && canPerform('PURCHASES_INVOICES', 'delete') && (
+                  <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                    onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
+                    <Trash2 className="size-3 mr-2" /> Anular
+                  </Button>
+                )}
               {!isNew && canPerform('PURCHASES_INVOICES', 'create') && onRegisterPaymentFromInvoice && (
                 <Button
                   variant="outline"
@@ -491,12 +600,12 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="col-span-2">
-                  <p className="text-[10px] text-muted-foreground mb-1">Número de Factura</p>
+                  <p className="text-[10px] text-muted-foreground mb-1">Número de Factura <span className="text-rose-500">*</span></p>
                   <Input 
-                    disabled
                     value={localDoc.number || ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, number: e.target.value })}
                     className="h-8 text-xs font-black uppercase" 
-                    placeholder="Se genera automáticamente" 
+                    placeholder="Ej: F001-000001" 
                   />
                 </div>
                 <div className="col-span-2">
@@ -787,6 +896,57 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar facturas de proveedor</DialogTitle>
+            <DialogDescription>
+              Sube un archivo Excel (.xlsx) para registrar facturas masivamente. Usa la plantilla para mantener el formato correcto.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border/60 p-4 bg-muted/20">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Formato esperado</p>
+              <p className="text-xs text-muted-foreground">
+                Columnas: <span className="font-mono">number, supplier, date, dueDate, currency, status, description, quantity, unitPrice, total</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                status: PENDING/PARTIAL/PAID/OVERDUE/REFUNDED · currency: NIO/USD
+              </p>
+              <Button variant="ghost" size="sm" className="mt-3 gap-2 h-8" onClick={downloadTemplate}>
+                <FileDown className="size-4" /> Descargar plantilla Excel
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-muted-foreground">Archivo Excel</label>
+              <Input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] || null)} />
+              {importFile && <p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p>}
+            </div>
+            {importResult && (
+              <div className="rounded-xl border border-border/60 p-4 bg-background">
+                <p className="text-xs font-black uppercase tracking-widest mb-2">Resultado</p>
+                <p className="text-sm">
+                  Total: <b>{importResult.total}</b> · Creadas: <b className="text-emerald-500">{importResult.created}</b> · Omitidas: <b className="text-amber-500">{importResult.skipped}</b>
+                </p>
+                {importResult.errors.length > 0 && (
+                  <div className="mt-2 text-xs text-amber-600 space-y-1">
+                    <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
+                    {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
+            <Button onClick={handleImport} disabled={importing || !importFile} className="gap-2">
+              <Upload className="size-4" /> {importing ? 'Importando...' : 'Importar facturas'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
     );
   }
 
@@ -795,23 +955,30 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     .reduce((acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate), 0);
 
   const kpis = [
-     { title: 'Facturas',        value: data.length,                   icon: FileStack, color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
+     { title: 'Facturas',        value: data.length,                   icon: FileStack, color: 'text-blue-500',   bg: 'bg-blue-500/10',    filter: 'ALL'       },
      {
        title: `Por Pagar (${displayCurrency})`,
        value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${pendingTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
        icon: Clock,
        color: 'text-amber-500',
        bg: 'bg-amber-500/10',
+       filter: 'PENDING',
      },
-     { title: 'Vencidas',        value: data.filter(b => new Date(b.dueDate).getTime() < Date.now() && (b.status||'').toUpperCase() !== 'PAID').length, icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-     { title: 'Pagadas (Mes)',   value: data.filter(b => (b.status||'').toUpperCase() === 'PAID').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+     { title: 'Vencidas',        value: data.filter(b => new Date(b.dueDate).getTime() < Date.now() && (b.status||'').toUpperCase() !== 'PAID').length, icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10', filter: 'OVERDUE' },
+     { title: 'Pagadas (Mes)',   value: data.filter(b => (b.status||'').toUpperCase() === 'PAID').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', filter: 'PAID' },
   ];
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((k, i) => (
-          <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
+          <Card key={i}
+            className={cn(
+              'bg-card border-border/50 rounded-2xl shadow-sm transition-all cursor-pointer',
+              statusFilter === k.filter ? 'ring-2 ring-primary/30 border-primary/30' : 'hover:border-border'
+            )}
+            onClick={() => setStatusFilter(prev => prev === k.filter ? 'ALL' : k.filter)}
+          >
             <CardContent className="p-5"><div className="flex items-center gap-4">
               <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
               <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
@@ -825,7 +992,9 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('PURCHASES_INVOICES', 'create') && (
-              <Button onClick={handleCreateNew} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Factura</Button>
+              <>
+                <Button onClick={handleCreateNew} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Factura</Button>
+              </>
             )}
           </div>
         </div>
@@ -895,6 +1064,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             />
           </div>
         </ConfirmDialog>
+
       </div>
     </div>
   );

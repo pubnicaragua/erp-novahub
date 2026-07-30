@@ -9,6 +9,8 @@ import {
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
+import { useBranchScope } from '../hooks/useBranchScope';
+import { BranchScopeFilter } from './ui/BranchScopeFilter';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { ShoppingBag } from 'lucide-react';
@@ -66,6 +68,7 @@ interface VentasPageProps {
 
 export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: VentasPageProps) {
   const { user } = useAuth();
+  const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
@@ -229,6 +232,21 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     employees: toArray(employeesQuery.data),
   };
 
+  const filteredData = {
+    clientes: filterByBranch(data.clientes),
+    estimaciones: filterByBranch(data.estimaciones),
+    ordenes: filterByBranch(data.ordenes),
+    facturas: filterByBranch(data.facturas),
+    recurrentes: filterByBranch(data.recurrentes),
+    pagos: filterByBranch(data.pagos),
+    devoluciones: filterByBranch(data.devoluciones),
+    notasCredito: filterByBranch(data.notasCredito),
+    productos: data.productos,
+    series: data.series,
+    warehouses: data.warehouses,
+    employees: data.employees,
+  };
+
   const activeQuery = activeSection === 'clientes' ? customersListQuery
     : activeSection === 'estimaciones' ? estimatesQuery
       : activeSection === 'ordenes-venta' ? ordersQuery
@@ -309,11 +327,15 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                   <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
                     {customersListQuery.data?.meta?.total ?? data.clientes.length} clientes · {invoicesQuery.data?.meta?.total ?? data.facturas.length} facturas
                   </Badge>
+                  {isRestricted && (
+                    <Badge variant="outline" className="border-amber-500/30 text-amber-600 bg-amber-500/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+                      {accessibleBranches.length} sucursal(es)
+                    </Badge>
+                  )}
                 </div>
               </div>
             </div>
-            
-
+            <BranchScopeFilter className="ml-auto" showLabel={false} />
           </div>
 
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
@@ -352,17 +374,17 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 <ClientesView data={data.clientes} loading={loading} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} isSidebarCollapsed={isSidebarCollapsed} />
               )}
               {activeSection === 'estimaciones' && (
-                <EstimacionesView data={data.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={data.clientes} products={data.productos} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} />
+                <EstimacionesView data={filteredData.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={filteredData.clientes} products={data.productos} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} />
               )}
               {activeSection === 'ordenes-venta' && (
-                <OrdenesVentaView data={data.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} targetOrderId={targetOrderId} onClearTargetOrderId={() => setTargetOrderId(null)} customers={data.clientes} products={data.productos} employees={data.employees} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes-venta', value)} />
+                <OrdenesVentaView data={filteredData.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} targetOrderId={targetOrderId} onClearTargetOrderId={() => setTargetOrderId(null)} customers={filteredData.clientes} products={data.productos} employees={data.employees} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes-venta', value)} />
               )}
               {activeSection === 'facturas' && (
                 <FacturasView 
-                  data={data.facturas} 
+                  data={filteredData.facturas} 
                   loading={loading} 
                   onRefresh={fetchData} 
-                  customers={data.clientes} 
+                  customers={filteredData.clientes} 
                   products={data.productos} 
                   series={data.series}
                   warehouses={data.warehouses}
@@ -376,16 +398,16 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 />
               )}
               {activeSection === 'facturas-recurrentes' && (
-                <FacturasRecurrentesView data={data.recurrentes} loading={loading} onRefresh={fetchData} customers={data.clientes} products={data.productos} pagination={pagination.recurrentes} onSearchChange={(value) => updateSearch('facturas-recurrentes', value)} />
+                <FacturasRecurrentesView data={filteredData.recurrentes} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} products={data.productos} pagination={pagination.recurrentes} onSearchChange={(value) => updateSearch('facturas-recurrentes', value)} />
               )}
               {activeSection === 'pagos-recibidos' && (
-                <PagosRecibidosView data={data.pagos} loading={loading} onRefresh={fetchData} customers={data.clientes} invoices={data.facturas} pagination={pagination.pagos} onSearchChange={(value) => updateSearch('pagos-recibidos', value)} />
+                <PagosRecibidosView data={filteredData.pagos} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} invoices={filteredData.facturas} pagination={pagination.pagos} onSearchChange={(value) => updateSearch('pagos-recibidos', value)} />
               )}
               {activeSection === 'devoluciones-venta' && (
-                <DevolucionesView data={data.devoluciones} loading={loading} onRefresh={fetchData} customers={data.clientes} invoices={data.facturas} products={data.productos} pagination={pagination.devoluciones} onSearchChange={(value) => updateSearch('devoluciones-venta', value)} />
+                <DevolucionesView data={filteredData.devoluciones} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} invoices={filteredData.facturas} products={data.productos} pagination={pagination.devoluciones} onSearchChange={(value) => updateSearch('devoluciones-venta', value)} />
               )}
               {activeSection === 'notas-credito' && (
-                <NotasCreditoView data={data.notasCredito} loading={loading} onRefresh={fetchData} customers={data.clientes} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} />
+                <NotasCreditoView data={filteredData.notasCredito} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} />
               )}
               {activeSection === 'listas-precios' && (
                 <PriceListsView products={data.productos} onRefresh={fetchData} isSidebarCollapsed={isSidebarCollapsed} />

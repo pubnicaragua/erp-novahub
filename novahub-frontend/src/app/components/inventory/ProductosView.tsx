@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { Search, Plus, Trash2, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp } from 'lucide-react';
+import { Search, Plus, Trash2, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { Card } from '../ui/card';
@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { MultiSelectFilter } from './MultiSelectFilter';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
 import { inventoryService } from '../../services/inventario.service';
+import { purchaseRequestsService } from '../../services/compras.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -233,7 +234,7 @@ function ImportPreviewPage({
 
 export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, itemType, isSidebarCollapsed = true }: ProductosViewProps) {
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
-  const { canPerform } = useAuth();
+  const { user, canPerform } = useAuth();
   const catalogItemType = itemType || 'PRODUCT';
   const isServiceView = catalogItemType === 'SERVICE';
   const entityLabel = isServiceView ? 'servicio' : 'producto';
@@ -294,18 +295,77 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [importExchangeRate, setImportExchangeRate] = useState<number>(Number(exchangeRate || 1));
   const [initialImportConfirmOpen, setInitialImportConfirmOpen] = useState(false);
   const [initialImportConfirmText, setInitialImportConfirmText] = useState('');
-  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
-  const [batchDeleting, setBatchDeleting] = useState(false);
   const [replenishmentPeriod, setReplenishmentPeriod] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly');
   const [downloadingReport, setDownloadingReport] = useState(false);
   const [replenishmentData, setReplenishmentData] = useState<any[] | null>(null);
   const [replenishmentModalOpen, setReplenishmentModalOpen] = useState(false);
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState<any | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
   
   const [skuErrors, setSkuErrors] = useState<Map<string, string>>(new Map());
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ─── Solicitar Compra Batch desde inventario ──────────────────────────────────
+  const [batchPrOpen, setBatchPrOpen] = useState(false);
+  const [batchPrWarehouses, setBatchPrWarehouses] = useState<any[]>([]);
+  const [batchPrWarehouseId, setBatchPrWarehouseId] = useState('');
+  const [batchPrJustification, setBatchPrJustification] = useState('');
+  const [batchPrCreating, setBatchPrCreating] = useState(false);
+
+  const openBatchPurchaseRequest = async () => {
+    try {
+      const res = await inventoryService.getWarehouses();
+      setBatchPrWarehouses(Array.isArray(res) ? res : []);
+    } catch { setBatchPrWarehouses([]); }
+    setBatchPrWarehouseId('');
+    setBatchPrJustification('');
+    setBatchPrOpen(true);
+  };
+
+  const handleBatchPurchaseRequest = async () => {
+    if (selectedIds.size === 0) { toast.error('Selecciona al menos un producto'); return; }
+    if (!batchPrWarehouseId) { toast.error('Selecciona una bodega'); return; }
+    setBatchPrCreating(true);
+    try {
+      const selectedProducts = paginatedProducts.filter((p: any) => selectedIds.has(p.id));
+      const items = selectedProducts.map((p: any) => ({
+        productId: p.id,
+        description: p.name,
+        quantity: Math.max(1, Math.ceil((Number(p.minStock || 0) * 2) - Number(p.stock || 0))),
+        warehouseId: batchPrWarehouseId,
+        currentStock: Number(p.stock || 0),
+        minStock: Number(p.minStock || 0),
+      }));
+      await purchaseRequestsService.create({
+        priority: 'NORMAL',
+        justification: batchPrJustification || 'Solicitud generada desde inventario',
+        warehouseId: batchPrWarehouseId,
+        requestedById: user?.id,
+        items,
+      } as any);
+      toast.success(`Solicitud creada con ${items.length} producto(s). Ve a Compras > Solicitudes.`);
+      setBatchPrOpen(false);
+      setSelectedIds(new Set());
+    } catch (e: any) {
+      toast.error(e?.message || 'Error al crear solicitud');
+    } finally {
+      setBatchPrCreating(false);
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    try {
+      await Promise.all(Array.from(selectedIds).map(id => inventoryService.deleteProduct(id)));
+      toast.success(`${selectedIds.size} producto(s) desactivado(s)`);
+      setSelectedIds(new Set());
+      fetchProducts();
+    } catch (e: any) {
+      toast.error(e?.message || 'Error al desactivar productos');
+    }
+  };
 
   const validateSkuDebounced = (productId: string, code: string, isNew: boolean) => {
     if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
@@ -1223,18 +1283,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     setSelectedIds(next);
   };
 
-  const handleBatchDelete = async () => {
-    if (selectedIds.size === 0) return;
-    try {
-      await inventoryService.deleteProducts(Array.from(selectedIds));
-      toast.success(`${selectedIds.size} ${entityLabel}(s) eliminado(s)`);
-      setSelectedIds(new Set());
-      onRefresh();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
-    }
-  };
-
   const handlePreviewReplenishment = async () => {
     setDownloadingReport(true);
     try {
@@ -1751,12 +1799,11 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           {selectedIds.size > 0 && (
             <Button
               size="sm"
-              variant="destructive"
-              className="h-9 rounded-lg px-3 font-black text-[10px] uppercase tracking-widest"
-              onClick={() => setBatchDeleteOpen(true)}
+              className="h-9 rounded-lg px-3 font-black text-[10px] uppercase tracking-widest bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={openBatchPurchaseRequest}
             >
-              <Trash2 className="size-4 mr-2" />
-              Eliminar {selectedIds.size}
+              <Package className="size-4 mr-2" />
+              Solicitar Compra ({selectedIds.size})
             </Button>
           )}
         </div>
@@ -2557,6 +2604,46 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         }}
       />
 
+      <Dialog open={batchPrOpen} onOpenChange={(o) => { if (!o) setBatchPrOpen(false); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="size-4" /> Solicitar Compra ({selectedIds.size} productos)
+            </DialogTitle>
+            <DialogDescription>
+              Se crearán solicitudes para {selectedIds.size} producto(s) seleccionados. La cantidad sugerida será (minStock × 2) − stock actual.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold">Bodega destino</label>
+              <Select value={batchPrWarehouseId} onValueChange={setBatchPrWarehouseId}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                <SelectContent>
+                  {batchPrWarehouses.map((w: any) => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold">Justificación</label>
+              <textarea className="w-full min-h-[60px] rounded-lg border border-input bg-background p-3 text-sm"
+                value={batchPrJustification}
+                onChange={(e) => setBatchPrJustification(e.target.value)}
+                placeholder="Ej: Reabastecimiento de inventario" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBatchPrOpen(false)} disabled={batchPrCreating}>Cancelar</Button>
+            <Button onClick={handleBatchPurchaseRequest} disabled={batchPrCreating}>
+              {batchPrCreating && <Loader2 className="size-3.5 mr-1 animate-spin" />}
+              Crear Solicitud
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       </Card>
 
       <Dialog open={replenishmentModalOpen} onOpenChange={(open) => { if (!open) setReplenishmentModalOpen(false); }}>
@@ -2605,6 +2692,32 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <Button variant="outline" onClick={() => setReplenishmentModalOpen(false)} className="rounded-xl font-bold text-xs uppercase tracking-widest">Cerrar</Button>
             <Button onClick={handleExportReplenishmentExcel} className="rounded-xl font-bold text-xs uppercase tracking-widest" disabled={!replenishmentData || replenishmentData.length === 0}>
               <Download className="size-4 mr-2" /> Exportar Excel
+            </Button>
+            <Button onClick={async () => {
+              if (!replenishmentData || replenishmentData.length === 0) return;
+              const items = replenishmentData.map((item: any) => ({
+                productId: item.productId,
+                description: item.productName,
+                quantity: item.suggestedQuantity || 1,
+                warehouseId: item.warehouseId,
+                currentStock: item.currentStock,
+                minStock: item.minStock,
+              }));
+              try {
+                await purchaseRequestsService.create({
+                  priority: 'NORMAL',
+                  justification: `Reabastecimiento ${replenishmentPeriod === 'weekly' ? 'semanal' : replenishmentPeriod === 'biweekly' ? 'quincenal' : 'mensual'}`,
+                  warehouseId: items[0]?.warehouseId || '',
+                  requestedById: user?.id,
+                  items,
+                } as any);
+                toast.success(`Solicitud creada con ${items.length} producto(s). Revisa Compras > Solicitudes.`);
+                setReplenishmentModalOpen(false);
+              } catch (e: any) {
+                toast.error(e?.response?.data?.message || e?.message || 'Error al crear solicitud');
+              }
+            }} className="rounded-xl bg-primary text-primary-foreground font-bold text-xs uppercase tracking-widest" disabled={!replenishmentData || replenishmentData.length === 0}>
+              <Send className="size-4 mr-2" /> Enviar a Compras
             </Button>
           </DialogFooter>
         </DialogContent>

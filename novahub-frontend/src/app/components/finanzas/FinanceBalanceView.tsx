@@ -1045,7 +1045,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
           </Card>
         )}
         {showBalanceKPI && (
-          <Card className={`border-${balance>=0?'emerald':'rose'}-500/20 bg-gradient-to-br from-${balance>=0?'emerald':'rose'}-500/5 to-transparent relative overflow-hidden`}>
+          <Card className={cn(balance >= 0 ? 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/5' : 'border-rose-500/20 bg-gradient-to-br from-rose-500/5', 'to-transparent relative overflow-hidden')}>
             <div className="absolute top-2 right-2 opacity-10"><Scale className="size-12" /></div>
             <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Wallet className="size-4" />Balance Neto</CardTitle></CardHeader>
             <CardContent>

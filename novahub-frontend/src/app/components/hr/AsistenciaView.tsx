@@ -1,17 +1,24 @@
 import React from 'react';
 import { useState } from 'react';
-import { Clock, LogIn, LogOut, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp } from 'lucide-react';
+import { Clock, LogIn, LogOut, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Upload, FileDown, Info, UserCheck, UserX } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
+import { Input } from '../ui/input';
+import * as XLSX from 'xlsx';
 
 export function AsistenciaView({ attendance, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [showTutorial, setShowTutorial] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
 
 const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
   {
@@ -62,6 +69,70 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
     }
   };
 
+  const downloadAttendanceTemplate = () => {
+    const ws = XLSX.utils.json_to_sheet([{
+      employeeNumber: 'EMP-001', date: '2026-07-29', checkIn: '08:00', checkOut: '17:00',
+      status: 'PRESENT', hoursWorked: '9', overtimeHours: '1', location: 'Oficina Central'
+    }]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Asistencia');
+    XLSX.writeFile(wb, 'plantilla_asistencia.xlsx');
+    toast.success('Plantilla descargada');
+  };
+
+  const handleImportAttendance = async () => {
+    if (!importFile) return toast.error('Selecciona un archivo');
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const buffer = await importFile.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+      if (rows.length === 0) { toast.error('El archivo no contiene filas'); return; }
+      let created = 0, skipped = 0;
+      const errors: string[] = [];
+      for (let idx = 0; idx < rows.length; idx++) {
+        const row = rows[idx];
+        const rowNum = idx + 2;
+        const empNum = String(row.employeeNumber || row.employeenumber || row.codigo || '').trim();
+        const employee = employees.find((e: any) =>
+          (e.employeeNumber && (e.employeeNumber+'').toLowerCase() === empNum.toLowerCase()) ||
+          ((e.firstName + ' ' + e.lastName).toLowerCase() === empNum.toLowerCase())
+        );
+        if (!employee) { skipped++; errors.push(`Fila ${rowNum}: empleado "${empNum}" no encontrado`); continue; }
+        const dateRaw = String(row.date || row.fecha || '').trim();
+        const dateParsed = dateRaw ? new Date(dateRaw) : new Date();
+        const date = Number.isNaN(dateParsed.getTime()) ? new Date().toISOString() : dateParsed.toISOString();
+        const checkInRaw = String(row.checkIn || row.checkin || row.entrada || '').trim();
+        const checkOutRaw = String(row.checkOut || row.checkout || row.salida || '').trim();
+        const checkIn = checkInRaw ? new Date(`${dateRaw || date.split('T')[0]}T${checkInRaw}`).toISOString() : undefined;
+        const checkOut = checkOutRaw ? new Date(`${dateRaw || date.split('T')[0]}T${checkOutRaw}`).toISOString() : undefined;
+        const statusRaw = String(row.status || row.estado || 'PRESENT').trim().toUpperCase();
+        const status = ['PRESENT', 'ABSENT', 'LATE', 'REMOTE'].includes(statusRaw) ? statusRaw : 'PRESENT';
+        const hoursWorked = Number(String(row.hoursWorked || row.horastrabajadas || row.horas || '0').replace(',', '.'));
+        const overtimeHours = Number(String(row.overtimeHours || row.horasextra || '0').replace(',', '.'));
+        const location = String(row.location || row.ubicacion || '').trim();
+        try {
+          await hrService.createAttendance({
+            employeeId: employee.id, date, checkIn, checkOut, status, hoursWorked, overtimeHours: overtimeHours || 0, location: location || undefined,
+          });
+          created++;
+        } catch (e: any) {
+          skipped++;
+          errors.push(`Fila ${rowNum}: ${e?.response?.data?.message || e?.message || 'error al crear'}`);
+        }
+      }
+      setImportResult({ total: rows.length, created, skipped, errors: errors.slice(0, 12) });
+      if (created > 0) onRefresh();
+      toast.success(`Importación finalizada: ${created} registros, ${skipped} omitidos`);
+    } catch (error: any) {
+      toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const todayRecords = attendance.filter((a: any) => {
     const recordDate = new Date(a.date);
     const today = new Date();
@@ -87,31 +158,31 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
     <div className="space-y-4">
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
-          <div className="flex items-center justify-between mb-3">
+        <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-blue-500/10"><UserCheck className="size-5 text-blue-500" /></div>
             <div>
-              <p className="text-sm text-muted-foreground">Presentes Hoy</p>
-              <h3 className="text-3xl font-bold text-blue-700 dark:text-blue-400">{presentToday}</h3>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Presentes Hoy</p>
+              <p className="text-2xl font-black tabular-nums">{presentToday}</p>
             </div>
-            <Clock className="size-8 text-blue-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
-          <div className="flex items-center justify-between mb-3">
+        <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-emerald-500/10"><Calendar className="size-5 text-emerald-500" /></div>
             <div>
-              <p className="text-sm text-muted-foreground">Horas Totales Hoy</p>
-              <h3 className="text-3xl font-bold text-green-700 dark:text-green-400">{totalHoursToday.toFixed(1)}</h3>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Horas Totales Hoy</p>
+              <p className="text-2xl font-black tabular-nums">{totalHoursToday.toFixed(1)}</p>
             </div>
-            <Calendar className="size-8 text-green-500" />
           </div>
         </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20">
-          <div className="flex items-center justify-between mb-3">
+        <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-rose-500/10"><UserX className="size-5 text-rose-500" /></div>
             <div>
-              <p className="text-sm text-muted-foreground">Ausentes Hoy</p>
-              <h3 className="text-3xl font-bold text-red-700 dark:text-red-400">{absentToday}</h3>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Ausentes Hoy</p>
+              <p className="text-2xl font-black tabular-nums">{absentToday}</p>
             </div>
-            <Clock className="size-8 text-red-500" />
           </div>
         </div>
       </div>
@@ -146,6 +217,11 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
                   Salida
                 </Button>
               </>
+            )}
+            {canPerform('HR_ATTENDANCE', 'create') && (
+              <Button type="button" variant="outline" size="sm" onClick={() => setImportOpen(true)} aria-label="Importar" className="w-full sm:w-auto">
+                <Upload className="size-3.5 mr-1" /> Importar
+              </Button>
             )}
             <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} aria-label="Tutorial" className="w-full sm:w-auto">
               <CircleHelp className="size-3.5 mr-1" /> Tutorial
@@ -318,6 +394,54 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
         </div>
       )}
       {showTutorial && <GuidedTour steps={ASISTENCIA_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Asistencia" />}
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar asistencia</DialogTitle>
+            <DialogDescription>
+              Sube un archivo Excel (.xlsx) para registrar asistencia masivamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border/60 p-4 bg-muted/20">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Formato esperado</p>
+              <p className="text-xs text-muted-foreground">
+                Columnas: <span className="font-mono">employeeNumber (código), date (fecha), checkIn (entrada), checkOut (salida), status (estado), hoursWorked (horas), overtimeHours (extra), location (ubicación)</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                estado: PRESENT (Presente) / ABSENT (Ausente) / LATE (Tardanza) / REMOTE (Remoto) · employeeNumber: código del empleado
+              </p>
+              <Button variant="ghost" size="sm" className="mt-3 gap-2 h-8" onClick={downloadAttendanceTemplate}>
+                <FileDown className="size-4" /> Descargar plantilla Excel
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-muted-foreground">Archivo Excel</label>
+              <Input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] || null)} />
+              {importFile && <p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p>}
+            </div>
+            {importResult && (
+              <div className="rounded-xl border border-border/60 p-4 bg-background">
+                <p className="text-xs font-black uppercase tracking-widest mb-2">Resultado</p>
+                <p className="text-sm">Total: <b>{importResult.total}</b> · Creados: <b className="text-emerald-500">{importResult.created}</b> · Omitidos: <b className="text-amber-500">{importResult.skipped}</b></p>
+                {importResult.errors.length > 0 && (
+                  <div className="mt-2 text-xs text-amber-600 space-y-1">
+                    <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
+                    {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
+            <Button onClick={handleImportAttendance} disabled={importing || !importFile} className="gap-2">
+              <Upload className="size-4" /> {importing ? 'Importando...' : 'Importar asistencia'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

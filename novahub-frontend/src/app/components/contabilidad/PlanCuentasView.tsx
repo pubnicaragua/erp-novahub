@@ -5,6 +5,7 @@ import {
   RefreshCw, X, Loader2, FileSpreadsheet,
   AlertTriangle, Info
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -157,12 +158,23 @@ export function PlanCuentasView() {
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [replaceAccounts, setReplaceAccounts] = useState(false);
 
-  const fetchAccounts = useCallback(async () => {
+  const fetchAccounts = useCallback(async (refresh = false) => {
     setLoading(true);
     try {
-      const raw = await contabilidadService.getChartOfAccounts();
-      const list = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.data) ? (raw as any).data : [];
+      const raw = await contabilidadService.getChartOfAccounts(refresh);
+      const tree = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.data) ? (raw as any).data : [];
+      const flatten = (items: any[]): any[] => {
+        const result: any[] = [];
+        for (const item of items) {
+          const { children, ...rest } = item;
+          result.push(rest);
+          if (Array.isArray(children) && children.length > 0) result.push(...flatten(children));
+        }
+        return result;
+      };
+      const list = flatten(tree);
       const nodes = list.map((a: any) => ({
         id: a.id, code: a.code ?? '', name: a.name ?? '',
         type: (a.type ?? 'ASSET').toUpperCase() as AccountType,
@@ -290,7 +302,7 @@ export function PlanCuentasView() {
         toast.success('Cuenta creada');
       }
       setDialogOpen(false);
-      fetchAccounts();
+      fetchAccounts(true);
     } catch (e: any) {
       toast.error(e?.message || 'Error al guardar cuenta');
     } finally {
@@ -306,7 +318,7 @@ export function PlanCuentasView() {
       toast.success('Cuenta eliminada');
       setDeleteConfirmId(null);
       if (selectedAccount?.id === deleteConfirmId) setSelectedAccount(null);
-      fetchAccounts();
+      fetchAccounts(true);
     } catch (e: any) {
       toast.error(e?.message || 'Error al eliminar cuenta');
     } finally {
@@ -320,7 +332,7 @@ export function PlanCuentasView() {
     try {
       const res = await contabilidadService.importDefaultsWithHierarchy(industry);
       toast.success(res?.message || 'Catálogo importado exitosamente');
-      fetchAccounts();
+      fetchAccounts(true);
     } catch (e: any) {
       toast.error(e?.message || 'Error al cargar cuentas predeterminadas');
     } finally {
@@ -341,15 +353,29 @@ export function PlanCuentasView() {
   };
 
   const handleImport = async () => {
-    if (!importFile) { toast.error('Selecciona un archivo CSV'); return; }
+    if (!importFile) { toast.error('Selecciona un archivo CSV o Excel'); return; }
     setImporting(true);
     try {
-      const text = await importFile.text();
-      const csvRows = parseCsvText(text);
-      const headers = (csvRows[0] ?? []).map(header => header.trim().toLowerCase());
-      const rows = csvRows.slice(1).map(cols => {
+      let csvRows: string[][];
+      const fileName = importFile.name.toLowerCase();
+
+      if (fileName.endsWith('.csv')) {
+        const text = await importFile.text();
+        csvRows = parseCsvText(text);
+      } else {
+        const buffer = await importFile.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonRows = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: '' });
+        csvRows = jsonRows.map((row: any) => (Array.isArray(row) ? row : [String(row)]).map(String));
+      }
+
+      const nonEmpty = csvRows.filter(row => row.some(cell => String(cell ?? '').trim().length > 0));
+      if (nonEmpty.length < 2) { toast.error('El archivo no contiene datos'); return; }
+      const headers = (nonEmpty[0] ?? []).map(header => String(header).trim().toLowerCase());
+      const rows = nonEmpty.slice(1).map(cols => {
         const row: Record<string, string> = {};
-        headers.forEach((header, index) => { row[header] = cols[index] ?? ''; });
+        headers.forEach((header, index) => { row[header] = String(cols[index] ?? '').trim(); });
         return row;
       });
 
@@ -378,9 +404,13 @@ export function PlanCuentasView() {
       }
 
       if (valid.length > 0) {
-        await contabilidadService.importAccounts(valid);
-        toast.success(`${valid.length} cuentas importadas${errors.length > 0 ? ` (${errors.length} errores)` : ''}`);
-        fetchAccounts();
+        const res: any = await contabilidadService.importAccounts(valid, replaceAccounts);
+        const msg = replaceAccounts
+          ? `${res?.imported ?? valid.length} importadas, ${res?.removed ?? 0} reemplazadas`
+          : `${res?.imported ?? valid.length} cuentas importadas${errors.length > 0 ? ` (${errors.length} errores)` : ''}`;
+        toast.success(msg);
+        setAccounts([]);
+        await fetchAccounts(true);
       } else {
         toast.error('No se encontraron cuentas válidas para importar');
       }
@@ -520,7 +550,7 @@ export function PlanCuentasView() {
             ))}
           </SelectContent>
         </Select>
-        <Button variant="ghost" size="icon" className="w-9 h-9" onClick={fetchAccounts} title="Recargar">
+        <Button variant="ghost" size="icon" className="w-9 h-9" onClick={() => fetchAccounts(true)} title="Recargar">
           <RefreshCw className="w-4 h-4" />
         </Button>
         <Badge variant="secondary" className="ml-auto text-xs">
@@ -893,10 +923,23 @@ export function PlanCuentasView() {
               <Input
                 id="import-file"
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx,.xls"
                 onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
               />
             </div>
+
+            <label className="flex items-center gap-2 rounded-md border px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors">
+              <input
+                type="checkbox"
+                checked={replaceAccounts}
+                onChange={(e) => setReplaceAccounts(e.target.checked)}
+                className="rounded border-input size-4"
+              />
+              <div>
+                <p className="text-sm font-medium">Reemplazar cuentas existentes</p>
+                <p className="text-xs text-muted-foreground">Elimina cuentas que no están en el archivo importado (solo si no tienen movimientos)</p>
+              </div>
+            </label>
 
             <Button variant="outline" size="sm" className="w-full" onClick={() => {
               downloadCsv('plantilla_cuentas.csv', templateRows());

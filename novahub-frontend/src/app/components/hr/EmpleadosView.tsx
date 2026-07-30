@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState } from 'react';
-import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Send, CheckCircle2, XCircle, History } from 'lucide-react';
+import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Send, CheckCircle2, XCircle, History, Ban } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -183,11 +183,11 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
   const handleDelete = async (id: string) => {
     try {
       setDeleteLoading(true);
-      await hrService.deleteEmployee(id);
-      toast.success('Empleado eliminado');
+      await hrService.updateEmployee(id, { employmentStatus: 'INACTIVE' });
+      toast.success('Empleado desactivado');
       onRefresh();
     } catch (error) {
-      toast.error('Error al eliminar empleado');
+      toast.error('Error al desactivar empleado');
     } finally {
       setDeleteLoading(false);
       setPendingDeleteId(null);
@@ -648,8 +648,8 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                               <History className="size-4" />
                             </Button>
                             {canPerform('HR_EMPLOYEES', 'delete') && (
-                              <Button size="sm" variant="ghost" onClick={() => setPendingDeleteId(emp.id)} className="h-7 px-2 text-red-600">
-                                <Trash2 className="size-3" />
+                              <Button size="sm" variant="ghost" title="Desactivar" onClick={() => setPendingDeleteId(emp.id)} className="h-7 px-2 text-red-600">
+                                <Ban className="size-3" />
                               </Button>
                             )}
                           </>
@@ -721,8 +721,8 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                   </Button>
                 )}
                 {canPerform('HR_EMPLOYEES', 'delete') && (
-                  <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(emp.id)} className="text-red-600 rounded-xl hover:bg-red-500/10 hover:border-red-500/30 transition-all">
-                    <Trash2 className="size-3" />
+                  <Button size="sm" variant="outline" title="Desactivar" onClick={() => setPendingDeleteId(emp.id)} className="text-red-600 rounded-xl hover:bg-red-500/10 hover:border-red-500/30 transition-all">
+                    <Ban className="size-3" />
                   </Button>
                 )}
               </div>
@@ -878,9 +878,9 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       <ConfirmDialog 
         open={pendingDeleteId !== null} 
         onOpenChange={open => { if (!open) setPendingDeleteId(null); }} 
-        title="¿Eliminar Empleado?" 
-        description="¿Estás seguro de que deseas eliminar este empleado? Esta acción no se puede deshacer." 
-        confirmLabel="Eliminar" 
+        title="¿Desactivar Empleado?" 
+        description="El empleado quedará inactivo y no aparecerá en selecciones futuras." 
+        confirmLabel="Desactivar" 
         variant="destructive" 
         loading={deleteLoading} 
         onConfirm={() => pendingDeleteId ? handleDelete(pendingDeleteId) : Promise.resolve()} 

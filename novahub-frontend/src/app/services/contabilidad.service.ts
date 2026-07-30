@@ -3,12 +3,12 @@ import type { ChartAccount, ChartAccountCsvRow } from '../types/accounting';
 
 export const contabilidadService = {
   // Plan de Cuentas
-  getChartOfAccounts: () => api.get<ChartAccount[]>('/accounting/accounts'),
+  getChartOfAccounts: (refresh = false) => api.get<ChartAccount[]>(`/accounting/accounts${refresh ? '?refresh=true' : ''}`),
   getAccount: (id: string) => api.get<ChartAccount>(`/accounting/accounts/${id}`),
   createAccount: (data: Partial<ChartAccount>) => api.post<ChartAccount>('/accounting/accounts', data),
   updateAccount: (id: string, data: Partial<ChartAccount>) => api.put<ChartAccount>(`/accounting/accounts/${id}`, data),
   deleteAccount: (id: string) => api.delete(`/accounting/accounts/${id}`),
-  importAccounts: (data: ChartAccountCsvRow[]) => api.post<ChartAccount[]>('/accounting/accounts/import', data),
+  importAccounts: (data: ChartAccountCsvRow[], replace = false) => api.post<any>(`/accounting/accounts/import${replace ? '?replace=true' : ''}`, data),
   exportAccounts: () => api.get<string[][]>('/accounting/accounts/export'),
   getDefaultAccountsByIndustry: (industry: string) => api.get<any[]>(`/accounting/accounts/defaults/${industry}`),
   getAccountBalance: (id: string, dateFrom?: string, dateTo?: string) => api.get<any>(`/accounting/accounts/${id}/balance`, { params: { dateFrom, dateTo } }),

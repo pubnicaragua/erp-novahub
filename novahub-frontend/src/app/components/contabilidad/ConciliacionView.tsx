@@ -64,8 +64,18 @@ export function ConciliacionView() {
 
   const fetchAccounts = async () => {
     try {
-      const res = await contabilidadService.getChartOfAccounts();
-      setAccounts(res || []);
+      const res = await contabilidadService.getChartOfAccounts(true);
+      const tree = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+      const flatten = (items: any[]): any[] => {
+        const result: any[] = [];
+        for (const item of items) {
+          const { children, ...rest } = item;
+          result.push(rest);
+          if (Array.isArray(children) && children.length > 0) result.push(...flatten(children));
+        }
+        return result;
+      };
+      setAccounts(flatten(tree));
     } catch {
       // Silently fail
     }
@@ -362,7 +372,7 @@ export function ConciliacionView() {
               <Select value={form.accountId} onValueChange={(v) => setForm({ ...form, accountId: v })}>
                 <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
                 <SelectContent>
-                  {accounts.filter((a) => a.type?.toUpperCase() === 'BANK' || a.type?.toUpperCase() === 'CASH').map((a) => (
+                  {accounts.map((a) => (
                     <SelectItem key={a.id} value={a.id} className="text-xs">{a.code} - {a.name}</SelectItem>
                   ))}
                 </SelectContent>

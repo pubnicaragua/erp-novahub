@@ -14,6 +14,8 @@ import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useBranchScope } from '../hooks/useBranchScope';
+import { BranchScopeFilter } from './ui/BranchScopeFilter';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
@@ -23,6 +25,7 @@ interface FinanzasPageProps {
 
 export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: FinanzasPageProps) {
   const { user, canPerform } = useAuth();
+  const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const { displayCurrency, exchangeRate: globalRate, convertAmount } = useCurrency();
 
   const hasAccess = (moduleId: string) => {
@@ -50,6 +53,11 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const [recurringIncomes, setRecurringIncomes] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const fIncomes = filterByBranch(incomes);
+  const fExpenses = filterByBranch(expenses);
+  const fRecurringExpenses = filterByBranch(recurringExpenses);
+  const fRecurringIncomes = filterByBranch(recurringIncomes);
+  const fAccounts = filterByBranch(accounts);
 
   const normalizeListResponse = (response: any) => {
     if (Array.isArray(response)) return response;
@@ -349,8 +357,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     }
   };
 
-  const totalIncome = incomes.reduce((acc, i) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0);
-  const totalExpense = expenses.reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
+  const totalIncome = fIncomes.reduce((acc, i) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0);
+  const totalExpense = fExpenses.reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
   const balanceSymbol = displayCurrency === 'USD' ? '$' : 'C$';
 
   // Shared tab trigger class matching RH pattern — uses primary theme color
@@ -370,11 +378,17 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
             </h1>
             <div className="flex items-center gap-2 mt-2">
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                {incomes.length} ingresos · {expenses.length} gastos · Balance: {balanceSymbol}{(totalIncome - totalExpense).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                {fIncomes.length} ingresos · {fExpenses.length} gastos
               </Badge>
+              {isRestricted && (
+                <Badge variant="outline" className="border-amber-500/30 text-amber-600 bg-amber-500/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+                  {accessibleBranches.length} sucursal(es)
+                </Badge>
+              )}
             </div>
           </div>
         </div>
+        <BranchScopeFilter className="ml-auto" showLabel={false} />
       </div>
 
       {/* Main Navigation Tabs — matches RH pattern with primary theme colors */}
@@ -422,7 +436,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                 >
-                  <FinanceDashboardView incomes={incomes} expenses={expenses} recurringExpenses={recurringExpenses} recurringIncomes={recurringIncomes} accounts={accounts} />
+                  <FinanceDashboardView incomes={fIncomes} expenses={fExpenses} recurringExpenses={fRecurringExpenses} recurringIncomes={fRecurringIncomes} accounts={fAccounts} />
                 </motion.div>
               </TabsContent>
 
@@ -434,7 +448,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                 >
                   <FinanceTableView 
                     title="Libro de Ingresos Directos"
-                    data={incomes}
+                    data={fIncomes}
                     columns={INCOME_COLUMNS}
                     onUpdate={handleUpdateIncome}
                     onAdd={handleAddIncome}
@@ -459,7 +473,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                 >
                   <FinanceTableView 
                     title="Control de Egresos Operativos"
-                    data={expenses}
+                    data={fExpenses}
                     columns={EXPENSE_COLUMNS}
                     onUpdate={handleUpdateExpense}
                     onAdd={handleAddExpense}
@@ -488,7 +502,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                 >
                   <FinanceTableView 
                     title="Configuración de Gastos Periódicos"
-                    data={recurringExpenses}
+                    data={fRecurringExpenses}
                     columns={RECURRING_COLUMNS}
                     onUpdate={handleUpdateRecurring}
                     onAdd={handleAddRecurring}
@@ -513,7 +527,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                 >
                   <FinanceTableView 
                     title="Configuración de Ingresos Recurrentes"
-                    data={recurringIncomes}
+                    data={fRecurringIncomes}
                     columns={RECURRING_INCOME_COLUMNS}
                     onUpdate={handleUpdateRecurringIncome}
                     onAdd={handleAddRecurringIncome}
@@ -536,7 +550,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                 >
-                  <FinanceBalanceView incomes={incomes} expenses={expenses} recurringIncomes={recurringIncomes} recurringExpenses={recurringExpenses} />
+                  <FinanceBalanceView incomes={fIncomes} expenses={fExpenses} recurringIncomes={fRecurringIncomes} recurringExpenses={fRecurringExpenses} />
                 </motion.div>
               </TabsContent>
             </>

@@ -100,7 +100,7 @@ export function MovimientosView({ movements, warehouses }: MovimientosViewProps)
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
-              {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+              {(warehouses || []).map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -110,7 +110,7 @@ export function MovimientosView({ movements, warehouses }: MovimientosViewProps)
         </Button>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      <div className="rounded-lg border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">

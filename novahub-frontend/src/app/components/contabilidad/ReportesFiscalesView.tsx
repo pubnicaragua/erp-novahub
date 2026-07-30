@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  FileBarChart, FileText, Receipt, Users, Building2, Eye, ChevronDown, ChevronUp
+  FileBarChart, FileText, Receipt, Users, Building2, Eye, ChevronDown, ChevronUp, Download
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -19,6 +19,7 @@ import {
 } from '../ui/table';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 const statusStyles: Record<string, string> = {
   DRAFT: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -287,7 +288,7 @@ export function ReportesFiscalesView() {
                   </TableCell>
                   <TableCell className="text-xs">{r.period || 'N/A'}</TableCell>
                   <TableCell className="text-xs font-mono">{r.year || 'N/A'}</TableCell>
-                  <TableCell className="text-xs">{r.month ? months.find((m) => m.value === String(r.month))?.label || r.month : 'N/A'}</TableCell>
+                  <TableCell className="text-xs">{['IR'].includes(r.type) ? 'Anual' : r.month ? months.find((m) => m.value === String(r.month))?.label || r.month : 'N/A'}</TableCell>
                   <TableCell className="text-xs tabular-nums text-right">C$ {Number(r.totalAmount || 0).toLocaleString()}</TableCell>
                   <TableCell className="text-xs tabular-nums text-right">C$ {Number(r.taxAmount || 0).toLocaleString()}</TableCell>
                   <TableCell>
@@ -295,17 +296,43 @@ export function ReportesFiscalesView() {
                       {statusLabels[r.status || 'DRAFT']}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{r.generatedAt ? new Date(r.generatedAt).toLocaleDateString() : 'N/A'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'N/A'}</TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
-                      onClick={() => setShowMeta(r)}
-                      title="Ver metadatos"
-                    >
-                      <Eye className="size-4" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
+                        onClick={() => setShowMeta(r)}
+                        title="Ver detalle"
+                      >
+                        <Eye className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500"
+                        onClick={() => {
+                          const rows = [[
+                            'Tipo', 'Período', 'Monto Total', 'Impuesto', 'Estado',
+                            ...Object.keys(r.metadata || {}).filter(k => !['period','month','year'].includes(k))
+                          ]];
+                          const dataRow = [
+                            r.type, r.period, r.totalAmount, r.taxAmount, r.status,
+                            ...Object.keys(r.metadata || {}).filter(k => !['period','month','year'].includes(k)).map(k => r.metadata[k])
+                          ];
+                          rows.push(dataRow);
+                          const ws = XLSX.utils.aoa_to_sheet(rows);
+                          const wb = XLSX.utils.book_new();
+                          XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
+                          XLSX.writeFile(wb, `reporte-${r.type}-${r.period}.xlsx`);
+                          toast.success('Reporte exportado');
+                        }}
+                        title="Exportar Excel"
+                      >
+                        <Download className="size-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -318,15 +345,62 @@ export function ReportesFiscalesView() {
         <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg font-black uppercase tracking-tight">
-              Metadatos del Reporte
+              {showMeta?.type ? formatReportType(showMeta.type) : ''} · {showMeta?.period || ''}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              {showMeta?.type ? formatReportType(showMeta.type) : ''} · {showMeta?.period || ''}
+              Reporte en estado <strong>{statusLabels[showMeta?.status] || showMeta?.status}</strong>
             </DialogDescription>
           </DialogHeader>
-          <pre className="bg-muted/30 rounded-xl p-4 text-[11px] font-mono whitespace-pre-wrap overflow-x-auto max-h-[50vh]">
-            {JSON.stringify(showMeta, null, 2)}
-          </pre>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-xl bg-muted/30 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Período</p>
+                <p className="text-sm font-bold">{showMeta?.period || 'N/A'}</p>
+              </div>
+              <div className="rounded-xl bg-muted/30 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</p>
+                <p className="text-sm font-bold">{statusLabels[showMeta?.status] || showMeta?.status}</p>
+              </div>
+              <div className="rounded-xl bg-muted/30 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto Total</p>
+                <p className="text-sm font-bold tabular-nums">C$ {Number(showMeta?.totalAmount || 0).toLocaleString()}</p>
+              </div>
+              <div className="rounded-xl bg-muted/30 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Impuesto</p>
+                <p className="text-sm font-bold tabular-nums">C$ {Number(showMeta?.taxAmount || 0).toLocaleString()}</p>
+              </div>
+            </div>
+            {showMeta?.metadata && (
+              <div className="rounded-xl border border-border/30">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-4 pt-3 pb-2">Detalles del cálculo</p>
+                <table className="w-full text-[11px]">
+                  <thead className="bg-muted/20">
+                    <tr>
+                      <th className="text-left px-4 py-2 font-bold text-muted-foreground">Campo</th>
+                      <th className="text-right px-4 py-2 font-bold text-muted-foreground">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(showMeta.metadata).filter(([k]) => !['period','month'].includes(k)).map(([key, val]: [string, any]) => (
+                      <tr key={key} className="border-t border-border/10">
+                        <td className="px-4 py-1.5 font-medium">{{
+                          year: 'Año', netProfit: 'Utilidad Neta', irRate: 'Tasa IR',
+                          irAmount: 'IR Calculado', totalIngresos: 'Total Ingresos',
+                          totalGastos: 'Total Gastos', totalGross: 'Total Bruto',
+                          inssLaboral: 'INSS Laboral', inssPatronal: 'INSS Patronal',
+                          employerRate: 'Tasa Patronal', employeeRate: 'Tasa Laboral',
+                          totalAmount: 'Monto Total', taxAmount: 'Impuesto'
+                        }[key] || key}</td>
+                        <td className="px-4 py-1.5 text-right tabular-nums font-mono">
+                          {typeof val === 'number' ? (key === 'year' ? String(val) : key.includes('Rate') ? `${(val * 100).toFixed(1)}%` : `C$ ${val.toLocaleString()}`) : String(val)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -118,6 +118,9 @@ function normalizeErrorMessage(message?: string, status?: number, context?: stri
   if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network request failed')) {
     return 'No se pudo conectar con el servidor. Revisa tu conexion o confirma que el backend este encendido.';
   }
+  if (lower.includes('email') && (lower.includes('formato') || lower.includes('válido') || lower.includes('invalido'))) {
+    return 'Correo electrónico inválido. Verifica el formato del email ingresado (ej: contacto@empresa.com).';
+  }
   if (lower.includes('base de datos no esta sincronizada')) return `${prefix}${raw}`;
   if (lower.includes('column') && lower.includes('does not exist')) {
     return `${prefix}La base de datos no tiene una columna requerida por esta version del sistema. Aplica las migraciones pendientes.`;
