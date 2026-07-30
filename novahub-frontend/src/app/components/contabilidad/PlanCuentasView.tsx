@@ -24,7 +24,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import type { Currency } from '../../types';
 import type { AccountDetailType, AccountSubtype, AccountType, ChartAccountCsvRow } from '../../types/accounting';
-import { downloadCsv, parseCsvText, templateRows } from '../../utils/chartOfAccountsCsv';
+import { downloadCsv, downloadXlsx, parseCsvText, templateRows } from '../../utils/chartOfAccountsCsv';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface AccountNode {
@@ -159,6 +159,10 @@ export function PlanCuentasView() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [replaceAccounts, setReplaceAccounts] = useState(false);
+  const [importPreviewRows, setImportPreviewRows] = useState<ChartAccountCsvRow[]>([]);
+  const [importPreviewErrors, setImportPreviewErrors] = useState<string[]>([]);
+  const [importPreviewOpen, setImportPreviewOpen] = useState(false);
+  const [importFileName, setImportFileName] = useState('');
 
   const fetchAccounts = useCallback(async (refresh = false) => {
     setLoading(true);
@@ -196,7 +200,7 @@ export function PlanCuentasView() {
     }
   }, []);
 
-  useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
+  useEffect(() => { fetchAccounts(true); }, [fetchAccounts]);
 
   const flatList = useMemo(() => flattenTree(accounts), [accounts]);
 
@@ -352,9 +356,8 @@ export function PlanCuentasView() {
     }
   };
 
-  const handleImport = async () => {
-    if (!importFile) { toast.error('Selecciona un archivo CSV o Excel'); return; }
-    setImporting(true);
+  const parseImportFile = async () => {
+    if (!importFile) { toast.error('Selecciona un archivo CSV o Excel'); return null; }
     try {
       let csvRows: string[][];
       const fileName = importFile.name.toLowerCase();
@@ -371,7 +374,7 @@ export function PlanCuentasView() {
       }
 
       const nonEmpty = csvRows.filter(row => row.some(cell => String(cell ?? '').trim().length > 0));
-      if (nonEmpty.length < 2) { toast.error('El archivo no contiene datos'); return; }
+      if (nonEmpty.length < 2) { toast.error('El archivo no contiene datos'); return null; }
       const headers = (nonEmpty[0] ?? []).map(header => String(header).trim().toLowerCase());
       const rows = nonEmpty.slice(1).map(cols => {
         const row: Record<string, string> = {};
@@ -403,25 +406,72 @@ export function PlanCuentasView() {
         });
       }
 
-      if (valid.length > 0) {
-        const res: any = await contabilidadService.importAccounts(valid, replaceAccounts);
-        const msg = replaceAccounts
-          ? `${res?.imported ?? valid.length} importadas, ${res?.removed ?? 0} reemplazadas`
-          : `${res?.imported ?? valid.length} cuentas importadas${errors.length > 0 ? ` (${errors.length} errores)` : ''}`;
-        toast.success(msg);
-        setAccounts([]);
-        await fetchAccounts(true);
-      } else {
-        toast.error('No se encontraron cuentas válidas para importar');
+      return { valid, errors, fileName: importFile.name };
+    } catch (e: any) {
+      toast.error(e?.message || 'Error al leer el archivo');
+      return null;
+    }
+  };
+
+  const handlePreviewImport = async () => {
+    const result = await parseImportFile();
+    if (!result) return;
+    setImportPreviewRows(result.valid);
+    setImportPreviewErrors(result.errors);
+    setImportFileName(result.fileName);
+    setImportPreviewOpen(true);
+  };
+
+  const handleConfirmImport = async () => {
+    if (importPreviewRows.length === 0) { toast.error('No hay cuentas válidas para importar'); return; }
+    setImporting(true);
+    try {
+      const res: any = await contabilidadService.importAccounts(importPreviewRows, replaceAccounts);
+      
+      // Direct update from response — no fetch or reload needed
+      if (res?.accounts && Array.isArray(res.accounts)) {
+        const flatten = (items: any[]): any[] => {
+          const result: any[] = [];
+          for (const item of items) {
+            const { children, ...rest } = item;
+            result.push(rest);
+            if (Array.isArray(children) && children.length > 0) result.push(...flatten(children));
+          }
+          return result;
+        };
+        setAccounts(buildTree(
+          flatten(res.accounts).map((a: any) => ({
+            id: a.id, code: a.code ?? '', name: a.name ?? '',
+            type: (a.type ?? 'ASSET').toUpperCase() as AccountType,
+            parentId: a.parentId ?? null, balance: Number(a.balance ?? 0),
+            currency: a.currency ?? 'USD', isActive: a.isActive !== false,
+            subtype: a.subtype ?? 'DETAIL_ACCOUNT',
+            detailType: a.detailType ?? ((a.type === 'INCOME' || a.type === 'EXPENSE') ? 'INCOME_STATEMENT' : 'BALANCE_SHEET'),
+            allowManualEntry: a.allowManualEntry !== false && a.acceptsPostings !== false,
+            acceptsPostings: a.acceptsPostings !== false,
+            notes: a.notes ?? null, children: [], level: 0,
+            _count: a._count ?? { children: 0, transactions: 0 },
+          }))
+        ));
       }
+      
+      const msg = replaceAccounts
+        ? `${res?.imported ?? importPreviewRows.length} importadas, ${res?.removed ?? 0} reemplazadas`
+        : `${res?.imported ?? importPreviewRows.length} cuentas importadas${importPreviewErrors.length > 0 ? ` (${importPreviewErrors.length} errores)` : ''}`;
+      toast.success(msg);
+      setImportPreviewOpen(false);
       setImportOpen(false);
       setImportFile(null);
+      setImportPreviewRows([]);
+      setImportPreviewErrors([]);
     } catch (e: any) {
       toast.error(e?.message || 'Error al importar');
     } finally {
       setImporting(false);
     }
   };
+
+  const handleImport = handlePreviewImport;
 
   const renderTreeRow = (account: AccountNode) => {
     const hasChildren = account.children.length > 0;
@@ -919,7 +969,7 @@ export function PlanCuentasView() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="import-file">Archivo CSV</Label>
+              <Label htmlFor="import-file">Archivo Excel / CSV (.xlsx, .xls, .csv)</Label>
               <Input
                 id="import-file"
                 type="file"
@@ -942,7 +992,7 @@ export function PlanCuentasView() {
             </label>
 
             <Button variant="outline" size="sm" className="w-full" onClick={() => {
-              downloadCsv('plantilla_cuentas.csv', templateRows());
+              downloadXlsx('plantilla_cuentas.xlsx', templateRows());
             }}>
               <FileSpreadsheet className="w-4 h-4 mr-1" /> Descargar Plantilla
             </Button>
@@ -953,7 +1003,75 @@ export function PlanCuentasView() {
             </Button>
             <Button onClick={handleImport} disabled={!importFile || importing}>
               {importing && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
-              Importar
+              Previsualizar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview Dialog */}
+      <Dialog open={importPreviewOpen} onOpenChange={setImportPreviewOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5" />
+              Previsualizar importación de cuentas
+            </DialogTitle>
+            <DialogDescription>
+              {importFileName} — {importPreviewRows.length} cuentas válidas
+              {importPreviewErrors.length > 0 && ` · ${importPreviewErrors.length} errores`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-auto min-h-0 border rounded-lg">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 z-10 bg-muted">
+                <tr className="border-b">
+                  <th className="text-left p-2 font-bold uppercase tracking-wider">Código</th>
+                  <th className="text-left p-2 font-bold uppercase tracking-wider">Nombre</th>
+                  <th className="text-left p-2 font-bold uppercase tracking-wider">Tipo</th>
+                  <th className="text-left p-2 font-bold uppercase tracking-wider">Subtipo</th>
+                  <th className="text-left p-2 font-bold uppercase tracking-wider">Detalle</th>
+                  <th className="text-left p-2 font-bold uppercase tracking-wider">Moneda</th>
+                  <th className="text-left p-2 font-bold uppercase tracking-wider">Padre</th>
+                  <th className="text-center p-2 font-bold uppercase tracking-wider">Manual</th>
+                  <th className="text-center p-2 font-bold uppercase tracking-wider">Activa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importPreviewRows.map((row, i) => (
+                  <tr key={i} className="border-b border-border/20 hover:bg-muted/20">
+                    <td className="p-2 font-mono text-primary">{row.codigo}</td>
+                    <td className="p-2 font-medium">{row.nombre}</td>
+                    <td className="p-2">{row.tipo_cuenta}</td>
+                    <td className="p-2 text-muted-foreground">{row.subtipo}</td>
+                    <td className="p-2 text-muted-foreground">{row.tipo_detalle}</td>
+                    <td className="p-2">{row.moneda}</td>
+                    <td className="p-2 font-mono text-muted-foreground">{row.codigo_padre || '—'}</td>
+                    <td className="p-2 text-center">{row.permite_manual === '1' ? 'Sí' : 'No'}</td>
+                    <td className="p-2 text-center">{row.activa === '1' ? 'Sí' : 'No'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {importPreviewErrors.length > 0 && (
+            <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3">
+              <p className="text-xs font-bold text-rose-500 mb-1">Filas omitidas ({importPreviewErrors.length})</p>
+              <ul className="text-[10px] text-rose-400 space-y-0.5 list-disc list-inside">
+                {importPreviewErrors.map((err, i) => <li key={i}>{err}</li>)}
+              </ul>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportPreviewOpen(false)} disabled={importing}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmImport} disabled={importing || importPreviewRows.length === 0}
+              className="bg-primary text-primary-foreground">
+              {importing ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Importando...</> : `Importar ${importPreviewRows.length} cuenta(s)`}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -30,7 +30,7 @@ import autoTable from 'jspdf-autotable';
 interface Column {
   key: string;
   label: string;
-  type: 'text' | 'number' | 'date' | 'datetime' | 'select' | 'currency';
+  type: 'text' | 'number' | 'date' | 'datetime' | 'select' | 'currency' | 'source';
   options?: { value: string; label: string }[];
   editable?: boolean;
   render?: (value: any, item: any) => React.ReactNode;
@@ -88,7 +88,7 @@ export function FinanceTableView({
   // Pagination State
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
-  const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
+  const PAGE_SIZE_OPTIONS = [10, 20, 30, 50];
 
   useEffect(() => { setLocalData(data); }, [data]);
 
@@ -438,6 +438,14 @@ export function FinanceTableView({
         );
       }
       return <Badge variant="secondary" className="font-semibold uppercase text-[10px]">{label}</Badge>;
+    }
+    if (col.type === 'source') {
+      const isManual = ['Manual', 'manual', '', null, undefined].includes(value);
+      return (
+        <Badge className={cn("text-[10px] font-bold", isManual ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-primary/10 text-primary border border-primary/20")}>
+          {isManual ? 'Manual' : (value || 'Automático')}
+        </Badge>
+      );
     }
     return value || '-';
   };

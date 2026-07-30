@@ -98,6 +98,27 @@ export function downloadCsv(filename: string, rows: readonly (readonly unknown[]
   URL.revokeObjectURL(link.href);
 }
 
+export function downloadXlsx(filename: string, rows: readonly (readonly unknown[])[]): void {
+  const XLSX = (window as any).XLSX;
+  if (!XLSX) {
+    // Fallback to CSV if XLSX not available
+    downloadCsv(filename.replace(/\.xlsx$/i, '.csv'), rows);
+    return;
+  }
+  const ws = XLSX.utils.aoa_to_sheet([...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Cuentas');
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([wbout], { type: 'application/octet-stream' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+}
+
 export function templateRows(): string[][] {
   return [
     [...CHART_ACCOUNT_CSV_HEADERS],

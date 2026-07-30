@@ -3,7 +3,7 @@ import type { ChartAccount, ChartAccountCsvRow } from '../types/accounting';
 
 export const contabilidadService = {
   // Plan de Cuentas
-  getChartOfAccounts: (refresh = false) => api.get<ChartAccount[]>(`/accounting/accounts${refresh ? '?refresh=true' : ''}`),
+  getChartOfAccounts: (refresh = false) => api.get<ChartAccount[]>(`/accounting/accounts${refresh ? `?refresh=true&_t=${Date.now()}` : ''}`),
   getAccount: (id: string) => api.get<ChartAccount>(`/accounting/accounts/${id}`),
   createAccount: (data: Partial<ChartAccount>) => api.post<ChartAccount>('/accounting/accounts', data),
   updateAccount: (id: string, data: Partial<ChartAccount>) => api.put<ChartAccount>(`/accounting/accounts/${id}`, data),

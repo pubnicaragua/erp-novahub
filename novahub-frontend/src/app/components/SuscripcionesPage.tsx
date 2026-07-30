@@ -10,6 +10,7 @@ import { tenantsService } from '../services/tenants.service';
 import { rolesService } from '../services/roles.service';
 import { toast } from 'sonner';
 import { api } from '../services/api';
+import { TrialExtensionRequestsPanel } from './suscripciones/TrialExtensionRequestsPanel';
 import { 
   CheckCircle2, 
   Clock, 
@@ -786,7 +787,7 @@ export function SuscripcionesPage() {
       </Dialog>
 
       <Tabs defaultValue="active" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 lg:w-[400px] bg-muted/20 border border-border/50 p-1 h-12">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[600px] bg-muted/20 border border-border/50 p-1 h-12">
           <TabsTrigger value="active" className="text-muted-foreground hover:text-foreground hover:bg-muted/40 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground uppercase text-[10px] font-black tracking-widest gap-2">
             <Building2 className="size-4" /> Gestión Empresas
           </TabsTrigger>
@@ -797,6 +798,9 @@ export function SuscripcionesPage() {
                 {requests.filter(r => r.status === 'PENDING').length}
               </Badge>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="trial-extensions" className="text-muted-foreground hover:text-foreground hover:bg-muted/40 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground uppercase text-[10px] font-black tracking-widest gap-2">
+            <Clock className="size-4" /> Trial Ext.
           </TabsTrigger>
         </TabsList>
 
@@ -1019,6 +1023,9 @@ export function SuscripcionesPage() {
             )}
           </div>
         </TabsContent>
+        <TabsContent value="trial-extensions" className="mt-6">
+          <TrialExtensionRequestsPanel />
+        </TabsContent>
       </Tabs>
 
       <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
@@ -1047,6 +1054,16 @@ export function SuscripcionesPage() {
                     <Badge variant="outline" className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 ${u.isActive ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-red-500/10 text-red-400 border-red-400/30'}`}>
                       {u.isActive ? 'Activo' : 'Inactivo'}
                     </Badge>
+                      <button onClick={async () => {
+                        try {
+                          await api.patch(`/tenants/${selectedTenant.id}/users/${u.id}`, { isActive: !u.isActive });
+                          toast.success(u.isActive ? 'Usuario desactivado' : 'Usuario activado');
+                          setTenantUsers(prev => prev.map(p => p.id === u.id ? { ...p, isActive: !p.isActive } : p));
+                        } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error'); }
+                      }} className={`p-1.5 rounded-lg transition-colors ${u.isActive ? 'text-rose-500 hover:bg-rose-500/10' : 'text-emerald-500 hover:bg-emerald-500/10'}`}
+                      title={u.isActive ? 'Desactivar usuario' : 'Activar usuario'}>
+                        {u.isActive ? <X className="size-3.5" /> : <Check className="size-3.5" />}
+                      </button>
                     <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full" onClick={() => setPasswordDialogUser(u)} title="Cambiar Contraseña">
                       <KeyRound className="size-3" />
                     </Button>

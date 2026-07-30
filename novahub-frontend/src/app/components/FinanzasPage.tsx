@@ -1,12 +1,15 @@
 import { cn } from './ui/utils';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   DollarSign, TrendingUp, TrendingDown, BarChart3, 
   CalendarClock, Landmark, RotateCcw, Wallet,
-  AlertTriangle, Calendar,
+  AlertTriangle, Calendar, CalendarDays, Filter, X,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { FinanceDashboardView } from './finanzas/FinanceDashboardView';
 import { FinanceTableView } from './finanzas/FinanceTableView';
 import { FinanceBalanceView } from './finanzas/FinanceBalanceView';
@@ -28,6 +31,14 @@ interface FinanzasPageProps {
   isSidebarCollapsed?: boolean;
   onSubModuleChange?: (subModule?: string) => void;
 }
+
+const PERIOD_PRESETS = [
+  { label: 'Hoy', days: 0 },
+  { label: '7 días', days: 7 },
+  { label: 'Mes', days: 30 },
+  { label: 'Trimestre', days: 90 },
+  { label: 'Año', days: 365 },
+];
 
 export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: FinanzasPageProps) {
   const { user, canPerform } = useAuth();
@@ -61,11 +72,39 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const [recurringIncomes, setRecurringIncomes] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const fIncomes = filterByBranch(incomes);
-  const fExpenses = filterByBranch(expenses);
-  const fRecurringExpenses = filterByBranch(recurringExpenses);
-  const fRecurringIncomes = filterByBranch(recurringIncomes);
-  const fAccounts = filterByBranch(accounts);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [activePreset, setActivePreset] = useState<string>('');
+
+  const applyPreset = (label: string, days: number) => {
+    setActivePreset(label);
+    if (days === 0) {
+      const d = new Date(); setDateFrom(d.toISOString().split('T')[0]); setDateTo(d.toISOString().split('T')[0]);
+    } else {
+      const to = new Date(); const from = new Date(); from.setDate(from.getDate() - days);
+      setDateFrom(from.toISOString().split('T')[0]); setDateTo(to.toISOString().split('T')[0]);
+    }
+  };
+
+  const clearFilters = () => { setDateFrom(''); setDateTo(''); setActivePreset(''); };
+
+  const filterByDate = (items: any[]) => {
+    if (!dateFrom && !dateTo) return items;
+    return items.filter((item: any) => {
+      const d = item.date || item.createdAt;
+      if (!d) return true;
+      const dt = new Date(d);
+      if (dateFrom && dt < new Date(dateFrom)) return false;
+      if (dateTo) { const end = new Date(dateTo); end.setHours(23, 59, 59, 999); if (dt > end) return false; }
+      return true;
+    });
+  };
+
+  const fIncomes = filterByDate(filterByBranch(incomes));
+  const fExpenses = filterByDate(filterByBranch(expenses));
+  const fRecurringExpenses = filterByDate(filterByBranch(recurringExpenses)).filter((r: any) => Number(r.amount) > 0);
+  const fRecurringIncomes = filterByDate(filterByBranch(recurringIncomes)).filter((r: any) => Number(r.amount) > 0);
+  const fAccounts = filterByDate(filterByBranch(accounts));
 
   const normalizeListResponse = (response: any) => {
     if (Array.isArray(response)) return response;
@@ -160,7 +199,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const INCOME_COLUMNS = [
     { key: 'number', label: 'No. Recibo', type: 'text' as const, editable: false },
     { key: 'createdAt', label: 'Fecha Reg.', type: 'datetime' as const, editable: false },
-    { key: 'source', label: 'Origen', type: 'text' as const, editable: true },
+    { key: 'source', label: 'Origen', type: 'source' as const, editable: false },
     { key: 'description', label: 'Descripción', type: 'text' as const, editable: true },
     { key: 'category', label: 'Categoría', type: 'select' as const, editable: true },
     { key: 'amount', label: 'Monto', type: 'currency' as const, editable: true },
@@ -170,7 +209,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const EXPENSE_COLUMNS = [
     { key: 'number', label: 'No. Gasto', type: 'text' as const, editable: false },
     { key: 'createdAt', label: 'Fecha Reg.', type: 'datetime' as const, editable: false },
-    { key: 'source', label: 'Origen', type: 'text' as const, editable: true },
+    { key: 'source', label: 'Origen', type: 'source' as const, editable: false },
     { key: 'description', label: 'Descripción', type: 'text' as const, editable: true },
     { key: 'category', label: 'Categoría', type: 'select' as const, editable: true },
     { key: 'amount', label: 'Monto', type: 'currency' as const, editable: true },
@@ -312,6 +351,23 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl border border-border/40 bg-card/50">
+        <CalendarDays className="size-4 text-muted-foreground" />
+        {PERIOD_PRESETS.map(p => (
+          <button key={p.label} onClick={() => applyPreset(p.label, p.days)}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activePreset === p.label ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>
+            {p.label}
+          </button>
+        ))}
+        <div className="h-5 w-px bg-border mx-1" />
+        <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setActivePreset(''); }} className="h-8 w-36 text-xs" placeholder="Desde" />
+        <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setActivePreset(''); }} className="h-8 w-36 text-xs" placeholder="Hasta" />
+        {(dateFrom || dateTo || activePreset) && (
+          <button onClick={clearFilters} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground" title="Limpiar filtros"><X className="size-3.5" /></button>
+        )}
         <BranchScopeFilter className="ml-auto" showLabel={false} />
       </div>
 
@@ -343,7 +399,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
             <>
               <TabsContent value="resumen" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                  <FinanceDashboardView incomes={fIncomes} expenses={fExpenses} recurringExpenses={fRecurringExpenses} recurringIncomes={fRecurringIncomes} accounts={fAccounts} />
+                  <FinanceDashboardView incomes={fIncomes} expenses={fExpenses} recurringExpenses={fRecurringExpenses} recurringIncomes={fRecurringIncomes} accounts={fAccounts} onNavigate={(tab) => handleTabChange(tab)} />
                 </motion.div>
               </TabsContent>
 

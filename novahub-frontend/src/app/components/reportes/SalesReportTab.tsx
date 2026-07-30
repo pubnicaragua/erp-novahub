@@ -129,7 +129,14 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   const totalPending = useMemo(() => Math.max(0, totalBilled - totalPaid), [totalBilled, totalPaid]);
 
   const totalCost = useMemo(() => fInv.reduce((acc, i) => {
-    const cost = Number(i.totalCost || Number(i.total || 0) * 0.4);
+    let cost = Number(i.totalCost || 0);
+    if (!cost && i.items) {
+      cost = i.items.reduce((sum: number, item: any) => {
+        const itemCost = Number(item.costPrice || item.product?.costPrice || 0);
+        return sum + itemCost * Number(item.quantity || 1);
+      }, 0);
+    }
+    if (!cost) cost = 0;
     return acc + (i.currency === 'USD' ? cost * (i.exchangeRate || exchangeRate) : cost);
   }, 0), [fInv, exchangeRate]); 
   
@@ -221,7 +228,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   }, [monthlyData]);
 
   const projectionData = useMemo(() => {
-    if (monthlyData.length < 3) return monthlyData.map(d => ({ ...d, projection: null }));
+    if (monthlyData.length < 6) return monthlyData.map(d => ({ ...d, projection: null }));
     const recent = monthlyData.slice(-3);
     const avgGrowth = recent.reduce((sum, d, i) => {
       if (i === 0) return sum;
@@ -671,12 +678,21 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
               <p className="text-2xl font-black text-emerald-500">{customers.length}</p>
             </div>
             <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/10">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase">Ventas/Cliente</p>
-              <p className="text-2xl font-black text-orange-500">{(fInv.length / Math.max(customers.length, 1)).toFixed(1)}</p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase">Facturas x Cliente</p>
+              <p className="text-2xl font-black text-orange-500">{customers.length > 0 ? (fInv.length / Math.max(customers.length, 1)).toFixed(1) : 'N/A'}</p>
             </div>
             <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase">Ticket Promedio</p>
-              <p className="text-2xl font-black text-blue-500">{formatConvertedAmount(fInv.length > 0 ? totalBilled / fInv.length : 0, 'NIO')}</p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase">Días Prom. Cobro</p>
+              <p className="text-2xl font-black text-blue-500">
+                {fInv.length > 0 && totalPaid > 0
+                  ? (fInv.reduce((acc: number, i: any) => {
+                      const d = i.dueDate || i.date ? new Date(i.dueDate || i.date) : null;
+                      const pd = i.paidDate || i.paymentDate ? new Date(i.paidDate || i.paymentDate) : null;
+                      if (!d || !pd) return acc;
+                      return acc + Math.abs(Math.floor((pd.getTime() - d.getTime()) / (1000 * 60 * 60 * 24)));
+                    }, 0) / Math.max(fInv.filter((i: any) => i.paidDate || i.paymentDate).length, 1)).toFixed(1)
+                  : 'N/A'}
+              </p>
             </div>
             <div className="p-4 rounded-xl bg-violet-500/5 border border-violet-500/10 flex items-center gap-3">
               <div className="p-2 rounded-lg bg-violet-500/10">

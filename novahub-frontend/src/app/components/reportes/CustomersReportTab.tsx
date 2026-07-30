@@ -498,10 +498,10 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                       <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
-                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11, fontWeight: 600 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
-                  <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.06)" opacity={0.3} />
+                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: 600 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
+                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px', fontSize: '12px' }} />
                   <Area type="monotone" dataKey="ventas" name="Ventas" stroke="#3b82f6" strokeWidth={2.5} fill="url(#cusGrad)" dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -566,7 +566,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                     <Cell fill="#10b981" />
                     <Cell fill="#94a3b8" />
                   </Pie>
-                  <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
+                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px', fontSize: '12px' }} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>

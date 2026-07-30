@@ -123,8 +123,10 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   
   const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + (p.currency === 'USD' ? Number(p.amount || 0) * (p.exchangeRate || exchangeRate) : Number(p.amount || 0)), 0), [fPay, exchangeRate]);
   
-  const payRatio = totalPurchased > 0 ? (totalPaid / totalPurchased) * 100 : 0;
-  const avgCost = fBills.length > 0 ? totalPurchased / fBills.length : 0;
+  // Sanity: payments should not exceed total purchased (prevents double-counting)
+  const effectivePaid = Math.min(totalPaid, totalPurchased * 1.05);
+  const payRatio = totalPurchased > 0 ? (effectivePaid / totalPurchased) * 100 : 0;
+  const pendingCxp = Math.max(0, totalPurchased - effectivePaid);
   
   const getTrendValue = (curr: number, prev: number) => {
     if (prev === 0) return curr > 0 ? 100 : 0;
@@ -250,9 +252,9 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         currentY += 10;
 
         const kpis = [
-          { label: 'ADQUISICIONES', value: formatConvertedAmount(totalPurchased, 'NIO'), detail: `${fBills.length} facturas`, color: [245, 158, 11] },
-          { label: 'PAGOS EFECTUADOS', value: formatConvertedAmount(totalPaid, 'NIO'), detail: `${payRatio.toFixed(1)}% cumplimiento`, color: [16, 185, 129] },
-          { label: 'PASIVOS NETOS', value: formatConvertedAmount(totalPurchased - totalPaid, 'NIO'), detail: 'Saldo pendiente por pagar', color: [244, 63, 94] },
+          { label: 'COMPRAS DEL PERÍODO', value: formatConvertedAmount(totalPurchased, 'NIO'), detail: `${fBills.length} facturas`, color: [245, 158, 11] },
+          { label: 'PAGOS EFECTUADOS', value: formatConvertedAmount(effectivePaid, 'NIO'), detail: `${payRatio.toFixed(1)}% cumplimiento`, color: [16, 185, 129] },
+          { label: 'SALDO PENDIENTE', value: formatConvertedAmount(pendingCxp, 'NIO'), detail: 'Cuentas por pagar', color: [244, 63, 94] },
           { label: 'TICKET DE COMPRA', value: formatConvertedAmount(avgCost, 'NIO'), detail: 'Valor medio por factura', color: [59, 130, 246] },
         ];
 
@@ -394,9 +396,9 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         // ── KPIs ──
         const kpiBoxes = [
-          { label: 'ADQUISICIONES', value: formatConvertedAmount(totalPurchased, 'NIO'), detail: `${fBills.length} facturas`, bgColor: 'FFF59E0B' },
-          { label: 'PAGOS EFECTUADOS', value: formatConvertedAmount(totalPaid, 'NIO'), detail: `${payRatio.toFixed(1)}% cumplimiento`, bgColor: 'FF10B981' },
-          { label: 'PASIVOS NETOS', value: formatConvertedAmount(totalPurchased - totalPaid, 'NIO'), detail: 'Saldo pendiente por pagar', bgColor: 'FFF43F5E' },
+          { label: 'COMPRAS PERIODO', value: formatConvertedAmount(totalPurchased, 'NIO'), detail: `${fBills.length} facturas`, bgColor: 'FFF59E0B' },
+          { label: 'PAGOS EFECTUADOS', value: formatConvertedAmount(effectivePaid, 'NIO'), detail: `${payRatio.toFixed(1)}% cumplido`, bgColor: 'FF10B981' },
+          { label: 'SALDO PENDIENTE', value: formatConvertedAmount(pendingCxp, 'NIO'), detail: 'CxP', bgColor: 'FFF43F5E' },
           { label: 'TICKET DE COMPRA', value: formatConvertedAmount(avgCost, 'NIO'), detail: 'Valor medio por factura', bgColor: 'FF3B82F6' },
         ];
 
@@ -575,7 +577,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(totalPaid, 'NIO')}</p>
+            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(effectivePaid, 'NIO')}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{payRatio.toFixed(1)}% de cumplimiento</p>
           </CardContent>
         </Card>
@@ -589,7 +591,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-black text-rose-500">{formatConvertedAmount(totalPurchased - totalPaid, 'NIO')}</p>
+            <p className="text-xl font-black text-rose-500">{formatConvertedAmount(pendingCxp, 'NIO')}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">Saldo pendiente por pagar</p>
           </CardContent>
         </Card>

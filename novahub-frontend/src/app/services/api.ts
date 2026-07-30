@@ -28,7 +28,7 @@ function stableRequestKey(value: unknown): string {
 }
 
 interface ApiErrorBody {
-  message?: string | string[];
+  message?: string | string[] | Record<string, any>;
   error?: string;
   details?: string | string[];
   code?: string;
@@ -102,44 +102,36 @@ function normalizeErrorMessage(message?: string, status?: number, context?: stri
   const lower = raw.toLowerCase();
   const prefix = context ? `No se pudo ${context}. ` : '';
 
-  if (!raw) {
-    if (status === 400) return `${prefix}Revisa los datos enviados; hay informacion incompleta o invalida.`;
-    if (status === 401) return 'Tu sesion expiro o no esta autorizada. Inicia sesion nuevamente.';
-    if (status === 403) return `${prefix}Tu usuario no tiene permisos para realizar esta accion.`;
-    if (status === 404) return `${prefix}No se encontro el registro solicitado o ya no esta disponible.`;
-    if (status === 409) return `${prefix}Hay un conflicto con un registro existente.`;
-    if (status === 422) return `${prefix}La informacion enviada no cumple las reglas de validacion.`;
-    if ((status || 0) >= 500) {
-      return `${prefix}El servidor encontro un problema interno (HTTP ${status}). Si el modulo fue actualizado recientemente, verifica que las migraciones de base de datos esten aplicadas.`;
+  // Always prefer the backend's message when available
+  if (raw) {
+    // Only use custom replacements for known technical messages
+    if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network request failed')) {
+      return 'No se pudo conectar con el servidor. Revisa tu conexion o confirma que el backend este encendido.';
     }
-    return `${prefix}Ocurrio un error inesperado.`;
+    if (lower.includes('column') && lower.includes('does not exist')) {
+      return `${prefix}La base de datos no tiene una columna requerida por esta version del sistema. Aplica las migraciones pendientes.`;
+    }
+    if (lower.includes('unique constraint failed') || lower.includes('already exists')) {
+      return `${prefix}Ya existe un registro con esos datos.`;
+    }
+    if (lower.startsWith('http error') && status) {
+      return normalizeErrorMessage('', status, context);
+    }
+    // Return the backend message as-is (with prefix for context)
+    return prefix && !lower.startsWith('no se pudo') ? `${prefix}${raw}` : raw;
   }
 
-  if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network request failed')) {
-    return 'No se pudo conectar con el servidor. Revisa tu conexion o confirma que el backend este encendido.';
+  // Generic fallbacks when no backend message
+  if (status === 400) return `${prefix}Revisa los datos enviados; hay informacion incompleta o invalida.`;
+  if (status === 401) return 'Tu sesion expiro o no esta autorizada. Inicia sesion nuevamente.';
+  if (status === 403) return `${prefix}Tu usuario no tiene permisos para realizar esta accion.`;
+  if (status === 404) return `${prefix}No se encontro el registro solicitado o ya no esta disponible.`;
+  if (status === 409) return `${prefix}Hay un conflicto con un registro existente.`;
+  if (status === 422) return `${prefix}La informacion enviada no cumple las reglas de validacion.`;
+  if ((status || 0) >= 500) {
+    return `${prefix}El servidor encontro un problema interno (HTTP ${status}). Si el modulo fue actualizado recientemente, verifica que las migraciones de base de datos esten aplicadas.`;
   }
-  if (lower.includes('email') && (lower.includes('formato') || lower.includes('válido') || lower.includes('invalido'))) {
-    return 'Correo electrónico inválido. Verifica el formato del email ingresado (ej: contacto@empresa.com).';
-  }
-  if (lower.includes('base de datos no esta sincronizada')) return `${prefix}${raw}`;
-  if (lower.includes('column') && lower.includes('does not exist')) {
-    return `${prefix}La base de datos no tiene una columna requerida por esta version del sistema. Aplica las migraciones pendientes.`;
-  }
-  if (lower.includes('forbidden')) return `${prefix}Tu usuario no tiene permisos para realizar esta accion.`;
-  if (lower.includes('unauthorized')) return 'Tu sesion expiro o no esta autorizada. Inicia sesion nuevamente.';
-  if (lower.includes('not found')) return `${prefix}No se encontro el registro solicitado o ya no esta disponible.`;
-  if (lower.includes('internal server error')) {
-    return `${prefix}El servidor encontro un problema interno (HTTP ${status || 500}). Revisa el log del backend para ver la causa exacta.`;
-  }
-  if (lower.includes('bad request')) return `${prefix}Revisa los datos enviados; hay informacion incompleta o invalida.`;
-  if (lower.includes('unique constraint failed') || lower.includes('already exists')) {
-    return `${prefix}Ya existe un registro con esos datos.`;
-  }
-  if (lower.startsWith('http error') && status) {
-    return normalizeErrorMessage('', status, context);
-  }
-
-  return prefix && !lower.startsWith('no se pudo') ? `${prefix}${raw}` : raw;
+  return `${prefix}Ocurrio un error inesperado.`;
 }
 
 export function getApiErrorMessage(error: unknown, fallback: string): string {
@@ -150,7 +142,7 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
 function extractServerMessages(errorBody: ApiErrorBody | null) {
   if (!errorBody) return [];
   return [
-    ...asTextList(errorBody.message),
+    ...asTextList(typeof errorBody.message === 'object' ? (errorBody.message as any)?.message || (errorBody.message as any)?.error : errorBody.message),
     ...asTextList(errorBody.details),
     ...asTextList(errorBody.error),
   ];
@@ -194,11 +186,21 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       errorBody = null;
     }
 
-    if (errorBody?.code === 'TRIAL_EXPIRED') {
-      window.dispatchEvent(new CustomEvent('trial-expired', { detail: errorBody }));
+    if (errorBody?.code === 'TRIAL_EXPIRED' || (errorBody?.message && typeof errorBody.message === 'object' && (errorBody.message as any)?.code === 'TRIAL_EXPIRED')) {
+      const innerMsg = typeof errorBody.message === 'object' ? (errorBody.message as any)?.message : errorBody.message;
+      // Dispatch with code at the top level for App.tsx listener
+      const detail = { ...errorBody, code: 'TRIAL_EXPIRED', message: innerMsg };
+      window.dispatchEvent(new CustomEvent('trial-expired', { detail }));
+      const err = new Error(innerMsg || 'Tu período de prueba ha terminado. Actualiza tu plan para continuar.');
+      err.name = 'TrialExpiredError';
+      throw err;
     }
 
-    const messages = extractServerMessages(errorBody);
+    // Handle nested message objects (e.g., ForbiddenException wrapping)
+    const rawMessage = typeof errorBody?.message === 'object' && errorBody.message !== null
+      ? (errorBody.message as any)?.message || (errorBody.message as any)?.error || ''
+      : errorBody?.message || '';
+    const messages = extractServerMessages(rawMessage ? { ...errorBody, message: rawMessage } : errorBody);
     throw new ApiRequestError(
       normalizeErrorMessage(messages.join('. '), response.status, context),
       response.status,

@@ -67,18 +67,29 @@ export function FinanceCashView() {
   const cashTotal = cashAccounts.reduce((a: number, ac: any) => a + Number(ac.balance || 0), 0)
   const bankTotal = bankAccs.reduce((a: number, ac: any) => a + Number(ac.balance || 0), 0)
 
-  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun']
-  const balanceHistory = months.map((month, i) => ({
-    month, saldo: totalBalance * (0.7 + (i / months.length) * 0.6),
-    entradas: (salesInvoices.reduce((a: number, inv: any) => a + Number(inv.total || 0), 0) / months.length) * (0.8 + Math.random() * 0.4),
-    salidas: (supplierInvoices.reduce((a: number, inv: any) => a + Number(inv.total || 0), 0) / months.length) * (0.8 + Math.random() * 0.4),
-  }))
+  // Aggregate real monthly data from invoices + payments
+  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+  const now = new Date()
+  const balanceHistory = months.slice(0, now.getMonth() + 1).map((month, i) => {
+    const m = String(i + 1).padStart(2, '0')
+    const y = now.getFullYear()
+    const entradas = salesInvoices
+      .filter((inv: any) => { const d = inv.date || inv.createdAt; return d && d.startsWith(`${y}-${m}`) && String(inv.status || '').toUpperCase() !== 'CANCELLED' })
+      .reduce((a: number, inv: any) => a + Number(inv.total || 0), 0)
+    const salidas = supplierInvoices
+      .filter((inv: any) => { const d = inv.date || inv.createdAt; return d && d.startsWith(`${y}-${m}`) && String(inv.status || '').toUpperCase() !== 'CANCELLED' })
+      .reduce((a: number, inv: any) => a + Number(inv.total || 0), 0)
+    const pags = paymentsMade
+      .filter((p: any) => { const d = p.date || p.createdAt; return d && d.startsWith(`${y}-${m}`) })
+      .reduce((a: number, p: any) => a + Number(p.amount || 0), 0)
+    return { month, saldo: entradas - salidas - pags, entradas, salidas: salidas + pags }
+  })
 
   const distribution = [
     ...bankAccs.map((a: any) => ({ name: a.name || 'Banco', value: Number(a.balance || 0) })),
     ...cashAccounts.map((a: any) => ({ name: a.name || 'Caja', value: Number(a.balance || 0) })),
   ]
-  if (distribution.length === 0) distribution.push({ name: 'Efectivo', value: totalBalance * 0.3 }, { name: 'Bancos', value: totalBalance * 0.7 })
+  if (distribution.length === 0) distribution.push({ name: 'Efectivo', value: 0 }, { name: 'Bancos', value: 0 })
 
   const subtypeLabel = (s: string) => {
     const map: Record<string, string> = { CASH: 'Efectivo', BANK: 'Banco', DETAIL_ACCOUNT: 'Cuenta Detalle', GROUP_ACCOUNT: 'Cuenta Grupo', PRINCIPAL_ACCOUNT: 'Cuenta Principal' }

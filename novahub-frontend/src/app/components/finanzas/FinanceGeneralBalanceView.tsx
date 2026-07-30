@@ -21,6 +21,8 @@ export function FinanceGeneralBalanceView({ incomes, expenses, accounts }: Props
   const totalAssets = assetAccounts.reduce((a: number, acc: any) => a + Number(acc.balance || 0), 0)
   const totalLiabilities = liabilityAccounts.reduce((a: number, acc: any) => a + Number(acc.balance || 0), 0)
   const totalEquity = equityAccounts.reduce((a: number, acc: any) => a + Number(acc.balance || 0), 0)
+  const totalLiabilitiesEquity = totalLiabilities + totalEquity + netIncome
+  const difference = totalAssets - totalLiabilitiesEquity
 
   return (
     <div className="space-y-6">
@@ -54,8 +56,17 @@ export function FinanceGeneralBalanceView({ incomes, expenses, accounts }: Props
         </Card>
       </div>
 
-      <div className="text-xs text-muted-foreground text-center py-4">
-        Activos ({fmt(totalAssets)}) = Pasivos ({fmt(totalLiabilities)}) + Patrimonio ({fmt(totalEquity + netIncome)})
+      <div className={`text-xs text-center py-4 px-4 rounded-xl ${Math.abs(difference) > 1 ? 'bg-rose-500/10 border border-rose-500/20' : 'bg-emerald-500/5 border border-emerald-500/20'}`}>
+        <p className={Math.abs(difference) > 1 ? 'text-rose-500' : 'text-emerald-500'}>
+          Activos ({fmt(totalAssets)}) = Pasivos ({fmt(totalLiabilities)}) + Patrimonio ({fmt(totalEquity + netIncome)})
+        </p>
+        {Math.abs(difference) > 1 ? (
+          <p className="text-rose-400 font-bold mt-1">
+            Diferencia: {fmt(difference)} — Revisar saldos de cuentas contables
+          </p>
+        ) : (
+          <p className="text-emerald-400 mt-1">✓ Balance cuadra correctamente</p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

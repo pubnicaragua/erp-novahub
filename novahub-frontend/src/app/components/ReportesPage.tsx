@@ -130,13 +130,15 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
             { id: 'reportes-clientes', label: 'Clientes', module: 'REPORTS_CLIENTS' },
             { id: 'reportes-proveedores', label: 'Proveedores', module: 'REPORTS_PROVIDERS' },
             { id: 'reportes-rrhh', label: 'Recursos Humanos', module: 'REPORTS_HR' },
-            { id: 'reportes-suscripciones', label: 'Suscripciones', module: 'REPORTS_SUBSCRIPTIONS' }
-          ].map((tab) => {
+            { id: 'reportes-suscripciones', label: 'Suscripciones', module: 'REPORTS_SUBSCRIPTIONS', superOnly: true }
+          ].map((tab: any) => {
             const hasRequired = user?.enabledModules?.includes(tab.module);
             const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('REPORTS_'));
             const hasFallback = user?.enabledModules?.includes('REPORTS') && !hasSpecificSubmodules;
             const hasAccess = !user?.enabledModules || hasRequired || hasFallback;
+            const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.email === 'admin@novahub.com';
             if (!hasAccess) return null;
+            if (tab.superOnly && !isSuperAdmin) return null;
             return (
               <TabsTrigger 
                 key={tab.id}

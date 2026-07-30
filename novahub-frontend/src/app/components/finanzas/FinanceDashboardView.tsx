@@ -20,6 +20,7 @@ interface Props {
   recurringExpenses: any[];
   recurringIncomes?: any[];
   accounts?: any[];
+  onNavigate?: (tab: string) => void;
 }
 
 const AXIS_TICK = { fontSize: 11, fill: '#9ca3af', fontWeight: 500 }
@@ -39,7 +40,7 @@ function TooltipCard({ active, payload, label, formatter }: any) {
   )
 }
 
-export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, accounts }: Props) {
+export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, accounts, onNavigate }: Props) {
   const { displayCurrency, convertAmount } = useCurrency();
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
 
@@ -61,16 +62,18 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   const netCashFlow = totalIncome - totalExpense;
   const marginPct = totalIncome > 0 ? ((netCashFlow / totalIncome) * 100) : 0;
 
-  const totalCxc = useMemo(() => salesInvoices.reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [salesInvoices]);
-  const totalCxp = useMemo(() => supplierInvoices.reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [supplierInvoices]);
-  const cxcOverdue = useMemo(() => salesInvoices.filter((inv: any) => {
+  const pendingSalesInvoices = useMemo(() => salesInvoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' }), [salesInvoices]);
+  const pendingSupplierInvoices = useMemo(() => supplierInvoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' }), [supplierInvoices]);
+  const totalCxc = useMemo(() => pendingSalesInvoices.reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [pendingSalesInvoices]);
+  const totalCxp = useMemo(() => pendingSupplierInvoices.reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [pendingSupplierInvoices]);
+  const cxcOverdue = useMemo(() => pendingSalesInvoices.filter((inv: any) => {
     const due = inv.dueDate ? new Date(inv.dueDate) : null;
     return due && due < new Date() && Number(inv.balanceDue || inv.total || 0) > 0;
-  }).reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [salesInvoices]);
-  const cxpOverdue = useMemo(() => supplierInvoices.filter((inv: any) => {
+  }).reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [pendingSalesInvoices]);
+  const cxpOverdue = useMemo(() => pendingSupplierInvoices.filter((inv: any) => {
     const due = inv.dueDate ? new Date(inv.dueDate) : null;
     return due && due < new Date() && Number(inv.balanceDue || inv.total || 0) > 0;
-  }).reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [supplierInvoices]);
+  }).reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [pendingSupplierInvoices]);
   const bankBalance = useMemo(() => bankAccounts.reduce((a, acc: any) => a + Number(acc.balance || 0), 0), [bankAccounts]);
 
   const activeRecurringExpenses = useMemo(() => recurringExpenses.filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringExpenses]);
@@ -100,11 +103,11 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   const agingData = useMemo(() => {
     const ranges = [{ label: '0-30 días', min: 0, max: 30 }, { label: '31-60 días', min: 31, max: 60 }, { label: '61-90 días', min: 61, max: 90 }, { label: '+90 días', min: 91, max: Infinity }];
     return ranges.map(r => {
-      const cxcAmt = salesInvoices.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= r.min && days <= r.max && Number(inv.balanceDue || inv.total || 0) > 0; }).reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0);
-      const cxpAmt = supplierInvoices.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= r.min && days <= r.max && Number(inv.balanceDue || inv.total || 0) > 0; }).reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0);
+      const cxcAmt = pendingSalesInvoices.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= r.min && days <= r.max && Number(inv.balanceDue || inv.total || 0) > 0; }).reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0);
+      const cxpAmt = pendingSupplierInvoices.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= r.min && days <= r.max && Number(inv.balanceDue || inv.total || 0) > 0; }).reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0);
       return { label: r.label, cxc: cxcAmt, cxp: cxpAmt };
     });
-  }, [salesInvoices, supplierInvoices]);
+  }, [pendingSalesInvoices, pendingSupplierInvoices]);
 
   const projectData = useMemo(() => {
     const last = monthlyData.length > 0 ? monthlyData[monthlyData.length - 1] : null;
@@ -128,12 +131,12 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-        <KpiCard icon={Landmark} label="Saldo Disponible" value={fmt(bankBalance)} />
-        <KpiCard icon={TrendingUp} label="Ingresos Cobrados" value={fmt(totalIncome)} />
-        <KpiCard icon={TrendingDown} label="Pagos Realizados" value={fmt(totalExpense)} />
+        <KpiCard icon={Landmark} label="Saldo Disponible" value={fmt(bankBalance)} onClick={() => onNavigate?.('caja-bancos')} />
+        <KpiCard icon={TrendingUp} label="Ingresos Cobrados" value={fmt(totalIncome)} onClick={() => onNavigate?.('ingresos')} />
+        <KpiCard icon={TrendingDown} label="Pagos Realizados" value={fmt(totalExpense)} onClick={() => onNavigate?.('gastos')} />
         <KpiCard icon={DollarSign} label="Flujo Neto" value={fmt(netCashFlow)} />
-        <KpiCard icon={BarChart3} label="Total por Cobrar" value={fmt(totalCxc)} sub={`${cxcOverdue > 0 ? fmt(cxcOverdue) + ' vencido' : 'Sin vencidos'}`} />
-        <KpiCard icon={BarChart3} label="Total por Pagar" value={fmt(totalCxp)} sub={`${cxpOverdue > 0 ? fmt(cxpOverdue) + ' vencido' : 'Sin vencidos'}`} />
+        <KpiCard icon={BarChart3} label="Total por Cobrar" value={fmt(totalCxc)} sub={`${cxcOverdue > 0 ? fmt(cxcOverdue) + ' vencido' : 'Sin vencidos'}`} onClick={() => onNavigate?.('cuentas-cobrar')} />
+        <KpiCard icon={BarChart3} label="Total por Pagar" value={fmt(totalCxp)} sub={`${cxpOverdue > 0 ? fmt(cxpOverdue) + ' vencido' : 'Sin vencidos'}`} onClick={() => onNavigate?.('cuentas-pagar')} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -240,7 +243,8 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
             {incomes.length === 0 ? (
               <div className="text-center py-10 text-xs text-muted-foreground"><TrendingUp className="size-6 mx-auto mb-2 text-muted-foreground/30" />Sin ingresos registrados</div>
             ) : (
-              incomes.slice(0, 5).map((inc: any) => (
+              <>
+              {incomes.slice(0, 5).map((inc: any) => (
                 <div key={inc.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0 group hover:bg-muted/30 -mx-2 px-2 rounded-lg transition-colors">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="size-7 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0"><ArrowUpRight className="size-3.5 text-emerald-500" /></div>
@@ -251,7 +255,13 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                   </div>
                   <span className="text-xs font-black text-emerald-500 shrink-0 ml-2">{fmt(convertAmount(inc.amount || 0, inc.currency, inc.exchangeRate))}</span>
                 </div>
-              ))
+              ))}
+              {incomes.length > 5 && (
+                <button onClick={() => onNavigate?.('ingresos')} className="w-full mt-2 py-2 text-[10px] font-black uppercase tracking-widest text-primary hover:text-primary/80 transition-colors">
+                  Ver todos ({incomes.length}) →
+                </button>
+              )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -266,7 +276,8 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
             {expenses.length === 0 ? (
               <div className="text-center py-10 text-xs text-muted-foreground"><TrendingDown className="size-6 mx-auto mb-2 text-muted-foreground/30" />Sin gastos registrados</div>
             ) : (
-              expenses.slice(0, 5).map((exp: any) => (
+              <>
+              {expenses.slice(0, 5).map((exp: any) => (
                 <div key={exp.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0 group hover:bg-muted/30 -mx-2 px-2 rounded-lg transition-colors">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="size-7 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0"><ArrowDownRight className="size-3.5 text-rose-500" /></div>
@@ -277,7 +288,13 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                   </div>
                   <span className="text-xs font-black text-rose-500 shrink-0 ml-2">{fmt(convertAmount(exp.amount || 0, exp.currency, exp.exchangeRate))}</span>
                 </div>
-              ))
+              ))}
+              {expenses.length > 5 && (
+                <button onClick={() => onNavigate?.('gastos')} className="w-full mt-2 py-2 text-[10px] font-black uppercase tracking-widest text-primary hover:text-primary/80 transition-colors">
+                  Ver todos ({expenses.length}) →
+                </button>
+              )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -286,9 +303,9 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   );
 }
 
-function KpiCard({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) {
+function KpiCard({ icon: Icon, label, value, sub, onClick }: { icon: any; label: string; value: string; sub?: string; onClick?: () => void }) {
   return (
-    <Card className="rounded-xl border-border/40 bg-card shadow-sm">
+    <Card className={`rounded-xl border-border/40 bg-card shadow-sm ${onClick ? 'cursor-pointer hover:border-primary/40 hover:shadow-md transition-all' : ''}`} onClick={onClick}>
       <CardContent className="p-3">
         <div className="flex items-start justify-between">
           <div className="space-y-0.5 min-w-0 flex-1">
