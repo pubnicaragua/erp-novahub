@@ -76,7 +76,6 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   
   const [products, setProducts] = useState<any[]>([]);
   const [movements, setMovements] = useState<any[]>([]);
-  const [adjustments, setAdjustments] = useState<any[]>([]);
   const [lowStock, setLowStock] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -85,15 +84,13 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     const fetch = async () => {
       setLoading(true);
       try {
-        const [prodRes, movRes, adjRes, lowRes] = await Promise.all([
+        const [prodRes, movRes, lowRes] = await Promise.all([
           inventoryService.getProducts().catch(() => ({ data: [] })),
           inventoryService.getMovements().catch(() => ({ data: [] })),
-          inventoryService.getAdjustments().catch(() => ({ data: [] })),
           inventoryService.getLowStockProducts().catch(() => ({ data: [] }))
         ]);
         setProducts(Array.isArray(prodRes) ? prodRes : (prodRes as any)?.data || []);
         setMovements(Array.isArray(movRes) ? movRes : (movRes as any)?.data || []);
-        setAdjustments(Array.isArray(adjRes) ? adjRes : (adjRes as any)?.data || []);
         setLowStock(Array.isArray(lowRes) ? lowRes : (lowRes as any)?.data || []);
       } catch (e: any) {
         toast.error(e?.response?.data?.message || e?.message || "Error cargando inventario");
@@ -115,7 +112,6 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const totalSaleValue = useMemo(() => products.reduce((acc, p) => acc + (Number(p.salePrice || 0) * Number(p.stock || 0)), 0), [products, exchangeRate]);
   
   const rotationRate = 14.2; // Proxy value for demo
-  const shrinkageValue = useMemo(() => adjustments.reduce((acc, adj) => acc + (adj.items || []).reduce((ia: number, it: any) => ia + (Math.abs(it.quantity || 0) * 10), 0), 0), [adjustments]);
 
   // ── 2 Tops ──
   const topValued = useMemo(() => {
@@ -250,7 +246,6 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         });
         currentY += boxH + 10;
 
-        const exportIds = ['inventory-dynamics-chart', 'inventory-distribution-chart'];
         const capture = async (elementId: string, height: number) => {
           const el = document.getElementById(elementId);
           if (!el) return;

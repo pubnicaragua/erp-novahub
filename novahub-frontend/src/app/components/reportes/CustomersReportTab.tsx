@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LabelList, AreaChart, Area, BarChart, Bar } from 'recharts';
+import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { customersService, invoicesService, paymentsService, salesOrdersService } from '../../services/ventas.service';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -8,7 +8,7 @@ import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Users, Scale, TrendingUp, DollarSign, Package, ArrowUpRight, Activity, Wallet, CreditCard, ShoppingCart, ShoppingBag, PieChart as PieChartIcon } from 'lucide-react';
+import { Users, Scale, TrendingUp, DollarSign, Package, ArrowUpRight, Activity, Wallet, CreditCard, ShoppingCart } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
@@ -375,7 +375,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const captureAndEmbed = async (elementId: string) => {
           const el = document.getElementById(elementId); if (!el) return;
           try {
-            const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(elementId, clonedDoc, `#${primaryHex}`) });
+            const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch([elementId], clonedDoc, `#${primaryHex}`) });
             const imgId = wb.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });
             const width = 600; const height = (canvas.height * width) / canvas.width;
             ws.addImage(imgId, { tl: { col: 0, row: currentRow }, ext: { width, height } });

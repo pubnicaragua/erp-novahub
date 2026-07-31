@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Users, Scale, TrendingUp, Package, ArrowUpRight, Activity, ShoppingCart, Truck, ExternalLink, Globe, Phone, ShoppingBag, Wallet, CreditCard } from 'lucide-react';
+import { Users, Scale, TrendingUp, Package, Activity, Truck, ShoppingBag, Wallet, CreditCard } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { cn } from '../ui/utils';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';

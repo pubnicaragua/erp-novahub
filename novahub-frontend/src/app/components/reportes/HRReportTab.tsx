@@ -80,7 +80,7 @@ function isDateInRange(value: unknown, range: string): boolean {
 }
 
 export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, formatConvertedAmount, convertAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   
