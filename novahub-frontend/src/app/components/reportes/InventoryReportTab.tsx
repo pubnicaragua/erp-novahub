@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Badge } from '../ui/badge';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { inventoryService } from '../../services/inventario.service';
 import jsPDF from 'jspdf';
@@ -8,12 +11,14 @@ import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Package, AlertTriangle, TrendingDown, DollarSign, Activity, ShoppingCart, ArrowUpRight, Scale, Warehouse, Tag } from 'lucide-react';
+import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Scale, Warehouse, Tag, ShieldAlert, Gauge, Layers } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const DAY_MS = 86_400_000;
+const PIE_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#14b8a6', '#6366f1', '#94a3b8'];
 
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -28,71 +33,139 @@ function getRangeDates(range: string) {
   const prevEnd = new Date(now);
 
   switch (range) {
-    case 'hoy': 
-      start.setHours(0, 0, 0, 0); 
+    case 'hoy':
+      start.setHours(0, 0, 0, 0);
       prevStart.setDate(now.getDate() - 1); prevStart.setHours(0, 0, 0, 0);
       prevEnd.setDate(now.getDate() - 1); prevEnd.setHours(23, 59, 59, 999);
       break;
-    case 'ultima-semana': 
-      start.setDate(now.getDate() - 7); 
+    case 'ultima-semana':
+      start.setDate(now.getDate() - 7);
       prevStart.setDate(now.getDate() - 14);
       prevEnd.setDate(now.getDate() - 7);
       break;
-    case 'ultimo-mes': 
-      start.setMonth(now.getMonth() - 1); 
+    case 'ultimo-mes':
+      start.setMonth(now.getMonth() - 1);
       prevStart.setMonth(now.getMonth() - 2);
       prevEnd.setMonth(now.getMonth() - 1);
       break;
-    case 'ultimo-trimestre': 
-      start.setMonth(now.getMonth() - 3); 
+    case 'ultimo-trimestre':
+      start.setMonth(now.getMonth() - 3);
       prevStart.setMonth(now.getMonth() - 6);
       prevEnd.setMonth(now.getMonth() - 3);
       break;
-    case 'ultimo-año': 
-      start.setFullYear(now.getFullYear() - 1); 
+    case 'ultimo-año':
+      start.setFullYear(now.getFullYear() - 1);
       prevStart.setFullYear(now.getFullYear() - 2);
       prevEnd.setFullYear(now.getFullYear() - 1);
       break;
-    default: return { start: new Date(0), prevStart: new Date(0), prevEnd: new Date(0) };
+    default:
+      return { start: new Date(0), prevStart: new Date(0), prevEnd: new Date(0), durationDays: Number.MAX_SAFE_INTEGER };
   }
   start.setHours(0, 0, 0, 0);
   prevStart.setHours(0, 0, 0, 0);
   prevEnd.setHours(23, 59, 59, 999);
-  return { start, prevStart, prevEnd };
+  const durationDays = Math.max(1, Math.round((now.getTime() - start.getTime()) / DAY_MS));
+  return { start, prevStart, prevEnd, durationDays };
 }
 
+function rangeText(range: string) {
+  switch (range) {
+    case 'hoy': return 'Hoy';
+    case 'ultima-semana': return 'últimos 7 días';
+    case 'ultimo-mes': return 'últimos 30 días';
+    case 'ultimo-trimestre': return 'últimos 3 meses';
+    case 'ultimo-año': return 'últimos 12 meses';
+    default: return 'histórico completo';
+  }
+}
+
+function cutoffText(date: Date) {
+  return `Existencias al ${date.toLocaleDateString('es-NI', { day: '2-digit', month: 'long', year: 'numeric' })}`;
+}
+
+function isTransferRef(m: any) {
+  return m.type === 'TRANSFER' || (m.reference && String(m.reference).toLowerCase().startsWith('transferencia'));
+}
+
+function isAdjustRef(m: any) {
+  return m.type === 'ADJUSTMENT' || (m.reference && String(m.reference).toLowerCase().startsWith('ajuste'));
+}
+
+function isOpMovement(m: any) {
+  return (m.type === 'IN' || m.type === 'OUT') && !isTransferRef(m) && !isAdjustRef(m);
+}
+
+function fmtQty(v: number | null | undefined) {
+  const num = Number(v ?? 0);
+  if (!Number.isFinite(num)) return '0';
+  return num.toLocaleString('es-NI', { maximumFractionDigits: 0 });
+}
+
+interface ProdRow {
+  id: string;
+  code: string;
+  name: string;
+  sku?: string;
+  brand?: string;
+  unit: string;
+  categoryName: string;
+  costPrice: number;
+  salePrice: number;
+  minStock: number;
+  qty: number;
+  reserved: number;
+  overstock: boolean;
+  levels: { warehouseId: string; warehouseName: string; quantity: number; minStock: number; maxStock: number | null }[];
+  mainWarehouse: string;
+}
+
+interface RiskRow {
+  product: string;
+  code: string;
+  warehouse: string;
+  qty: number;
+  minStock: number;
+  maxStock: number | null;
+  reason: string;
+}
+
+const TH = 'px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground whitespace-nowrap';
+const TD = 'px-3 py-2 text-xs whitespace-nowrap';
+
 export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, convertAmount, formatConvertedAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, formatConvertedAmount } = useCurrency();
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
 
-  const fmtShort = (v: number) => {
-    const num = Number(v);
-    if (!Number.isFinite(num)) return 'C$0';
-    const converted = convertAmount(num, 'NIO');
-    if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted/1000000).toFixed(1)}M`;
-    if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
-    return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-  };
-  
   const [products, setProducts] = useState<any[]>([]);
   const [movements, setMovements] = useState<any[]>([]);
-  const [lowStock, setLowStock] = useState<any[]>([]);
+  const [adjustments, setAdjustments] = useState<any[]>([]);
+  const [transfers, setTransfers] = useState<any[]>([]);
+  const [replenishment, setReplenishment] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  const [riskGroup, setRiskGroup] = useState<string | null>(null);
+  const [distMode, setDistMode] = useState<'categoria' | 'bodega' | 'marca' | 'rotacion'>('categoria');
+  const [movTab, setMovTab] = useState('movimientos');
+  const [valTab, setValTab] = useState('mayor-valor');
+  const [rotTab, setRotTab] = useState('mayor-rotacion');
 
   useEffect(() => {
     const fetch = async () => {
       setLoading(true);
       try {
-        const [prodRes, movRes, lowRes] = await Promise.all([
+        const [prodRes, movRes, adjRes, trfRes, replRes] = await Promise.all([
           inventoryService.getProducts().catch(() => ({ data: [] })),
-          inventoryService.getMovements().catch(() => ({ data: [] })),
-          inventoryService.getLowStockProducts().catch(() => ({ data: [] }))
+          inventoryService.getMovements({ limit: 10000 }).catch(() => ({ data: [] })),
+          inventoryService.getAdjustments().catch(() => ({ data: [] })),
+          inventoryService.getTransfers().catch(() => ({ data: [] })),
+          inventoryService.getReplenishmentReport('monthly').catch(() => null)
         ]);
         setProducts(Array.isArray(prodRes) ? prodRes : (prodRes as any)?.data || []);
         setMovements(Array.isArray(movRes) ? movRes : (movRes as any)?.data || []);
-        setLowStock(Array.isArray(lowRes) ? lowRes : (lowRes as any)?.data || []);
+        setAdjustments(Array.isArray(adjRes) ? adjRes : (adjRes as any)?.data || []);
+        setTransfers(Array.isArray(trfRes) ? trfRes : (trfRes as any)?.data || []);
+        setReplenishment(replRes || null);
       } catch (e: any) {
         toast.error(e?.response?.data?.message || e?.message || "Error cargando inventario");
       } finally {
@@ -102,73 +175,386 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     fetch();
   }, []);
 
-  const { start: currentStart } = useMemo(() => getRangeDates(dateRange), [dateRange]);
+  const { start: currentStart, durationDays } = useMemo(() => getRangeDates(dateRange), [dateRange]);
+  const rangeLabel = rangeText(dateRange);
 
-  const fMov = useMemo(() => movements.filter(i => {
-    const d = toDate(i.createdAt);
-    return d && d >= currentStart;
-  }), [movements, currentStart]);
-
-  const totalValue = useMemo(() => products.reduce((acc, p) => acc + (Number(p.costPrice || 0) * Number(p.stock || 0)), 0), [products, exchangeRate]);
-  const totalSaleValue = useMemo(() => products.reduce((acc, p) => acc + (Number(p.salePrice || 0) * Number(p.stock || 0)), 0), [products, exchangeRate]);
-  
-  const rotationRate = 14.2; // Proxy value for demo
-
-  // ── 2 Tops ──
-  const topValued = useMemo(() => {
-    return products.map(p => ({
-      name: p.name,
-      value: Number(p.costPrice || 0) * Number(p.stock || 0),
-      stock: p.stock
-    })).sort((a,b) => b.value - a.value).slice(0, 5);
-  }, [products, exchangeRate]);
-
-  const topRotated = useMemo(() => {
-    const map: Record<string, number> = {};
-    fMov.filter(m => m.type === 'OUT').forEach(m => {
-       const name = m.product?.name || 'Item';
-       map[name] = (map[name] || 0) + Math.abs(m.quantity || 0);
-    });
-    return Object.entries(map).map(([name, qty]) => ({ name, qty })).sort((a,b) => b.qty - a.qty).slice(0, 5);
-  }, [fMov]);
-
-  const categoryValueData = useMemo(() => {
-    const map = products.reduce((acc: Record<string, number>, p: any) => {
-      const c = p.category?.name || (typeof p.category === 'string' ? p.category : 'Sin categoría');
-      acc[c] = (acc[c] || 0) + Number(p.costPrice || 0) * Number(p.stock || 0);
-      return acc;
-    }, {});
-    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  // ── Product rows (non-service, with per-warehouse levels) ──
+  const prodRows = useMemo<ProdRow[]>(() => {
+    return products
+      .filter((p) => (p.type ?? p.itemType) !== 'SERVICE')
+      .map((p) => {
+        const levels = (p.stockLevels || [])
+          .filter((l: any) => l && l.quantity !== undefined)
+          .map((l: any) => ({
+            warehouseId: l.warehouseId,
+            warehouseName: l.warehouse?.name || 'Sin bodega',
+            quantity: Number(l.quantity || 0),
+            minStock: Number(l.minStock ?? p.minStock ?? 0),
+            maxStock: l.maxStock != null ? Number(l.maxStock) : null,
+          }));
+        const qty = levels.length > 0 ? levels.reduce((a: any, l: any) => a + l.quantity, 0) : Number(p.stock || 0);
+        const mainLevel = levels.length > 0 ? levels.reduce((a: any, b: any) => (b.quantity > a.quantity ? b : a)) : null;
+        const overstock = levels.some((l: any) => l.maxStock != null && l.quantity > l.maxStock);
+        return {
+          id: p.id,
+          code: p.code || p.sku || '',
+          name: p.name || 'Producto',
+          sku: p.sku,
+          brand: p.brand,
+          unit: p.unit || 'unidad',
+          categoryName: p.category?.name || (typeof p.category === 'string' ? p.category : 'Sin categoría'),
+          costPrice: Number(p.costPrice || 0),
+          salePrice: Number(p.salePrice || 0),
+          minStock: Number(p.minStock ?? 0),
+          qty,
+          reserved: levels.reduce((a: any, l: any) => a + Number(l.quantity > 0 ? (p.reserved || 0) : 0), 0),
+          overstock,
+          levels,
+          mainWarehouse: mainLevel?.warehouseName || 'Sin bodega',
+        };
+      });
   }, [products]);
 
-  // ── Charts ──
-  const monthlyData = useMemo(() => {
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-    const data = [];
-    for (let i = 5; i >= 0; i--) {
-      const monthIdx = (currentMonth - i + 12) % 12;
-      const year = (currentMonth - i < 0) ? currentYear - 1 : currentYear;
+  // ── Movements analysis ──
+  const opMov = useMemo(() => movements.filter(isOpMovement), [movements]);
 
-      const mIn = movements.filter(m => {
-        const d = toDate(m.createdAt);
-        return d && d.getMonth() === monthIdx && d.getFullYear() === year && m.type === 'IN';
-      }).reduce((a, c) => a + (c.quantity || 0), 0);
+  const periodOpMov = useMemo(() => opMov.filter((m) => {
+    const d = toDate(m.date || m.createdAt);
+    return !!d && d.getTime() >= currentStart.getTime();
+  }), [opMov, currentStart]);
 
-      const mOut = movements.filter(m => {
-        const d = toDate(m.createdAt);
-        return d && d.getMonth() === monthIdx && d.getFullYear() === year && m.type === 'OUT';
-      }).reduce((a, c) => a + Math.abs(c.quantity || 0), 0);
-
-      data.push({
-        mes: MONTH_NAMES[monthIdx],
-        entradas: mIn,
-        salidas: mOut
-      });
+  const periodAgg = useMemo(() => {
+    const outs = new Map<string, number>();
+    const ins = new Map<string, number>();
+    let cogs = 0;
+    for (const m of periodOpMov) {
+      const pid = m.productId;
+      const qty = Math.abs(Number(m.quantity || 0));
+      if (m.type === 'OUT') {
+        outs.set(pid, (outs.get(pid) || 0) + qty);
+        cogs += qty * Number(m.baseCost ?? m.unitCost ?? 0);
+      } else {
+        ins.set(pid, (ins.get(pid) || 0) + qty);
+      }
     }
-    return data;
-  }, [movements]);
+    return { outs, ins, cogs };
+  }, [periodOpMov]);
 
+  const lastOutByProduct = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of opMov) {
+      if (m.type !== 'OUT') continue;
+      const d = toDate(m.date || m.createdAt);
+      if (!d) continue;
+      const t = d.getTime();
+      if (!map.has(m.productId) || t > map.get(m.productId)!) map.set(m.productId, t);
+    }
+    return map;
+  }, [opMov]);
+
+  const nowMs = useMemo(() => Date.now(), []);
+
+  // ── KPI: Valor del inventario a costo ──
+  const valuation = useMemo(() => {
+    const withStock = prodRows.filter((r) => r.qty > 0);
+    const totalUnits = withStock.reduce((a, r) => a + r.qty, 0);
+    const totalValue = withStock.reduce((a, r) => a + r.qty * r.costPrice, 0);
+    const withoutCost = withStock.filter((r) => r.costPrice <= 0);
+    const status = withStock.length === 0
+      ? 'UNAVAILABLE'
+      : withoutCost.length > 0
+        ? 'PARTIAL'
+        : 'COMPLETE';
+    return { withStock, totalUnits, totalValue, withoutCost, status, productsWithStock: withStock.length };
+  }, [prodRows]);
+
+  // ── KPI: Valor potencial a precio de venta ──
+  const potential = useMemo(() => {
+    const { withStock } = valuation;
+    const totalSaleValue = withStock.reduce((a, r) => a + r.qty * r.salePrice, 0);
+    const withoutPrice = withStock.filter((r) => r.salePrice <= 0);
+    const complete = valuation.status === 'COMPLETE' && withoutPrice.length === 0;
+    const margin = complete ? totalSaleValue - valuation.totalValue : null;
+    return { totalSaleValue, withoutPrice, margin };
+  }, [valuation]);
+
+  // ── KPI: Rotación de inventario ──
+  const rotation = useMemo(() => {
+    const { outs, ins, cogs } = periodAgg;
+    let avgInvValue = 0;
+    let avgQtySum = 0;
+    for (const r of prodRows) {
+      const o = outs.get(r.id) || 0;
+      const i = ins.get(r.id) || 0;
+      const initial = Math.max(0, r.qty + o - i);
+      const avgQty = (initial + r.qty) / 2;
+      avgQtySum += avgQty;
+      avgInvValue += avgQty * r.costPrice;
+    }
+    const turnover = avgInvValue > 0 && cogs > 0 ? cogs / avgInvValue : null;
+    let totalOutUnits = 0;
+    for (const m of periodOpMov) {
+      if (m.type === 'OUT') totalOutUnits += Math.abs(Number(m.quantity || 0));
+    }
+    const avgCoverage = totalOutUnits > 0 && valuation.totalUnits > 0 ? valuation.totalUnits / (totalOutUnits / durationDays) : null;
+    return { turnover, avgInvValue, avgQtySum, cogs, avgCoverage };
+  }, [periodAgg, periodOpMov, prodRows, valuation.totalUnits, durationDays]);
+
+  // ── Riesgos ──
+  const risk = useMemo(() => {
+    const bajoMinimo: RiskRow[] = [];
+    const sinExistencia: RiskRow[] = [];
+    const negativo: RiskRow[] = [];
+    const sobrestock: RiskRow[] = [];
+    const sinMinimo: RiskRow[] = [];
+    const sinCosto: RiskRow[] = [];
+    const sinPrecio: RiskRow[] = [];
+    const sinBodega: RiskRow[] = [];
+    const lento: RiskRow[] = [];
+    const conExistencia: RiskRow[] = [];
+
+    for (const r of prodRows) {
+      if (r.qty > 0) {
+        conExistencia.push({ product: r.name, code: r.code, warehouse: r.mainWarehouse, qty: r.qty, minStock: r.minStock, maxStock: null, reason: 'Con existencia disponible' });
+      }
+      if (r.qty === 0) {
+        sinExistencia.push({ product: r.name, code: r.code, warehouse: r.mainWarehouse, qty: 0, minStock: r.minStock, maxStock: null, reason: 'Existencia igual a cero' });
+      }
+      if (r.qty < 0) {
+        negativo.push({ product: r.name, code: r.code, warehouse: r.mainWarehouse, qty: r.qty, minStock: r.minStock, maxStock: null, reason: 'Inventario negativo' });
+      }
+      if (r.minStock > 0 && r.qty > 0 && r.qty <= r.minStock) {
+        bajoMinimo.push({ product: r.name, code: r.code, warehouse: r.mainWarehouse, qty: r.qty, minStock: r.minStock, maxStock: null, reason: 'Bajo el mínimo configurado' });
+      }
+      if (r.overstock) {
+        const lvl = r.levels.find((l) => l.maxStock != null && l.quantity > l.maxStock);
+        sobrestock.push({ product: r.name, code: r.code, warehouse: lvl?.warehouseName || r.mainWarehouse, qty: r.qty, minStock: r.minStock, maxStock: lvl?.maxStock ?? null, reason: 'Excede el máximo configurado' });
+      }
+      if (r.qty > 0 && r.minStock <= 0) {
+        sinMinimo.push({ product: r.name, code: r.code, warehouse: r.mainWarehouse, qty: r.qty, minStock: 0, maxStock: null, reason: 'Sin mínimo configurado' });
+      }
+      if (r.qty > 0 && r.costPrice <= 0) {
+        sinCosto.push({ product: r.name, code: r.code, warehouse: r.mainWarehouse, qty: r.qty, minStock: r.minStock, maxStock: null, reason: 'Sin costo registrado' });
+      }
+      if (r.qty > 0 && r.salePrice <= 0) {
+        sinPrecio.push({ product: r.name, code: r.code, warehouse: r.mainWarehouse, qty: r.qty, minStock: r.minStock, maxStock: null, reason: 'Sin precio de venta' });
+      }
+      if (r.levels.length === 0) {
+        sinBodega.push({ product: r.name, code: r.code, warehouse: 'Sin bodega asignada', qty: r.qty, minStock: r.minStock, maxStock: null, reason: 'Producto sin bodega' });
+      }
+      if (r.qty > 0) {
+        const last = lastOutByProduct.get(r.id);
+        const days = last ? (nowMs - last) / DAY_MS : null;
+        if (days === null || days > 90) {
+          lento.push({ product: r.name, code: r.code, warehouse: r.mainWarehouse, qty: r.qty, minStock: r.minStock, maxStock: null, reason: days === null ? 'Sin salidas registradas' : `Sin movimiento en ${Math.floor(days)} días` });
+        }
+      }
+    }
+
+    const uniqueRiskIds = new Set([
+      ...bajoMinimo.map((x) => x.code),
+      ...sinExistencia.map((x) => x.code),
+      ...negativo.map((x) => x.code),
+    ]);
+    const riesgo = [...bajoMinimo, ...sinExistencia, ...negativo];
+
+    const lento90 = lento.length;
+    const sinMovimiento30 = prodRows.filter((r) => {
+      if (r.qty <= 0) return false;
+      const last = lastOutByProduct.get(r.id);
+      return last === undefined || (nowMs - last) / DAY_MS > 30;
+    }).length;
+
+    return {
+      bajoMinimo, sinExistencia, negativo, sobrestock, sinMinimo, sinCosto, sinPrecio, sinBodega, lento, conExistencia,
+      riesgo,
+      riesgoCount: uniqueRiskIds.size,
+      lento90,
+      sinMovimiento30,
+    };
+  }, [prodRows, lastOutByProduct, nowMs]);
+
+  const riskGroups: Record<string, { title: string; desc: string; rows: RiskRow[] }> = {
+    'existencia': { title: 'Productos con existencia', desc: 'Productos con unidades disponibles al corte.', rows: risk.conExistencia },
+    'riesgo': { title: 'Productos en riesgo de abastecimiento', desc: 'Bajo mínimo, sin existencia o con inventario negativo.', rows: risk.riesgo },
+    'bajo-minimo': { title: 'Bajo el mínimo configurado', desc: 'Todavía tienen unidades, pero están por debajo del mínimo.', rows: risk.bajoMinimo },
+    'sin-existencia': { title: 'Sin existencia', desc: 'Productos con cantidad igual a cero.', rows: risk.sinExistencia },
+    'negativo': { title: 'Inventario negativo', desc: 'Indica salidas sin stock, movimientos mal fechados o errores de integración.', rows: risk.negativo },
+    'sobrestock': { title: 'Sobrestock', desc: 'Existencias que exceden el máximo configurado.', rows: risk.sobrestock },
+    'sin-minimo': { title: 'Sin mínimo configurado', desc: 'No se puede evaluar su reposición.', rows: risk.sinMinimo },
+    'sin-costo': { title: 'Productos sin costo', desc: 'Afecta directamente la valorización del inventario.', rows: risk.sinCosto },
+    'sin-precio': { title: 'Productos sin precio de venta', desc: 'No se puede calcular el valor potencial de venta.', rows: risk.sinPrecio },
+    'lento': { title: 'Lento movimiento (90 días)', desc: 'Sin salidas en los últimos 90 días.', rows: risk.lento },
+  };
+
+  // ── Lento movimiento buckets ──
+  const slowBuckets = useMemo(() => {
+    const buckets = [
+      { label: 'Sin movimiento en 30 días', days: 30, count: 0, value: 0 },
+      { label: 'Sin movimiento en 60 días', days: 60, count: 0, value: 0 },
+      { label: 'Sin movimiento en 90 días', days: 90, count: 0, value: 0 },
+      { label: 'Más de 180 días', days: 180, count: 0, value: 0 },
+    ];
+    for (const r of prodRows) {
+      if (r.qty <= 0) continue;
+      const last = lastOutByProduct.get(r.id);
+      const days = last === undefined ? Number.POSITIVE_INFINITY : (nowMs - last) / DAY_MS;
+      for (const b of buckets) {
+        if (days > b.days) {
+          b.count += 1;
+          b.value += r.qty * r.costPrice;
+        }
+      }
+    }
+    return buckets;
+  }, [prodRows, lastOutByProduct, nowMs]);
+
+  // ── Per-product metrics (rotation / coverage) ──
+  const productMetrics = useMemo(() => {
+    const { outs, ins } = periodAgg;
+    const map = new Map<string, { outs: number; ins: number; initialQty: number; avgQty: number }>();
+    for (const r of prodRows) {
+      const o = outs.get(r.id) || 0;
+      const i = ins.get(r.id) || 0;
+      const initialQty = Math.max(0, r.qty + o - i);
+      const avgQty = (initialQty + r.qty) / 2;
+      map.set(r.id, { outs: o, ins: i, initialQty, avgQty });
+    }
+    return map;
+  }, [prodRows, periodAgg]);
+
+  const rotationList = useMemo(() => {
+    return prodRows.map((r) => {
+      const m = productMetrics.get(r.id)!;
+      const dailyOut = m.outs / durationDays;
+      return {
+        ...r,
+        outs: m.outs,
+        avgQty: m.avgQty,
+        rotation: m.outs > 0 && m.avgQty > 0 ? m.outs / m.avgQty : null,
+        coverage: r.qty > 0 && dailyOut > 0 ? r.qty / dailyOut : null,
+        daysSince: lastOutByProduct.has(r.id) ? (nowMs - lastOutByProduct.get(r.id)!) / DAY_MS : null,
+        value: r.qty * r.costPrice,
+      };
+    });
+  }, [prodRows, productMetrics, lastOutByProduct, nowMs, durationDays]);
+
+  // ── Mayor valor inmovilizado ──
+  const topValued = useMemo(() => rotationList.filter((r) => r.qty > 0).sort((a, b) => b.value - a.value).slice(0, 8), [rotationList]);
+  const topAging = useMemo(() => rotationList.filter((r) => r.qty > 0 && r.daysSince !== null).sort((a, b) => (b.daysSince! - a.daysSince!)).slice(0, 8), [rotationList]);
+  const topNeverMoved = useMemo(() => rotationList.filter((r) => r.qty > 0 && r.daysSince === null).sort((a, b) => b.value - a.value).slice(0, 8), [rotationList]);
+  const topOverstock = useMemo(() => rotationList.filter((r) => r.overstock).sort((a, b) => b.value - a.value).slice(0, 8), [rotationList]);
+
+  // ── Rotación y cobertura lists ──
+  const topRotated = useMemo(() => rotationList.filter((r) => r.rotation !== null).sort((a, b) => (b.rotation! - a.rotation!)).slice(0, 8), [rotationList]);
+  const leastRotated = useMemo(() => rotationList.filter((r) => r.rotation !== null).sort((a, b) => (a.rotation! - b.rotation!)).slice(0, 8), [rotationList]);
+  const leastCoverage = useMemo(() => rotationList.filter((r) => r.coverage !== null).sort((a, b) => (a.coverage! - b.coverage!)).slice(0, 8), [rotationList]);
+  const replenishItems = useMemo(() => {
+    const items = replenishment?.items || [];
+    return items.filter((i: any) => Number(i.suggestedQuantity) > 0 || (i.status && i.status !== 'OK')).sort((a: any, b: any) => Number(b.suggestedQuantity) - Number(a.suggestedQuantity)).slice(0, 8);
+  }, [replenishment]);
+
+  // ── Distribución del valor del inventario ──
+  const distribution = useMemo(() => {
+    const { withStock, totalValue } = valuation;
+    if (withStock.length === 0 || totalValue <= 0) return [];
+
+    const segMap = new Map<string, { value: number; units: number; products: Set<string> }>();
+    const add = (key: string, value: number, units: number, pid: string) => {
+      const seg = segMap.get(key) || { value: 0, units: 0, products: new Set<string>() };
+      seg.value += value;
+      seg.units += units;
+      seg.products.add(pid);
+      segMap.set(key, seg);
+    };
+
+    if (distMode === 'bodega') {
+      for (const r of withStock) {
+        for (const l of r.levels) {
+          if (l.quantity <= 0) continue;
+          add(l.warehouseName, l.quantity * r.costPrice, l.quantity, r.id);
+        }
+      }
+    } else if (distMode === 'marca') {
+      for (const r of withStock) add(r.brand || 'Sin marca', r.qty * r.costPrice, r.qty, r.id);
+    } else if (distMode === 'rotacion') {
+      for (const r of withStock) {
+        const m = productMetrics.get(r.id)!;
+        const rot = m.outs > 0 && m.avgQty > 0 ? m.outs / m.avgQty : 0;
+        const key = rot === 0 ? 'Sin movimiento' : rot >= 6 ? 'Alta rotación' : rot >= 2 ? 'Rotación media' : 'Baja rotación';
+        add(key, r.qty * r.costPrice, r.qty, r.id);
+      }
+    } else {
+      for (const r of withStock) add(r.categoryName, r.qty * r.costPrice, r.qty, r.id);
+    }
+
+    return [...segMap.entries()]
+      .map(([name, seg]) => ({ name, value: seg.value, units: seg.units, products: seg.products.size, pct: totalValue > 0 ? (seg.value / totalValue) * 100 : 0 }))
+      .sort((a, b) => b.value - a.value);
+  }, [valuation, distMode, productMetrics]);
+
+  // ── Dinámica de movimientos (agrupación dinámica) ──
+  const chartData = useMemo(() => {
+    const mode = durationDays >= 120 ? 'month' : durationDays > 31 ? 'week' : 'day';
+    const end = new Date();
+    let anchor = currentStart.getTime() > 0 ? new Date(currentStart) : new Date(end.getTime() - 730 * DAY_MS);
+    const minAnchor = end.getTime() - 730 * DAY_MS;
+    if (anchor.getTime() < minAnchor) anchor = new Date(minAnchor);
+    if (anchor.getTime() > end.getTime()) anchor = end;
+
+    const buckets: { label: string; start: number; end: number; entradas: number; salidas: number; ajustesPos: number; ajustesNeg: number }[] = [];
+    if (mode === 'day') {
+      for (let t = anchor.getTime(); t <= end.getTime(); t += DAY_MS) {
+        const d = new Date(t);
+        buckets.push({ label: `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`, start: t, end: t + DAY_MS, entradas: 0, salidas: 0, ajustesPos: 0, ajustesNeg: 0 });
+      }
+    } else if (mode === 'week') {
+      for (let t = anchor.getTime(); t <= end.getTime(); t += 7 * DAY_MS) {
+        const d = new Date(t);
+        buckets.push({ label: `Sem. ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`, start: t, end: t + 7 * DAY_MS, entradas: 0, salidas: 0, ajustesPos: 0, ajustesNeg: 0 });
+      }
+    } else {
+      let cursor = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+      while (cursor.getTime() <= end.getTime()) {
+        const year = cursor.getFullYear();
+        const month = cursor.getMonth();
+        const label = month === 0 ? `${MONTH_NAMES[month]} ${String(year).slice(2)}` : MONTH_NAMES[month];
+        buckets.push({ label, start: new Date(year, month, 1).getTime(), end: new Date(year, month + 1, 1).getTime(), entradas: 0, salidas: 0, ajustesPos: 0, ajustesNeg: 0 });
+        cursor = new Date(year, month + 1, 1);
+      }
+    }
+
+    for (const m of movements) {
+      const d = toDate(m.date || m.createdAt);
+      if (!d) continue;
+      if (d.getTime() < anchor.getTime() || d.getTime() > end.getTime()) continue;
+      const idx = buckets.findIndex((b) => d.getTime() >= b.start && d.getTime() < b.end);
+      if (idx < 0) continue;
+      const qty = Math.abs(Number(m.quantity || 0));
+      const isAdj = isAdjustRef(m);
+      const isTrf = isTransferRef(m);
+      if (isAdj) {
+        if (m.type === 'IN') buckets[idx].ajustesPos += qty;
+        else buckets[idx].ajustesNeg += qty;
+      } else if (!isTrf) {
+        if (m.type === 'IN') buckets[idx].entradas += qty;
+        else buckets[idx].salidas += qty;
+      }
+    }
+    return buckets;
+  }, [movements, currentStart, durationDays]);
+
+  const periodAdjustments = useMemo(() => adjustments.filter((a) => {
+    const d = toDate(a.date || a.createdAt);
+    return !!d && d.getTime() >= currentStart.getTime();
+  }), [adjustments, currentStart]);
+
+  const periodTransfers = useMemo(() => transfers.filter((t) => {
+    const d = toDate(t.date || t.createdAt);
+    return !!d && d.getTime() >= currentStart.getTime();
+  }), [transfers, currentStart]);
+
+  // ── Exports ──
   useImperativeHandle(ref, () => ({
     exportPDF: async () => {
       toast.info("Generando PDF (Inventario)...");
@@ -217,7 +603,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(120, 120, 120);
-        doc.text(`Generado: ${new Date().toLocaleDateString('es-NI')}  |  Moneda: ${displayCurrency}`, pageWidth / 2, currentY, { align: 'center' });
+        doc.text(`${cutoffText(new Date())}  |  Período: ${rangeLabel}  |  Moneda: ${displayCurrency}`, pageWidth / 2, currentY, { align: 'center' });
         currentY += 5;
 
         doc.setDrawColor(rgbPrimary[0] as any, rgbPrimary[1] as any, rgbPrimary[2] as any);
@@ -225,11 +611,12 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         doc.line(marginX, currentY, pageWidth - marginX, currentY);
         currentY += 10;
 
+        const riskStr = `${risk.bajoMinimo.length} bajo mínimo · ${risk.sinExistencia.length} sin existencia · ${risk.negativo.length} negativos`;
         const kpis = [
-          { label: 'CAPITAL EN STOCK', value: formatConvertedAmount(totalValue, 'NIO'), detail: 'Valor total a precio de costo', color: [16, 185, 129] },
-          { label: 'STOCK CRÍTICO', value: lowStock.length.toString(), detail: 'SKUs bajo mínimo', color: [244, 63, 94] },
-          { label: 'INDICE DE ROTACIÓN', value: `${rotationRate}x`, detail: 'Velocidad media', color: [59, 130, 246] },
-          { label: 'POTENCIAL DE VENTA', value: formatConvertedAmount(totalSaleValue, 'NIO'), detail: 'Retorno bruto estimado', color: [245, 158, 11] }
+          { label: 'VALOR DEL INVENTARIO A COSTO', value: formatConvertedAmount(valuation.totalValue, 'NIO'), detail: `${fmtQty(valuation.totalUnits)} unidades · ${valuation.productsWithStock} productos${valuation.withoutCost.length > 0 ? ` · ${valuation.withoutCost.length} sin costo` : ''}`, color: [16, 185, 129] },
+          { label: 'PRODUCTOS EN RIESGO', value: risk.riesgoCount.toString(), detail: riskStr, color: [244, 63, 94] },
+          { label: 'ROTACIÓN DE INVENTARIO', value: rotation.turnover !== null ? `${rotation.turnover.toFixed(1)}x` : 'N/D', detail: rotation.turnover !== null ? `veces · ${rangeLabel}` : 'datos insuficientes', color: [59, 130, 246] },
+          { label: 'VALOR POTENCIAL A PRECIO DE VENTA', value: formatConvertedAmount(potential.totalSaleValue, 'NIO'), detail: 'No representa ingreso ni utilidad', color: [245, 158, 11] }
         ];
 
         const cols = 4;
@@ -266,33 +653,31 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         await capture('inventory-dynamics-chart', 80);
         await capture('inventory-distribution-chart', 70);
 
-        const renderTop = (title: string, data: any[], isValued: boolean) => {
-          checkPage(40);
+        const renderTable = (title: string, headers: string[], rows: any[][], accent: [number, number, number]) => {
+          checkPage(rows.length * 7 + 30);
           doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
           doc.text(title, marginX, currentY); currentY += 7;
-          doc.setFillColor(isValued ? 16 : 59, isValued ? 185 : 130, isValued ? 129 : 246);
+          doc.setFillColor(accent[0], accent[1], accent[2]);
           doc.roundedRect(marginX, currentY, contentWidth, 8, 1, 1, 'F');
-          doc.setFontSize(8); doc.setTextColor(255, 255, 255);
-          doc.text('SKU', marginX + 3, currentY + 5.5);
-          doc.text('Detalle', marginX + 80, currentY + 5.5);
-          doc.text(isValued ? 'Valor Costo' : 'Rotación', marginX + 155, currentY + 5.5);
+          doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+          const colW = contentWidth / headers.length;
+          headers.forEach((h, i) => doc.text(h, marginX + i * colW + 2, currentY + 5.5));
           currentY += 10;
-          data.forEach((item, i) => {
-            checkPage(12);
-            if (i % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
-            doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
-            doc.text(item.name.substring(0, 40), marginX + 3, currentY + 4);
-            doc.text(isValued ? `${item.stock} unidades` : 'Despacho frecuente', marginX + 80, currentY + 4);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(isValued ? 16 : 59, isValued ? 185 : 130, isValued ? 129 : 246);
-            doc.text(isValued ? formatConvertedAmount(Number(item.value), 'NIO') : `${item.qty} ud`, marginX + 155, currentY + 4);
+          rows.forEach((row, ri) => {
+            checkPage(8);
+            if (ri % 2 === 0) { doc.setFillColor(248, 249, 250); doc.rect(marginX, currentY - 1, contentWidth, 7, 'F'); }
+            doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
+            row.forEach((cell, ci) => doc.text(String(cell), marginX + ci * colW + 2, currentY + 4));
             currentY += 7;
           });
           currentY += 10;
         };
 
-        renderTop('Inversión por SKU (Mayor Valor)', topValued, true);
-        renderTop('Artículos de Mayor Rotación', topRotated, false);
+        renderTable('Productos con mayor valor inmovilizado', ['Producto', 'Unidades', 'Costo prom.', 'Valor total', 'Participación', 'Días sin mov.', 'Bodega'], topValued.map((p) => [p.name.substring(0, 32), fmtQty(p.qty), formatConvertedAmount(p.costPrice, 'NIO'), formatConvertedAmount(p.value, 'NIO'), `${valuation.totalValue > 0 ? ((p.value / valuation.totalValue) * 100).toFixed(1) : '0'}%`, p.daysSince === null ? 'N/D' : fmtQty(p.daysSince), p.mainWarehouse]), [16, 185, 129]);
+
+        renderTable('Productos con mayor rotación', ['Producto', 'Salidas', 'Stock prom.', 'Rotación', 'Stock actual', 'Cobertura'], topRotated.map((p) => [p.name.substring(0, 32), fmtQty(p.outs), fmtQty(p.avgQty), p.rotation !== null ? `${p.rotation.toFixed(1)}x` : 'N/D', fmtQty(p.qty), p.coverage !== null ? `${Math.round(p.coverage)} días` : 'N/D']), [59, 130, 246]);
+
+        renderTable('Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado'], replenishItems.map((i: any) => [String(i.productName || '').substring(0, 32), i.warehouseName, fmtQty(i.currentStock), fmtQty(i.minStock), fmtQty(i.suggestedQuantity), i.status || '']), [245, 158, 11]);
 
         doc.save(`Reporte_Inventario_${new Date().toISOString().split('T')[0]}.pdf`);
         toast.success("PDF generado exitosamente");
@@ -310,10 +695,9 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const hexColor = primaryColor.startsWith('#') ? primaryColor.replace('#', '') : '10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
 
-        ws.getColumn(1).width = 30;
-        ws.getColumn(2).width = 22;
-        ws.getColumn(3).width = 22;
-        ws.getColumn(4).width = 22;
+        ws.columns = [
+          { width: 32 }, { width: 14 }, { width: 14 }, { width: 16 }, { width: 14 }, { width: 16 }, { width: 22 },
+        ];
 
         let currentRow = 1;
 
@@ -326,32 +710,33 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           }
         }
 
-        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        ws.mergeCells(`A${currentRow}:G${currentRow}`);
         const cName = ws.getCell(`A${currentRow}`);
         cName.value = companyName;
         cName.font = { size: 18, bold: true, color: { argb: `FF${hexColor}` } };
         cName.alignment = { horizontal: 'center' };
         currentRow++;
 
-        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        ws.mergeCells(`A${currentRow}:G${currentRow}`);
         const cTitle = ws.getCell(`A${currentRow}`);
         cTitle.value = 'Reporte de Inventario';
         cTitle.font = { size: 13, bold: true };
         cTitle.alignment = { horizontal: 'center' };
         currentRow++;
 
-        ws.mergeCells(`A${currentRow}:D${currentRow}`);
+        ws.mergeCells(`A${currentRow}:G${currentRow}`);
         const cMeta = ws.getCell(`A${currentRow}`);
-        cMeta.value = `Moneda: ${displayCurrency} (${currencySymbol})  |  ${new Date().toLocaleDateString('es-NI')}`;
+        cMeta.value = `${cutoffText(new Date())}  |  Período: ${rangeLabel}  |  Moneda: ${displayCurrency} (${currencySymbol})`;
         cMeta.font = { size: 10, italic: true, color: { argb: 'FF888888' } };
         cMeta.alignment = { horizontal: 'center' };
         currentRow += 2;
 
+        const riskStr = `${risk.bajoMinimo.length} bajo mínimo · ${risk.sinExistencia.length} sin existencia · ${risk.negativo.length} negativos`;
         const kpiBoxes = [
-          { label: 'CAPITAL EN STOCK', value: formatConvertedAmount(totalValue, 'NIO'), detail: 'Valor total a precio de costo', bgColor: 'FF10B981' },
-          { label: 'STOCK CRÍTICO', value: lowStock.length.toString(), detail: 'SKUs bajo mínimo', bgColor: 'FFF43F5E' },
-          { label: 'INDICE DE ROTACIÓN', value: `${rotationRate}x`, detail: 'Velocidad media', bgColor: 'FF3B82F6' },
-          { label: 'POTENCIAL DE VENTA', value: formatConvertedAmount(totalSaleValue, 'NIO'), detail: 'Retorno bruto estimado', bgColor: 'FFF59E0B' },
+          { label: 'VALOR DEL INVENTARIO A COSTO', value: formatConvertedAmount(valuation.totalValue, 'NIO'), detail: `${fmtQty(valuation.totalUnits)} unidades · ${valuation.productsWithStock} productos`, bgColor: 'FF10B981' },
+          { label: 'PRODUCTOS EN RIESGO', value: risk.riesgoCount.toString(), detail: riskStr, bgColor: 'FFF43F5E' },
+          { label: 'ROTACIÓN DE INVENTARIO', value: rotation.turnover !== null ? `${rotation.turnover.toFixed(1)}x` : 'N/D', detail: rotation.turnover !== null ? `veces · ${rangeLabel}` : 'datos insuficientes', bgColor: 'FF3B82F6' },
+          { label: 'VALOR POTENCIAL A PRECIO DE VENTA', value: formatConvertedAmount(potential.totalSaleValue, 'NIO'), detail: 'No representa ingreso ni utilidad', bgColor: 'FFF59E0B' },
         ];
 
         ws.getRow(currentRow).height = 18;
@@ -408,63 +793,32 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         currentRow = ws.rowCount + 2;
 
         const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
-
-        // Top Valued
-        const topValTitleRow = ws.addRow(['Inversión por SKU (Mayor Valor)', '', '', '']);
-        ws.mergeCells(`A${ws.rowCount}:D${ws.rowCount}`);
-        topValTitleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF10B981' } };
-        topValTitleRow.getCell(1).alignment = { horizontal: 'center' };
-        ws.addRow([]);
-
-        const topValHeader = ws.addRow(['#', 'SKU', 'Detalle', 'Valor Costo']);
-        topValHeader.eachCell((cell) => {
-          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
-          cell.alignment = { horizontal: 'center', vertical: 'middle' };
-          cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-        });
-
-        topValued.forEach((item: any, idx) => {
-          const r = ws.addRow([idx + 1, item.name, `${item.stock} unidades`, Number(item.value)]);
-          r.getCell(1).alignment = { horizontal: 'center' };
-          r.getCell(1).font = { bold: true, color: { argb: 'FF10B981' } };
-          r.getCell(4).numFmt = `"${currencySymbol}" #,##0.00`;
-          r.getCell(4).font = { bold: true, color: { argb: 'FF10B981' } };
-          r.getCell(4).alignment = { horizontal: 'right' };
-          r.eachCell((cell) => {
+        const writeTable = (title: string, headers: string[], rows: any[][], accent: string) => {
+          ws.addRow([title, '', '', '', '', '', '']);
+          ws.mergeCells(`A${ws.rowCount}:G${ws.rowCount}`);
+          ws.getCell(`A${ws.rowCount}`).font = { bold: true, size: 14, color: { argb: accent } };
+          ws.getCell(`A${ws.rowCount}`).alignment = { horizontal: 'center' };
+          ws.addRow([]);
+          const headerRow = ws.addRow(headers);
+          headerRow.eachCell((cell) => {
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: accent } };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
             cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-            if (idx % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
           });
-        });
-
-        ws.addRow([]); ws.addRow([]);
-
-        // Top Rotated
-        const topRotTitleRow = ws.addRow(['Artículos de Mayor Rotación', '', '', '']);
-        ws.mergeCells(`A${ws.rowCount}:D${ws.rowCount}`);
-        topRotTitleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF3B82F6' } };
-        topRotTitleRow.getCell(1).alignment = { horizontal: 'center' };
-        ws.addRow([]);
-
-        const topRotHeader = ws.addRow(['#', 'SKU', 'Detalle', 'Rotación']);
-        topRotHeader.eachCell((cell) => {
-          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
-          cell.alignment = { horizontal: 'center', vertical: 'middle' };
-          cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-        });
-
-        topRotated.forEach((item: any, idx) => {
-          const r = ws.addRow([idx + 1, item.name, 'Despacho frecuente', `${item.qty} ud`]);
-          r.getCell(1).alignment = { horizontal: 'center' };
-          r.getCell(1).font = { bold: true, color: { argb: 'FF3B82F6' } };
-          r.getCell(4).font = { bold: true, color: { argb: 'FF3B82F6' } };
-          r.getCell(4).alignment = { horizontal: 'right' };
-          r.eachCell((cell) => {
-            cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-            if (idx % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+          rows.forEach((row, idx) => {
+            const r = ws.addRow(row);
+            r.eachCell((cell) => {
+              cell.border = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
+              if (idx % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+            });
           });
-        });
+          ws.addRow([]); ws.addRow([]);
+        };
+
+        writeTable('Productos con mayor valor inmovilizado', ['Producto', 'Unidades', 'Costo prom.', 'Valor total', 'Participación', 'Días sin mov.', 'Bodega'], topValued.map((p) => [p.name, fmtQty(p.qty), p.costPrice, p.value, `${valuation.totalValue > 0 ? ((p.value / valuation.totalValue) * 100).toFixed(1) : '0'}%`, p.daysSince === null ? 'N/D' : fmtQty(p.daysSince), p.mainWarehouse]), 'FF10B981');
+        writeTable('Productos con mayor rotación', ['Producto', 'Salidas', 'Stock prom.', 'Rotación', 'Stock actual', 'Cobertura'], topRotated.map((p) => [p.name, fmtQty(p.outs), fmtQty(p.avgQty), p.rotation !== null ? `${p.rotation.toFixed(1)}x` : 'N/D', fmtQty(p.qty), p.coverage !== null ? `${Math.round(p.coverage)} días` : 'N/D']), 'FF3B82F6');
+        writeTable('Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado'], replenishItems.map((i: any) => [i.productName, i.warehouseName, fmtQty(i.currentStock), fmtQty(i.minStock), fmtQty(i.suggestedQuantity), i.status || '']), 'FFF59E0B');
 
         await downloadExcelWorkbook(wb, `Reporte_Inventario_${new Date().toISOString().split('T')[0]}.xlsx`);
         toast.success("Excel exportado exitosamente");
@@ -483,194 +837,714 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     );
   }
 
+  const activeRisk = riskGroup ? riskGroups[riskGroup] : null;
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
-      {/* ═══ KPI Cards (Dashboard Style) ═══ */}
+    <div className="space-y-6 animate-in fade-in duration-700">
+      {/* ═══ Cabecera de corte ═══ */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+          {cutoffText(new Date())} · Período de análisis: <span className="text-primary">{rangeLabel}</span>
+        </p>
+        <p className="text-[10px] text-muted-foreground">Valores expresados en {displayCurrency} ({currencySymbol})</p>
+      </div>
+
+      {/* ═══ KPI Cards ═══ */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Valor Total */}
+        {/* Valor del inventario a costo */}
         <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
           <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Warehouse className="size-10" /></div>
           <CardHeader className="pb-1">
             <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <DollarSign className="size-3.5 text-emerald-500" /> Capital en Stock
+              <DollarSign className="size-3.5 text-emerald-500" /> Valor del inventario a costo
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(totalValue, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Valor total a precio de costo</p>
+            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(valuation.totalValue, 'NIO')}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {fmtQty(valuation.totalUnits)} unidades · {valuation.productsWithStock} productos con existencia
+            </p>
+            {valuation.status === 'PARTIAL' && (
+              <p className="text-[10px] font-bold text-amber-500 mt-1">
+                Calculado parcialmente · {valuation.withoutCost.length} productos sin costo registrado
+              </p>
+            )}
+            {valuation.status === 'UNAVAILABLE' && (
+              <p className="text-[10px] font-bold text-amber-500 mt-1">Sin existencias valorizadas</p>
+            )}
           </CardContent>
         </Card>
 
-        {/* Alertas de Stock */}
-        <Card className="border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
-          <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><AlertTriangle className="size-10" /></div>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Package className="size-3.5 text-rose-500" /> Stock Crítico
-              {lowStock.length > 0 && (
-                <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-rose-500/10 text-rose-500 animate-pulse">
-                  ALERTA
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-black text-rose-500">{lowStock.length}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">SKUs bajo el mínimo establecido</p>
-          </CardContent>
-        </Card>
+        {/* Productos en riesgo de abastecimiento */}
+        <button type="button" onClick={() => setRiskGroup('riesgo')} className="text-left">
+          <Card className="border-rose-500/20 bg-gradient-to-br from-rose-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all cursor-pointer h-full">
+            <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><ShieldAlert className="size-10" /></div>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                <Package className="size-3.5 text-rose-500" /> Productos en riesgo de abastecimiento
+                {risk.riesgoCount > 0 && (
+                  <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-rose-500/10 text-rose-500 animate-pulse">
+                    ALERTA
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xl font-black text-rose-500">{risk.riesgoCount}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {risk.bajoMinimo.length} bajo mínimo · {risk.sinExistencia.length} sin existencia
+                {risk.negativo.length > 0 && ` · ${risk.negativo.length} negativos`}
+              </p>
+              <p className="text-[9px] text-muted-foreground/70 mt-1">Clic para ver el listado detallado</p>
+            </CardContent>
+          </Card>
+        </button>
 
-        {/* Rotación */}
+        {/* Rotación de inventario */}
         <Card className="border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
           <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><TrendingDown className="size-10" /></div>
           <CardHeader className="pb-1">
             <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Activity className="size-3.5 text-blue-500" /> Indice de Rotación
+              <Activity className="size-3.5 text-blue-500" /> Rotación de inventario
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-black text-blue-500">{rotationRate}x</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Velocidad media de desalojo</p>
+            {rotation.turnover !== null ? (
+              <>
+                <p className="text-xl font-black text-blue-500">{rotation.turnover.toFixed(1)} veces</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Costo de ventas ÷ inventario promedio · {rangeLabel}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xl font-black text-blue-500">N/D</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Datos insuficientes — sin consumo o inventario promedio válido en el período</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
-        {/* Valor Proyectado */}
+        {/* Valor potencial a precio de venta */}
         <Card className="border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-transparent relative overflow-hidden group hover:shadow-lg transition-all">
           <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Tag className="size-10" /></div>
           <CardHeader className="pb-1">
             <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Scale className="size-3.5 text-amber-500" /> Potencial de Venta
+              <Scale className="size-3.5 text-amber-500" /> Valor potencial a precio de venta
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-black text-amber-500">{formatConvertedAmount(totalSaleValue, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Retorno bruto estimado</p>
+            <p className="text-xl font-black text-amber-500">{formatConvertedAmount(potential.totalSaleValue, 'NIO')}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Existencia × precio vigente — no representa ingreso ni utilidad hasta vender</p>
+            {potential.margin !== null ? (
+              <p className="text-[10px] font-bold text-emerald-500 mt-1">Margen bruto potencial: {formatConvertedAmount(potential.margin, 'NIO')}</p>
+            ) : (
+              <p className="text-[10px] text-muted-foreground/70 mt-1">Margen no calculable: hay productos sin costo o sin precio</p>
+            )}
           </CardContent>
         </Card>
       </div>
 
+      {/* ═══ Franja operativa ═══ */}
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
+        {[
+          { key: 'existencia', label: 'Con existencia', value: valuation.productsWithStock, color: 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' },
+          { key: 'sin-existencia', label: 'Sin existencia', value: risk.sinExistencia.length, color: 'text-slate-400 border-slate-400/20 bg-slate-400/5' },
+          { key: 'lento', label: 'Lento movimiento (90d)', value: risk.lento90, color: 'text-orange-500 border-orange-500/20 bg-orange-500/5' },
+          { key: 'sobrestock', label: 'Sobrestock', value: risk.sobrestock.length, color: 'text-purple-500 border-purple-500/20 bg-purple-500/5' },
+          { key: 'sin-costo', label: 'Sin costo', value: risk.sinCosto.length, color: 'text-amber-500 border-amber-500/20 bg-amber-500/5' },
+          { key: 'sin-precio', label: 'Sin precio', value: risk.sinPrecio.length, color: 'text-blue-500 border-blue-500/20 bg-blue-500/5' },
+          { key: 'negativo', label: 'Inventario negativo', value: risk.negativo.length, color: risk.negativo.length > 0 ? 'text-rose-500 border-rose-500/40 bg-rose-500/10' : 'text-slate-500 border-slate-500/20 bg-slate-500/5' },
+        ].map((chip) => (
+          <button key={chip.key} type="button" onClick={() => setRiskGroup(chip.key)}
+            className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left transition-colors hover:opacity-80 ${chip.color}`}>
+            <span className="text-[10px] font-black uppercase tracking-wider">{chip.label}</span>
+            <span className="text-sm font-black">{chip.value}</span>
+          </button>
+        ))}
+      </div>
+
       {/* ═══ Charts Row ═══ */}
       <div className="grid gap-6 lg:grid-cols-3">
+        {/* Dinámica de movimientos + Ajustes + Transferencias */}
         <Card id="inventory-dynamics-chart" className="lg:col-span-2 border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <ArrowUpRight className="size-4 text-primary" /> Dinámica de Movimientos
+              <ArrowUpRight className="size-4 text-primary" /> Entradas, salidas y ajustes
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[320px] w-full pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyData} barGap={6}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.06)" />
-                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: 600 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
-                  <Tooltip cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} contentStyle={{ borderRadius: 10, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 700, color: 'hsl(var(--foreground))' }} />
-                  <Bar dataKey="entradas" name="Entradas" fill="#10b981" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="salidas" name="Salidas" fill="#ef4444" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <Tabs value={movTab} onValueChange={setMovTab}>
+              <TabsList className="mb-4">
+                <TabsTrigger value="movimientos">Movimientos</TabsTrigger>
+                <TabsTrigger value="ajustes">Ajustes y mermas</TabsTrigger>
+                <TabsTrigger value="transferencias">Transferencias</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="movimientos" className="mt-0">
+                <div className="h-[300px] w-full">
+                  {chartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData} barGap={4}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.06)" />
+                        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 600 }} interval={chartData.length > 14 ? Math.floor(chartData.length / 14) : 0} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={(v) => fmtQty(v)} />
+                        <Tooltip cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} contentStyle={{ borderRadius: 10, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} formatter={(v: any) => `${fmtQty(v)} ud`} />
+                        <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 700, color: 'hsl(var(--foreground))' }} />
+                        <Bar dataKey="entradas" name="Entradas" fill="#10b981" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="salidas" name="Salidas" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="ajustesPos" name="Ajustes +" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="ajustesNeg" name="Ajustes −" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">Sin movimientos en el período</div>
+                  )}
+                </div>
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  Agrupación {durationDays <= 31 ? 'diaria' : durationDays <= 120 ? 'semanal' : 'mensual'} según el rango seleccionado. Las transferencias internas entre bodegas no afectan el consolidado y no se mezclan con entradas/salidas.
+                </p>
+              </TabsContent>
+
+              <TabsContent value="ajustes" className="mt-0">
+                {periodAdjustments.length === 0 ? (
+                  <div className="h-[200px] flex items-center justify-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">Sin ajustes registrados en el período</div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-border/40">
+                    <table className="w-full min-w-[640px]">
+                      <thead className="bg-muted/40">
+                        <tr>
+                          <th className={TH}>Número</th>
+                          <th className={TH}>Fecha</th>
+                          <th className={TH}>Motivo</th>
+                          <th className={TH}>Bodega</th>
+                          <th className={TH}>Unidades afectadas</th>
+                          <th className={TH}>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {periodAdjustments.slice(0, 12).map((a: any) => {
+                          const units = (a.items || []).reduce((acc: number, it: any) => acc + Math.abs(Number(it.actualStock || 0) - Number(it.currentStock || 0)), 0);
+                          return (
+                            <tr key={a.id} className="hover:bg-muted/30">
+                              <td className={`${TD} font-bold`}>{a.number}</td>
+                              <td className={TD}>{toDate(a.date || a.createdAt)?.toLocaleDateString('es-NI')}</td>
+                              <td className={`${TD} max-w-[220px] truncate`}>{a.reason || '—'}</td>
+                              <td className={TD}>{a.warehouse?.name || '—'}</td>
+                              <td className={`${TD} font-bold`}>{fmtQty(units)}</td>
+                              <td className={TD}>
+                                <Badge variant={a.status === 'APPROVED' ? 'default' : a.status === 'REJECTED' ? 'destructive' : 'outline'} className="text-[9px]">
+                                  {a.status || 'PENDIENTE'}
+                                </Badge>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="transferencias" className="mt-0">
+                {periodTransfers.length === 0 ? (
+                  <div className="h-[200px] flex items-center justify-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">Sin transferencias en el período</div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-border/40">
+                    <table className="w-full min-w-[640px]">
+                      <thead className="bg-muted/40">
+                        <tr>
+                          <th className={TH}>Número</th>
+                          <th className={TH}>Fecha</th>
+                          <th className={TH}>Origen</th>
+                          <th className={TH}>Destino</th>
+                          <th className={TH}>Líneas</th>
+                          <th className={TH}>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {periodTransfers.slice(0, 12).map((t: any) => (
+                          <tr key={t.id} className="hover:bg-muted/30">
+                            <td className={`${TD} font-bold`}>{t.number}</td>
+                            <td className={TD}>{toDate(t.date || t.createdAt)?.toLocaleDateString('es-NI')}</td>
+                            <td className={TD}>{t.from?.name || '—'}</td>
+                            <td className={TD}>{t.to?.name || '—'}</td>
+                            <td className={`${TD} font-bold`}>{(t.items || []).length}</td>
+                            <td className={TD}>
+                              <Badge variant={t.status === 'COMPLETED' ? 'default' : t.status === 'CANCELLED' ? 'destructive' : t.status === 'IN_TRANSIT' ? 'secondary' : 'outline'} className="text-[9px]">
+                                {t.status || 'PENDING'}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
 
+        {/* Distribución del valor del inventario */}
         <Card id="inventory-distribution-chart" className="border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <ShoppingCart className="size-4 text-primary" /> Distribución de Valor
+              <Layers className="size-4 text-primary" /> Distribución del valor del inventario
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6 pt-4">
-             <div className="h-[200px] w-full">
-                {categoryValueData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={categoryValueData}
-                      innerRadius={50}
-                      outerRadius={70}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {categoryValueData.map((_, idx) => (
-                        <Cell key={idx} fill={['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#94a3b8'][idx % 6]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} formatter={(v: number) => formatConvertedAmount(v, 'NIO')} />
-                  </PieChart>
-                </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">Sin información disponible</div>
-                )}
-             </div>
-             <div className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-indigo-500/10">
-                   <Package className="size-5 text-indigo-500" />
+          <CardContent className="space-y-4 pt-2">
+            <div className="flex flex-wrap gap-1.5">
+              {(['categoria', 'bodega', 'marca', 'rotacion'] as const).map((mode) => (
+                <button key={mode} type="button" onClick={() => setDistMode(mode)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${distMode === mode ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground bg-muted/40'}`}>
+                  {mode === 'categoria' ? 'Categoría' : mode === 'bodega' ? 'Bodega' : mode === 'marca' ? 'Marca' : 'Rotación'}
+                </button>
+              ))}
+            </div>
+
+            {distribution.length > 0 ? (
+              <>
+                <div className="h-[190px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={distribution} innerRadius={48} outerRadius={70} paddingAngle={4} dataKey="value" nameKey="name">
+                        {distribution.map((_, idx) => (
+                          <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} formatter={(v: any, name: any) => [formatConvertedAmount(v, 'NIO'), name]} />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-                <div>
-                   <p className="text-xs font-bold text-indigo-500 uppercase">Resumen SKUs</p>
-                   <p className="text-[10px] text-muted-foreground">{products.length} productos diferentes en catálogo</p>
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                  {distribution.slice(0, 8).map((seg, idx) => (
+                    <div key={seg.name} className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 px-3 py-1.5">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="size-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[idx % PIE_COLORS.length] }} />
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-bold truncate">{seg.name}</p>
+                          <p className="text-[9px] text-muted-foreground">{fmtQty(seg.units)} ud · {seg.products} productos</p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-[11px] font-black">{formatConvertedAmount(seg.value, 'NIO')}</p>
+                        <p className="text-[9px] text-muted-foreground">{seg.pct.toFixed(1)}%</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-             </div>
+              </>
+            ) : (
+              <div className="h-[240px] flex items-center justify-center text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest leading-relaxed">
+                No es posible distribuir el valor<br />porque no existen existencias valorizadas
+              </div>
+            )}
+
+            <div className="p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/10 flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-indigo-500/10">
+                <Package className="size-4 text-indigo-500" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-indigo-500 uppercase">Resumen de existencias</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {valuation.productsWithStock} productos con existencia · {risk.sinExistencia.length} sin existencia · {risk.bajoMinimo.length} bajo mínimo
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* ═══ Top Lists ═══ */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Top Valorados */}
+        {/* Productos con mayor valor inmovilizado */}
         <Card className="border-emerald-500/20">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <DollarSign className="size-4 text-emerald-500" /> Inversión por SKU (Mayor Valor)
+              <DollarSign className="size-4 text-emerald-500" /> Productos con mayor valor inmovilizado
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {topValued.map((p: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 transition-colors gap-4">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="size-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-[10px] font-black text-emerald-600 shrink-0">
-                    #{idx + 1}
+          <CardContent>
+            <Tabs value={valTab} onValueChange={setValTab}>
+              <TabsList className="mb-3">
+                <TabsTrigger value="mayor-valor">Mayor valor</TabsTrigger>
+                <TabsTrigger value="antiguedad">Mayor antigüedad</TabsTrigger>
+                <TabsTrigger value="sin-movimiento">Sin movimiento</TabsTrigger>
+                <TabsTrigger value="sobrestock">Sobrestock</TabsTrigger>
+              </TabsList>
+              <TabsContent value="mayor-valor" className="mt-0">
+                {topValued.length === 0 ? <EmptyTable /> : (
+                  <div className="overflow-x-auto rounded-xl border border-border/40">
+                    <table className="w-full min-w-[680px]">
+                      <thead className="bg-emerald-500/5">
+                        <tr>
+                          <th className={TH}>Producto</th>
+                          <th className={TH}>Unid.</th>
+                          <th className={TH}>Costo prom.</th>
+                          <th className={TH}>Valor total</th>
+                          <th className={TH}>Part.</th>
+                          <th className={TH}>Días s/mov</th>
+                          <th className={TH}>Bodega</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {topValued.map((p) => (
+                          <tr key={p.id} className="hover:bg-emerald-500/5">
+                            <td className={`${TD} font-bold max-w-[180px]`}>
+                              <span className="block truncate">{p.name}</span>
+                              <span className="block text-[9px] text-muted-foreground font-normal">{p.code}</span>
+                            </td>
+                            <td className={`${TD} font-bold`}>{fmtQty(p.qty)}</td>
+                            <td className={TD}>{formatConvertedAmount(p.costPrice, 'NIO')}</td>
+                            <td className={`${TD} font-black text-emerald-500`}>{formatConvertedAmount(p.value, 'NIO')}</td>
+                            <td className={TD}>{valuation.totalValue > 0 ? ((p.value / valuation.totalValue) * 100).toFixed(1) : '0'}%</td>
+                            <td className={TD}>{p.daysSince === null ? <Badge variant="outline" className="text-[9px] text-orange-500">N/D</Badge> : fmtQty(p.daysSince)}</td>
+                            <td className={`${TD} text-muted-foreground`}>{p.mainWarehouse}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-black truncate">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{p.stock} unidades en almacén</p>
+                )}
+              </TabsContent>
+              <TabsContent value="antiguedad" className="mt-0">
+                {topAging.length === 0 ? <EmptyTable /> : (
+                  <div className="overflow-x-auto rounded-xl border border-border/40">
+                    <table className="w-full min-w-[680px]">
+                      <thead className="bg-orange-500/5">
+                        <tr>
+                          <th className={TH}>Producto</th>
+                          <th className={TH}>Unid.</th>
+                          <th className={TH}>Valor total</th>
+                          <th className={TH}>Días sin movimiento</th>
+                          <th className={TH}>Bodega</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {topAging.map((p) => (
+                          <tr key={p.id} className="hover:bg-orange-500/5">
+                            <td className={`${TD} font-bold max-w-[220px]`}>
+                              <span className="block truncate">{p.name}</span>
+                              <span className="block text-[9px] text-muted-foreground font-normal">{p.code}</span>
+                            </td>
+                            <td className={`${TD} font-bold`}>{fmtQty(p.qty)}</td>
+                            <td className={`${TD} font-black text-orange-500`}>{formatConvertedAmount(p.value, 'NIO')}</td>
+                            <td className={TD}>
+                              <Badge variant={p.daysSince !== null && p.daysSince > 180 ? 'destructive' : 'outline'} className="text-[9px]">
+                                {fmtQty(p.daysSince)} días
+                              </Badge>
+                            </td>
+                            <td className={`${TD} text-muted-foreground`}>{p.mainWarehouse}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </div>
-                <span className="text-sm font-black text-emerald-500 shrink-0">{formatConvertedAmount(p.value, 'NIO')}</span>
-              </div>
-            ))}
+                )}
+              </TabsContent>
+              <TabsContent value="sin-movimiento" className="mt-0">
+                {topNeverMoved.length === 0 ? <EmptyTable /> : (
+                  <div className="overflow-x-auto rounded-xl border border-border/40">
+                    <table className="w-full min-w-[680px]">
+                      <thead className="bg-slate-500/5">
+                        <tr>
+                          <th className={TH}>Producto</th>
+                          <th className={TH}>Unid.</th>
+                          <th className={TH}>Valor total</th>
+                          <th className={TH}>Última salida</th>
+                          <th className={TH}>Bodega</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {topNeverMoved.map((p) => (
+                          <tr key={p.id} className="hover:bg-slate-500/5">
+                            <td className={`${TD} font-bold max-w-[220px]`}>
+                              <span className="block truncate">{p.name}</span>
+                              <span className="block text-[9px] text-muted-foreground font-normal">{p.code}</span>
+                            </td>
+                            <td className={`${TD} font-bold`}>{fmtQty(p.qty)}</td>
+                            <td className={`${TD} font-black`}>{formatConvertedAmount(p.value, 'NIO')}</td>
+                            <td className={TD}><Badge variant="destructive" className="text-[9px]">Sin salidas registradas</Badge></td>
+                            <td className={`${TD} text-muted-foreground`}>{p.mainWarehouse}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </TabsContent>
+              <TabsContent value="sobrestock" className="mt-0">
+                {topOverstock.length === 0 ? <EmptyTable /> : (
+                  <div className="overflow-x-auto rounded-xl border border-border/40">
+                    <table className="w-full min-w-[680px]">
+                      <thead className="bg-purple-500/5">
+                        <tr>
+                          <th className={TH}>Producto</th>
+                          <th className={TH}>Actual</th>
+                          <th className={TH}>Máximo</th>
+                          <th className={TH}>Valor total</th>
+                          <th className={TH}>Bodega</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {topOverstock.map((p) => {
+                          const lvl = p.levels.find((l: any) => l.maxStock != null && l.quantity > l.maxStock);
+                          return (
+                            <tr key={p.id} className="hover:bg-purple-500/5">
+                              <td className={`${TD} font-bold max-w-[220px]`}>
+                                <span className="block truncate">{p.name}</span>
+                                <span className="block text-[9px] text-muted-foreground font-normal">{p.code}</span>
+                              </td>
+                              <td className={`${TD} font-bold text-purple-500`}>{fmtQty(p.qty)}</td>
+                              <td className={TD}>{lvl ? fmtQty(lvl.maxStock) : '—'}</td>
+                              <td className={`${TD} font-black`}>{formatConvertedAmount(p.value, 'NIO')}</td>
+                              <td className={`${TD} text-muted-foreground`}>{lvl?.warehouseName || p.mainWarehouse}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
 
-        {/* Top Rotación */}
+        {/* Rotación y cobertura */}
         <Card className="border-blue-500/20">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <TrendingDown className="size-4 text-blue-500" /> Artículos de Mayor Rotación
+              <Gauge className="size-4 text-blue-500" /> Rotación y cobertura de productos
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {topRotated.map((p: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-blue-500/5 border border-blue-500/10 hover:bg-blue-500/10 transition-colors gap-4">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="size-7 rounded-lg bg-blue-500/20 flex items-center justify-center text-[10px] font-black text-blue-600 shrink-0">
-                    #{idx + 1}
+          <CardContent>
+            <Tabs value={rotTab} onValueChange={setRotTab}>
+              <TabsList className="mb-3">
+                <TabsTrigger value="mayor-rotacion">Mayor rotación</TabsTrigger>
+                <TabsTrigger value="menor-rotacion">Menor rotación</TabsTrigger>
+                <TabsTrigger value="menor-cobertura">Menor cobertura</TabsTrigger>
+                <TabsTrigger value="reposicion">Reposición sugerida</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="mayor-rotacion" className="mt-0">
+                {topRotated.length === 0 ? <EmptyTable /> : (
+                  <div className="overflow-x-auto rounded-xl border border-border/40">
+                    <table className="w-full min-w-[680px]">
+                      <thead className="bg-blue-500/5">
+                        <tr>
+                          <th className={TH}>Producto</th>
+                          <th className={TH}>Salidas</th>
+                          <th className={TH}>Stock prom.</th>
+                          <th className={TH}>Rotación</th>
+                          <th className={TH}>Stock actual</th>
+                          <th className={TH}>Cobertura</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {topRotated.map((p) => (
+                          <tr key={p.id} className="hover:bg-blue-500/5">
+                            <td className={`${TD} font-bold max-w-[200px]`}>
+                              <span className="block truncate">{p.name}</span>
+                              <span className="block text-[9px] text-muted-foreground font-normal">{p.code}</span>
+                            </td>
+                            <td className={`${TD} font-bold`}>{fmtQty(p.outs)} ud</td>
+                            <td className={TD}>{fmtQty(p.avgQty)} ud</td>
+                            <td className={`${TD} font-black text-blue-500`}>{p.rotation!.toFixed(1)}x</td>
+                            <td className={TD}>{fmtQty(p.qty)} ud</td>
+                            <td className={TD}>{p.coverage !== null ? `${Math.round(p.coverage)} días` : 'N/D'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-black truncate">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">Despacho frecuente de inventario</p>
+                )}
+              </TabsContent>
+
+              <TabsContent value="menor-rotacion" className="mt-0">
+                {leastRotated.length === 0 ? <EmptyTable /> : (
+                  <div className="overflow-x-auto rounded-xl border border-border/40">
+                    <table className="w-full min-w-[680px]">
+                      <thead className="bg-orange-500/5">
+                        <tr>
+                          <th className={TH}>Producto</th>
+                          <th className={TH}>Salidas</th>
+                          <th className={TH}>Stock prom.</th>
+                          <th className={TH}>Rotación</th>
+                          <th className={TH}>Stock actual</th>
+                          <th className={TH}>Cobertura</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {leastRotated.map((p) => (
+                          <tr key={p.id} className="hover:bg-orange-500/5">
+                            <td className={`${TD} font-bold max-w-[200px]`}>
+                              <span className="block truncate">{p.name}</span>
+                              <span className="block text-[9px] text-muted-foreground font-normal">{p.code}</span>
+                            </td>
+                            <td className={`${TD} font-bold`}>{fmtQty(p.outs)} ud</td>
+                            <td className={TD}>{fmtQty(p.avgQty)} ud</td>
+                            <td className={`${TD} font-black text-orange-500`}>{p.rotation!.toFixed(1)}x</td>
+                            <td className={TD}>{fmtQty(p.qty)} ud</td>
+                            <td className={TD}>{p.coverage !== null ? `${Math.round(p.coverage)} días` : 'N/D'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </div>
-                <span className="text-sm font-black text-blue-500 shrink-0">{p.qty} Unidades</span>
+                )}
+              </TabsContent>
+
+              <TabsContent value="menor-cobertura" className="mt-0">
+                {leastCoverage.length === 0 ? <EmptyTable /> : (
+                  <div className="overflow-x-auto rounded-xl border border-border/40">
+                    <table className="w-full min-w-[680px]">
+                      <thead className="bg-rose-500/5">
+                        <tr>
+                          <th className={TH}>Producto</th>
+                          <th className={TH}>Stock actual</th>
+                          <th className={TH}>Cobertura</th>
+                          <th className={TH}>Consumo diario</th>
+                          <th className={TH}>Rotación</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {leastCoverage.map((p) => {
+                          const m = productMetrics.get(p.id)!;
+                          return (
+                            <tr key={p.id} className="hover:bg-rose-500/5">
+                              <td className={`${TD} font-bold max-w-[220px]`}>
+                                <span className="block truncate">{p.name}</span>
+                                <span className="block text-[9px] text-muted-foreground font-normal">{p.code}</span>
+                              </td>
+                              <td className={`${TD} font-bold`}>{fmtQty(p.qty)} ud</td>
+                              <td className={`${TD} font-black text-rose-500`}>{Math.round(p.coverage!)} días</td>
+                              <td className={TD}>{fmtQty(m.outs / durationDays)} ud/día</td>
+                              <td className={TD}>{p.rotation !== null ? `${p.rotation.toFixed(1)}x` : 'N/D'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="reposicion" className="mt-0">
+                {replenishItems.length === 0 ? (
+                  <div className="h-40 flex items-center justify-center text-[10px] text-muted-foreground uppercase font-black tracking-widest leading-relaxed text-center">
+                    Sin productos a reponer<br />en el período de reposición
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-border/40">
+                    <table className="w-full min-w-[680px]">
+                      <thead className="bg-amber-500/5">
+                        <tr>
+                          <th className={TH}>Producto</th>
+                          <th className={TH}>Bodega</th>
+                          <th className={TH}>Actual</th>
+                          <th className={TH}>Mínimo</th>
+                          <th className={TH}>Sugerido</th>
+                          <th className={TH}>Demanda/día</th>
+                          <th className={TH}>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {replenishItems.map((i: any, idx: number) => (
+                          <tr key={`${i.productId}-${i.warehouseId}-${idx}`} className="hover:bg-amber-500/5">
+                            <td className={`${TD} font-bold max-w-[200px]`}>
+                              <span className="block truncate">{i.productName}</span>
+                              <span className="block text-[9px] text-muted-foreground font-normal">{i.productCode}</span>
+                            </td>
+                            <td className={`${TD} text-muted-foreground`}>{i.warehouseName}</td>
+                            <td className={`${TD} font-bold`}>{fmtQty(i.currentStock)}</td>
+                            <td className={TD}>{fmtQty(i.minStock)}</td>
+                            <td className={`${TD} font-black text-amber-500`}>{fmtQty(i.suggestedQuantity)}</td>
+                            <td className={TD}>{fmtQty(i.averageDailyDemand)}</td>
+                            <td className={TD}>
+                              <Badge variant={i.status === 'OUT_OF_STOCK' ? 'destructive' : i.status === 'LOW_STOCK' ? 'default' : 'outline'} className="text-[9px]">
+                                {i.status || '—'}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-blue-500/5 border border-blue-500/10 p-3">
+                <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Lento movimiento (90 días)</p>
+                <p className="text-lg font-black text-blue-500">{risk.lento90} productos</p>
+                <p className="text-[9px] text-muted-foreground">{formatConvertedAmount(slowBuckets[2]?.value || 0, 'NIO')} inmovilizado</p>
               </div>
-            ))}
-            {topRotated.length === 0 && <p className="text-xs text-muted-foreground text-center py-8 opacity-40 uppercase font-black tracking-widest leading-relaxed">Sin movimientos de salida<br/>detectados en el periodo</p>}
+              <div className="rounded-xl bg-indigo-500/5 border border-indigo-500/10 p-3">
+                <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cobertura promedio</p>
+                <p className="text-lg font-black text-indigo-500">{rotation.avgCoverage !== null ? `${Math.round(rotation.avgCoverage)} días` : 'N/D'}</p>
+                <p className="text-[9px] text-muted-foreground">Stock actual ÷ consumo diario del período</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* ═══ Modal de riesgo ═══ */}
+      <Dialog open={!!activeRisk} onOpenChange={(open) => { if (!open) setRiskGroup(null); }}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="size-4 text-rose-500" /> {activeRisk?.title}
+            </DialogTitle>
+            <p className="text-[11px] text-muted-foreground">{activeRisk?.desc}</p>
+          </DialogHeader>
+          {activeRisk && activeRisk.rows.length === 0 ? (
+            <div className="h-40 flex items-center justify-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">Nada que reportar aquí</div>
+          ) : activeRisk ? (
+            <div className="overflow-y-auto overflow-x-auto rounded-xl border border-border/40">
+              <table className="w-full min-w-[640px]">
+                <thead className="bg-rose-500/5 sticky top-0">
+                  <tr>
+                    <th className={TH}>Producto</th>
+                    <th className={TH}>Código</th>
+                    <th className={TH}>Bodega</th>
+                    <th className={TH}>Actual</th>
+                    <th className={TH}>Mínimo</th>
+                    <th className={TH}>Máximo</th>
+                    <th className={TH}>Motivo</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {activeRisk.rows.slice(0, 80).map((r, idx) => (
+                    <tr key={`${r.code}-${idx}`} className="hover:bg-muted/30">
+                      <td className={`${TD} font-bold max-w-[200px]`}>
+                        <span className="block truncate">{r.product}</span>
+                      </td>
+                      <td className={`${TD} font-mono text-[10px]`}>{r.code}</td>
+                      <td className={`${TD} text-muted-foreground`}>{r.warehouse}</td>
+                      <td className={`${TD} font-black ${r.qty < 0 ? 'text-rose-500' : ''}`}>{fmtQty(r.qty)}</td>
+                      <td className={TD}>{fmtQty(r.minStock)}</td>
+                      <td className={TD}>{r.maxStock != null ? fmtQty(r.maxStock) : '—'}</td>
+                      <td className={`${TD} text-muted-foreground max-w-[220px] truncate`}>{r.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 });
-InventoryReportTab.displayName = 'InventoryReportTab';
 
+function EmptyTable() {
+  return (
+    <div className="h-40 flex items-center justify-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">
+      Sin datos para este criterio
+    </div>
+  );
+}
+
+InventoryReportTab.displayName = 'InventoryReportTab';

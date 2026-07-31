@@ -108,7 +108,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
               <SelectItem value="ultimo-mes">Últimos 30 días</SelectItem>
               <SelectItem value="ultimo-trimestre">Último Trimestre</SelectItem>
               <SelectItem value="ultimo-año">Último Año</SelectItem>
-              <SelectItem value="todo">Eje Histórico</SelectItem>
+              <SelectItem value="todo">Histórico completo</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" onClick={handleExportPDF} className="gap-2">
