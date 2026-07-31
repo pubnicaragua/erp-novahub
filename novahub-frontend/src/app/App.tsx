@@ -177,7 +177,7 @@ function DashboardLayout() {
       case 'notificaciones': return <NotificacionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'transferencias': return <TransferenciasPage />;
       case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'roles': return <ModuleErrorBoundary moduleName="Roles"><ConfiguracionPage initialTab="roles" /></ModuleErrorBoundary>;
+      case 'roles': return <SuscripcionesPage />;
       case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} /></ModuleErrorBoundary>;
       case 'suscripciones': return <SuscripcionesPage />;
       case 'schema': return <PrismaSchemaPage />;

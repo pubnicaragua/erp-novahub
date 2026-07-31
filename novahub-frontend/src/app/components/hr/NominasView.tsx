@@ -13,6 +13,7 @@ import { AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
   const { convertAmount, formatConvertedAmount, displayCurrency } = useCurrency();
@@ -137,9 +138,10 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
     }
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     try {
-      const doc = new jsPDF() as any;
+      const pdfSettings = await getPdfDesignSettings('recursos-humanos.payrolls');
+      const doc = new jsPDF(pdfDesignPaper(pdfSettings)) as any;
       doc.text("Reporte de Nominas", 14, 15);
       doc.setFontSize(10);
       doc.text(`Generado: ${new Date().toLocaleDateString()}`, 14, 22);

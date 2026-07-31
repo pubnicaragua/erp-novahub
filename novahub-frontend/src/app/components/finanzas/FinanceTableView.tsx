@@ -23,6 +23,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
+import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -332,7 +333,8 @@ export function FinanceTableView({
   const exportPDF = async () => {
     try {
       toast.info("Generando PDF, por favor espere...");
-      const doc = new jsPDF();
+      const pdfSettings = await getPdfDesignSettings('finanzas.transactions');
+      const doc = new jsPDF(pdfDesignPaper(pdfSettings));
       const pageWidth = doc.internal.pageSize.getWidth();
       const primaryColor = themeConfig.colors.primary || '#10b981';
       const rgbPrimary = primaryColor.startsWith('#') 

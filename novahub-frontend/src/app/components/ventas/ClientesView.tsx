@@ -11,6 +11,7 @@ import { customersService } from '../../services/ventas.service';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
+import { SalesKpiCard } from './SalesKpiCard';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Customer, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
@@ -87,6 +88,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Customer | null>(null);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [customerTypeFilter, setCustomerTypeFilter] = useState<'ALL' | 'INDIVIDUAL' | 'COMPANY'>('ALL');
   const [pendingStatusChange, setPendingStatusChange] = useState<Customer | null>(null);
   const [statusChanging, setStatusChanging] = useState(false);
   const [pendingBulkDeactivateIds, setPendingBulkDeactivateIds] = useState<(string | number)[]>([]);
@@ -263,6 +265,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     const search = searchTerm.toLowerCase();
     const customerStatus = String(c.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
     if (statusFilter !== 'ALL' && customerStatus !== statusFilter) return false;
+    if (customerTypeFilter !== 'ALL' && String(c.type || '').toUpperCase() !== customerTypeFilter) return false;
     return (
       String(c.name || '').toLowerCase().includes(search) || 
       (c.email || '').toLowerCase().includes(search) ||
@@ -540,32 +543,14 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'status', label: 'Estado' },
   ];
 
-  const kpis = [
-    { title: 'Total Clientes', value: data.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
-    { title: 'Particulares', value: data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Empresas', value: data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length, icon: CheckCircle2, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'Saldo Pendiente', value: formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.balance || 0), 0), 'NIO'), icon: CreditCard, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-  ];
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* KPIs Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((kpi, i) => (
-          <Card key={i} className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-4">
-                <div className={cn("p-3 rounded-xl shadow-inner", kpi.bg, kpi.color)}>
-                  <kpi.icon className="size-5" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p>
-                  <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{kpi.value}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        <SalesKpiCard title="Total Clientes" value={data.length} icon={Users} color="text-primary" bg="bg-primary/10" kind="filter" active={customerTypeFilter === 'ALL' && statusFilter === 'ALL'} onClick={() => { setCustomerTypeFilter('ALL'); setStatusFilter('ALL'); }} />
+        <SalesKpiCard title="Particulares" value={data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length} icon={Users} color="text-blue-500" bg="bg-blue-500/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
+        <SalesKpiCard title="Empresas" value={data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length} icon={CheckCircle2} color="text-amber-500" bg="bg-amber-500/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
+        <SalesKpiCard title="Saldo Pendiente" value={formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.balance || 0), 0), 'NIO')} icon={CreditCard} color="text-rose-500" bg="bg-rose-500/10" />
       </div>
 
       {/* Main Content */}

@@ -93,6 +93,20 @@
   max-width: 100%;
 }
 
+/* Ventas: todo control accionable debe comunicar que puede pulsarse. */
+.sales-module button:not(:disabled),
+.sales-module select,
+.sales-module [role="button"],
+.sales-module a {
+  cursor: pointer;
+}
+
+.sales-module input[type="checkbox"],
+.sales-module input[type="radio"],
+.sales-module label {
+  cursor: pointer;
+}
+
 .sales-module .grid > *,
 .sales-module .flex > *,
 .purchases-module .grid > *,

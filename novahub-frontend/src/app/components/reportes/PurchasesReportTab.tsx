@@ -15,6 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ShoppingBag, CreditCard, Wallet, Activity, Truck, TrendingUp, Package, Scale, PieChart as PieChartIcon, AlertTriangle, Clock, Receipt, Info, Target, CalendarDays, ArrowUpRight, Percent, BarChart3, ClipboardList, FileWarning } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { cn } from '../ui/utils';
+import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -937,13 +938,14 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     exportPDF: async () => {
       try {
         toast.info('Generando PDF (Compras)...');
-        const doc = new jsPDF();
+        const pdfSettings = await getPdfDesignSettings('reportes.purchases');
+        const doc = new jsPDF(pdfDesignPaper(pdfSettings));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
-        const primaryColor = themeConfig.colors.primary || '#f97316';
-        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#f97316';
+        const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
+        const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
           ? [parseInt(primaryHex.slice(1, 3), 16), parseInt(primaryHex.slice(3, 5), 16), parseInt(primaryHex.slice(5, 7), 16)]
           : [249, 115, 22];

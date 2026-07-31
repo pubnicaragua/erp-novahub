@@ -23,6 +23,7 @@ import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceLis
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { SalesKpiCard } from './SalesKpiCard';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -52,6 +53,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'SENT' | 'APPROVED'>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -117,7 +119,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   };
 
   const filtered = data.filter(e => 
+    (statusFilter === 'ALL' || String(e.status || '').toUpperCase() === statusFilter) &&
     e.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (statusFilter === 'ALL' || String(e.status || '').toUpperCase() === statusFilter) &&
     (e.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -388,19 +392,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     (acc, estimate) => acc + convertAmount(estimate.total || 0, estimate.currency, estimate.exchangeRate),
     0,
   );
-
-  const kpis = [
-    {
-      title: `Total Cotizado (${displayCurrency})`,
-      value: formatConvertedAmount(quotedTotalInDisplayCurrency, displayCurrency),
-      icon: FileSpreadsheet,
-      color: 'text-blue-500',
-      bg: 'bg-blue-500/10',
-    },
-    { title: 'Tasa Conversión', value: `${((data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (data.length || 1)) * 100).toFixed(0)}%`, icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Enviadas', value: data.filter(e => (e.status||'').toUpperCase() === 'SENT').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'Aprobadas', value: data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length, icon: CheckCircle2, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-  ];
 
   if (editingId && localDoc) {
     return (
@@ -758,21 +749,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((kpi, i) => (
-          <Card key={i} className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-4">
-                <div className={cn("p-3 rounded-xl shadow-inner", kpi.bg, kpi.color)}>
-                  <kpi.icon className="size-5" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p>
-                  <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{kpi.value}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, displayCurrency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />
+        <SalesKpiCard title="Tasa Conversión" value={`${((data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (data.length || 1)) * 100).toFixed(0)}%`} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
+        <SalesKpiCard title="Enviadas" value={data.filter(e => (e.status||'').toUpperCase() === 'SENT').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'SENT'} onClick={() => setStatusFilter(statusFilter === 'SENT' ? 'ALL' : 'SENT')} />
+        <SalesKpiCard title="Aprobadas" value={data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-purple-500" bg="bg-purple-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
       </div>
 
       <div className="flex flex-col gap-4">

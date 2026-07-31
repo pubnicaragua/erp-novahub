@@ -367,7 +367,7 @@ const menuItems: MenuItem[] = [
       { id: 'reportes-suscripciones', label: 'Suscripciones', icon: <Layers className="size-4" /> },
     ]
   },
-  { id: 'suscripciones', label: 'Mi Suscripción', icon: <Zap className="size-5" />, section: 'Sistema' },
+  { id: 'suscripciones', label: 'Mi Empresa', icon: <Zap className="size-5" />, section: 'Sistema' },
   { id: 'dashboard-cxc', label: 'CxC / CxP', icon: <BadgeDollarSign className="size-5" /> },
   { id: 'configuracion', label: 'Configuracion', icon: <Settings className="size-5" /> },
 ];

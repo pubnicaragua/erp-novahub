@@ -462,6 +462,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
               onClick={() => generateExpensePDF({
                 expense: localDoc,
                 tenantName: 'Nova Hub',
+                targetKey: 'compras.expense',
                 formatAmount: (amount: number, currency?: string, rate?: number) =>
                   formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
               })}

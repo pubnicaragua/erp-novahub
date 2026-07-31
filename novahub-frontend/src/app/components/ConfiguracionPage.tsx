@@ -34,6 +34,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { modulePricingService, type ModulePriceItem } from '../services/module-pricing.service';
 import { CountriesView } from './admin/CountriesView';
 import { SucursalesView } from './inventory/SucursalesView';
+import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -150,7 +152,6 @@ export const SUBMODULES_FOR_PERMS = [
   // Configuración
   { id: 'CONFIG_COMPANY', label: 'Empresa', parent: 'CONFIGURATION' },
   { id: 'CONFIG_BRANDING', label: 'Marca y Tema', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_ROLES', label: 'Roles y Permisos', parent: 'CONFIGURATION' },
   { id: 'CONFIG_SECURITY', label: 'Seguridad', parent: 'CONFIGURATION' },
   { id: 'CONFIG_CURRENCY', label: 'Moneda', parent: 'CONFIGURATION' },
 
@@ -334,8 +335,7 @@ function getScenario(role?: string): 'superadmin' | 'partner' | 'client' {
 interface TabDef { id: string; label: string; icon: React.ElementType; scenario: ('superadmin' | 'partner' | 'client')[] }
 const ALL_TABS: TabDef[] = [
   { id: 'branding', label: 'Marca & Tema', icon: Palette, scenario: ['superadmin', 'partner', 'client'] },
-  { id: 'empresa', label: 'Mi Empresa', icon: Building2, scenario: ['superadmin', 'partner', 'client'] },
-  { id: 'roles', label: 'Roles & Permisos', icon: ShieldCheck, scenario: ['superadmin', 'partner', 'client'] },
+  { id: 'documentos-pdf', label: 'Documentos PDF', icon: FileText, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'seguridad', label: 'Seguridad', icon: KeyRound, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'tenancy', label: 'Multi-Tenancy', icon: Layers, scenario: ['superadmin', 'partner'] },
   { id: 'currency', label: 'Moneda & Cambio', icon: Coins, scenario: ['superadmin', 'partner', 'client'] },
@@ -423,11 +423,11 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [industryOptions, setIndustryOptions] = useState<{ id?: string; code: string; name: string; isDefault: boolean }[]>([]);
   const [newIndustryName, setNewIndustryName] = useState('');
   const [showAddIndustry, setShowAddIndustry] = useState(false);
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const [activeTab, setActiveTab] = useState(() => ALL_TABS.some(tab => tab.id === initialTab) ? initialTab : 'branding');
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setActiveTab(initialTab);
+    setActiveTab(ALL_TABS.some(tab => tab.id === initialTab) ? initialTab : 'branding');
   }, [initialTab]);
 
   // Security state
@@ -640,6 +640,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
   const [, setIsLoadingModules] = useState(false);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
+  const [pendingDeleteRole, setPendingDeleteRole] = useState<RoleManagement | null>(null);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [sucursalModalOpen, setSucursalModalOpen] = useState(false);
 
@@ -664,7 +665,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     }
     if (user?.tenantId) {
       fetchEnabledModules();
-      fetchWarehouses();
     }
   }, [user?.tenantId, canViewRoles]);
 
@@ -691,7 +691,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
   const fetchWarehouses = async () => {
     try {
-      const res: any = await api.get('/warehouses');
+      const res: any = await api.get('/inventory/warehouses');
       const list = Array.isArray(res) ? res : (res as any)?.data || [];
       setWarehouses(list);
     } catch { /* ignore */ }
@@ -813,6 +813,22 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       permissions: fullPerms
     });
     setIsRoleDialogOpen(true);
+  };
+
+  const confirmDeleteRole = async () => {
+    if (!pendingDeleteRole) return;
+    const role = pendingDeleteRole;
+    if (!user?.isPlatformAdmin && (role as any).clientTenantId && (role as any).clientTenantId !== user?.tenantId) {
+      toast.error('No puedes eliminar roles de otra empresa');
+      setPendingDeleteRole(null);
+      return;
+    }
+    try {
+      await rolesService.delete(role.id);
+      toast.success('Rol eliminado');
+      setPendingDeleteRole(null);
+      fetchRoles();
+    } catch { toast.error('Error al eliminar rol'); }
   };
 
   const handleSaveRole = async () => {
@@ -1116,6 +1132,16 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </motion.div>
         </TabsContent>
 
+        {/* ══════════ TAB: PERSONALIZACIÓN PDF ══════════ */}
+        <TabsContent value="documentos-pdf" className="space-y-6 mt-0">
+          <PdfDocumentCustomizer
+            tenantId={user?.tenantId}
+            companyName={companyName || user?.tenantName || ''}
+            corporateColor={themeConfig.colors.primary.startsWith('#') ? themeConfig.colors.primary : '#10b981'}
+            logo={logoPreview || themeConfig.logo}
+          />
+        </TabsContent>
+
         {/* ══════════ TAB: EMPRESA ══════════ */}
         <TabsContent value="empresa" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1316,13 +1342,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                               </button>
                               {!['Administrador', 'Admin'].includes(role.name) && canDeleteRoles && (
                                 <button onClick={async () => {
-                                  if (!confirm(`¿Eliminar el rol "${role.name}"?`)) return;
-                                  if (!user?.isPlatformAdmin && (role as any).clientTenantId && (role as any).clientTenantId !== user?.tenantId) {
-                                    toast.error('No puedes eliminar roles de otra empresa');
-                                    return;
-                                  }
-                                  try { await rolesService.delete(role.id); toast.success('Rol eliminado'); fetchRoles(); }
-                                  catch { toast.error('Error al eliminar rol'); }
+                                  setPendingDeleteRole(role);
                                 }} className="size-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 flex items-center justify-center text-rose-500 transition-all">
                                   <Trash2 className="size-3.5" />
                                 </button>
@@ -1396,7 +1416,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     <CardTitle className="flex items-center gap-2 font-black"><Building2 className="size-5 text-primary" />Sucursales</CardTitle>
                     <CardDescription>Gestiona las sucursales de tu empresa</CardDescription>
                   </div>
-                  <Button onClick={() => setSucursalModalOpen(true)} className="rounded-xl gap-2 font-black text-xs uppercase tracking-widest h-10">
+                  <Button onClick={() => { setSucursalModalOpen(true); fetchWarehouses(); }} className="rounded-xl gap-2 font-black text-xs uppercase tracking-widest h-10">
                     <Plus className="size-4" />Crear Sucursal
                   </Button>
                 </div>
@@ -2059,6 +2079,15 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         </TabsContent>
 
       </Tabs>
+      <ConfirmDialog
+        open={Boolean(pendingDeleteRole)}
+        onOpenChange={open => { if (!open) setPendingDeleteRole(null); }}
+        title="¿Eliminar rol?"
+        description={pendingDeleteRole ? `El rol «${pendingDeleteRole.name}» se eliminará y esta acción no se puede deshacer.` : undefined}
+        confirmLabel="Eliminar rol"
+        variant="destructive"
+        onConfirm={confirmDeleteRole}
+      />
     </div>
   );
 }

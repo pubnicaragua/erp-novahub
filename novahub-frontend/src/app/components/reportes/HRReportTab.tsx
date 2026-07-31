@@ -11,6 +11,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Users, DollarSign, CalendarCheck, Clock, Activity, Briefcase, TrendingUp, UserPlus, ShieldCheck, Scale } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
+import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -207,11 +208,12 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     exportPDF: async () => {
       toast.info("Generando PDF (RRHH)...");
       try {
-        const doc = new jsPDF();
+        const pdfSettings = await getPdfDesignSettings('reportes.hr');
+        const doc = new jsPDF(pdfDesignPaper(pdfSettings));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
-        const primaryColor = themeConfig.colors.primary || '#10b981';
+        const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
           ? [parseInt(primaryHex.slice(1, 3), 16), parseInt(primaryHex.slice(3, 5), 16), parseInt(primaryHex.slice(5, 7), 16)]

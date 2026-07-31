@@ -311,6 +311,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                   onClick={() => generateExpensePDF({
                     expense: toExpensePayload(localDoc, suppliers.find((s) => s.id === localDoc.supplierId)?.name),
                     tenantName: user?.tenantName || 'Nova Hub',
+                    targetKey: 'compras.payment-made',
                     formatAmount: (amount: number, currency?: string, rate?: number) =>
                       formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
                   })}
@@ -594,6 +595,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                  onClick={() => generateExpensePDF({
                    expense: toExpensePayload(row, row.supplier?.name),
                    tenantName: user?.tenantName || 'Nova Hub',
+                   targetKey: 'compras.payment-made',
                    formatAmount: (amount: number, currency?: string, rate?: number) =>
                      formatConvertedAmount(Number(amount || 0), currency || row.currency, rate || row.exchangeRate),
                  })}

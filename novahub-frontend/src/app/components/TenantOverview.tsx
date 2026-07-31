@@ -22,6 +22,7 @@ import {
   getImplementationSetupSummary,
   type ImplementationSetupSummary,
 } from '../services/implementation-setup.service';
+import { getPdfDesignSettings, pdfDesignPaper } from '../utils/pdfGenerator';
 
 interface TenantOverviewProps {
   onNavigate?: (module: Module) => void;
@@ -172,7 +173,8 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     try {
       const k = cajaData.kpis;
       const { default: jsPDF } = await import('jspdf');
-      const doc = new jsPDF();
+      const pdfSettings = await getPdfDesignSettings('dashboard.tenant-overview');
+      const doc = new jsPDF(pdfDesignPaper(pdfSettings));
       const pageW = doc.internal.pageSize.getWidth();
       let y = 20;
 

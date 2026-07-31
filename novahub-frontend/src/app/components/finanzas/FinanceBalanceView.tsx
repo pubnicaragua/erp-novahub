@@ -13,6 +13,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
+import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
@@ -343,7 +344,8 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
   const exportPDF = async () => {
     try {
       toast.info("Generando PDF, por favor espere...");
-      const doc = new jsPDF();
+      const pdfSettings = await getPdfDesignSettings('finanzas.balance');
+      const doc = new jsPDF(pdfDesignPaper(pdfSettings));
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const companyName = (themeConfig.tenantName || user?.tenantName || 'Mi Empresa').toUpperCase();

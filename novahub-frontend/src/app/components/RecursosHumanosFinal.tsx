@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 
 export function RecursosHumanosFinal() {
   const [loading, setLoading] = useState(true);
@@ -28,6 +29,7 @@ export function RecursosHumanosFinal() {
     salary: '', contractType: 'FULL_TIME', hireDate: new Date().toISOString().split('T')[0]
   });
   const [departmentForm, setDepartmentForm] = useState({ code: '', name: '', description: '', budget: '' });
+  const [pendingDeleteEmployee, setPendingDeleteEmployee] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -85,11 +87,16 @@ export function RecursosHumanosFinal() {
     }
   };
 
-  const handleDeleteEmployee = async (id: string, name: string) => {
-    if (!confirm(`¿Eliminar a ${name}?`)) return;
+  const handleDeleteEmployee = (id: string, name: string) => {
+    setPendingDeleteEmployee({ id, name });
+  };
+
+  const confirmDeleteEmployee = async () => {
+    if (!pendingDeleteEmployee) return;
     try {
-      await hrService.deleteEmployee(id);
+      await hrService.deleteEmployee(pendingDeleteEmployee.id);
       toast.success('Empleado eliminado');
+      setPendingDeleteEmployee(null);
       fetchData();
     } catch (error) {
       toast.error('Error al eliminar empleado');
@@ -300,6 +307,16 @@ export function RecursosHumanosFinal() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteEmployee)}
+        onOpenChange={open => { if (!open) setPendingDeleteEmployee(null); }}
+        title="¿Eliminar empleado?"
+        description={pendingDeleteEmployee ? `Se eliminará a ${pendingDeleteEmployee.name}. Esta acción no se puede deshacer.` : undefined}
+        confirmLabel="Eliminar"
+        variant="destructive"
+        onConfirm={confirmDeleteEmployee}
+      />
 
       {/* Department Dialog */}
       <Dialog open={isDepartmentDialogOpen} onOpenChange={setIsDepartmentDialogOpen}>

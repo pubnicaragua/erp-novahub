@@ -12,6 +12,7 @@ import { Users, Scale, TrendingUp, DollarSign, Package, ArrowUpRight, Activity, 
 import type { ReportExportRef, ReportProps } from './types';
 import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
+import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -204,12 +205,13 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     exportPDF: async () => {
       try {
         toast.info("Generando PDF (Clientes), por favor espere...");
-        const doc = new jsPDF();
+        const pdfSettings = await getPdfDesignSettings('reportes.customers');
+        const doc = new jsPDF(pdfDesignPaper(pdfSettings));
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
-        const primaryColor = themeConfig.colors.primary || '#10b981';
+        const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#') ? [parseInt(primaryHex.slice(1,3), 16), parseInt(primaryHex.slice(3,5), 16), parseInt(primaryHex.slice(5,7), 16)] : [16, 185, 129];
         const marginX = 14;

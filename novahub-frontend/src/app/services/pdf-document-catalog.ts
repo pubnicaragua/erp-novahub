@@ -1,0 +1,80 @@
+export type PdfDocumentStructure = 'transaction' | 'history' | 'report' | 'receipt' | 'administrative' | 'dashboard' | 'print';
+
+export type PdfTemplateModule =
+  | 'ventas'
+  | 'compras'
+  | 'finanzas'
+  | 'inventario'
+  | 'recursos-humanos'
+  | 'reportes'
+  | 'dashboard';
+
+export interface PdfTemplateTarget {
+  key: string;
+  module: PdfTemplateModule;
+  moduleLabel: string;
+  label: string;
+  structure: PdfDocumentStructure;
+  legacyKeys?: string[];
+  source: string;
+}
+
+/**
+ * Catálogo único de salidas PDF/imprimibles del ERP.
+ * Cada clave debe corresponder a un exportador real del frontend.
+ */
+export const PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
+  { key: 'ventas.estimate', module: 'ventas', moduleLabel: 'Ventas', label: 'Cotizaciones', structure: 'transaction', legacyKeys: ['estimate'], source: 'generateEstimatePDF' },
+  { key: 'ventas.order', module: 'ventas', moduleLabel: 'Ventas', label: 'Órdenes de venta', structure: 'transaction', legacyKeys: ['order'], source: 'generateEstimatePDF' },
+  { key: 'ventas.invoice', module: 'ventas', moduleLabel: 'Ventas', label: 'Facturas', structure: 'transaction', legacyKeys: ['invoice'], source: 'generateEstimatePDF' },
+  { key: 'ventas.recurring', module: 'ventas', moduleLabel: 'Ventas', label: 'Facturas recurrentes', structure: 'transaction', legacyKeys: ['recurring'], source: 'generateRecurringInvoicePDF' },
+  { key: 'ventas.payment', module: 'ventas', moduleLabel: 'Ventas', label: 'Pagos recibidos', structure: 'receipt', legacyKeys: ['payment'], source: 'generateEstimatePDF' },
+  { key: 'ventas.return', module: 'ventas', moduleLabel: 'Ventas', label: 'Devoluciones', structure: 'transaction', legacyKeys: ['return'], source: 'generateEstimatePDF' },
+  { key: 'ventas.credit-note', module: 'ventas', moduleLabel: 'Ventas', label: 'Notas de crédito', structure: 'transaction', legacyKeys: ['credit-note'], source: 'generateEstimatePDF' },
+  { key: 'ventas.cash-session', module: 'ventas', moduleLabel: 'Ventas', label: 'Resumen de sesión de caja', structure: 'receipt', source: 'generateSessionSummaryPDF' },
+  { key: 'ventas.cash-ticket', module: 'ventas', moduleLabel: 'Ventas', label: 'Ticket de caja', structure: 'print', source: 'printPosTicket' },
+
+  { key: 'compras.supplier-history', module: 'compras', moduleLabel: 'Compras', label: 'Historial de proveedor', structure: 'history', source: 'generateSupplierHistoryPDF' },
+  { key: 'compras.expense', module: 'compras', moduleLabel: 'Compras', label: 'Comprobante de gasto', structure: 'receipt', source: 'generateExpensePDF' },
+  { key: 'compras.purchase-order', module: 'compras', moduleLabel: 'Compras', label: 'Órdenes de compra', structure: 'transaction', source: 'generatePurchaseOrderPDF' },
+  { key: 'compras.supplier-invoice', module: 'compras', moduleLabel: 'Compras', label: 'Facturas de proveedor', structure: 'transaction', source: 'generateSupplierInvoicePDF' },
+  { key: 'compras.payment-made', module: 'compras', moduleLabel: 'Compras', label: 'Pagos realizados', structure: 'receipt', source: 'generateExpensePDF' },
+  { key: 'compras.purchase-request', module: 'compras', moduleLabel: 'Compras', label: 'Solicitud de compra', structure: 'administrative', source: 'window.print' },
+
+  { key: 'finanzas.balance', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Balance general', structure: 'report', source: 'FinanceBalanceView.exportPDF' },
+  { key: 'finanzas.transactions', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Tabla financiera', structure: 'report', source: 'FinanceTableView.exportPDF' },
+  { key: 'recursos-humanos.payrolls', module: 'recursos-humanos', moduleLabel: 'Recursos Humanos', label: 'Reporte de nóminas', structure: 'report', source: 'NominasView.handleExportPDF' },
+
+  { key: 'reportes.customers', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de clientes', structure: 'report', source: 'CustomersReportTab.exportPDF' },
+  { key: 'reportes.sales', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de ventas', structure: 'report', source: 'SalesReportTab.exportPDF' },
+  { key: 'reportes.purchases', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de compras', structure: 'report', source: 'PurchasesReportTab.exportPDF' },
+  { key: 'reportes.inventory', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de inventario', structure: 'report', source: 'InventoryReportTab.exportPDF' },
+  { key: 'reportes.providers', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de proveedores', structure: 'report', source: 'ProvidersReportTab.exportPDF' },
+  { key: 'reportes.finance', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte financiero', structure: 'report', source: 'FinanceReportTab.exportPDF' },
+  { key: 'reportes.hr', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de capital humano', structure: 'report', source: 'HRReportTab.exportPDF' },
+  { key: 'reportes.subscriptions', module: 'reportes', moduleLabel: 'Reportes', label: 'Reporte de suscripciones', structure: 'report', source: 'SubscriptionsReportTab.exportPDF' },
+  { key: 'dashboard.tenant-overview', module: 'dashboard', moduleLabel: 'Dashboard', label: 'Reporte del dashboard', structure: 'dashboard', source: 'TenantOverview.handleExport' },
+];
+
+export const PDF_TEMPLATE_MODULES = Array.from(
+  new Map(PDF_TEMPLATE_TARGETS.map(target => [target.module, { id: target.module, label: target.moduleLabel }])).values(),
+);
+
+export function getPdfTemplateTarget(key: string | null | undefined) {
+  if (!key) return PDF_TEMPLATE_TARGETS[0];
+  return PDF_TEMPLATE_TARGETS.find(target => target.key === key || target.legacyKeys?.includes(key)) || PDF_TEMPLATE_TARGETS[0];
+}
+
+export function normalizePdfTemplateKey(key: string | null | undefined) {
+  if (!key) return PDF_TEMPLATE_TARGETS[0].key;
+  const knownTarget = PDF_TEMPLATE_TARGETS.find(target => target.key === key || target.legacyKeys?.includes(key));
+  return knownTarget?.key || key;
+}
+
+export function getPdfTemplateTargetByLegacyKey(key: string) {
+  return PDF_TEMPLATE_TARGETS.find(target => target.legacyKeys?.includes(key));
+}
+
+export function getPdfTemplateLegacyKey(key: string) {
+  return getPdfTemplateTarget(key).legacyKeys?.[0] || key;
+}

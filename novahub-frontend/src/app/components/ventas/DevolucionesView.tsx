@@ -22,6 +22,7 @@ import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/sale
 import { SalesIrSelector } from './SalesIrSelector';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { SalesKpiCard } from './SalesKpiCard';
 
 interface DevolucionesViewProps {
   data: SalesReturn[];
@@ -48,6 +49,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -66,9 +68,10 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     }
   }, [editingId]);
 
-  const filtered = data.filter(r => 
-    r.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (r.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  const filtered = data.filter(r =>
+    (statusFilter === 'ALL' || String(r.status || '').toUpperCase() === statusFilter) &&
+    (r.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (r.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const startNew = () => {
@@ -181,13 +184,6 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     (acc, salesReturn) => acc + convertAmount(salesReturn.total || 0, (salesReturn as any).currency, (salesReturn as any).exchangeRate),
     0,
   );
-
-  const kpis = [
-    { title: 'Total Devuelto',  value: formatConvertedAmount(totalReturnedInDisplayCurrency, displayCurrency), icon: FileOutput,   color: 'text-rose-500',    bg: 'bg-rose-500/10'    },
-    { title: 'Pendientes',      value: data.filter(r => (r.status||'').toUpperCase() === 'PENDING').length,           icon: Clock,        color: 'text-amber-500',   bg: 'bg-amber-500/10'   },
-    { title: 'Aprobadas',       value: data.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length,          icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Rechazadas',      value: data.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length,          icon: XCircle,      color: 'text-muted-foreground', bg: 'bg-muted/10' },
-  ];
 
   // ─── INLINE FORM ────────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
@@ -317,12 +313,10 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((kpi, i) => (
-          <Card key={i} className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
-            <CardContent className="p-5"><div className="flex items-center gap-4"><div className={cn("p-3 rounded-xl shadow-inner", kpi.bg, kpi.color)}><kpi.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{kpi.value}</p></div></div></CardContent>
-          </Card>
-        ))}
+        <SalesKpiCard title="Total Devuelto" value={formatConvertedAmount(totalReturnedInDisplayCurrency, displayCurrency)} icon={FileOutput} color="text-rose-500" bg="bg-rose-500/10" />
+        <SalesKpiCard title="Pendientes" value={data.filter(r => (r.status||'').toUpperCase() === 'PENDING').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'PENDING'} onClick={() => setStatusFilter(statusFilter === 'PENDING' ? 'ALL' : 'PENDING')} />
+        <SalesKpiCard title="Aprobadas" value={data.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        <SalesKpiCard title="Rechazadas" value={data.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length} icon={XCircle} color="text-muted-foreground" bg="bg-muted/10" active={statusFilter === 'REJECTED'} onClick={() => setStatusFilter(statusFilter === 'REJECTED' ? 'ALL' : 'REJECTED')} />
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

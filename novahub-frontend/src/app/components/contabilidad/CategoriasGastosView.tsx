@@ -16,6 +16,7 @@ import { Separator } from '../ui/separator';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 const ACCOUNT_TYPES = [
   { value: 'ASSET', label: 'Activo' },
@@ -34,6 +35,7 @@ export function CategoriasGastosView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({ code: '', name: '', description: '', accountId: '', isActive: true });
 
   useEffect(() => { loadData(); }, [filterType]);
@@ -94,10 +96,15 @@ export function CategoriasGastosView() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('¿Eliminar esta categoría? No se puede si tiene gastos asociados.')) return;
+    setPendingDeleteId(id);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeleteId) return;
     try {
-      await contabilidadService.deleteExpenseCategory(id);
+      await contabilidadService.deleteExpenseCategory(pendingDeleteId);
       toast.success('Categoría eliminada');
+      setPendingDeleteId(null);
       loadData();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al eliminar');
@@ -278,6 +285,16 @@ export function CategoriasGastosView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteId)}
+        onOpenChange={open => { if (!open) setPendingDeleteId(null); }}
+        title="¿Eliminar categoría?"
+        description="No podrás eliminarla si tiene gastos asociados. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

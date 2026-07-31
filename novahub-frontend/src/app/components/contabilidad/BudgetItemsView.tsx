@@ -17,6 +17,7 @@ import { Separator } from '../ui/separator';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 const PERIODS = [
   { label: 'Este Mes', value: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}` },
@@ -32,6 +33,7 @@ export function BudgetItemsView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({ code: '', name: '', assignedAmount: 0, accountId: '', costCenterId: '', period: PERIODS[0].value, status: 'ACTIVE' });
 
   useEffect(() => { loadData(); }, [filterPeriod]);
@@ -89,10 +91,15 @@ export function BudgetItemsView() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('¿Eliminar esta partida presupuestaria?')) return;
+    setPendingDeleteId(id);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeleteId) return;
     try {
-      await contabilidadService.deleteBudgetItem(id);
+      await contabilidadService.deleteBudgetItem(pendingDeleteId);
       toast.success('Partida eliminada');
+      setPendingDeleteId(null);
       loadData();
     } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); }
   }
@@ -276,6 +283,16 @@ export function BudgetItemsView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteId)}
+        onOpenChange={open => { if (!open) setPendingDeleteId(null); }}
+        title="¿Eliminar partida presupuestaria?"
+        description="La partida se eliminará y esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="destructive"
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
