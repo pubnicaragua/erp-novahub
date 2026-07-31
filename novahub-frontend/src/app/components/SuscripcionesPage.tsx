@@ -11,7 +11,6 @@ import { rolesService } from '../services/roles.service';
 import { toast } from 'sonner';
 import { api } from '../services/api';
 import { TrialExtensionRequestsPanel } from './suscripciones/TrialExtensionRequestsPanel';
-import { DominiosView } from './suscripciones/DominiosView';
 import { NovaSuiteIcon } from './ui/NovaIcons';
 import { 
   CheckCircle2, 
@@ -551,7 +550,6 @@ export function SuscripcionesPage() {
           });
         }}
       />
-      <DominiosView />
     </>);
   }
 

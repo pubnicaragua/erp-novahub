@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
-  Zap, Building2, Globe, User as UserIcon, LayoutGrid, Check, Clock, Plus, ShieldCheck, DollarSign, MessageSquare, Users, Edit2, Trash2, KeyRound, X, Mail, Shield, MapPin, Store
+  Zap, Building2, CircleHelp, Globe, User as UserIcon, LayoutGrid, Check, Clock, Plus, ShieldCheck, DollarSign, MessageSquare, Users, Edit2, Trash2, KeyRound, X, Mail, Shield, MapPin, Store, Info, Crown
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -13,13 +13,20 @@ import { Textarea } from '../ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { TeamManagementPanel } from './TeamManagementPanel';
+import { TeamAccessPanel } from './TeamAccessPanel';
+import { SucursalesView } from '../inventory/SucursalesView';
+import { DominiosView } from './DominiosView';
 import { TrialCountdownBanner } from '../auth/TrialCountdownBanner';
 import { tenantsService } from '../../services/tenants.service';
 import { usersService } from '../../services/users.service';
 import { inventoryService } from '../../services/inventario.service';
+import { brandingService } from '../../services/branding.service';
+import { api } from '../../services/api';
 import { cajaService } from '../../services/caja.service';
 import { toast } from 'sonner';
+import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
 
 interface TenantSubscriptionViewProps {
@@ -36,16 +43,34 @@ const SYSTEM_ROLE_OPTIONS = [
   { value: 'EMPLOYEE', label: 'Colaborador', description: 'Acceso limitado según rol personalizado asignado' },
 ];
 
+const TEAM_TOUR_STEPS: GuidedTourStep[] = [
+  { target: '[data-tour="team-users"]', title: 'Usuarios', description: 'Desde aquí puedes crear y administrar las personas que tienen acceso a la empresa, su tipo de acceso, rol, contraseña y estado.', placement: 'right' },
+  { target: '[data-tour="team-roles"]', title: 'Roles y permisos', description: 'Los roles agrupan permisos para que puedas asignar rápidamente qué módulos y acciones puede utilizar cada usuario.', placement: 'left' },
+  { target: '[data-tour="team-departments"]', title: 'Departamentos', description: 'Crea áreas de trabajo y asigna usuarios a cada departamento para mantener organizado el equipo.', placement: 'bottom' },
+];
+
 export function TenantSubscriptionView({ tenant, availableModules, requests, customRoles = [], onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
+  const { updateConfig } = useTheme();
+  const { user: currentUser } = useAuth();
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
   const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
+  const [isDepartmentDialogOpen, setIsDepartmentDialogOpen] = useState(false);
+  const [showTeamTutorial, setShowTeamTutorial] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [selectedModule, setSelectedModule] = useState<any>(null);
   const [notes, setNotes] = useState('');
   const [users, setUsers] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [companyName, setCompanyName] = useState('');
+  const [companySlug, setCompanySlug] = useState('');
+  const [companyIndustry, setCompanyIndustry] = useState('OTHER');
+  const [industryOptions, setIndustryOptions] = useState<{ id?: string; code: string; name: string; isDefault: boolean }[]>([]);
+  const [newIndustryName, setNewIndustryName] = useState('');
+  const [showAddIndustry, setShowAddIndustry] = useState(false);
+  const [savingCompany, setSavingCompany] = useState(false);
   
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'EMPLOYEE' });
   const [uploading, setUploading] = useState(false);
@@ -56,8 +81,64 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   useEffect(() => {
     if (tenant?.id) {
       fetchUsers();
+      inventoryService.getWarehouses().then((response: any) => setWarehouses(Array.isArray(response) ? response : (response?.data || []))).catch(() => setWarehouses([]));
+      setCompanyName(tenant.name || '');
+      setCompanySlug(tenant.slug || '');
+      setCompanyIndustry(tenant.industry || 'OTHER');
+      brandingService.getCurrent().then((branding) => {
+        if (branding.companyName) setCompanyName(branding.companyName);
+        if (branding.industry) setCompanyIndustry(branding.industry);
+      }).catch(() => undefined);
+      api.get<any[]>(`/tenants/${tenant.id}/industries`).then((response) => setIndustryOptions(Array.isArray(response) ? response : [])).catch(() => setIndustryOptions([]));
     }
   }, [tenant?.id]);
+
+  const handleAddIndustry = async () => {
+    const name = newIndustryName.trim();
+    if (!name || !tenant?.id) return;
+    try {
+      const code = name.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
+      await api.post(`/tenants/${tenant.id}/industries`, { name, code });
+      setNewIndustryName('');
+      setShowAddIndustry(false);
+      const response = await api.get<any[]>(`/tenants/${tenant.id}/industries`);
+      setIndustryOptions(Array.isArray(response) ? response : []);
+      toast.success('Industria agregada correctamente');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Error al agregar industria');
+    }
+  };
+
+  const handleDeleteIndustry = async (id: string) => {
+    try {
+      await api.delete(`/tenants/${tenant.id}/industries/${id}`);
+      setIndustryOptions((current) => current.filter((industry) => industry.id !== id));
+      toast.success('Industria eliminada');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Error al eliminar industria');
+    }
+  };
+
+  const handleSaveCompanyInfo = async () => {
+    if (!companyName.trim()) {
+      toast.error('El nombre de la empresa es obligatorio');
+      return;
+    }
+    try {
+      setSavingCompany(true);
+      await Promise.all([
+        brandingService.update({ companyName: companyName.trim(), industry: companyIndustry }),
+        tenantsService.update(tenant.id, { name: companyName.trim(), slug: companySlug.trim() }),
+      ]);
+      updateConfig({ tenantName: companyName.trim() });
+      toast.success('Información general actualizada');
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Error al guardar la información');
+    } finally {
+      setSavingCompany(false);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -199,9 +280,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         <div>
           <h1 className="text-4xl font-black tracking-tighter text-foreground flex items-center gap-3 uppercase italic">
             <Zap className="size-10 text-primary fill-primary/20" />
-            Mi Suscripción
+             Mi Empresa
           </h1>
-          <p className="text-muted-foreground font-medium mt-2">Gestiona el plan, módulos y el equipo de {tenant.name}.</p>
+           <p className="text-muted-foreground font-medium mt-2">Gestiona la suscripción, el equipo y la estructura de {tenant.name}.</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -219,18 +300,107 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         <TrialCountdownBanner />
       </motion.div>
 
-      <Tabs defaultValue="plan" className="w-full">
-        <TabsList className="bg-muted/20 border border-border/50 p-1 h-12 mb-8">
+      <Tabs defaultValue="general" className="w-full">
+        <TabsList className="bg-muted/20 border border-border/50 p-1 h-auto min-h-12 mb-8 flex flex-wrap">
+          <TabsTrigger value="general" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+            <Building2 className="size-4" /> General
+          </TabsTrigger>
           <TabsTrigger value="plan" className="px-8 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
             <LayoutGrid className="size-4" /> Módulos y Plan
           </TabsTrigger>
-          <TabsTrigger value="team" className="px-8 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+          <TabsTrigger value="team" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
             <Users className="size-4" /> Mi Equipo ({users.length})
           </TabsTrigger>
-          <TabsTrigger value="estructura" className="px-8 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
-            <Store className="size-4" /> Estructura
+          <TabsTrigger value="sucursales" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+            <Store className="size-4" /> Sucursales
+          </TabsTrigger>
+          <TabsTrigger value="dominio" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+            <Globe className="size-4" /> Dominio propio
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="general" className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <CardTitle className="flex items-center gap-2 font-black"><Building2 className="size-5 text-primary" />Datos generales</CardTitle>
+                <CardDescription>Información principal de {tenant.name}.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5 pt-6">
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre de la empresa</Label>
+                  <Input value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Ej: Empresa Demo S.A." className="h-11 rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Slug / Identificador</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-lg bg-muted px-3 py-2 text-sm font-mono text-muted-foreground">novahub.io/</span>
+                    <Input value={companySlug} onChange={(event) => setCompanySlug(event.target.value)} className="h-11 rounded-xl font-mono" placeholder="empresa-demo" />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Identificador único de tu empresa dentro de NovaHub.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Industria</Label>
+                  <select value={companyIndustry} onChange={(event) => setCompanyIndustry(event.target.value)} className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    {industryOptions.length > 0 ? (
+                      <>
+                        <optgroup label="Predeterminadas">
+                          {industryOptions.filter((industry) => industry.isDefault).map((industry) => <option key={industry.code} value={industry.code}>{industry.name}</option>)}
+                        </optgroup>
+                        {industryOptions.some((industry) => !industry.isDefault) && <optgroup label="Personalizadas">
+                          {industryOptions.filter((industry) => !industry.isDefault).map((industry) => <option key={industry.code} value={industry.code}>{industry.name}</option>)}
+                        </optgroup>}
+                      </>
+                    ) : (
+                      <>
+                        <option value="RETAIL">Comercio / Retail</option>
+                        <option value="SERVICES">Servicios profesionales</option>
+                        <option value="TECHNOLOGY">Tecnología</option>
+                        <option value="OTHER">Otro</option>
+                      </>
+                    )}
+                  </select>
+                  {industryOptions.filter((industry) => !industry.isDefault).length > 0 && <div className="flex flex-wrap gap-1.5">
+                    {industryOptions.filter((industry) => !industry.isDefault).map((industry) => <Badge key={industry.id} variant="secondary" className="gap-1 pr-1 text-[10px] font-bold">
+                      {industry.name}
+                      <button onClick={() => industry.id && void handleDeleteIndustry(industry.id)} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-destructive/20 hover:text-destructive"><Trash2 className="size-2.5" /></button>
+                    </Badge>)}
+                  </div>}
+                  {showAddIndustry ? <div className="flex gap-2">
+                    <Input value={newIndustryName} onChange={(event) => setNewIndustryName(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void handleAddIndustry()} placeholder="Ej: Logística y Transporte" className="h-9 flex-1 rounded-xl text-xs" autoFocus />
+                    <Button size="sm" onClick={() => void handleAddIndustry()} className="h-9 rounded-xl text-xs font-bold">Agregar</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setShowAddIndustry(false); setNewIndustryName(''); }} className="h-9 text-xs">Cancelar</Button>
+                  </div> : <button onClick={() => setShowAddIndustry(true)} className="flex items-center gap-1.5 text-xs font-bold text-primary transition-colors hover:text-primary/80"><Plus className="size-3.5" />Agregar nueva industria</button>}
+                </div>
+                <Button onClick={() => void handleSaveCompanyInfo()} disabled={savingCompany} className="h-11 w-full gap-2 rounded-xl font-bold">
+                  {savingCompany ? 'Guardando...' : 'Guardar información'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="border-b border-border/30 bg-muted/10">
+                <CardTitle className="flex items-center gap-2 font-black"><Info className="size-5 text-primary" />Resumen de la empresa</CardTitle>
+                <CardDescription>Datos de referencia de tu cuenta.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-6">
+                {[
+                  { label: 'Tenant ID', value: tenant.id, mono: true },
+                  { label: 'Slug activo', value: tenant.slug || companySlug || 'N/A', mono: true },
+                  { label: 'Usuarios', value: String(users.length), mono: false },
+                  { label: 'Plan actual', value: tenant.plan || 'BASIC', mono: false },
+                ].map(({ label, value, mono }) => <div key={label} className="flex items-center justify-between rounded-xl border border-border/30 bg-muted/20 p-3">
+                  <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">{label}</span>
+                  <span className={cn('text-xs font-bold', mono && 'font-mono')}>{value}</span>
+                </div>)}
+                <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 p-4">
+                  <div><p className="text-xs font-black uppercase tracking-widest text-primary">Estado</p><p className="mt-0.5 text-2xl font-black">Activa</p></div>
+                  <Crown className="size-7 text-primary" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
 
         <TabsContent value="plan" className="space-y-8">
           {/* Plan Card */}
@@ -368,132 +538,103 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
           </div>
         </TabsContent>
 
-        <TabsContent value="team" className="space-y-6">
-          <div className="flex items-center justify-between bg-card border border-border/50 p-6 rounded-2xl">
-            <div>
-              <h3 className="text-xl font-bold tracking-tight">Miembros de la Empresa</h3>
-              <p className="text-sm text-muted-foreground">Gestiona quién tiene acceso a los módulos habilitados de {tenant.name}.</p>
+         <TabsContent value="team" className="space-y-4">
+           <div className="flex justify-end">
+            <div className="flex items-center gap-2">
+              <Button data-tour="team-tutorial" variant="outline" className="gap-2 font-bold" onClick={() => setShowTeamTutorial(true)}>
+                <CircleHelp className="size-4" /> Tutorial
+              </Button>
+              <Button data-tour="team-departments" variant="outline" className="gap-2 font-bold" onClick={() => setIsDepartmentDialogOpen(true)}>
+              <Building2 className="size-4" /> Departamentos
+              </Button>
             </div>
-            <Button className="bg-primary text-primary-foreground gap-2 font-bold px-6" onClick={() => setIsUserDialogOpen(true)}>
-              <Plus className="size-5" /> Agregar Miembro
-            </Button>
-          </div>
+           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {users.map((u) => (
-              <Card key={u.id} className="bg-card border-border/50 hover:border-primary/20 transition-all overflow-hidden group">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-4">
-                      <div className="size-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-black text-xl">
-                        {u.name?.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-foreground leading-tight">{u.name}</h4>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                          <Mail className="size-3" /> {u.email}
-                        </p>
-                      </div>
+          <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2">
+            <Card className="h-full border-border/50" data-tour="team-users">
+              <CardHeader className="flex-row items-center justify-between gap-4 border-b border-border/30 bg-muted/10 pb-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Users className="size-4 text-primary" /> Usuarios ({users.length})</CardTitle>
+                  <CardDescription className="mt-1 text-xs">Administra las personas que tienen acceso a la empresa.</CardDescription>
+                </div>
+                <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={() => setIsUserDialogOpen(true)}>
+                  <Plus className="size-4" /> Crear usuario
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-2 p-4">
+            {users.map((u) => {
+              const isCurrentUser = currentUser?.id === u.id;
+              return <div key={u.id} className={cn('space-y-3 rounded-lg bg-muted/20 px-4 py-3 transition-colors', isCurrentUser ? 'bg-primary/10 ring-1 ring-inset ring-primary/30' : 'hover:bg-muted/40')}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl font-black text-lg', isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary')}>
+                      {u.name?.charAt(0).toUpperCase()}
                     </div>
-                    <Badge variant="outline" className={cn(
-                      "text-[10px] font-black uppercase tracking-widest",
-                      u.isActive ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"
-                    )}>
-                      {u.isActive ? 'Activo' : 'Suspendido'}
-                    </Badge>
-                  </div>
-
-                  <div className="space-y-3 pt-4 border-t border-border/50">
-                    <div className="flex flex-col gap-2 pt-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Tipo</span>
-                        <Select
-                          value={u.role?.toUpperCase() === 'ADMIN' ? 'ADMIN' : 'EMPLOYEE'}
-                          onValueChange={async (val) => {
-                            try {
-                              await tenantsService.updateUser(tenant.id, u.id, { role: val });
-                              if (val === 'ADMIN') {
-                                // Admin no necesita rol personalizado
-                                await tenantsService.updateUser(tenant.id, u.id, { customRoleId: null } as any);
-                              }
-                              toast.success('Tipo de acceso actualizado');
-                              fetchUsers();
-                            } catch (err: any) { toast.error(err.response?.data?.message || 'Error'); }
-                          }}
-                        >
-                          <SelectTrigger className="h-7 w-[130px] text-[10px] font-bold uppercase bg-primary/5 border-none shadow-none focus:ring-0">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SYSTEM_ROLE_OPTIONS.map(r => (
-                              <SelectItem key={r.value} value={r.value} className="text-[10px] font-bold uppercase">{r.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="truncate text-sm font-bold text-foreground">{u.name}</h4>
+                        {isCurrentUser && <Badge className="bg-primary text-primary-foreground text-[9px] uppercase">Tu usuario</Badge>}
                       </div>
-
-                      {u.role?.toUpperCase() !== 'ADMIN' && (
-                        <div className="flex items-center justify-between pt-1">
-                          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Rol Personalizado</span>
-                          <Select
-                            value={u.customRoleId || 'none'}
-                            onValueChange={(val) => handleUpdateCustomRole(u.id, val)}
-                          >
-                            <SelectTrigger className="h-7 w-[130px] text-[10px] font-bold uppercase bg-purple-500/5 text-purple-600 border-none shadow-none focus:ring-0">
-                              <SelectValue placeholder="Ninguno" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none" className="text-[10px] font-bold uppercase">Ninguno</SelectItem>
-                              {customRoles.map(r => (
-                                <SelectItem key={r.id} value={r.id} className="text-[10px] font-bold uppercase">{r.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-2 pt-4">
-                      {u.role?.toUpperCase() !== 'ADMIN' && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="flex-[0.5] text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500 h-8 border-orange-500/20"
-                          onClick={() => handleOpenChangePassword(u)}
-                          title="Cambiar Contraseña"
-                        >
-                          <KeyRound className="size-3" />
-                        </Button>
-                      )}
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary h-8 border-primary/10"
-                        onClick={() => handleViewPerms(u)}
-                      >
-                        <Shield className="size-3 mr-2" /> Permisos
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className={cn(
-                          "flex-1 text-[10px] font-black uppercase tracking-widest h-8",
-                          u.isActive ? "hover:bg-rose-500/10 hover:text-rose-500" : "hover:bg-emerald-500/10 hover:text-emerald-500"
-                        )}
-                        onClick={() => toggleUserStatus(u.id, u.isActive)}
-                      >
-                        {u.isActive ? <><X className="size-3 mr-2" /> Suspender</> : <><Check className="size-3 mr-2" /> Activar</>}
-                      </Button>
+                      <p className="flex items-center gap-1 truncate text-xs text-muted-foreground"><Mail className="size-3" /> {u.email}</p>
+                      <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-primary/80">{u.department?.name || 'Sin departamento'}</p>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+                  <Badge variant="outline" className={cn('shrink-0 text-[10px] font-black uppercase tracking-widest', u.isActive ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20')}>
+                    {u.isActive ? 'Activo' : 'Suspendido'}
+                  </Badge>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pl-0 sm:pl-[52px]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tipo</span>
+                    <Select value={u.role?.toUpperCase() === 'ADMIN' ? 'ADMIN' : 'EMPLOYEE'} onValueChange={async (val) => {
+                      try {
+                        await tenantsService.updateUser(tenant.id, u.id, { role: val });
+                        if (val === 'ADMIN') await tenantsService.updateUser(tenant.id, u.id, { customRoleId: null } as any);
+                        toast.success('Tipo de acceso actualizado');
+                        fetchUsers();
+                      } catch (err: any) { toast.error(err.response?.data?.message || 'Error'); }
+                    }}>
+                      <SelectTrigger className="h-8 w-[122px] bg-primary/5 text-[10px] font-bold uppercase"><SelectValue /></SelectTrigger>
+                      <SelectContent>{SYSTEM_ROLE_OPTIONS.map(r => <SelectItem key={r.value} value={r.value} className="text-[10px] font-bold uppercase">{r.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+
+                  {u.role?.toUpperCase() !== 'ADMIN' && <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Rol</span>
+                    <Select value={u.customRoleId || 'none'} onValueChange={(val) => handleUpdateCustomRole(u.id, val)}>
+                      <SelectTrigger className="h-8 w-[132px] bg-purple-500/5 text-[10px] font-bold uppercase text-purple-600"><SelectValue placeholder="Ninguno" /></SelectTrigger>
+                      <SelectContent><SelectItem value="none" className="text-[10px] font-bold uppercase">Ninguno</SelectItem>{customRoles.map(r => <SelectItem key={r.id} value={r.id} className="text-[10px] font-bold uppercase">{r.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>}
+
+                  {u.role?.toUpperCase() !== 'ADMIN' && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-orange-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/10 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary" onClick={() => handleViewPerms(u)}><Shield className="size-3" /> Permisos</Button>
+                  <Button variant="ghost" size="sm" disabled={isCurrentUser} className={cn('h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest', isCurrentUser ? 'cursor-not-allowed text-muted-foreground/50' : u.isActive ? 'hover:bg-rose-500/10 hover:text-rose-500' : 'hover:bg-emerald-500/10 hover:text-emerald-500')} onClick={() => !isCurrentUser && toggleUserStatus(u.id, u.isActive)} title={isCurrentUser ? 'No puedes suspenderte a ti mismo' : u.isActive ? 'Suspender usuario' : 'Activar usuario'}>
+                    {u.isActive ? <><X className="size-3" /> {isCurrentUser ? 'Tu usuario' : 'Suspender'}</> : <><Check className="size-3" /> Activar</>}
+                  </Button>
+                </div>
+              </div>;
+            })}
+                {!users.length && <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Aún no hay usuarios creados.</div>}
+              </CardContent>
+            </Card>
+
+            <TeamAccessPanel tenantId={tenant.id} tenantName={tenant.name} users={users} departmentDialogOpen={isDepartmentDialogOpen} onDepartmentDialogChange={setIsDepartmentDialogOpen} onRolesChange={onRefresh} onUsersChange={fetchUsers} />
           </div>
-        </TabsContent>
-        <TabsContent value="estructura" className="space-y-6">
-          <TeamManagementPanel tenantId={tenant.id} tenantName={tenant.name} />
-        </TabsContent>      </Tabs>
+         </TabsContent>
+         <TabsContent value="sucursales" className="space-y-6">
+           <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
+             <strong className="text-foreground">Sucursales de la empresa.</strong> Crea sucursales y asigna los usuarios que tendrán acceso a cada una.
+           </div>
+           <SucursalesView warehouses={warehouses} onRefresh={() => inventoryService.getWarehouses().then((response: any) => setWarehouses(Array.isArray(response) ? response : (response?.data || []))).catch(() => undefined)} />
+         </TabsContent>
+         <TabsContent value="dominio" className="space-y-6">
+           <DominiosView />
+         </TabsContent>
+      </Tabs>
+
+      {showTeamTutorial && <GuidedTour steps={TEAM_TOUR_STEPS} onClose={() => setShowTeamTutorial(false)} title="Mi Equipo" allowTargetInteraction />}
 
       {/* Permissions Viewer Dialog */}
       <Dialog open={isPermsDialogOpen} onOpenChange={setIsPermsDialogOpen}>

@@ -121,7 +121,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     { label: 'Nóminas', description: 'Procesamiento de nóminas', module: 'rh', subModule: 'nominas', keywords: ['nomina', 'salario', 'pago'], group: 'RRHH' },
     { label: 'Asistencia', description: 'Control de asistencia y marcaje', module: 'rh', subModule: 'asistencia', keywords: ['asistencia', 'marcaje', 'reloj'], group: 'RRHH' },
     { label: 'Ausencias', description: 'Solicitudes de permisos y vacaciones', module: 'rh', subModule: 'ausencias', keywords: ['ausencia', 'permiso', 'vacacion'], group: 'RRHH' },
-    { label: 'Configuración', description: 'Roles, usuarios y ajustes del sistema', module: 'configuracion', subModule: undefined, keywords: ['configuracion', 'ajustes', 'roles', 'permisos'], group: 'Sistema' },
+    { label: 'Configuración', description: 'Ajustes generales del sistema', module: 'configuracion', subModule: undefined, keywords: ['configuracion', 'ajustes'], group: 'Sistema' },
   ];
 
   const getSearchResults = (query: string) => {

@@ -10,6 +10,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Layers, CheckCircle2, TrendingUp, DollarSign, Activity, ShoppingCart, ArrowUpRight, Scale, RefreshCw, UserMinus } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -136,8 +137,9 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
     exportPDF: async () => {
       toast.info("Generando PDF (Suscripciones)...");
       try {
-        const doc = new jsPDF();
-        const primaryHex = themeConfig.colors.primary.startsWith('#') ? themeConfig.colors.primary : '#10b981';
+        const pdfSettings = await getPdfDesignSettings('reportes.subscriptions');
+        const doc = new jsPDF(pdfDesignPaper(pdfSettings));
+        const primaryHex = String(pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981');
         let currentY = 20;
 
         doc.setFontSize(18);

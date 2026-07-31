@@ -18,6 +18,8 @@ import { inventoryService } from '../../services/inventario.service';
 import type { PurchaseRequest, PurchaseManagement, Warehouse } from '../../types';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { PromptDialog } from '../ui/PromptDialog';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-zinc-100 text-zinc-700 border-zinc-200',
@@ -65,6 +67,8 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
   const [reason, setReason] = useState('');
   const [statusLoading, setStatusLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [pendingRejectManagement, setPendingRejectManagement] = useState<PurchaseManagement | null>(null);
+  const [pendingConvertManagement, setPendingConvertManagement] = useState<PurchaseManagement | null>(null);
 
   const filtered = useMemo(() => {
     return data.filter(r => {
@@ -117,20 +121,30 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
   };
 
   const handleRejectManagement = async (mgmt: PurchaseManagement) => {
-    const reason = window.prompt('Motivo del rechazo:');
-    if (reason === null) return;
+    setPendingRejectManagement(mgmt);
+  };
+
+  const confirmRejectManagement = async (rejectReason: string) => {
+    if (!pendingRejectManagement) return;
+    const mgmt = pendingRejectManagement;
     setActionLoading(mgmt.id);
-    try { await purchaseManagementService.reject(mgmt.id, reason || undefined); toast.success('Gestión rechazada'); onRefresh(); }
+    try { await purchaseManagementService.reject(mgmt.id, rejectReason || undefined); toast.success('Gestión rechazada'); setPendingRejectManagement(null); onRefresh(); }
     catch (e: any) { toast.error(e?.message || 'Error al rechazar'); }
     finally { setActionLoading(null); }
   };
 
   const handleConvertToOrder = async (mgmt: PurchaseManagement) => {
-    if (!window.confirm('¿Generar orden de compra a partir de esta gestión?')) return;
+    setPendingConvertManagement(mgmt);
+  };
+
+  const confirmConvertToOrder = async () => {
+    if (!pendingConvertManagement) return;
+    const mgmt = pendingConvertManagement;
     setActionLoading(mgmt.id);
     try {
       const order = await purchaseManagementService.convertToOrder(mgmt.id);
       toast.success(`Orden de compra #${order.number} generada`);
+      setPendingConvertManagement(null);
       onRefresh();
     } catch (e: any) { toast.error(e?.message || 'Error al convertir'); }
     finally { setActionLoading(null); }
@@ -613,6 +627,27 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PromptDialog
+        open={Boolean(pendingRejectManagement)}
+        onOpenChange={open => { if (!open && !actionLoading) setPendingRejectManagement(null); }}
+        title="Rechazar gestión"
+        description="Indica el motivo para que quede registrado en el historial de la gestión."
+        label="Motivo del rechazo"
+        placeholder="Escribe el motivo…"
+        confirmLabel="Rechazar"
+        onConfirm={confirmRejectManagement}
+        loading={Boolean(actionLoading && pendingRejectManagement)}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingConvertManagement)}
+        onOpenChange={open => { if (!open && !actionLoading) setPendingConvertManagement(null); }}
+        title="¿Generar orden de compra?"
+        description="Se creará una orden de compra a partir de esta gestión aprobada."
+        confirmLabel="Generar orden"
+        variant="default"
+        onConfirm={confirmConvertToOrder}
+        loading={Boolean(actionLoading && pendingConvertManagement)}
+      />
     </div>
   );
 }

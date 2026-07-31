@@ -14,6 +14,7 @@ import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';
 import type { AbsenceType, VacationBalance } from '../../types';
+import { PromptDialog } from '../ui/PromptDialog';
 
 export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
@@ -32,6 +33,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const [vacationBalance, setVacationBalance] = useState<VacationBalance | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [absenceTypes, setAbsenceTypes] = useState<AbsenceType[]>([]);
+  const [pendingRejectId, setPendingRejectId] = useState<string | null>(null);
 
   useEffect(() => {
     if (newRequest.startDate && newRequest.endDate) {
@@ -119,12 +121,16 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   };
 
   const handleReject = async (id: string) => {
-    const reason = prompt('Razón del rechazo:');
-    if (!reason) return;
+    setPendingRejectId(id);
+  };
+
+  const confirmReject = async (rejectReason: string) => {
+    if (!pendingRejectId) return;
 
     try {
-      await hrService.rejectLeaveRequest(id, reason);
+      await hrService.rejectLeaveRequest(pendingRejectId, rejectReason);
       toast.success('Solicitud rechazada');
+      setPendingRejectId(null);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al rechazar solicitud');
@@ -519,6 +525,16 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
           <p className="text-muted-foreground">No hay solicitudes de ausencia</p>
         </div>
       )}
+      <PromptDialog
+        open={Boolean(pendingRejectId)}
+        onOpenChange={open => { if (!open) setPendingRejectId(null); }}
+        title="Rechazar solicitud"
+        description="Indica la razón que se mostrará en el historial de la solicitud."
+        label="Razón del rechazo"
+        placeholder="Escribe la razón…"
+        confirmLabel="Rechazar"
+        onConfirm={confirmReject}
+      />
     </div>
   );
 }

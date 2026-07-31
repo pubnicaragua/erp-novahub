@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 
 const AVAILABLE_MODULES = [
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes' },
@@ -54,6 +55,7 @@ export function SuscripcionesPageFinal() {
   });
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'user' });
   const [moduleForm, setModuleForm] = useState({ module: '', price: 0, notes: '' });
+  const [pendingDeleteTenant, setPendingDeleteTenant] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -126,12 +128,17 @@ export function SuscripcionesPageFinal() {
     }
   };
 
-  const handleDeleteTenant = async (id: string, name: string) => {
+  const handleDeleteTenant = (id: string, name: string) => {
     if (!isPlatformAdmin) return toast.error('No autorizado');
-    if (!confirm(`¿Eliminar empresa "${name}"? Esta acción no se puede deshacer.`)) return;
+    setPendingDeleteTenant({ id, name });
+  };
+
+  const confirmDeleteTenant = async () => {
+    if (!pendingDeleteTenant) return;
     try {
-      await tenantsService.delete(id);
+      await tenantsService.delete(pendingDeleteTenant.id);
       toast.success('Empresa eliminada');
+      setPendingDeleteTenant(null);
       fetchData();
     } catch (error) {
       toast.error('Error al eliminar empresa');
@@ -586,6 +593,16 @@ export function SuscripcionesPageFinal() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteTenant)}
+        onOpenChange={open => { if (!open) setPendingDeleteTenant(null); }}
+        title="¿Eliminar empresa?"
+        description={pendingDeleteTenant ? `La empresa «${pendingDeleteTenant.name}» y sus datos asociados se eliminarán. Esta acción no se puede deshacer.` : undefined}
+        confirmLabel="Eliminar empresa"
+        variant="destructive"
+        onConfirm={confirmDeleteTenant}
+      />
     </div>
   );
 }

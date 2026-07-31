@@ -19,6 +19,7 @@ interface PreparedUpload {
   bucket: string;
   path: string;
   token: string;
+  signedUrl?: string;
   uri: string;
   publicUrl: string | null;
 }
@@ -38,29 +39,72 @@ const supabase = supabaseUrl && supabaseAnonKey
     })
   : null;
 
+function getUploadMimeType(file: File) {
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  if (extension === 'pdf') return 'application/pdf';
+  if (extension === 'html' || extension === 'htm') return 'text/html';
+  return file.type || 'application/octet-stream';
+}
+
 export const storageService = {
   async uploadFile(
     purpose: StoragePurpose,
     file: File,
     options: { folder?: string; scopeId?: string } = {},
   ): Promise<UploadedFile> {
-    if (!supabase) throw new Error('El almacenamiento no está configurado. Contacta al administrador.');
-
+    const mimeType = getUploadMimeType(file);
+    const uploadFile = file.type === mimeType
+      ? file
+      : new File([file], file.name, { type: mimeType });
     const prepared = await api.post<PreparedUpload>(`/storage/uploads/${purpose}`, {
       fileName: file.name,
-      mimeType: file.type || 'application/octet-stream',
+      mimeType,
       size: file.size,
       folder: options.folder,
       scopeId: options.scopeId,
     });
-    const { error } = await supabase.storage
-      .from(prepared.bucket)
-      .uploadToSignedUrl(prepared.path, prepared.token, file, {
-        contentType: file.type || 'application/octet-stream',
-        cacheControl: '3600',
+
+    // The backend creates the signed URL with its service-role client. Uploading
+    // to that exact URL avoids rebuilding it with the browser Supabase client,
+    // which can point to a different project when environments drift.
+    if (prepared.signedUrl) {
+      const body = new FormData();
+      body.append('cacheControl', '3600');
+      body.append('', uploadFile);
+
+      const response = await fetch(prepared.signedUrl, {
+        method: 'PUT',
+        headers: { 'x-upsert': 'false' },
+        body,
       });
 
-    if (error) throw new Error('No se pudo subir el archivo al almacenamiento.');
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        let message = detail;
+        try {
+          const parsed = JSON.parse(detail) as { message?: string; error?: string };
+          message = parsed.message || parsed.error || detail;
+        } catch {
+          // Keep the raw response when Storage does not return JSON.
+        }
+        throw new Error(
+          `No se pudo subir el archivo al almacenamiento (${response.status}).${message ? ` ${message}` : ''}`,
+        );
+      }
+    } else {
+      // Compatibility fallback for an older backend response.
+      if (!supabase) throw new Error('El almacenamiento no está configurado. Contacta al administrador.');
+      const { error } = await supabase.storage
+        .from(prepared.bucket)
+        .uploadToSignedUrl(prepared.path, prepared.token, uploadFile, {
+          contentType: mimeType,
+          cacheControl: '3600',
+        });
+      if (error) {
+        throw new Error(`No se pudo subir el archivo al almacenamiento. ${error.message}`);
+      }
+    }
+
     const url = prepared.publicUrl || (await this.resolveUrl(prepared.uri));
     return { uri: prepared.uri, url, bucket: prepared.bucket, path: prepared.path };
   },

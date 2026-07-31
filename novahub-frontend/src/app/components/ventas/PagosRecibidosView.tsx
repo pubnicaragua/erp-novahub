@@ -20,6 +20,7 @@ import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { formatSalesAmount } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { SalesKpiCard } from './SalesKpiCard';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -45,6 +46,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [invoiceFilter, setInvoiceFilter] = useState<'ALL' | 'WITH_INVOICE'>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -52,9 +54,10 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const [localDoc, setLocalDoc] = useState<any>(null);
 
   const filtered = data.filter(p =>
-    p.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (invoiceFilter === 'ALL' || Boolean(p.invoice?.number)) &&
+    (p.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.invoice?.number || '').toLowerCase().includes(searchTerm.toLowerCase())
+    (p.invoice?.number || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleUpdate = async (id: string | number, updates: Partial<PaymentReceived>) => {
@@ -164,19 +167,6 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     0,
   );
 
-  const kpis = [
-    {
-      title: `Total Recaudado (${displayCurrency})`,
-      value: formatConvertedAmount(totalCollectedInDisplayCurrency, displayCurrency),
-      icon: TrendingUp,
-      color: 'text-emerald-500',
-      bg: 'bg-emerald-500/10',
-    },
-    { title: 'Pagos', value: data.length, icon: CheckCircle2, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Con Factura', value: data.filter(p => p.invoice?.number).length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'Método Principal', value: mainMethod, icon: Wallet, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-  ];
-
   // ─── INLINE FORM ────────────────────────────────────────────────────
   if (isCreating && localDoc) {
     return (
@@ -272,12 +262,10 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((kpi, i) => (
-          <Card key={i} className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
-            <CardContent className="p-5"><div className="flex items-center gap-4"><div className={cn("p-3 rounded-xl shadow-inner", kpi.bg, kpi.color)}><kpi.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{kpi.value}</p></div></div></CardContent>
-          </Card>
-        ))}
+        <SalesKpiCard title={`Total Recaudado (${displayCurrency})`} value={formatConvertedAmount(totalCollectedInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
+        <SalesKpiCard title="Pagos" value={data.length} icon={CheckCircle2} color="text-blue-500" bg="bg-blue-500/10" />
+        <SalesKpiCard title="Con Factura" value={data.filter(p => p.invoice?.number).length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
+        <SalesKpiCard title="Método Principal" value={mainMethod} icon={Wallet} color="text-purple-500" bg="bg-purple-500/10" />
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

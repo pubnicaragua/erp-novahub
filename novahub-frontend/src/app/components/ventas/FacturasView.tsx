@@ -25,6 +25,7 @@ import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { SalesKpiCard } from './SalesKpiCard';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -61,6 +62,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState(sessionStorage.getItem('global-search-module') === 'facturas' ? (sessionStorage.removeItem('global-search-module') || sessionStorage.getItem('global-search-term') || '') : '');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'RECEIVABLE' | 'OVERDUE' | 'PAID'>('ALL');
   useEffect(() => { try { sessionStorage.removeItem('global-search-term') } catch {} }, [])
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -197,8 +199,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   }, [targetInvoiceId, data, onClearTargetInvoiceId]);
 
   const filtered = data.filter(f =>
-    f.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (f.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+    (statusFilter === 'ALL' || (statusFilter === 'RECEIVABLE' && ['PENDING', 'OVERDUE', 'PARTIAL'].includes(String(f.status || '').toUpperCase())) || String(f.status || '').toUpperCase() === statusFilter) &&
+    (f.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (f.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleUpdate = async (id: string | number, updates: Partial<Invoice>) => {
@@ -512,31 +515,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const paidInDisplayCurrency = data
     .filter(invoice => (invoice.status || '').toUpperCase() === 'PAID')
     .reduce((acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate), 0);
-
-  const kpis = [
-    {
-      title: `Facturado Total (${displayCurrency})`,
-      value: formatConvertedAmount(totalBilledInDisplayCurrency, displayCurrency),
-      icon: FileText,
-      color: 'text-primary',
-      bg: 'bg-primary/10',
-    },
-    {
-      title: `Por Cobrar (${displayCurrency})`,
-      value: formatConvertedAmount(accountsReceivableInDisplayCurrency, displayCurrency),
-      icon: TrendingUp,
-      color: 'text-orange-500',
-      bg: 'bg-orange-500/10',
-    },
-    { title: 'Vencidas', value: data.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length, icon: AlertCircle, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-    {
-      title: `Cobrado (${displayCurrency})`,
-      value: formatConvertedAmount(paidInDisplayCurrency, displayCurrency),
-      icon: CheckCircle2,
-      color: 'text-emerald-500',
-      bg: 'bg-emerald-500/10',
-    },
-  ];
 
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
@@ -984,21 +962,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((kpi, i) => (
-          <Card key={i} className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-4">
-                <div className={cn("p-3 rounded-xl shadow-inner", kpi.bg, kpi.color)}>
-                  <kpi.icon className="size-5" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p>
-                  <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{kpi.value}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        <SalesKpiCard title={`Facturado Total (${displayCurrency})`} value={formatConvertedAmount(totalBilledInDisplayCurrency, displayCurrency)} icon={FileText} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title={`Por Cobrar (${displayCurrency})`} value={formatConvertedAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />
+        <SalesKpiCard title="Vencidas" value={data.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length} icon={AlertCircle} color="text-rose-500" bg="bg-rose-500/10" active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(statusFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
+        <SalesKpiCard title={`Cobrado (${displayCurrency})`} value={formatConvertedAmount(paidInDisplayCurrency, displayCurrency)} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />
       </div>
 
       <div className="flex flex-col gap-4">

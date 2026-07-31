@@ -41,6 +41,7 @@ import { priceListsService, type PriceList } from '../../services/price-lists.se
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
 import { SalesIrSelector } from './SalesIrSelector';
 import { formatSalesAmount, getMissingSalesPriceMessage, getSalesUnitPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
+import { getPdfDesignSettings } from '../../utils/pdfGenerator';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -99,9 +100,14 @@ function escapeTicketHtml(value: unknown) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character] || character));
 }
 
-function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: PosPaymentLine[], currency: PaymentCurrency, exchangeRate: number, companyName: string) {
+async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: PosPaymentLine[], currency: PaymentCurrency, exchangeRate: number, companyName: string) {
   const win = window.open('', '_blank', 'width=420,height=700');
   if (!win) return;
+  // Se consulta la vista específica para que el ticket no herede la plantilla de una factura.
+  const ticketSettings = await getPdfDesignSettings('ventas.cash-ticket');
+  const ticketPrimary = typeof ticketSettings.primaryColor === 'string' ? ticketSettings.primaryColor : '#000';
+  const ticketText = typeof ticketSettings.textColor === 'string' ? ticketSettings.textColor : '#000';
+  const ticketFont = typeof ticketSettings.fontFamily === 'string' ? ticketSettings.fontFamily.replace(/["'<>]/g, '') : 'monospace';
   const money = (value: number) => `${currency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(value)}`;
   const paidDisplay = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const paidLocal = paidDisplay * (currency === 'USD' ? exchangeRate : 1);
@@ -115,6 +121,9 @@ function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: PosPaym
   const totalRecibidoHtml = payments.length > 1 ? `<div class="row"><span>Total recibido</span><span>${money(paidDisplay)}</span></div>` : '';
   const registerCode = invoice.register?.code || 'N/D';
   win.document.write(`<html><head><title>${escapeTicketHtml(invoice.number)}</title><style>@page{size:80mm auto;margin:0}body{width:72mm;margin:4mm auto;font:11px monospace;color:#000}h2{text-align:center;margin:0 0 5px;font-size:16px}h3{text-align:center;margin:0 0 8px;font-size:11px;font-weight:normal}.center{text-align:center}.row{display:flex;justify-content:space-between;gap:8px;margin:3px 0}.line{border-top:1px dashed #000;margin:8px 0}.item{margin:5px 0}.item .row{font-size:10px}.totals{margin-top:6px}.total{font-size:14px;font-weight:bold}.label{font-weight:bold;margin-top:7px}.muted{font-size:10px}.footer{text-align:center;margin-top:14px;font-size:10px}</style></head><body><h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3><div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Caja: ${escapeTicketHtml(registerCode)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div><div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${formatSalesAmount(changeLocal)}</span></div></div><div class="footer">Gracias por su compra</div></body></html>`);
+  const designStyle = win.document.createElement('style');
+  designStyle.textContent = ['body{font-family:', ticketFont, ';color:', ticketText, '}', 'h2,.label,.total{color:', ticketPrimary, '}', '.line{border-color:', ticketPrimary, '}'].join('');
+  win.document.head.appendChild(designStyle);
   win.document.close();
   // Esperar a que el documento se pinte evita que Chrome abra una vista previa en blanco.
   window.setTimeout(() => {

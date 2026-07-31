@@ -24,6 +24,7 @@ import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { SalesKpiCard } from './SalesKpiCard';
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -57,6 +58,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'CONFIRMED' | 'IN_PROGRESS'>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -172,7 +174,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   }, [targetOrderId, data, onClearTargetOrderId]);
 
   const filtered = data.filter(o => 
+    (statusFilter === 'ALL' || String(o.status || '').toUpperCase() === statusFilter) &&
     o.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (statusFilter === 'ALL' || String(o.status || '').toUpperCase() === statusFilter) &&
     (o.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -403,19 +407,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const confirmedAmountInDisplayCurrency = data
     .filter(order => (order.status || '').toUpperCase() === 'CONFIRMED')
     .reduce((acc, order) => acc + convertAmount(order.total || 0, order.currency, order.exchangeRate), 0);
-
-  const kpis = [
-    { title: 'Órdenes Abiertas',  value: data.filter(o => (o.status||'').toUpperCase() === 'CONFIRMED').length, icon: Package, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-    {
-      title: `Monto Confirmado (${displayCurrency})`,
-      value: formatConvertedAmount(confirmedAmountInDisplayCurrency, displayCurrency),
-      icon: TrendingUp,
-      color: 'text-emerald-500',
-      bg: 'bg-emerald-500/10',
-    },
-    { title: 'En Proceso',        value: data.filter(o => (o.status||'').toUpperCase() === 'IN_PROGRESS').length, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Total del Mes',     value: data.length, icon: ClipboardList, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-  ];
 
   if (editingId && localDoc) {
     return (
@@ -914,21 +905,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((kpi, i) => (
-          <Card key={i} className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-4">
-                <div className={cn("p-3 rounded-xl shadow-inner", kpi.bg, kpi.color)}>
-                  <kpi.icon className="size-5" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p>
-                  <p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{kpi.value}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        <SalesKpiCard title="Órdenes Abiertas" value={data.filter(o => (o.status||'').toUpperCase() === 'CONFIRMED').length} icon={Package} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'CONFIRMED'} onClick={() => setStatusFilter(statusFilter === 'CONFIRMED' ? 'ALL' : 'CONFIRMED')} />
+        <SalesKpiCard title={`Monto Confirmado (${displayCurrency})`} value={formatConvertedAmount(confirmedAmountInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
+        <SalesKpiCard title="En Proceso" value={data.filter(o => (o.status||'').toUpperCase() === 'IN_PROGRESS').length} icon={Clock} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'IN_PROGRESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROGRESS' ? 'ALL' : 'IN_PROGRESS')} />
+        <SalesKpiCard title="Total del Mes" value={data.length} icon={ClipboardList} color="text-purple-500" bg="bg-purple-500/10" />
       </div>
 
       <div className="flex flex-col gap-4">

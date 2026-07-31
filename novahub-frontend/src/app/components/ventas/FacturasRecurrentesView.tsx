@@ -24,6 +24,7 @@ import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/sale
 import { SalesIrSelector } from './SalesIrSelector';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { SalesKpiCard } from './SalesKpiCard';
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
@@ -88,6 +89,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -123,9 +125,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     }
   }, [editingId]);
 
-  const filtered = data.filter(r => 
-    (r as any).profileName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (r.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  const filtered = data.filter(r =>
+    (statusFilter === 'ALL' || String(r.status || '').toUpperCase() === statusFilter) &&
+    ((r as any).profileName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (r.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleUpdate = async (id: string | number, updates: Partial<RecurringInvoice>) => {
@@ -345,25 +348,6 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     return nextDate >= today && nextDate <= sevenDaysAhead;
   }).length;
   const annualRunRateInDisplayCurrency = activeRecurringInDisplayCurrency * 12;
-  const kpis = [
-    {
-      title: `MRR Activo (${displayCurrency})`,
-      value: formatConvertedAmount(activeRecurringInDisplayCurrency, displayCurrency),
-      icon: RotateCcw,
-      color: 'text-primary',
-      bg: 'bg-primary/10',
-    },
-    { title: 'Próximas 7 días', value: upcomingIn7Days, icon: Calendar,  color: 'text-blue-500',  bg: 'bg-blue-500/10'  },
-    { title: 'Activas',       value: data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length, icon: Clock,     color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    {
-      title: `ARR (${displayCurrency})`,
-      value: formatConvertedAmount(annualRunRateInDisplayCurrency, displayCurrency),
-      icon: TrendingUp,
-      color: 'text-rose-500',
-      bg: 'bg-rose-500/10',
-    },
-  ];
-
   // ─── INLINE EDITOR ─────────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
     return (
@@ -633,12 +617,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((kpi, i) => (
-          <Card key={i} className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
-            <CardContent className="p-5"><div className="flex items-center gap-4"><div className={cn("p-3 rounded-xl shadow-inner", kpi.bg, kpi.color)}><kpi.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.title}</p><p className="text-2xl font-black text-foreground tabular-nums tracking-tighter">{kpi.value}</p></div></div></CardContent>
-          </Card>
-        ))}
+        <SalesKpiCard title={`MRR Activo (${displayCurrency})`} value={formatConvertedAmount(activeRecurringInDisplayCurrency, displayCurrency)} icon={RotateCcw} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="Próximas 7 días" value={upcomingIn7Days} icon={Calendar} color="text-blue-500" bg="bg-blue-500/10" />
+        <SalesKpiCard title="Activas" value={data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length} icon={Clock} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'ACTIVE'} onClick={() => setStatusFilter(statusFilter === 'ACTIVE' ? 'ALL' : 'ACTIVE')} />
+        <SalesKpiCard title={`ARR (${displayCurrency})`} value={formatConvertedAmount(annualRunRateInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-rose-500" bg="bg-rose-500/10" />
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

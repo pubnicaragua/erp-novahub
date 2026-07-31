@@ -103,6 +103,7 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
+                <span className="mb-1 inline-flex w-fit items-center rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Indicador</span>
                 <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Ingresos Totales</p>
                 <p className="text-2xl font-black mt-1">{formatCurrency(kpis.totalRevenue)}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">≈ {displayCurrency === 'USD' ? 'C$' : '$'} {(displayCurrency === 'USD' ? kpis.totalRevenue : kpis.totalRevenue / globalRate).toLocaleString('en-US', { maximumFractionDigits: 0 })} {displayCurrency === 'USD' ? 'NIO' : 'USD'}</p>
@@ -118,6 +119,7 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
+                <span className="mb-1 inline-flex w-fit items-center rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Indicador</span>
                 <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Gastos Totales</p>
                 <p className="text-2xl font-black mt-1">{formatCurrency(kpis.totalExpenses)}</p>
                 <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
@@ -135,6 +137,7 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
+                <span className="mb-1 inline-flex w-fit items-center rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Indicador</span>
                 <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Órdenes de Venta</p>
                 <p className="text-2xl font-black mt-1">{kpis.ordersCount}</p>
                 {kpis.pendingOrders > 0 && (
@@ -154,6 +157,7 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
+                <span className="mb-1 inline-flex w-fit items-center rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Indicador</span>
                 <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Margen Utilidad Net.</p>
                 <p className="text-2xl font-black mt-1">{kpis.netMargin}%</p>
                 <p className={`text-[10px] mt-1 flex items-center gap-1 ${kpis.netMargin >= 30 ? 'text-emerald-600' : 'text-amber-600'}`}>

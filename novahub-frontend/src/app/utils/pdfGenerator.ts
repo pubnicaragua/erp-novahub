@@ -1,5 +1,153 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
+import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
+import { sanitizeHtml2CanvasOklch } from './export-utils';
+
+type PdfRgb = [number, number, number];
+
+function pdfHexToRgb(value: unknown, fallback: PdfRgb): PdfRgb {
+  if (typeof value !== 'string') return fallback;
+  const hex = value.replace('#', '').trim();
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return fallback;
+  return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+}
+
+export async function getPdfDesignSettings(targetKey: string) {
+  try {
+    const target = getPdfTemplateTarget(targetKey);
+    const design = await pdfDocumentDesignService.active(target.key);
+    return (design?.settings || {}) as Record<string, any>;
+  } catch {
+    // La personalización es opcional: el exportador siempre conserva su diseño actual.
+    return {};
+  }
+}
+
+export function pdfDesignColor(value: unknown, fallback: PdfRgb): PdfRgb {
+  return pdfHexToRgb(value, fallback);
+}
+
+export function pdfDesignPaper(settings: Record<string, any>) {
+  return {
+    format: settings.paperSize === 'A4' ? 'a4' : settings.paperSize === 'LEGAL' ? 'legal' : 'letter',
+    orientation: settings.orientation === 'landscape' ? 'landscape' : 'portrait',
+  } as const;
+}
+
+function htmlSafeColor(value: unknown, fallback: string) {
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  const color = value.trim();
+  return /oklch\(|oklab\(|color\(|lch\(|lab\(/i.test(color) ? fallback : color;
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character);
+}
+
+function htmlFieldStyle(field: any) {
+  return `position:absolute;left:${Number(field.x) || 0}%;top:${Number(field.y) || 0}%;width:${Number(field.width) || 30}%;min-height:${Number(field.height) || 7}%;`;
+}
+
+async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, formatAmount, tenantLogo, documentType, save }: { savedDesign: any; estimate: any; tenantName: string; formatAmount: (amount: number, currency: string, rate: number) => string; tenantLogo?: string; documentType: string; save: boolean }): Promise<{ doc: jsPDF; blob: Blob }> {
+  const design = savedDesign.settings || {};
+  const fields = Array.isArray(savedDesign.layoutZones?.fields) ? savedDesign.layoutZones.fields : [];
+  const field = (id: string, fallback: any) => fields.find((item: any) => item.id === id) || { id, x: fallback.x, y: fallback.y, width: fallback.width, height: fallback.height, enabled: true };
+  const titleMap: Record<string, string> = { estimate: 'COTIZACIÓN', order: 'ORDEN DE VENTA', invoice: 'FACTURA', recurring: 'FACTURA RECURRENTE', payment: 'PAGO RECIBIDO', return: 'DEVOLUCIÓN', 'credit-note': 'NOTA DE CRÉDITO' };
+  const total = formatAmount(Number(estimate.total || 0), estimate.currency, estimate.exchangeRate);
+  const values: Record<string, string> = {
+    company: design.companyName || tenantName || 'Nuestra Empresa',
+    slogan: design.slogan || '',
+    fiscal: design.fiscalInfo || '',
+    documentTitle: titleMap[documentType] || documentType.toUpperCase(),
+    documentNumber: estimate.number || 'N/A',
+    date: estimate.date ? new Date(estimate.date).toLocaleDateString() : 'N/A',
+    customer: estimate.customer?.name || 'Cliente sin registrar',
+    address: design.address || '',
+    phone: design.phone || '',
+    email: design.email || estimate.customer?.email || '',
+    totals: total,
+    legal: design.legalText || '',
+    terms: design.terms || '',
+    notes: design.defaultNotes || estimate.notes || '',
+    footer: design.footerText || `Documento generado por ${tenantName}`,
+  };
+  const primary = htmlSafeColor(design.primaryColor, '#10b981');
+  const text = htmlSafeColor(design.textColor, '#334155');
+  const line = htmlSafeColor(design.lineColor, '#e2e8f0');
+  const pageWidthPx = design.orientation === 'landscape' ? 1123 : 794;
+  const pageHeightPx = design.orientation === 'landscape' ? 794 : 1123;
+  const headerLayout = String(design.headerLayout || 'split');
+  const tableLayout = String(design.tableLayout || 'standard');
+  const bannerHeader = ['banner', 'ribbon', 'corner', 'double-band'].includes(headerLayout);
+  const tableHeaderBackground = tableLayout === 'minimal' ? '#f8fafc' : primary;
+  const tableHeaderColor = tableLayout === 'minimal' ? text : '#fff';
+  const tableBorder = tableLayout === 'cards' ? 'none' : `1px solid ${line}`;
+  const zone = (id: string, content: string, extra = '') => {
+    const meta = field(id, { x: 8, y: 8, width: 38, height: 8 });
+    if (meta.enabled === false || !content) return '';
+    return `<div data-template-field="${id}" style="${htmlFieldStyle(meta)}${extra}">${content}</div>`;
+  };
+  const items = Array.isArray(estimate.items) ? estimate.items : [];
+  const rows = (items.length ? items : [{ description: 'Sin productos', quantity: 0, unitPrice: 0, total: 0 }]).map((item: any, index: number) => `<div style="display:grid;grid-template-columns:1fr 12% 18% 18%;gap:4px;padding:${tableLayout === 'compact' ? 5 : 8}px;border-top:${tableBorder};border-radius:${tableLayout === 'cards' ? 4 : 0}px;background:${['striped', 'ledger', 'accent'].includes(tableLayout) && index % 2 ? '#f8fafc' : '#fff'};"><span>${escapeHtml(item.description || item.name || 'Producto')}</span><span>${escapeHtml(item.quantity || 0)}</span><span>${escapeHtml(formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate))}</span><strong style="color:${tableLayout === 'accent' ? primary : text}">${escapeHtml(formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate))}</strong></div>`).join('');
+  const headerBackground = bannerHeader ? primary : '#fff';
+  const headerBorder = bannerHeader ? 'none' : `1px solid ${line}`;
+  const logoSource = design.logoUrl || tenantLogo;
+  const logo = logoSource ? `<img src="${escapeHtml(logoSource)}" style="position:absolute;left:${design.logoPosition === 'right' ? '78%' : design.logoPosition === 'center' ? '42%' : '8%'};top:5%;width:${Math.min(Number(design.logoSize) || 34, 70) / 2}%;max-height:9%;object-fit:contain;" />` : '';
+  const pageHtml = `<div id="pdf-template-canvas" style="position:relative;width:${pageWidthPx}px;height:${pageHeightPx}px;overflow:hidden;background:#fff;color:${text};font-family:${escapeHtml(design.fontFamily || 'Arial')};font-size:${Number(design.fontSize) || 9}px;box-sizing:border-box;">
+    <div style="position:absolute;inset:0 0 auto;height:29%;background:${headerBackground};border-bottom:${headerBorder};${headerLayout === 'double-band' ? `border-bottom:10px solid ${line};` : ''}${headerLayout === 'sidebar' ? `border-left:10px solid ${primary};` : ''}${headerLayout === 'boxed' ? `inset:2%;height:25%;border:1px solid ${line};border-radius:10px;` : ''}"></div>${design.watermark ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.1;transform:rotate(-25deg);font-size:64px;font-weight:800;color:#64748b;">${escapeHtml(design.watermark)}</div>` : ''}${logo}
+    ${zone('company', `<strong>${escapeHtml(values.company)}</strong>`)}
+    ${zone('slogan', `<span style="opacity:.75">${escapeHtml(values.slogan)}</span>`, 'font-size:.78em;')}
+    ${zone('fiscal', `<span style="opacity:.75;white-space:pre-line">${escapeHtml(values.fiscal)}</span>`, 'font-size:.72em;')}
+    ${zone('documentTitle', `<strong>${escapeHtml(values.documentTitle)}</strong>`, `text-align:right;font-size:1.35em;font-weight:800;`)}
+    ${zone('documentNumber', `Nº: ${escapeHtml(values.documentNumber)}`, 'text-align:right;font-size:.82em;')}
+    ${zone('date', `Fecha: ${escapeHtml(values.date)}`, 'text-align:right;font-size:.82em;')}
+    ${zone('customer', `<strong style="display:block;color:${primary};font-size:.78em;text-transform:uppercase;">Preparado para</strong><span>${escapeHtml(values.customer)}</span>`)}
+    ${zone('address', escapeHtml(values.address), 'font-size:.78em;opacity:.75;')}
+    ${zone('phone', escapeHtml(values.phone), 'font-size:.78em;opacity:.75;')}
+    ${zone('email', escapeHtml(values.email), 'font-size:.78em;opacity:.75;')}
+    ${zone('items', `<div style="overflow:hidden;border:${tableBorder};border-radius:${tableLayout === 'cards' ? 0 : 5}px;font-size:.78em;"><div style="display:grid;grid-template-columns:1fr 12% 18% 18%;gap:4px;padding:${tableLayout === 'compact' ? 6 : 9}px;background:${tableHeaderBackground};color:${tableHeaderColor};font-weight:700;"><span>Descripción</span><span>Cant.</span><span>Precio</span><span>Total</span></div>${rows}</div>`, 'padding:0;')}
+    ${zone('totals', `<div style="font-size:.78em;text-align:right;"><div style="display:flex;justify-content:space-between;"><span>Subtotal</span><span>${escapeHtml(formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;"><span>Impuesto</span><span>${escapeHtml(formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;border-top:1px solid ${line};padding-top:4px;color:${primary};font-weight:700;"><span>TOTAL</span><span>${escapeHtml(total)}</span></div></div>`)}
+    ${zone('legal', escapeHtml(values.legal).replace(/\n/g, '<br />'), 'font-size:.68em;opacity:.75;')}
+    ${zone('terms', escapeHtml(values.terms).replace(/\n/g, '<br />'), 'font-size:.68em;opacity:.75;')}
+    ${zone('notes', escapeHtml(values.notes).replace(/\n/g, '<br />'), 'font-size:.68em;opacity:.75;')}
+    ${zone('footer', escapeHtml(values.footer), `font-size:.68em;opacity:.7;border-top:1px solid ${line};padding-top:4px;`)}
+    ${design.showPageNumber !== false ? `<div style="position:absolute;right:8%;bottom:3%;font-size:.65em;opacity:.6;">${escapeHtml(design.pageNumberFormat === 'number-only' ? '1' : design.pageNumberFormat === 'custom' ? String(design.pageNumberCustom || 'Página {page} de {pages}').replace('{page}', '1').replace('{pages}', '1') : 'Página 1 de 1')}</div>` : ''}
+    ${design.showQr ? '<div style="position:absolute;right:8%;bottom:7%;width:36px;height:36px;border:1px solid #94a3b8;"></div>' : ''}${design.showBarcode ? '<div style="position:absolute;right:18%;bottom:7%;width:80px;height:36px;border:1px solid #94a3b8;"></div>' : ''}
+  </div>`;
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:fixed;left:-100000px;top:0;z-index:-1;background:#fff;';
+  wrapper.innerHTML = pageHtml;
+  document.body.appendChild(wrapper);
+  try {
+    const { default: html2canvas } = await import('html2canvas');
+    const canvas = await html2canvas(wrapper.firstElementChild as HTMLElement, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      logging: false,
+      onclone: (clonedDoc) => sanitizeHtml2CanvasOklch('pdf-template-canvas', clonedDoc, primary),
+    });
+    const format = design.paperSize === 'A4' ? 'a4' : design.paperSize === 'LEGAL' ? 'legal' : 'letter';
+    const orientation = design.orientation === 'landscape' ? 'landscape' : 'portrait';
+    const doc = new jsPDF({ orientation, unit: 'mm', format });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
+    const blob = doc.output('blob');
+    if (save) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${estimate.number || 'Documento'}.pdf`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    return { doc, blob };
+  } finally {
+    wrapper.remove();
+  }
+}
 
 interface PDFGeneratorParams {
   estimate: any; // El objeto localDoc/estimate a imprimir
@@ -10,20 +158,76 @@ interface PDFGeneratorParams {
   save?: boolean;
 }
 
-export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, tenantLogo, documentType = 'estimate', save = true }: PDFGeneratorParams): Promise<{ doc: jsPDF; blob: Blob }> => {
-  const doc = new jsPDF();
+export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, tenantLogo, documentType = 'estimate', save = true }: PDFGeneratorParams): Promise<{ doc: jsPDF | null; blob: Blob }> => {
+  const savedDesign = await pdfDocumentDesignService.active(getPdfTemplateTarget(documentType).key).catch(() => null);
+  if (savedDesign?.engine === 'HTML_TEMPLATE' || savedDesign?.sourceType === 'UPLOADED_PDF') {
+    return generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, formatAmount, tenantLogo, documentType, save });
+  }
+  // Las plantillas cargadas se exportan con el mismo motor HTML-estructurado
+  // que la vista previa. El PDF original queda como referencia, no como fondo
+  // para evitar duplicar textos y datos dinámicos.
+  const design: any = savedDesign?.settings || {};
+  const format = design.paperSize === 'A4' ? 'a4' : design.paperSize === 'LEGAL' ? 'legal' : 'letter';
+  const orientation = design.orientation === 'landscape' ? 'landscape' : 'portrait';
+  const doc = new jsPDF({ orientation, unit: 'mm', format });
   
   // 1. Configuraciones iniciales y estilos base
-  const primaryColor = [16, 185, 129] as [number, number, number]; // Emerald 500 para la identidad corporativa básica
-  const textColor = [51, 65, 85] as [number, number, number]; // Slate 700
+  const primaryColor = pdfHexToRgb(design.primaryColor, [16, 185, 129]);
+  const textColor = pdfHexToRgb(design.textColor, [51, 65, 85]);
+  const lineColor = pdfHexToRgb(design.lineColor, [226, 232, 240]);
+  const margin = Math.max(8, Math.min(28, Number(design.margins) || 14));
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const rightEdge = pageWidth - margin;
+  // jsPDF trae tres familias base; las opciones adicionales del diseñador
+  // se agrupan en su equivalente PDF para conservar una salida consistente.
+  const selectedFont = String(design.fontFamily || 'helvetica').toLowerCase();
+  const serifFonts = ['times', 'times new roman', 'georgia', 'garamond', 'cambria', 'palatino linotype', 'bookman'];
+  const monoFonts = ['courier', 'courier new', 'consolas', 'monaco'];
+  const fontName = serifFonts.includes(selectedFont) ? 'times' : monoFonts.includes(selectedFont) ? 'courier' : 'helvetica';
+  const baseFontSize = Math.max(7, Math.min(13, Number(design.fontSize) || 9));
+  const companyDisplayName = design.showCompanyName === false ? '' : (design.companyName || tenantName || 'Nuestra Empresa');
+  const logoPosition = design.logoPosition || 'left';
+  const logoWidth = Math.max(18, Math.min(70, Number(design.logoSize) || 30));
+  const logoHeight = logoWidth * 0.5;
+  const designLogo = design.logoUrl || tenantLogo;
+  const headerLayout = design.headerLayout || 'split';
+  const tableLayout = design.tableLayout || 'standard';
+  const isBannerHeader = ['banner', 'ribbon', 'corner', 'double-band'].includes(headerLayout);
+  const headerTextColor: PdfRgb = isBannerHeader ? [255, 255, 255] : textColor;
+  const headerHeight = headerLayout === 'compact' ? 42 : isBannerHeader ? 46 : 52;
+  const companyHeaderColor: PdfRgb = isBannerHeader ? [255, 255, 255] : primaryColor;
+
+  // La vista previa usa una banda real para el layout corporativo. Antes el
+  // exportador solo tomaba el color de la tabla y dejaba el encabezado blanco,
+  // por eso el PDF no coincidía con la configuración guardada por vista.
+  if (isBannerHeader) {
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.rect(0, 0, pageWidth, headerHeight, 'F');
+  }
+  if (headerLayout === 'topline' || headerLayout === 'sidebar') {
+    doc.setDrawColor(...primaryColor);
+    doc.setLineWidth(1.5);
+    if (headerLayout === 'topline') doc.line(margin, 8, rightEdge, 8);
+    if (headerLayout === 'sidebar') doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    if (headerLayout === 'sidebar') doc.rect(0, 0, 5, headerHeight, 'F');
+  }
+  if (headerLayout === 'boxed') {
+    doc.setDrawColor(...lineColor);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(margin - 2, 8, pageWidth - (margin * 2) + 4, headerHeight - 12, 3, 3, 'S');
+  }
+  if (headerLayout === 'double-band') {
+    doc.setFillColor(lineColor[0], lineColor[1], lineColor[2]);
+    doc.rect(0, headerHeight - 5, pageWidth, 5, 'F');
+  }
   
   // 2. Head - Top Left (Logo y Nombre de la Institución/Tenant)
   let titleY = 25;
-  if (tenantLogo) {
+  const logoX = logoPosition === 'center' ? (pageWidth - logoWidth) / 2 : logoPosition === 'right' ? rightEdge - logoWidth : margin;
+  if (designLogo) {
     try {
-      // Ajustar logo en 14x15 de anchura máxima proporcional, aquí asumimos un rectangle genérico
-      doc.addImage(tenantLogo, 'PNG', 14, 15, 30, 15);
-      titleY = 38; // Empujar the title un poco hacia abajo
+      doc.addImage(designLogo, 'PNG', logoX, 15, logoWidth, logoHeight);
+      titleY = 15 + logoHeight + 8;
       doc.setFontSize(14); // Texto más pequeño si existe un logo
     } catch (error) {
       console.warn('No se pudo incrustar el logo en el PDF', error);
@@ -32,15 +236,17 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   } else {
     doc.setFontSize(22);
   }
-  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(companyHeaderColor[0], companyHeaderColor[1], companyHeaderColor[2]);
+  doc.setFont(fontName, 'bold');
   // Representación del Nombre de la Empresa en el encabezado izquierdo
-  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  if (companyDisplayName) doc.text(companyDisplayName, logoPosition === 'right' ? rightEdge : margin, titleY, { align: logoPosition === 'right' ? 'right' : 'left' });
   
   // Subtítulo / Identificadores de Empresa
   doc.setFontSize(10);
-  doc.setTextColor(100, 116, 139); // Slate 500
-  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(isBannerHeader ? 235 : 100, isBannerHeader ? 245 : 116, isBannerHeader ? 240 : 139);
+  doc.setFont(fontName, 'normal');
+  if (design.slogan) doc.text(String(design.slogan), margin, titleY + 5);
+  if (design.fiscalInfo) doc.text(String(design.fiscalInfo), margin, titleY + 10);
   let docTypeStr = 'Cotización de Venta';
   if (documentType === 'order') docTypeStr = 'Orden de Venta';
   else if (documentType === 'invoice') docTypeStr = 'Factura';
@@ -48,12 +254,12 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   else if (documentType === 'payment') docTypeStr = 'Comprobante de Pago';
   else if (documentType === 'return') docTypeStr = 'Devolución de Venta';
   else if (documentType === 'credit-note') docTypeStr = 'Nota de Crédito';
-  doc.text(docTypeStr, 14, titleY + 7);
+  doc.text(docTypeStr, margin, titleY + (design.slogan || design.fiscalInfo ? 15 : 7));
   
   // 3. Head - Top Right (Info de la Cotización)
   doc.setFontSize(18);
-  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(headerTextColor[0], headerTextColor[1], headerTextColor[2]);
+  doc.setFont(fontName, 'bold');
   let titleStr = 'COTIZACIÓN';
   if (documentType === 'order') titleStr = 'ORDEN DE VENTA';
   else if (documentType === 'invoice') titleStr = 'FACTURA';
@@ -61,39 +267,44 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   else if (documentType === 'payment') titleStr = 'PAGO RECIBIDO';
   else if (documentType === 'return') titleStr = 'DEVOLUCIÓN';
   else if (documentType === 'credit-note') titleStr = 'NOTA DE CRÉDITO';
-  doc.text(titleStr, 196, 25, { align: 'right' });
+  doc.text(titleStr, rightEdge, 25, { align: 'right' });
   
   doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Nº: ${estimate.number || 'N/A'}`, 196, 32, { align: 'right' });
-  doc.text(`Fecha: ${estimate.date ? new Date(estimate.date).toLocaleDateString() : 'N/A'}`, 196, 38, { align: 'right' });
+  doc.setFont(fontName, 'normal');
+  doc.text(`Nº: ${estimate.number || 'N/A'}`, rightEdge, headerLayout === 'compact' ? 28 : 32, { align: 'right' });
+  doc.text(`Fecha: ${estimate.date ? new Date(estimate.date).toLocaleDateString() : 'N/A'}`, rightEdge, headerLayout === 'compact' ? 34 : 38, { align: 'right' });
   
   if (documentType === 'order') {
-    doc.text(`Entrega: ${estimate.expectedDelivery ? new Date(estimate.expectedDelivery).toLocaleDateString() : 'N/A'}`, 196, 44, { align: 'right' });
+    doc.text(`Entrega: ${estimate.expectedDelivery ? new Date(estimate.expectedDelivery).toLocaleDateString() : 'N/A'}`, rightEdge, headerLayout === 'compact' ? 40 : 44, { align: 'right' });
   } else {
-    doc.text(`Validez: ${estimate.expiryDate ? new Date(estimate.expiryDate).toLocaleDateString() : 'N/A'}`, 196, 44, { align: 'right' });
+    doc.text(`Validez: ${estimate.expiryDate ? new Date(estimate.expiryDate).toLocaleDateString() : 'N/A'}`, rightEdge, headerLayout === 'compact' ? 40 : 44, { align: 'right' });
   }
 
   // 4. Separador
-  doc.setDrawColor(226, 232, 240); // Slate 200
+  doc.setDrawColor(...lineColor);
   doc.setLineWidth(0.5);
-  doc.line(14, 52, 196, 52);
+  if (design.separator !== 'none' && !isBannerHeader) {
+    if (design.separator === 'dashed') doc.setLineDashPattern([2, 2], 0);
+    doc.line(margin, headerHeight, rightEdge, headerHeight);
+    doc.setLineDashPattern([], 0);
+  }
 
   // 5. Cliente Info
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(headerLayout === 'compact' ? 10 : 11);
+  doc.setFont(fontName, 'bold');
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-  doc.text('Preparado para:', 14, 62);
+  doc.text('Preparado para:', margin, headerLayout === 'compact' ? 54 : 62);
   
   doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(fontName, 'normal');
   const clienteNombre = estimate.customer?.name || 'Cliente sin registrar';
   const clienteEmail = estimate.customer?.email || '';
   const clienteTelf = estimate.customer?.phone || '';
   
-  doc.text(clienteNombre, 14, 68);
-  if (clienteEmail) doc.text(clienteEmail, 14, 73);
-  if (clienteTelf) doc.text(clienteTelf, 14, 78);
+  const customerY = headerLayout === 'compact' ? 60 : 68;
+  doc.text(clienteNombre, margin, customerY);
+  if (clienteEmail) doc.text(clienteEmail, margin, customerY + 5);
+  if (clienteTelf) doc.text(clienteTelf, margin, customerY + 10);
 
   // 6. Configuración de ítems (Tabla)
   const tableData = (estimate.items || []).map((item: any) => [
@@ -103,21 +314,23 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
     formatAmount(Number(item.total), estimate.currency, estimate.exchangeRate)
   ]);
 
+  const tableTheme = tableLayout === 'striped' || tableLayout === 'ledger' ? 'striped' : tableLayout === 'minimal' ? 'plain' : 'grid';
+  const lightTableHeader = tableLayout === 'minimal';
   autoTable(doc, {
-    startY: 90,
+    startY: headerLayout === 'compact' ? 78 : 90,
     head: [['Descripción', 'Cantidad', 'Precio U.', 'Total']],
     body: tableData,
-    theme: 'grid',
+    theme: tableTheme,
     headStyles: {
-      fillColor: primaryColor,
-      textColor: 255,
-      fontSize: 10,
+      fillColor: lightTableHeader ? [248, 250, 252] : primaryColor,
+      textColor: lightTableHeader ? textColor : 255,
+      fontSize: baseFontSize + 1,
       fontStyle: 'bold',
       halign: 'center'
     },
     bodyStyles: {
       textColor: textColor,
-      fontSize: 9
+      fontSize: baseFontSize
     },
     columnStyles: {
       0: { cellWidth: 'auto', halign: 'left' },
@@ -125,23 +338,23 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       2: { cellWidth: 35, halign: 'right' },
       3: { cellWidth: 35, halign: 'right' }
     },
-    styles: { overflow: 'linebreak', cellPadding: 5, lineWidth: 0.2, lineColor: [203, 213, 225] },
-    tableLineWidth: 0.2,
-    tableLineColor: [203, 213, 225],
-    alternateRowStyles: { fillColor: [248, 250, 252] },
+    styles: { overflow: 'linebreak', cellPadding: tableLayout === 'compact' ? 2.5 : tableLayout === 'cards' ? 4 : 5, lineWidth: tableLayout === 'minimal' ? 0 : 0.2, lineColor },
+    tableLineWidth: tableLayout === 'minimal' ? 0 : 0.2,
+    tableLineColor: lineColor,
+    alternateRowStyles: tableLayout === 'striped' || tableLayout === 'ledger' || tableLayout === 'accent' ? { fillColor: [248, 250, 252] } : undefined,
   });
 
   // 7. Resumen Financiero
   const finalY = (doc as any).lastAutoTable.finalY || 90;
   
-  const rightX = 196;
+  const rightX = rightEdge;
   const labelX = 140;
   let currentY = finalY + 10;
   
   doc.setFontSize(10);
   
   // Subtotal
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(fontName, 'normal');
   doc.text('Subtotal:', labelX, currentY);
   doc.text(formatAmount(Number(estimate.subtotal), estimate.currency, estimate.exchangeRate), rightX, currentY, { align: 'right' });
   currentY += 7;
@@ -170,8 +383,8 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   }
   
   // Total Line
-  doc.setDrawColor(226, 232, 240);
-  doc.line(labelX, currentY - 3, rightX, currentY - 3);
+  doc.setDrawColor(...lineColor);
+  if (design.separator !== 'none') doc.line(labelX, currentY - 3, rightX, currentY - 3);
   
   // Total
   doc.setFontSize(12);
@@ -184,23 +397,36 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   if (estimate.notes) {
      const notesY = Math.max(currentY + 20, finalY + 15);
      doc.setFontSize(10);
-     doc.setFont('helvetica', 'bold');
+     doc.setFont(fontName, 'bold');
      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-     doc.text('Notas:', 14, notesY);
+     doc.text('Notas:', margin, notesY);
      
      doc.setFontSize(9);
-     doc.setFont('helvetica', 'normal');
+     doc.setFont(fontName, 'normal');
      doc.setTextColor(100, 116, 139);
      const splitNotes = doc.splitTextToSize(estimate.notes, 100);
-     doc.text(splitNotes, 14, notesY + 6);
+     doc.text(splitNotes, margin, notesY + 6);
+  }
+
+  const extraText = [design.bankInfo && `Información bancaria: ${design.bankInfo}`, design.legalText && `Legal: ${design.legalText}`, design.terms && `Términos: ${design.terms}`, design.defaultNotes && `Observaciones: ${design.defaultNotes}`].filter(Boolean).join('\n');
+  const pageHeight = doc.internal.pageSize.height;
+  if (extraText) {
+    const extraY = Math.min(pageHeight - 30, (doc as any).lastAutoTable.finalY + 42);
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(doc.splitTextToSize(extraText, pageWidth - margin * 2), margin, extraY);
   }
 
   // Footer (Generado por)
-  const pageHeight = doc.internal.pageSize.height;
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184); // Slate 400
-  doc.setFont('helvetica', 'italic');
-  doc.text(`Documento de cotización originado por el módulo Ventas de ERP Nova Hub. Generado por ${tenantName}`, 14, pageHeight - 10);
+  doc.setFont(fontName, 'italic');
+  if (design.footerText) doc.text(String(design.footerText), margin, pageHeight - 16);
+  doc.text(`Documento generado por ${tenantName}`, margin, pageHeight - 10);
+  if (design.showPageNumber !== false) {
+    const pageText = design.pageNumberFormat === 'number-only' ? '1' : design.pageNumberFormat === 'custom' ? String(design.pageNumberCustom || 'Página {page} de {pages}').replace('{page}', '1').replace('{pages}', '1') : 'Página 1 de 1';
+    doc.text(pageText, rightEdge, pageHeight - 10, { align: 'right' });
+  }
 
   const blob = doc.output('blob');
   if (save) {
@@ -221,10 +447,11 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
 };
 
 export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, formatAmount, tenantLogo }: any) => {
-  const doc = new jsPDF();
+  const settings = await getPdfDesignSettings('compras.supplier-history');
+  const doc = new jsPDF(pdfDesignPaper(settings));
   
-  const primaryColor = [16, 185, 129] as [number, number, number];
-  const textColor = [51, 65, 85] as [number, number, number];
+  const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
   
   let titleY = 25;
   if (tenantLogo) {
@@ -304,14 +531,17 @@ export const generateExpensePDF = async ({
   expense,
   tenantName,
   formatAmount,
+  targetKey = 'compras.expense',
 }: {
   expense: any;
   tenantName: string;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  targetKey?: string;
 }) => {
-  const doc = new jsPDF();
-  const primaryColor = [16, 185, 129] as [number, number, number];
-  const textColor = [51, 65, 85] as [number, number, number];
+  const settings = await getPdfDesignSettings(targetKey);
+  const doc = new jsPDF(pdfDesignPaper(settings));
+  const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
 
   doc.setFontSize(20);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
@@ -371,9 +601,10 @@ export const generatePurchaseOrderPDF = async ({
   tenantName: string;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
 }) => {
-  const doc = new jsPDF();
-  const primaryColor = [16, 185, 129] as [number, number, number];
-  const textColor = [51, 65, 85] as [number, number, number];
+  const settings = await getPdfDesignSettings('compras.purchase-order');
+  const doc = new jsPDF(pdfDesignPaper(settings));
+  const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
 
   doc.setFontSize(20);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
@@ -477,9 +708,10 @@ export const generateRecurringInvoicePDF = async ({
   tenantName: string;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
 }) => {
-  const doc = new jsPDF();
-  const primaryColor = [16, 185, 129] as [number, number, number];
-  const textColor = [51, 65, 85] as [number, number, number];
+  const settings = await getPdfDesignSettings('ventas.recurring');
+  const doc = new jsPDF(pdfDesignPaper(settings));
+  const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
 
   doc.setFontSize(20);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
@@ -588,9 +820,10 @@ export const generateSupplierInvoicePDF = async ({
   tenantName: string;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
 }) => {
-  const doc = new jsPDF();
-  const primaryColor = [16, 185, 129] as [number, number, number];
-  const textColor = [51, 65, 85] as [number, number, number];
+  const settings = await getPdfDesignSettings('compras.supplier-invoice');
+  const doc = new jsPDF(pdfDesignPaper(settings));
+  const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
 
   doc.setFontSize(20);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
@@ -704,9 +937,10 @@ export const generateSessionSummaryPDF = async ({
   }
   hideSystemAmounts?: boolean;
 }) => {
-  const doc = new jsPDF();
-  const primaryColor = [16, 185, 129] as [number, number, number];
-  const textColor = [51, 65, 85] as [number, number, number];
+  const settings = await getPdfDesignSettings('ventas.cash-session');
+  const doc = new jsPDF(pdfDesignPaper(settings));
+  const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
   const symbol = isUSD ? '$' : 'C$';
 
   let titleY = 25;

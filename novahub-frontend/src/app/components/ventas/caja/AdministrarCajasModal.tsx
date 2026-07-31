@@ -10,6 +10,7 @@ import { Banknote, Plus, Loader2, Edit2, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { cajaService, type CashRegister, type CashClosureMode } from '../../../services/caja.service';
 import { api, getApiErrorMessage } from '../../../services/api';
+import { ConfirmDialog } from '../../ui/ConfirmDialog';
 
 interface AdministrarCajasModalProps {
   open: boolean;
@@ -41,6 +42,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [assignedUsers, setAssignedUsers] = useState<Map<string, CashClosureMode>>(new Map());
   const [accessLoading, setAccessLoading] = useState(false);
+  const [pendingDeleteCaja, setPendingDeleteCaja] = useState<CashRegister | null>(null);
 
   const fetchCajas = async () => {
     setCajasLoading(true);
@@ -109,6 +111,19 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
       onOpenChange(true);
     } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al guardar accesos'));
+    }
+  };
+
+  const confirmDeleteCaja = async () => {
+    if (!pendingDeleteCaja?.id) return;
+    try {
+      await cajaService.deleteRegister(pendingDeleteCaja.id);
+      toast.success('Caja eliminada');
+      setPendingDeleteCaja(null);
+      fetchCajas();
+      onRegistersChanged?.();
+    } catch (e: any) {
+      toast.error(getApiErrorMessage(e, 'Error al eliminar la caja'));
     }
   };
 
@@ -181,18 +196,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                             }}>
                               <Edit2 className="size-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="text-destructive" onClick={async () => {
-                              if (confirm('¿Eliminar esta caja?')) {
-                                try {
-                                  await cajaService.deleteRegister(caja.id!);
-                                  toast.success('Caja eliminada');
-                                  fetchCajas();
-                                  onRegistersChanged?.();
-                                } catch (e: any) {
-                                  toast.error(getApiErrorMessage(e, 'Error al eliminar la caja'));
-                                }
-                              }
-                            }}>
+                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setPendingDeleteCaja(caja)}>
                               <Trash2 className="size-4" />
                             </Button>
                           </div>
@@ -216,6 +220,16 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteCaja)}
+        onOpenChange={open => { if (!open) setPendingDeleteCaja(null); }}
+        title="¿Eliminar caja?"
+        description={pendingDeleteCaja ? `La caja «${pendingDeleteCaja.name}» se eliminará y esta acción no se puede deshacer.` : undefined}
+        confirmLabel="Eliminar caja"
+        variant="destructive"
+        onConfirm={confirmDeleteCaja}
+      />
 
       {/* Modal Formulario de Caja */}
       <Dialog open={isCajaFormOpen} onOpenChange={(open) => {
