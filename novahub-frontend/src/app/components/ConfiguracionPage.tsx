@@ -420,13 +420,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [sidebarFgHex, setSidebarFgHex] = useState(() => oklchToApproxHex(themeConfig.colors.sidebarForeground));
   const [primaryFgHex, setPrimaryFgHex] = useState(() => oklchToApproxHex(themeConfig.colors.primaryForeground));
   const [portalPrimaryHex, setPortalPrimaryHex] = useState('#10b981');
-  const [portalBackgroundHex, setPortalBackgroundHex] = useState('#020617');
   const [portalAccentHex, setPortalAccentHex] = useState('#0f172a');
-  const [portalLightPrimaryHex, setPortalLightPrimaryHex] = useState('#2563eb');
-  const [portalLightBackgroundHex, setPortalLightBackgroundHex] = useState('#f8fafc');
-  const [portalLightAccentHex, setPortalLightAccentHex] = useState('#ffffff');
-  const [portalColorMode, setPortalColorMode] = useState<'dark' | 'light'>('dark');
-  const [portalDefaultTheme, setPortalDefaultTheme] = useState<'dark' | 'light'>('dark');
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -536,12 +530,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       if (b.sidebarColor) setSidebarHex(b.sidebarColor.startsWith('oklch') ? oklchToApproxHex(b.sidebarColor) : b.sidebarColor);
       if (b.accentColor) setAccentHex(b.accentColor.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : b.accentColor);
       if (b.portalPrimaryColor) setPortalPrimaryHex(b.portalPrimaryColor);
-      if (b.portalBackgroundColor) setPortalBackgroundHex(b.portalBackgroundColor);
       if (b.portalAccentColor) setPortalAccentHex(b.portalAccentColor);
-      if (b.portalLightPrimaryColor) setPortalLightPrimaryHex(b.portalLightPrimaryColor);
-      if (b.portalLightBackgroundColor) setPortalLightBackgroundHex(b.portalLightBackgroundColor);
-      if (b.portalLightAccentColor) setPortalLightAccentHex(b.portalLightAccentColor);
-      if (b.portalDefaultTheme) setPortalDefaultTheme(b.portalDefaultTheme === 'light' ? 'light' : 'dark');
       if (b.companyName) setCompanyName(b.companyName);
       if (b.logo) setLogoPreview(b.logo);
       if (b.industry) setCompanyIndustry(b.industry);
@@ -840,14 +829,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     try {
       await brandingService.update({
         portalPrimaryColor: portalPrimaryHex,
-        portalBackgroundColor: portalBackgroundHex,
         portalAccentColor: portalAccentHex,
-        portalLightPrimaryColor: portalLightPrimaryHex,
-        portalLightBackgroundColor: portalLightBackgroundHex,
-        portalLightAccentColor: portalLightAccentHex,
-        portalDefaultTheme,
       });
-      toast.success('Personalización del portal guardada', { description: 'Estos colores son independientes del tema de cada usuario.' });
+      toast.success('Personalización del portal guardada', { description: 'El portal utiliza esta paleta oscura independientemente del tema de cada usuario.' });
     } catch (error) {
       console.error('Error saving public portal branding:', error);
       toast.error('No se pudo guardar la personalización del portal');
@@ -1094,34 +1078,11 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               <Card className="border-border/50 shadow-sm">
                 <CardHeader className="border-b border-border/30 bg-muted/10">
                   <CardTitle className="flex items-center gap-2 text-lg font-black"><Globe className="size-5 text-primary" />Personalización del portal del cliente</CardTitle>
-                  <CardDescription>Colores exclusivos del enlace público, independientes del tema de cada usuario.</CardDescription>
+                  <CardDescription>Define el color principal y el color de las tarjetas del enlace público.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-6">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Editar colores del modo</Label>
-                    <select value={portalColorMode} onChange={event => setPortalColorMode(event.target.value === 'light' ? 'light' : 'dark')} className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      <option value="dark">Modo oscuro</option>
-                      <option value="light">Modo claro</option>
-                    </select>
-                    <p className="text-xs text-muted-foreground">Selecciona un modo para editar su propia paleta del portal. Los cambios no afectan el tema del ERP.</p>
-                  </div>
-                  {portalColorMode === 'dark' ? <>
-                    <ColorField label="Color principal del modo oscuro" description="Botones, importes, enlaces y estados destacados" hexValue={portalPrimaryHex} onHexChange={setPortalPrimaryHex} />
-                    <ColorField label="Fondo del modo oscuro" description="Color base de la página pública en oscuro" hexValue={portalBackgroundHex} onHexChange={setPortalBackgroundHex} />
-                    <ColorField label="Tarjetas del modo oscuro" description="Fondos del encabezado, datos y documentos" hexValue={portalAccentHex} onHexChange={setPortalAccentHex} />
-                  </> : <>
-                    <ColorField label="Color principal del modo claro" description="Botones, importes, enlaces y estados destacados" hexValue={portalLightPrimaryHex} onHexChange={setPortalLightPrimaryHex} />
-                    <ColorField label="Fondo del modo claro" description="Color base de la página pública en claro" hexValue={portalLightBackgroundHex} onHexChange={setPortalLightBackgroundHex} />
-                    <ColorField label="Tarjetas del modo claro" description="Fondos del encabezado, datos y documentos" hexValue={portalLightAccentHex} onHexChange={setPortalLightAccentHex} />
-                  </>}
-                  <div className="space-y-2">
-                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Modo inicial</Label>
-                    <select value={portalDefaultTheme} onChange={event => setPortalDefaultTheme(event.target.value === 'light' ? 'light' : 'dark')} className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      <option value="dark">Oscuro</option>
-                      <option value="light">Claro</option>
-                    </select>
-                    <p className="text-xs text-muted-foreground">La persona podrá cambiarlo desde el enlace; esta opción define cómo se abre inicialmente.</p>
-                  </div>
+                  <ColorField label="Color principal del portal" description="Botones, importes, enlaces y estados destacados" hexValue={portalPrimaryHex} onHexChange={setPortalPrimaryHex} />
+                  <ColorField label="Color de las tarjetas" description="Fondos del encabezado, datos y documentos" hexValue={portalAccentHex} onHexChange={setPortalAccentHex} />
                   <Button onClick={handleSavePortalBranding} className="rounded-xl gap-2 font-bold"><Save className="size-4" />Guardar portal</Button>
                 </CardContent>
               </Card>
