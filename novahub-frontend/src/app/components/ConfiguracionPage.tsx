@@ -21,6 +21,7 @@ import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
 import { useTheme, type BrandColors } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { NovaSuiteIcon } from './ui/NovaIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { rolesService } from '../services/roles.service';
 import { subscriptionsService } from '../services/subscriptions.service';
@@ -65,7 +66,7 @@ const AVAILABLE_MODULES = [
   { id: 'LEGAL', label: 'Asesoría Legal', icon: Scale, description: 'Asesoría y Casos Legales' },
   { id: 'HR_TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
   { id: 'SUPPORT_TECH', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
-  { id: 'NOVACHAT', label: 'Nova Suite', icon: MessageSquare, description: 'Bandeja multicanal y comunicación unificada' },
+  { id: 'NOVACHAT', label: 'Nova Suite', icon: NovaSuiteIcon, description: 'Bandeja multicanal y comunicación unificada' },
 ];
 
 // Submódulos para permisos ultra-granulares
@@ -341,7 +342,6 @@ const ALL_TABS: TabDef[] = [
   { id: 'plataforma', label: 'Plataforma', icon: Server, scenario: ['superadmin'] },
   { id: 'paises', label: 'Países', icon: Globe, scenario: ['superadmin'] },
   { id: 'precios', label: 'Precios Módulos', icon: DollarSign, scenario: ['superadmin'] },
-  { id: 'dominios', label: 'Dominios', icon: Globe, scenario: ['superadmin', 'partner', 'client'] },
 ];
 
 // ---- Main Component ----

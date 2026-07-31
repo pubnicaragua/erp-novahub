@@ -5,6 +5,7 @@ import {
   Paperclip, Smile, ArrowLeft, FileText,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { NovaChatIcon } from '../ui/NovaIcons';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -181,7 +182,7 @@ export function NovaChatView() {
               filterChannel === 'all' ? 'bg-primary/10 text-primary' : 'hover:bg-muted/50 text-muted-foreground'
             }`}
           >
-            <MessageSquare className="size-4" />
+            <NovaChatIcon className="size-4" />
             <span>Todas las conversaciones</span>
             <Badge className="ml-auto bg-primary/20 text-primary text-[9px]">{conversations.length}</Badge>
           </button>

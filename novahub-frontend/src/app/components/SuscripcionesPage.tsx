@@ -11,6 +11,8 @@ import { rolesService } from '../services/roles.service';
 import { toast } from 'sonner';
 import { api } from '../services/api';
 import { TrialExtensionRequestsPanel } from './suscripciones/TrialExtensionRequestsPanel';
+import { DominiosView } from './suscripciones/DominiosView';
+import { NovaSuiteIcon } from './ui/NovaIcons';
 import { 
   CheckCircle2, 
   Clock, 
@@ -93,7 +95,7 @@ const AVAILABLE_MODULES = [
   { id: 'LEGAL', label: 'Asesoría Legal', icon: Scale, description: 'Asesoría y Casos Legales' },
   { id: 'TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
   { id: 'SUPPORT', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
-  { id: 'NOVACHAT', label: 'Nova Suite', icon: MessageSquare, description: 'Bandeja multicanal y comunicación unificada' },
+  { id: 'NOVACHAT', label: 'Nova Suite', icon: NovaSuiteIcon, description: 'Bandeja multicanal y comunicación unificada' },
 ];
 
 const SYSTEM_ROLE_OPTIONS = [
@@ -528,6 +530,7 @@ export function SuscripcionesPage() {
   if (user && !user.isPlatformAdmin) {
     const myTenant = tenants.find(t => t.id === user.tenantId);
     return (
+      <>
       <TenantSubscriptionView 
         tenant={myTenant} 
         availableModules={AVAILABLE_MODULES} 
@@ -548,7 +551,8 @@ export function SuscripcionesPage() {
           });
         }}
       />
-    );
+      <DominiosView />
+    </>);
   }
 
   return (

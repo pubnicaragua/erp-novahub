@@ -90,7 +90,9 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   const [loading, setLoading] = useState(true);
 
   const fmtShort = (v: number) => {
-    const converted = convertAmount(v, 'NIO');
+    const num = Number(v);
+    if (!Number.isFinite(num)) return 'C$0';
+    const converted = convertAmount(num, 'NIO');
     if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted/1000000).toFixed(1)}M`;
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -157,10 +159,10 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   // ── 2 Tops ──
   const topDepts = useMemo(() => {
      const map: Record<string, number> = {};
-     employees.forEach(e => {
-        const dept = e.department || 'Gral';
-        map[dept] = (map[dept] || 0) + 1;
-     });
+      employees.forEach(e => {
+         const dept = typeof e.department === 'object' && e.department ? (e.department.name || 'Gral') : (e.department || 'Gral');
+         map[dept] = (map[dept] || 0) + 1;
+      });
      return Object.entries(map).map(([name, count]) => ({ name, count })).sort((a,b) => b.count - a.count).slice(0, 5);
   }, [employees]);
 
@@ -543,7 +545,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-black text-amber-500">{avgAntiquity.toFixed(1)} Años</p>
+            <p className="text-xl font-black text-amber-500">{avgAntiquity < 1 ? `${(avgAntiquity * 12).toFixed(1)} meses` : `${avgAntiquity.toFixed(1)} años`}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">Trayectoria promedio del equipo</p>
           </CardContent>
         </Card>

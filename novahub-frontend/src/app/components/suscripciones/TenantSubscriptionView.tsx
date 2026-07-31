@@ -13,6 +13,8 @@ import { Textarea } from '../ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { TeamManagementPanel } from './TeamManagementPanel';
+import { TrialCountdownBanner } from '../auth/TrialCountdownBanner';
 import { tenantsService } from '../../services/tenants.service';
 import { usersService } from '../../services/users.service';
 import { inventoryService } from '../../services/inventario.service';
@@ -209,6 +211,14 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         </div>
       </motion.div>
 
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-4"
+      >
+        <TrialCountdownBanner />
+      </motion.div>
+
       <Tabs defaultValue="plan" className="w-full">
         <TabsList className="bg-muted/20 border border-border/50 p-1 h-12 mb-8">
           <TabsTrigger value="plan" className="px-8 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
@@ -216,6 +226,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
           </TabsTrigger>
           <TabsTrigger value="team" className="px-8 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
             <Users className="size-4" /> Mi Equipo ({users.length})
+          </TabsTrigger>
+          <TabsTrigger value="estructura" className="px-8 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+            <Store className="size-4" /> Estructura
           </TabsTrigger>
         </TabsList>
 
@@ -478,7 +491,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
             ))}
           </div>
         </TabsContent>
-      </Tabs>
+        <TabsContent value="estructura" className="space-y-6">
+          <TeamManagementPanel tenantId={tenant.id} tenantName={tenant.name} />
+        </TabsContent>      </Tabs>
 
       {/* Permissions Viewer Dialog */}
       <Dialog open={isPermsDialogOpen} onOpenChange={setIsPermsDialogOpen}>

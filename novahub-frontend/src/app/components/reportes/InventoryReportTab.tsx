@@ -66,7 +66,9 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
 
   const fmtShort = (v: number) => {
-    const converted = convertAmount(v, 'NIO');
+    const num = Number(v);
+    if (!Number.isFinite(num)) return 'C$0';
+    const converted = convertAmount(num, 'NIO');
     if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted/1000000).toFixed(1)}M`;
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -132,6 +134,15 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     });
     return Object.entries(map).map(([name, qty]) => ({ name, qty })).sort((a,b) => b.qty - a.qty).slice(0, 5);
   }, [fMov]);
+
+  const categoryValueData = useMemo(() => {
+    const map = products.reduce((acc: Record<string, number>, p: any) => {
+      const c = p.category?.name || (typeof p.category === 'string' ? p.category : 'Sin categoría');
+      acc[c] = (acc[c] || 0) + Number(p.costPrice || 0) * Number(p.stock || 0);
+      return acc;
+    }, {});
+    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [products]);
 
   // ── Charts ──
   const monthlyData = useMemo(() => {
@@ -574,26 +585,26 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           </CardHeader>
           <CardContent className="space-y-6 pt-4">
              <div className="h-[200px] w-full">
+                {categoryValueData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={[
-                        { name: 'Activo', value: products.length * 0.9 },
-                        { name: 'Obsoleto', value: products.length * 0.05 },
-                        { name: 'Dañado', value: products.length * 0.05 }
-                      ]}
+                      data={categoryValueData}
                       innerRadius={50}
                       outerRadius={70}
                       paddingAngle={5}
                       dataKey="value"
                     >
-                      <Cell fill="#10b981" />
-                      <Cell fill="#94a3b8" />
-                      <Cell fill="#ef4444" />
+                      {categoryValueData.map((_, idx) => (
+                        <Cell key={idx} fill={['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#94a3b8'][idx % 6]} />
+                      ))}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
+                    <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} formatter={(v: number) => formatConvertedAmount(v, 'NIO')} />
                   </PieChart>
                 </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">Sin información disponible</div>
+                )}
              </div>
              <div className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 flex items-center gap-4">
                 <div className="p-3 rounded-lg bg-indigo-500/10">

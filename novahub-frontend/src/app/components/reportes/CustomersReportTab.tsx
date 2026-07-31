@@ -73,6 +73,8 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const [loading, setLoading] = useState(true);
 
   const fmtShort = (v: number) => {
+    const num = Number(v);
+    if (!Number.isFinite(num)) return 'C$0';
     const converted = convertAmount(v, 'NIO');
     if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted/1000000).toFixed(1)}M`;
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
@@ -169,6 +171,14 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     });
     return Object.entries(map).map(([name, v]) => ({ name, value: v.total, qty: v.qty })).sort((a,b) => b.value - a.value).slice(0, 5);
   }, [fInv, exchangeRate]);
+
+  const topByBalance = useMemo(() => {
+    return Object.entries(invoices.filter(i => i.status !== 'PAID' && i.status !== 'CANCELLED').reduce((acc: Record<string, number>, inv: any) => {
+      const n = inv.customer?.name || inv.customerName || 'Cliente';
+      acc[n] = (acc[n] || 0) + Number(inv.balanceDue || inv.total || 0);
+      return acc;
+    }, {})).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 5);
+  }, [invoices]);
 
   // ── Charts ──
   const monthlyData = useMemo(() => {
@@ -442,7 +452,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><ArrowUpRight className="size-10" /></div>
           <CardHeader className="pb-1">
             <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Activity className="size-3.5 text-emerald-500" /> Adquisición (Periodo)
+              <Activity className="size-3.5 text-emerald-500" /> Nuevos clientes del período
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -456,12 +466,12 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Scale className="size-10" /></div>
           <CardHeader className="pb-1">
             <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <CreditCard className="size-3.5 text-purple-500" /> Eficiencia de Cobro
+              <CreditCard className="size-3.5 text-purple-500" /> Cobros recibidos
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-black text-purple-500">{payRatio.toFixed(1)}%</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{formatConvertedAmount(totalPaid, 'NIO')} cobrados</p>
+            <p className="text-xl font-black text-purple-500">{formatConvertedAmount(totalPaid, 'NIO')}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Cobros del período</p>
           </CardContent>
         </Card>
 
@@ -577,11 +587,11 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         <Card id="customers-products-card" className="border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <Package className="size-4 text-primary" /> Productos Estrella
+              <Package className="size-4 text-primary" /> Clientes con mayor saldo
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {topProducts.map((p: any, idx: number) => (
+            {topByBalance.map((p: any, idx: number) => (
               <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-orange-500/5 border border-orange-500/10 hover:bg-orange-500/10 transition-colors gap-4">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="size-7 rounded-lg bg-orange-500/20 flex items-center justify-center text-[10px] font-black text-orange-600 shrink-0">
@@ -589,7 +599,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold truncate">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{p.qty} unidades vendidas</p>
+                    <p className="text-[10px] text-muted-foreground truncate">Saldo pendiente</p>
                   </div>
                 </div>
                 <span className="text-sm font-black text-orange-500 shrink-0">{formatConvertedAmount(Number(p.value), 'NIO')}</span>

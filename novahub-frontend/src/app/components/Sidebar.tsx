@@ -71,6 +71,7 @@ import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { NovaHubLogo } from './NovaHubLogo';
+import { NovaSuiteIcon } from './ui/NovaIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface SidebarProps {
@@ -327,7 +328,7 @@ const menuItems: MenuItem[] = [
       { id: 'reminders', label: 'Recordatorios', icon: <Bell className="size-4" /> }
     ]
   },
-  { id: 'novachat', label: 'Nova Suite', icon: <MessageSquare className="size-5" /> },
+  { id: 'novachat', label: 'Nova Suite', icon: <NovaSuiteIcon className="size-5" /> },
   {
     id: 'documentos',
     label: 'Nova Cloud',

@@ -75,6 +75,8 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const [loading, setLoading] = useState(true);
 
   const fmtShort = (v: number) => {
+    const num = Number(v);
+    if (!Number.isFinite(num)) return 'C$0';
     const converted = convertAmount(v, 'NIO');
     if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted/1000000).toFixed(1)}M`;
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
@@ -125,7 +127,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const prevTotalPurchased = useMemo(() => pBills.reduce((acc, b) => acc + (b.currency === 'USD' ? Number(b.total || 0) * (b.exchangeRate || exchangeRate) : Number(b.total || 0)), 0), [pBills, exchangeRate]);
   const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + (p.currency === 'USD' ? Number(p.amount || 0) * (p.exchangeRate || exchangeRate) : Number(p.amount || 0)), 0), [fPay, exchangeRate]);
   
-  const payRatio = totalPurchased > 0 ? (totalPaid / totalPurchased) * 100 : 0;
+  const payRatio = totalPurchased > 0 ? Math.min(100, (totalPaid / totalPurchased) * 100) : 0;
   const avgPurchasePerSupp = suppliers.length > 0 ? (totalPurchased / suppliers.length) : 0;
 
   const getTrendValue = (curr: number, prev: number) => {
@@ -446,7 +448,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         const thinBorder = { style: 'thin' as const, color: { argb: 'FFE5E7EB' } };
 
-        // ── Top 5 Proveedores (native table) ──
+        // ── Principales Proveedores (native table) ──
         const topSupTitleRow = ws.addRow(['Socios Estratégicos (Volumen)', '', '', '']);
         ws.mergeCells(`A${ws.rowCount}:D${ws.rowCount}`);
         topSupTitleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FFF59E0B' } };
@@ -541,7 +543,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><ShoppingBag className="size-10" /></div>
           <CardHeader className="pb-1">
             <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Truck className="size-3.5 text-orange-500" /> Suministro Total
+              <Truck className="size-3.5 text-orange-500" /> Compras a proveedores
               {getTrendValue(totalPurchased, prevTotalPurchased) !== 0 && (
                 <span className={cn("ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-bold", getTrendValue(totalPurchased, prevTotalPurchased) > 0 ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500")}>
                   {getTrendValue(totalPurchased, prevTotalPurchased) > 0 ? '+' : ''}{getTrendValue(totalPurchased, prevTotalPurchased).toFixed(1)}%
@@ -560,7 +562,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><Package className="size-10" /></div>
           <CardHeader className="pb-1">
             <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <Activity className="size-3.5 text-blue-500" /> Logística Activa
+              <Activity className="size-3.5 text-blue-500" /> Órdenes pendientes de recepción
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -578,7 +580,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-black text-rose-500">{formatConvertedAmount(totalPurchased - totalPaid, 'NIO')}</p>
+            <p className="text-xl font-black text-rose-500">{formatConvertedAmount(Math.max(0, totalPurchased - totalPaid), 'NIO')}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{payRatio.toFixed(1)}% de deuda saldada</p>
           </CardContent>
         </Card>
@@ -588,7 +590,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity"><CreditCard className="size-10" /></div>
           <CardHeader className="pb-1">
             <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-              <TrendingUp className="size-3.5 text-emerald-500" /> Flujo de Pago
+              <TrendingUp className="size-3.5 text-emerald-500" /> Pagos realizados
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -649,7 +651,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                    <CreditCard className="size-5 text-emerald-500" />
                 </div>
                 <div>
-                   <p className="text-xs font-bold text-emerald-500 uppercase">Salud de Deuda</p>
+                   <p className="text-xs font-bold text-emerald-500 uppercase">Cumplimiento de pago</p>
                    <p className="text-[10px] text-muted-foreground">Capacidad de amortización: {payRatio.toFixed(1)}%</p>
                 </div>
              </div>
@@ -663,7 +665,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         <Card id="providers-top-suppliers" className="border-orange-500/20 min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <Users className="size-4 text-orange-500" /> Socios Estratégicos (Volumen)
+              <Users className="size-4 text-orange-500" /> Principales proveedores
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">

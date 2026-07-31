@@ -74,7 +74,10 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const [loading, setLoading] = useState(true);
 
   const fmtShort = (v: number) => {
-    const converted = convertAmount(v, 'NIO');
+    const num = Number(v);
+    if (!Number.isFinite(num)) return `${currencySymbol}0`;
+    const converted = convertAmount(num, 'NIO');
+    if (!Number.isFinite(converted)) return `${currencySymbol}0`;
     if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted/1000000).toFixed(1)}M`;
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -127,6 +130,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const effectivePaid = Math.min(totalPaid, totalPurchased * 1.05);
   const payRatio = totalPurchased > 0 ? (effectivePaid / totalPurchased) * 100 : 0;
   const pendingCxp = Math.max(0, totalPurchased - effectivePaid);
+  const avgCost = fBills.length > 0 ? totalPurchased / fBills.length : 0;
   
   const getTrendValue = (curr: number, prev: number) => {
     if (prev === 0) return curr > 0 ? 100 : 0;
@@ -182,8 +186,8 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       
       data.push({
         mes: MONTH_NAMES[monthIdx],
-        compras: Math.round(mPurch),
-        pagos: Math.round(mPay),
+        compras: Number.isFinite(mPurch) ? Math.round(mPurch) : 0,
+        pagos: Number.isFinite(mPay) ? Math.round(mPay) : 0,
       });
     }
     return data;
@@ -623,11 +627,11 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             <div className="h-[320px] w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyData} barGap={6}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
-                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11, fontWeight: 600 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
-                  <Tooltip cursor={{ fill: 'rgba(0,0,0,0.04)' }} contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 700 }} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: 600 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
+                  <Tooltip cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }} contentStyle={{ borderRadius: 10, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))', fontSize: 12 }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 700, color: 'hsl(var(--foreground))' }} />
                   <Bar dataKey="compras" name="Compras" fill="#f97316" radius={[6, 6, 0, 0]}>
                     <LabelList dataKey="compras" position="top" formatter={(v: number) => v > 0 ? fmtShort(v) : ''} style={{ fontSize: 9, fill: '#f97316', fontWeight: 700 }} />
                   </Bar>
@@ -643,13 +647,13 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         <Card id="purchases-distribution-chart" className="border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <Package className="size-4 text-primary" /> Eficiencia Logística
+              <Package className="size-4 text-primary" /> Estado del Ciclo de Compra
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6 pt-4">
              <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/10 text-center">
-                   <p className="text-[10px] font-bold text-muted-foreground uppercase">OC Pendientes</p>
+                   <p className="text-[10px] font-bold text-muted-foreground uppercase">Órdenes Pendientes</p>
                    <p className="text-2xl font-black text-orange-500">{orders.filter(o => o.status === 'PENDING').length}</p>
                 </div>
                 <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10 text-center">
@@ -662,8 +666,8 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                    <CreditCard className="size-5 text-emerald-500" />
                 </div>
                 <div>
-                   <p className="text-xs font-bold text-emerald-500 uppercase">Salud Crediticia</p>
-                   <p className="text-[10px] text-muted-foreground">Proporción de pago sobre adquisiciones: {payRatio.toFixed(1)}%</p>
+                   <p className="text-xs font-bold text-emerald-500 uppercase">Cumplimiento de Pagos</p>
+                   <p className="text-[10px] text-muted-foreground">Proporción de pago sobre compras: {Math.min(100, payRatio).toFixed(1)}%</p>
                 </div>
              </div>
           </CardContent>
@@ -688,10 +692,10 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                         <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" opacity={0.3} />
-                    <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={v => fmtShort(v)} />
-                    <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.06)" />
+                    <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={v => fmtShort(v)} />
+                    <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))', fontSize: 12 }} />
                     <Area type="monotone" dataKey="compras" stroke="#f97316" strokeWidth={2.5} fill="url(#purchGrad)" dot={{ r: 4, fill: '#f97316', strokeWidth: 2, stroke: '#fff' }} />
                   </AreaChart>
                </ResponsiveContainer>
@@ -702,7 +706,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         <Card id="purchases-pie-chart" className="border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <PieChartIcon className="size-4 text-primary" /> Distribución de Gasto
+              <PieChartIcon className="size-4 text-primary" /> Compras por Proveedor
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -710,20 +714,19 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={[
-                        { name: 'Facturas', value: bills.length },
-                        { name: 'Órdenes', value: orders.length }
-                      ]}
+                      data={topSuppliers.length > 0 ? topSuppliers : [{ name: 'Sin información disponible', value: 1 }]}
                       innerRadius={50}
                       outerRadius={70}
                       paddingAngle={5}
                       dataKey="value"
+                      nameKey="name"
                     >
-                      <Cell fill="#f59e0b" />
-                      <Cell fill="#8b5cf6" />
+                      {topSuppliers.length > 0
+                        ? topSuppliers.map((_, i) => <Cell key={i} fill={['#f97316', '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b'][i % 5]} />)
+                        : <Cell fill="#94a3b8" />}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '12px' }} />
-                    <Legend />
+                    <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))', fontSize: 12 }} formatter={(value: number, name: string) => [formatConvertedAmount(Number(value), 'NIO'), name]} />
+                    <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))', fontSize: 11 }}>{value.length > 18 ? value.substring(0, 17) + '…' : value}</span>} />
                   </PieChart>
                 </ResponsiveContainer>
              </div>
@@ -737,7 +740,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         <Card id="purchases-top-suppliers" className="border-orange-500/20 min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <Truck className="size-4 text-orange-500" /> Top 5 Proveedores
+              <Truck className="size-4 text-orange-500" /> Principales Proveedores
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -749,7 +752,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold truncate">{s.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">Suministro Estratégico</p>
+                    <p className="text-[10px] text-muted-foreground truncate">Monto comprado en el período</p>
                   </div>
                 </div>
                 <span className="text-sm font-black text-orange-500 shrink-0 ml-3">{formatConvertedAmount(Number(s.value), 'NIO')}</span>
@@ -762,7 +765,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         <Card id="purchases-top-products" className="border-blue-500/20 min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-              <Package className="size-4 text-blue-500" /> Items Críticos (Inversión)
+              <Package className="size-4 text-blue-500" /> Productos con Mayor Inversión
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
