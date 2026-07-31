@@ -24,6 +24,9 @@ import {
   Tag,
   Hash,
   Activity,
+  Link2,
+  Copy,
+  RefreshCcw,
 } from 'lucide-react';
 
 import {
@@ -55,6 +58,8 @@ import {
 } from '../ui/table';
 import { auditService, customersService, invoicesService } from '../../services/ventas.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
+import { toast } from 'sonner';
 import type { Customer, Invoice } from '../../types';
 
 interface CustomerDetailDrawerProps {
@@ -103,6 +108,9 @@ export function CustomerDetailDrawer({
   const [loading, setLoading] = useState(false);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [publicLinks, setPublicLinks] = useState<any[]>([]);
+  const [publicLinksLoading, setPublicLinksLoading] = useState(false);
+  const [creatingPortalLink, setCreatingPortalLink] = useState(false);
 
   useEffect(() => {
     if (!customerId) {
@@ -160,6 +168,13 @@ export function CustomerDetailDrawer({
       }
     })();
 
+    (async () => {
+      setPublicLinksLoading(true);
+      try { const links = await publicAccessService.list(customerId); if (!cancelled) setPublicLinks(links || []); }
+      catch { if (!cancelled) setPublicLinks([]); }
+      finally { if (!cancelled) setPublicLinksLoading(false); }
+    })();
+
     return () => {
       cancelled = true;
     };
@@ -180,6 +195,24 @@ export function CustomerDetailDrawer({
   const creditLimit = Number(customer?.creditLimit ?? 0);
   const availableCredit = Math.max(0, creditLimit - balance);
   const creditUsedPercent = creditLimit > 0 ? Math.min(100, (balance / creditLimit) * 100) : 0;
+
+  const createPortalLink = async () => {
+    if (!customer?.id) return;
+    setCreatingPortalLink(true);
+    try {
+      const created = await publicAccessService.createPortalLink({ customerId: customer.id });
+      const url = publicLinkUrl(created.path);
+      await navigator.clipboard?.writeText(url);
+      toast.success('Portal generado y enlace copiado');
+      setPublicLinks(await publicAccessService.list(customer.id));
+    } catch (e: any) { toast.error(e?.message || 'No se pudo generar el portal'); }
+    finally { setCreatingPortalLink(false); }
+  };
+
+  const revokePublicLink = async (id: string) => {
+    try { await publicAccessService.revoke(id); setPublicLinks(await publicAccessService.list(customer?.id)); toast.success('Enlace revocado'); }
+    catch (e: any) { toast.error(e?.message || 'No se pudo revocar el enlace'); }
+  };
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -281,6 +314,17 @@ export function CustomerDetailDrawer({
                     <InfoField label="Departamento" value={customer?.department || 'Sin departamento'} icon={MapPin} muted={!customer?.department} />
                     <InfoField label="País" value={customer?.country || 'Sin país'} icon={MapPin} muted={!customer?.country} />
                   </div>
+                </Card>
+
+                <Card className="p-5 bg-card border-border/60 rounded-2xl space-y-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2"><Link2 className="size-4 text-primary" /> Accesos públicos seguros</h3>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Genera enlaces temporales para que el cliente consulte documentos o su portal sin tener una cuenta interna.</p>
+                    </div>
+                    <Button size="sm" onClick={createPortalLink} disabled={creatingPortalLink || !customer?.id} className="shrink-0 gap-1.5 rounded-xl text-xs font-bold"><RefreshCcw className={`size-3.5 ${creatingPortalLink ? 'animate-spin' : ''}`} /> Portal</Button>
+                  </div>
+                  {publicLinksLoading ? <Skeleton className="h-12 w-full rounded-xl" /> : publicLinks.length === 0 ? <p className="rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">Todavía no hay enlaces activos para este cliente.</p> : <div className="space-y-2">{publicLinks.filter(link => link.isActive).slice(0, 8).map(link => <div key={link.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/10 p-3"><div className="min-w-0"><p className="text-xs font-bold">{link.accessType === 'PORTAL' ? 'Portal del cliente' : `Documento · ${link.documentType || 'PDF'}`}</p><p className="text-[10px] text-muted-foreground">{link.expiresAt ? `Expira ${format(new Date(link.expiresAt), 'dd/MM/yyyy')}` : 'Sin fecha de expiración'}</p></div><div className="flex shrink-0 gap-1"><Button variant="ghost" size="icon" className="size-8" title="Copiar enlace" onClick={() => toast.info('Para copiar un enlace existente, genéralo nuevamente desde Portal')}><Copy className="size-3.5" /></Button><Button variant="ghost" size="icon" className="size-8 text-rose-500" title="Revocar enlace" onClick={() => revokePublicLink(link.id)}><ShieldAlert className="size-3.5" /></Button></div></div>)}</div>}
                 </Card>
 
                 <Card className="p-5 bg-card border-border/60 rounded-2xl space-y-4 shadow-sm">

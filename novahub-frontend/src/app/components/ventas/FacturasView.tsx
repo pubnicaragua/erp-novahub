@@ -19,6 +19,7 @@ import { useGlobalSearch } from '../hooks/useGlobalSearch';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
@@ -98,12 +99,28 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     return customer?.phone || null;
   };
 
-  const handleWhatsApp = () => {
+  const handleWhatsApp = async () => {
     const phone = getCustomerPhone();
     if (!phone) { toast.error('El cliente no tiene número de teléfono registrado'); return; }
     const digits = phone.replace(/\D/g, '');
     const phoneWithCode = digits.length === 8 ? '505' + digits : (digits.startsWith('505') ? digits : '505' + digits);
-    const text = encodeURIComponent(`Hola ${localDoc?.customer?.name || ''}, te compartimos la factura ${localDoc?.number} por un total de ${localDoc?.currency === 'USD' ? '$' : 'C$'}${formatSalesAmount(localDoc?.total)}.`);
+    let message = `Hola ${localDoc?.customer?.name || ''}, te compartimos la factura ${localDoc?.number} por un total de ${localDoc?.currency === 'USD' ? '$' : 'C$'}${formatSalesAmount(localDoc?.total)}.`;
+    try {
+      if (localDoc?.customerId && localDoc?.id) {
+        const [documentLink, portalLink] = await Promise.all([
+          publicAccessService.createDocumentLink({ customerId: localDoc.customerId, documentType: 'invoice', documentId: localDoc.id, allowPrint: true, allowDownload: true, allowRelated: true }),
+          publicAccessService.createPortalLink({ customerId: localDoc.customerId }),
+        ]);
+        message += `\n\nPodés consultar la factura de forma segura aquí:\n${publicLinkUrl(documentLink.path)}`;
+        message += `\n\nPortal del cliente (historial y saldo):\n${publicLinkUrl(portalLink.path)}`;
+      } else {
+        message += ' Adjunto encontrarás el documento PDF con todos los detalles.';
+      }
+    } catch (error) {
+      console.warn('No se pudo crear el enlace seguro de la factura, se conserva el mensaje actual.', error);
+      message += ' Adjunto encontrarás el documento PDF con todos los detalles.';
+    }
+    const text = encodeURIComponent(message);
     window.open(`https://wa.me/${phoneWithCode}?text=${text}`, '_blank');
   };
 

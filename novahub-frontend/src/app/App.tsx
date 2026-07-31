@@ -11,6 +11,7 @@ import { TrialExpiredPage } from './components/auth/TrialExpiredPage';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
+import { PublicAccessPage } from './components/public/PublicAccessPage';
 
 const OverviewDashboard = lazy(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })));
 const PartnerDashboard = lazy(() => import('./components/PartnerDashboard').then(m => ({ default: m.PartnerDashboard })));
@@ -225,6 +226,9 @@ function AppContent() {
   const { isAuthenticated, login, logout } = useAuth();
   const location = useLocation();
   const [trialExpired, setTrialExpired] = useState(false);
+
+  if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
+  if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
 
   useEffect(() => {
     const handler = (e: Event) => {

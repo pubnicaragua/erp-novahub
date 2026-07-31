@@ -5,6 +5,10 @@ export interface Branding {
   primaryColor: string;
   sidebarColor: string;
   accentColor: string;
+  portalPrimaryColor: string;
+  portalBackgroundColor: string;
+  portalAccentColor: string;
+  portalDefaultTheme: 'dark' | 'light';
   whiteLabel: boolean;
   companyName: string;
   industry?: string;

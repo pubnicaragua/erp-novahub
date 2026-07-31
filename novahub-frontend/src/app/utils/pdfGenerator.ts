@@ -156,10 +156,11 @@ interface PDFGeneratorParams {
   tenantLogo?: string;
   documentType?: 'estimate' | 'order' | 'invoice' | 'recurring' | 'payment' | 'return' | 'credit-note';
   save?: boolean;
+  designOverride?: any;
 }
 
-export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, tenantLogo, documentType = 'estimate', save = true }: PDFGeneratorParams): Promise<{ doc: jsPDF | null; blob: Blob }> => {
-  const savedDesign = await pdfDocumentDesignService.active(getPdfTemplateTarget(documentType).key).catch(() => null);
+export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, tenantLogo, documentType = 'estimate', save = true, designOverride }: PDFGeneratorParams): Promise<{ doc: jsPDF | null; blob: Blob }> => {
+  const savedDesign = designOverride || await pdfDocumentDesignService.active(getPdfTemplateTarget(documentType).key).catch(() => null);
   if (savedDesign?.engine === 'HTML_TEMPLATE' || savedDesign?.sourceType === 'UPLOADED_PDF') {
     return generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, formatAmount, tenantLogo, documentType, save });
   }
