@@ -75,7 +75,9 @@ import {
   type Submodule 
 } from '../types/modules';
 import { storageService } from '../services/storage.service';
+import { authService } from '../services/auth.service';
 import { TenantSubscriptionView } from './suscripciones/TenantSubscriptionView';
+import { getPasswordError, isValidEmail, normalizeEmail } from '../utils/accountValidation';
 
 const AVAILABLE_MODULES = [
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes', submodules: SALES_SUBMODULES },
@@ -139,6 +141,8 @@ export function SuscripcionesPage() {
   const [passwordDialogUser, setPasswordDialogUser] = useState<any>(null);
   const [newPassword, setNewPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [tenantAdminEmailError, setTenantAdminEmailError] = useState('');
+  const [checkingTenantAdminEmail, setCheckingTenantAdminEmail] = useState(false);
   const [pendingDeleteTenant, setPendingDeleteTenant] = useState<{ id: string; name: string } | null>(null);
 
   // Form state for module request
@@ -155,11 +159,39 @@ export function SuscripcionesPage() {
     slug: '',
     adminName: '',
     adminEmail: '',
+    adminPassword: '',
     industry: 'TECHNOLOGY',
     plan: 'BASIC',
     logo: '',
     customPrice: ''
   });
+
+  useEffect(() => {
+    const email = normalizeEmail(tenantForm.adminEmail);
+    setTenantAdminEmailError('');
+    if (!email || !isValidEmail(email)) {
+      setCheckingTenantAdminEmail(false);
+      return;
+    }
+    const currentEmail = normalizeEmail(selectedTenant?.users?.[0]?.email || '');
+    if (selectedTenant && email === currentEmail) {
+      setCheckingTenantAdminEmail(false);
+      return;
+    }
+    const timer = window.setTimeout(async () => {
+      setCheckingTenantAdminEmail(true);
+      try {
+        const response: any = await authService.checkEmail(email);
+        const exists = response?.data?.exists ?? response?.exists;
+        setTenantAdminEmailError(exists ? 'Este correo ya está en uso. Escribe otro.' : '');
+      } catch {
+        setTenantAdminEmailError('No se pudo verificar el correo. Intenta nuevamente.');
+      } finally {
+        setCheckingTenantAdminEmail(false);
+      }
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [tenantForm.adminEmail, selectedTenant]);
 
   useEffect(() => {
     if (user && (user.isPlatformAdmin || user.isTenantAdmin)) {
@@ -240,6 +272,11 @@ export function SuscripcionesPage() {
   };
 
   const handleCreateTenant = async () => {
+    const passwordError = getPasswordError(tenantForm.adminPassword);
+    if (!tenantForm.name.trim() || !tenantForm.adminName.trim() || !isValidEmail(tenantForm.adminEmail) || tenantAdminEmailError || checkingTenantAdminEmail || passwordError) {
+      toast.error(tenantAdminEmailError || passwordError || 'Completa los datos del administrador con un correo disponible');
+      return;
+    }
     try {
       setUploading(true);
       let logoUrl = tenantForm.logo || null;
@@ -248,7 +285,7 @@ export function SuscripcionesPage() {
         logoUrl = await storageService.uploadTenantLogo(logoFile, tenantForm.slug || 'temp');
       }
       
-      await tenantsService.create({ ...tenantForm, logo: logoUrl || undefined });
+      await tenantsService.create({ ...tenantForm, adminEmail: normalizeEmail(tenantForm.adminEmail), logo: logoUrl || undefined });
       toast.success('Empresa creada exitosamente');
       setIsTenantDialogOpen(false);
       resetTenantForm();
@@ -264,6 +301,10 @@ export function SuscripcionesPage() {
 
   const handleUpdateTenant = async () => {
     if (!selectedTenant) return;
+    if (!isValidEmail(tenantForm.adminEmail) || tenantAdminEmailError || checkingTenantAdminEmail) {
+      toast.error(tenantAdminEmailError || 'Escribe un correo válido y disponible para el administrador');
+      return;
+    }
     try {
       setUploading(true);
       let logoUrl = tenantForm.logo;
@@ -272,7 +313,7 @@ export function SuscripcionesPage() {
         logoUrl = await storageService.uploadTenantLogo(logoFile, selectedTenant.id);
       }
       
-      await tenantsService.update(selectedTenant.id, { ...tenantForm, logo: logoUrl });
+      await tenantsService.update(selectedTenant.id, { ...tenantForm, adminEmail: normalizeEmail(tenantForm.adminEmail), logo: logoUrl });
       toast.success('Información actualizada correctamente');
       setIsTenantDialogOpen(false);
       setSelectedTenant(null);
@@ -301,6 +342,7 @@ export function SuscripcionesPage() {
       slug: '',
       adminName: '',
       adminEmail: '',
+      adminPassword: '',
       industry: 'TECHNOLOGY',
       plan: 'BASIC',
       logo: '',
@@ -317,6 +359,7 @@ export function SuscripcionesPage() {
       slug: tenant.slug,
       adminName: tenant.users?.[0]?.name || '',
       adminEmail: tenant.users?.[0]?.email || '',
+      adminPassword: '',
       industry: tenant.industry,
       plan: tenant.plan,
       logo: tenant.logo || '',
@@ -441,8 +484,9 @@ export function SuscripcionesPage() {
   };
 
   const handleChangePassword = async () => {
-    if (!newPassword || newPassword.length < 6) {
-      toast.error('La contraseña debe tener al menos 6 caracteres');
+    const passwordError = getPasswordError(newPassword);
+    if (passwordError) {
+      toast.error(passwordError);
       return;
     }
     try {
@@ -630,11 +674,28 @@ export function SuscripcionesPage() {
                     />
                     <Input 
                       placeholder="correo@empresa.com" 
-                      className="bg-muted/10 border-border/50 h-11 rounded-xl"
+                      className={cn("bg-muted/10 border-border/50 h-11 rounded-xl", tenantAdminEmailError && 'border-destructive')}
                       value={tenantForm.adminEmail}
-                      onChange={e => setTenantForm({...tenantForm, adminEmail: e.target.value})}
+                      onChange={e => {
+                        setTenantForm({...tenantForm, adminEmail: e.target.value});
+                        setTenantAdminEmailError('');
+                      }}
                     />
                   </div>
+                  {!selectedTenant && (
+                    <div className="col-span-2 space-y-2">
+                      <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Contraseña inicial</Label>
+                      <Input
+                        type="password"
+                        placeholder="8 caracteres, mayúscula, número y símbolo"
+                        className={cn("bg-muted/10 border-border/50 h-11 rounded-xl", getPasswordError(tenantForm.adminPassword) && 'border-destructive')}
+                        value={tenantForm.adminPassword}
+                        onChange={e => setTenantForm({...tenantForm, adminPassword: e.target.value})}
+                      />
+                      {getPasswordError(tenantForm.adminPassword) && <p className="text-xs text-destructive">{getPasswordError(tenantForm.adminPassword)}</p>}
+                    </div>
+                  )}
+                  {tenantAdminEmailError && <p className="col-span-2 text-xs text-destructive">{tenantAdminEmailError}</p>}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -705,7 +766,7 @@ export function SuscripcionesPage() {
               </div>
               <DialogFooter className="gap-3">
                 <Button variant="outline" className="border-border/50 rounded-xl h-11" onClick={() => { setIsTenantDialogOpen(false); setSelectedTenant(null); resetTenantForm(); }}>Cancelar</Button>
-                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-11 px-8 font-bold" onClick={selectedTenant ? handleUpdateTenant : handleCreateTenant}>
+                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-11 px-8 font-bold" onClick={selectedTenant ? handleUpdateTenant : handleCreateTenant} disabled={uploading || checkingTenantAdminEmail || !!tenantAdminEmailError || !isValidEmail(tenantForm.adminEmail) || (!selectedTenant && !!getPasswordError(tenantForm.adminPassword))}>
                   {selectedTenant ? 'Guardar Cambios' : 'Crear Entidad'}
                 </Button>
               </DialogFooter>
@@ -1122,15 +1183,16 @@ export function SuscripcionesPage() {
             <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Nueva Contraseña</Label>
             <Input 
               type="password" 
-              placeholder="Min. 6 caracteres" 
+              placeholder="8 caracteres, mayúscula, número y símbolo" 
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="bg-muted/10 border-border/50 h-11 rounded-xl"
+              className={cn("bg-muted/10 border-border/50 h-11 rounded-xl", getPasswordError(newPassword) && 'border-destructive')}
             />
+            {getPasswordError(newPassword) && <p className="text-xs text-destructive">{getPasswordError(newPassword)}</p>}
           </div>
           <DialogFooter className="gap-3">
             <Button variant="outline" className="border-border/50 rounded-xl h-11" onClick={() => setPasswordDialogUser(null)} disabled={isChangingPassword}>Cancelar</Button>
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-11 px-8 font-bold" onClick={handleChangePassword} disabled={isChangingPassword || newPassword.length < 6}>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-11 px-8 font-bold" onClick={handleChangePassword} disabled={isChangingPassword || !!getPasswordError(newPassword)}>
               {isChangingPassword ? 'Guardando...' : 'Guardar Contraseña'}
             </Button>
           </DialogFooter>

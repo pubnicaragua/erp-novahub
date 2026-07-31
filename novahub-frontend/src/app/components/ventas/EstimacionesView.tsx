@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, FileDown, Eye, Trash2, Ban, ChevronLeft, MessageCircle
+  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, FileDown, Eye, Trash2, Ban, ChevronLeft, MessageCircle
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -812,9 +812,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                   size="icon"
                   disabled={convertingId === row.id}
                   onClick={(e) => { e.stopPropagation(); void handleConvertToOrder(row); }}
-                  className="hover:bg-emerald-500/10 hover:text-emerald-500"
+                  className="text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500"
                 >
-                  <CheckCircle2 className={cn('size-4', convertingId === row.id && 'animate-pulse')} />
+                  <ArrowRightCircle className={cn('size-4', convertingId === row.id && 'animate-pulse')} />
                 </Button>
               )}
               <Button type="button" variant="ghost" title="Descargar PDF" size="icon" className="relative z-20" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { 

@@ -34,7 +34,9 @@ export function ControlDashboardCajaView({
 }) {
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [selectedRegister, setSelectedRegister] = useState<string>(initialRegisterId || '');
-  const [activeSection, setActiveSection] = useState<SectionType>(initialSection || 'dashboard');
+  // El dashboard se conserva implementado para una futura reactivación, pero la
+  // vista operativa de Control de Caja inicia ahora en el control de sesiones.
+  const [activeSection, setActiveSection] = useState<SectionType>(initialSection || 'session');
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [manageCajasOpen, setManageCajasOpen] = useState(false);
   const [initialCajaModalMode, setInitialCajaModalMode] = useState<'create-register' | undefined>();
@@ -155,14 +157,6 @@ export function ControlDashboardCajaView({
                   data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
               >
                 Control de Cajas
-              </TabsTrigger>
-              <TabsTrigger 
-                value="dashboard"
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
-                  data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
-                  data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
-              >
-                Dashboard
               </TabsTrigger>
               <TabsTrigger 
                 value="history"

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Search, TrendingUp, Clock, FilePlus, Package, Eye, Ban, ChevronLeft, Trash2
+  ClipboardList, Plus, Search, TrendingUp, Clock, ArrowRightCircle, Package, Eye, Ban, ChevronLeft, Trash2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -956,9 +956,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     disabled={invoicingOrderId === row.id}
                     variant="ghost" 
                     size="icon" 
-                    className="size-8 shrink-0 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
+                    className="size-8 shrink-0 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
                   >
-                    <FilePlus className={cn('size-4', invoicingOrderId === row.id && 'animate-pulse')} />
+                    <ArrowRightCircle className={cn('size-4', invoicingOrderId === row.id && 'animate-pulse')} />
                   </Button>
                 )}
                 <Button type="button" title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>

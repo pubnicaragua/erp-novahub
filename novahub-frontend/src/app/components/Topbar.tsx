@@ -46,6 +46,7 @@ import { Label } from './ui/label';
 import { usersService } from '../services/users.service';
 import { Lock } from 'lucide-react';
 import { TrialCountdownBanner } from './auth/TrialCountdownBanner';
+import { getPasswordError } from '../utils/accountValidation';
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -160,8 +161,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   const handleChangePassword = async () => {
-    if (newPassword.length < 6) {
-      toast.error('La contraseña debe tener al menos 6 caracteres');
+    const passwordError = getPasswordError(newPassword);
+    if (passwordError) {
+      toast.error(passwordError);
       return;
     }
     if (!user?.id) return;
@@ -545,16 +547,17 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nueva Contraseña</Label>
               <Input 
                 type="password" 
-                placeholder="Mínimo 6 caracteres" 
+                placeholder="8 caracteres, mayúscula, número y símbolo" 
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="rounded-xl"
+                className={`rounded-xl ${getPasswordError(newPassword) ? 'border-destructive' : ''}`}
               />
+              {getPasswordError(newPassword) && <p className="text-xs text-destructive">{getPasswordError(newPassword)}</p>}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowPasswordModal(false)} disabled={isUpdatingPassword}>Cancelar</Button>
-            <Button onClick={handleChangePassword} disabled={isUpdatingPassword} className="bg-primary text-primary-foreground">
+            <Button onClick={handleChangePassword} disabled={isUpdatingPassword || !!getPasswordError(newPassword)} className="bg-primary text-primary-foreground">
               {isUpdatingPassword ? 'Guardando...' : 'Guardar Contraseña'}
             </Button>
           </DialogFooter>

@@ -9,10 +9,11 @@ export interface CreateTenantDto {
   adminUser?: {
     name: string;
     email: string;
-    password?: string;
+    password: string;
   };
   adminEmail?: string;
   adminName?: string;
+  adminPassword: string;
 }
 
 export interface TenantUser {
@@ -51,7 +52,7 @@ export const tenantsService = {
     clientTenantId: string; 
     name: string; 
     email: string; 
-    password?: string;
+    password: string;
     role?: string;
     avatar?: string | null;
   }) => api.post(`/tenants/${data.clientTenantId}/users`, data),

@@ -17,6 +17,7 @@ import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import { authService, type ModuleRecommendationsResponse } from '../../services/auth.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { getPasswordError, isValidEmail, normalizeEmail, passwordRules } from '../../utils/accountValidation';
 
 type IndustryKey = 'ARCHITECTURE' | 'RETAIL' | 'TECHNOLOGY' | 'SERVICES' | 'MANUFACTURING' | 'CONSTRUCTION' | 'HEALTHCARE' | 'EDUCATION' | 'RESTAURANT' | 'OTHER' | 'CUSTOM';
 type CompanySize = 'MICRO' | 'SMALL' | 'MEDIUM' | 'LARGE';
@@ -45,7 +46,7 @@ const step1Schema = z.object({
   companyName: z.string().min(2, 'Mínimo 2 caracteres').max(100).trim(),
   userName: z.string().min(2, 'Mínimo 2 caracteres').max(100).trim(),
   email: z.string().email('Email inválido').trim().toLowerCase(),
-  password: z.string().min(8, 'Mínimo 8 caracteres').regex(/[A-Z]/, 'Debe incluir mayúscula').regex(/[0-9]/, 'Debe incluir número'),
+  password: z.string().min(8, 'Mínimo 8 caracteres').regex(/[A-Z]/, 'Debe incluir mayúscula').regex(/[0-9]/, 'Debe incluir número').regex(/[^a-zA-Z0-9\s]/, 'Debe incluir carácter especial'),
   acceptTerms: z.boolean().refine((v) => v === true, 'Debés aceptar los términos'),
 });
 
@@ -283,28 +284,61 @@ export function RegisterTenantPage() {
   const [expandedParent, setExpandedParent] = useState<string | null>(null);
   const [logo, setLogo] = useState<string | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [users, setUsers] = useState<{name: string, email: string, password?: string, roleName?: string}[]>([]);
+  const [users, setUsers] = useState<{name: string, email: string, password: string, roleName?: string}[]>([]);
   const [roles, setRoles] = useState<{name: string, allowedModules: string[], permissions: any[]}[]>([]);
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleModules, setNewRoleModules] = useState<string[]>([]);
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', roleName: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [showUserPassword, setShowUserPassword] = useState(false);
+  const [newUserEmailError, setNewUserEmailError] = useState('');
+  const [newUserEmailChecking, setNewUserEmailChecking] = useState(false);
 
-  const { register, handleSubmit, formState: { errors }, watch, setError: setFormError } = useForm<Step1Data>({
+  const { register, handleSubmit, formState: { errors, isValid }, watch, setError: setFormError, clearErrors } = useForm<Step1Data>({
     resolver: zodResolver(step1Schema),
+    mode: 'onChange',
     defaultValues: { companyName: '', userName: '', email: '', password: '', acceptTerms: false },
   });
 
   const acceptTerms = watch('acceptTerms');
   const passwordValue = watch('password');
 
-  const passwordRules = [
-    { label: 'Mínimo 8 caracteres', test: (v: string) => v.length >= 8 },
-    { label: '1 mayúscula', test: (v: string) => /[A-Z]/.test(v) },
-    { label: '1 número', test: (v: string) => /\d/.test(v) },
-    { label: '1 caracter especial', test: (v: string) => /[^a-zA-Z0-9\s]/.test(v) },
-  ];
+  const newUserPasswordError = getPasswordError(newUser.password);
+  const newUserDuplicateEmail = users.some(user => normalizeEmail(user.email) === normalizeEmail(newUser.email) && normalizeEmail(newUser.email) !== '');
+  const newUserFormInvalid = !newUser.name.trim() || !isValidEmail(newUser.email) || newUserEmailChecking || !!newUserEmailError || newUserDuplicateEmail || !!newUserPasswordError;
+  const newUserDraftStarted = Object.values(newUser).some(value => String(value).trim() !== '');
+  const step4Invalid = newUserDraftStarted && newUserFormInvalid;
+
+  useEffect(() => {
+    const email = normalizeEmail(newUser.email);
+    setNewUserEmailError('');
+    if (!email) {
+      setNewUserEmailChecking(false);
+      return;
+    }
+    if (!isValidEmail(email)) {
+      setNewUserEmailChecking(false);
+      return;
+    }
+    if (newUserDuplicateEmail) {
+      setNewUserEmailChecking(false);
+      setNewUserEmailError('Este correo ya está agregado en este formulario. Escribe otro.');
+      return;
+    }
+    const timer = window.setTimeout(async () => {
+      setNewUserEmailChecking(true);
+      try {
+        const response: any = await authService.checkEmail(email);
+        const exists = response?.data?.exists ?? response?.exists;
+        setNewUserEmailError(exists ? 'Este correo ya está en uso. Escribe otro.' : '');
+      } catch {
+        setNewUserEmailError('No se pudo verificar el correo. Intenta nuevamente.');
+      } finally {
+        setNewUserEmailChecking(false);
+      }
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [newUser.email, newUserDuplicateEmail]);
 
   useEffect(() => {
     if (step === 2 && industry && !recommendations) {
@@ -340,7 +374,7 @@ export function RegisterTenantPage() {
         setFormError('email', { type: 'manual', message: 'Email ya registrado en el sistema' });
         return;
       }
-      setStep1Data(data);
+      setStep1Data({ ...data, email: normalizeEmail(data.email) });
       setStep(1);
     } catch (e: any) {
       setFormError('email', { type: 'manual', message: 'Error al verificar el correo' });
@@ -365,7 +399,7 @@ export function RegisterTenantPage() {
       const response: any = await authService.registerTenant({
         companyName: step1Data.companyName,
         userName: step1Data.userName,
-        email: step1Data.email,
+        email: normalizeEmail(step1Data.email),
         password: step1Data.password,
         industry: industry || undefined,
         subIndustry: subIndustry || undefined,
@@ -550,6 +584,7 @@ export function RegisterTenantPage() {
         <div className="relative">
           <Mail className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input id="email" {...register('email')} type="email" placeholder="tu@empresa.com" autoComplete="email"
+            onChange={(e) => { register('email').onChange(e); if (errors.email?.type === 'manual') clearErrors('email'); }}
             onBlur={async (e) => {
               register('email').onBlur(e);
               if (e.target.value && e.target.value.includes('@')) {
@@ -569,7 +604,7 @@ export function RegisterTenantPage() {
         <Label htmlFor="password" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Contraseña</Label>
         <div className="relative">
           <Lock className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input id="password" {...register('password')} type={showPassword ? 'text' : 'password'} placeholder="Mín. 8 caracteres, 1 mayúscula, 1 número" autoComplete="new-password"
+          <Input id="password" {...register('password')} type={showPassword ? 'text' : 'password'} placeholder="8 caracteres, mayúscula, número y símbolo" autoComplete="new-password"
             className={cn('h-11 pl-11 pr-11 rounded-xl bg-white/5 border-white/10', errors.password && 'border-destructive')} />
           <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
             {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -601,7 +636,7 @@ export function RegisterTenantPage() {
         </label>
         {errors.acceptTerms && <p className="text-xs text-destructive ml-1">{errors.acceptTerms.message}</p>}
       </div>
-      <Button type="submit" disabled={!acceptTerms || Object.keys(errors).length > 0}
+      <Button type="submit" disabled={!acceptTerms || !isValid || Object.keys(errors).length > 0}
         className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 mt-2">
         Siguiente <ArrowRight className="size-4" />
       </Button>
@@ -1004,10 +1039,11 @@ export function RegisterTenantPage() {
             }}
             placeholder="Email" 
             type="email" 
-            className="h-9 bg-white/5 text-xs border-border/50" 
+            className={cn('h-9 bg-white/5 text-xs border-border/50', (newUserEmailError || newUserDuplicateEmail) && 'border-destructive')} 
           />
+          {(newUserEmailError || newUserDuplicateEmail) && <p className="col-span-2 text-[10px] text-destructive">{newUserEmailError || 'Este correo ya está agregado en este formulario. Escribe otro.'}</p>}
           <div className="relative">
-            <Input value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="Contraseña" type={showUserPassword ? 'text' : 'password'} className="h-9 bg-white/5 text-xs border-border/50 pr-8" />
+            <Input value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="8 caracteres, mayúscula, número y símbolo" type={showUserPassword ? 'text' : 'password'} className={cn('h-9 bg-white/5 text-xs border-border/50 pr-8', newUserPasswordError && 'border-destructive')} />
             <button type="button" onClick={() => setShowUserPassword(!showUserPassword)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
               {showUserPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
             </button>
@@ -1017,16 +1053,21 @@ export function RegisterTenantPage() {
             {roles.map((r, i) => <option key={i} value={r.name}>{r.name}</option>)}
           </select>
         </div>
+        {newUserPasswordError && <p className="text-[10px] text-destructive">{newUserPasswordError}</p>}
         <Button type="button" variant="outline" className="w-full h-8 text-xs mb-3 border-border/50" onClick={async () => {
+          if (!newUser.name.trim() || !isValidEmail(newUser.email) || newUserEmailError || newUserDuplicateEmail || newUserPasswordError) {
+            toast.error(newUserEmailError || (newUserDuplicateEmail ? 'Este correo ya está agregado en este formulario. Escribe otro.' : newUserPasswordError || 'Completa los datos del usuario'));
+            return;
+          }
           if (newUser.name && newUser.email && newUser.password) {
             try {
-              const res: any = await authService.checkEmail(newUser.email);
+              const res: any = await authService.checkEmail(normalizeEmail(newUser.email));
               const exists = res?.data?.exists ?? res?.exists;
               if (exists) {
                 toast.error('El email del usuario ya está registrado en el sistema');
                 return;
               }
-              setUsers([...users, { ...newUser }]);
+              setUsers([...users, { ...newUser, email: normalizeEmail(newUser.email) }]);
               setNewUser({ name: '', email: '', password: '', roleName: '' });
             } catch (e: any) {
               toast.error(e?.response?.data?.message || e?.message || 'Error al verificar el correo');
@@ -1034,7 +1075,7 @@ export function RegisterTenantPage() {
           } else {
             toast.error('Nombre, Email y Contraseña son obligatorios para crear un usuario');
           }
-        }}>Añadir Usuario</Button>
+        }} disabled={step4Invalid || newUserEmailChecking}>Añadir Usuario</Button>
         {users.length > 0 && (
           <div className="space-y-2">
             {users.map((u, i) => (
@@ -1058,7 +1099,7 @@ export function RegisterTenantPage() {
           className="h-12 rounded-xl font-bold uppercase tracking-widest gap-2 flex-1">
           <ArrowLeft className="size-4" /> Atrás
         </Button>
-        <Button type="button" disabled={submitting} onClick={handleFinalSubmit}
+        <Button type="button" disabled={submitting || step4Invalid} onClick={handleFinalSubmit}
           className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 flex-1">
           {submitting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
           Comenzar prueba gratis

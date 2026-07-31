@@ -79,20 +79,51 @@ const roleThemeTokens: Record<string, { surface: string; accent: string; border:
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+function createDefaultTheme(tenantId = 'default'): ThemeConfig {
+  return {
+    ...defaultTheme,
+    tenantId,
+    colors: { ...defaultColors },
+  };
+}
+
+function themeStorageKey(tenantId: string) {
+  return `erp-theme-config:${tenantId}`;
+}
+
+function readStoredTheme(tenantId: string): ThemeConfig {
+  try {
+    const saved = localStorage.getItem(themeStorageKey(tenantId));
+    if (saved) {
+      const parsed = JSON.parse(saved) as Partial<ThemeConfig>;
+      if (parsed.tenantName === 'Solcom ERP') return createDefaultTheme(tenantId);
+      return {
+        ...createDefaultTheme(tenantId),
+        ...parsed,
+        tenantId,
+        colors: { ...defaultColors, ...(parsed.colors || {}) },
+      };
+    }
+  } catch { }
+
+  return createDefaultTheme(tenantId);
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const activeTenantId = user?.tenantId || 'default';
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => {
-    try {
-      const saved = localStorage.getItem('erp-theme-config');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Force update if old theme
-        if (parsed.tenantName === 'Solcom ERP') return defaultTheme;
-        return parsed;
-      }
-    } catch { }
-    return defaultTheme;
+    return readStoredTheme(user?.tenantId || 'default');
   });
+
+  useEffect(() => {
+    // Cada empresa mantiene su propio tema. Esto evita reutilizar el color de la
+    // empresa anterior mientras se cambia de usuario o contexto.
+    setThemeConfig((current) => {
+      if (current.tenantId === activeTenantId) return current;
+      return readStoredTheme(activeTenantId);
+    });
+  }, [activeTenantId]);
 
   useEffect(() => {
     // Apply theme colors to CSS variables
@@ -102,9 +133,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.style.setProperty(cssVarName, value);
     });
 
-    // Save to localStorage
-    localStorage.setItem('erp-theme-config', JSON.stringify(themeConfig));
-  }, [themeConfig]);
+    // No persistir un tema antiguo dentro del tenant nuevo durante la transición.
+    if (themeConfig.tenantId === activeTenantId) {
+      localStorage.setItem(themeStorageKey(activeTenantId), JSON.stringify(themeConfig));
+    }
+  }, [themeConfig, activeTenantId]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -127,8 +160,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         setTokenTrigger(e.newValue);
         if (!e.newValue) {
           // Logged out — reset branding
-          setThemeConfig(defaultTheme);
-          localStorage.removeItem('erp-theme-config');
+          setThemeConfig(createDefaultTheme('default'));
         }
       }
     };
@@ -147,20 +179,31 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!tokenTrigger) return;
+    if (!tokenTrigger || activeTenantId === 'default') return;
+    let cancelled = false;
+
     api.get<any>('/branding/current')
       .then(b => {
-        if (b && b.primaryColor) {
-          updateTheme({
-            primary: b.primaryColor,
-            sidebar: b.sidebarColor,
-            accent: b.accentColor,
-          });
-          updateConfig({ tenantName: b.companyName, logo: b.logo || undefined });
-        }
+        if (cancelled || !b) return;
+
+        const serverColors: Partial<BrandColors> = {};
+        if (b.primaryColor) serverColors.primary = b.primaryColor;
+        if (b.sidebarColor) serverColors.sidebar = b.sidebarColor;
+        if (b.accentColor) serverColors.accent = b.accentColor;
+
+        if (Object.keys(serverColors).length > 0) updateTheme(serverColors);
+        updateConfig({
+          tenantId: activeTenantId,
+          tenantName: b.companyName || defaultTheme.tenantName,
+          logo: b.logo || undefined,
+        });
       })
-      .catch(err => console.error('Failed to fetch branding:', err));
-  }, [tokenTrigger]);
+      .catch(err => {
+        if (!cancelled) console.error('Failed to fetch branding:', err);
+      });
+
+    return () => { cancelled = true; };
+  }, [tokenTrigger, activeTenantId]);
 
   const updateTheme = (colors: Partial<BrandColors>) => {
     setThemeConfig(prev => ({
@@ -177,8 +220,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetTheme = () => {
-    setThemeConfig(defaultTheme);
-    localStorage.removeItem('erp-theme-config');
+    setThemeConfig(createDefaultTheme(activeTenantId));
+    localStorage.removeItem(themeStorageKey(activeTenantId));
   };
 
   return (

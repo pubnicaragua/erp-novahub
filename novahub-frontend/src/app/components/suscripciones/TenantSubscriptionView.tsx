@@ -21,6 +21,7 @@ import { tenantsService } from '../../services/tenants.service';
 import { usersService } from '../../services/users.service';
 import { inventoryService } from '../../services/inventario.service';
 import { brandingService } from '../../services/branding.service';
+import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
 import { cajaService } from '../../services/caja.service';
 import { toast } from 'sonner';
@@ -28,6 +29,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
+import { getPasswordError, isValidEmail, normalizeEmail } from '../../utils/accountValidation';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
@@ -77,6 +79,8 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
 
   const [newPasswordForUser, setNewPasswordForUser] = useState('');
   const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [userEmailError, setUserEmailError] = useState('');
+  const [checkingUserEmail, setCheckingUserEmail] = useState(false);
 
   useEffect(() => {
     if (tenant?.id) {
@@ -92,6 +96,34 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       api.get<any[]>(`/tenants/${tenant.id}/industries`).then((response) => setIndustryOptions(Array.isArray(response) ? response : [])).catch(() => setIndustryOptions([]));
     }
   }, [tenant?.id]);
+
+  useEffect(() => {
+    const email = normalizeEmail(userForm.email);
+    setUserEmailError('');
+    if (!email || !isValidEmail(email)) {
+      setCheckingUserEmail(false);
+      return;
+    }
+    const duplicateInList = users.some(existing => normalizeEmail(existing.email) === email);
+    if (duplicateInList) {
+      setUserEmailError('Este correo ya está en uso. Escribe otro.');
+      setCheckingUserEmail(false);
+      return;
+    }
+    const timer = window.setTimeout(async () => {
+      setCheckingUserEmail(true);
+      try {
+        const response: any = await authService.checkEmail(email);
+        const exists = response?.data?.exists ?? response?.exists;
+        setUserEmailError(exists ? 'Este correo ya está en uso. Escribe otro.' : '');
+      } catch {
+        setUserEmailError('No se pudo verificar el correo. Intenta nuevamente.');
+      } finally {
+        setCheckingUserEmail(false);
+      }
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [userForm.email, users]);
 
   const handleAddIndustry = async () => {
     const name = newIndustryName.trim();
@@ -174,8 +206,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   };
 
   const handleAdminChangePassword = async () => {
-    if (!newPasswordForUser || newPasswordForUser.length < 6) {
-      toast.error('La contraseña debe tener al menos 6 caracteres');
+    const passwordError = getPasswordError(newPasswordForUser);
+    if (passwordError) {
+      toast.error(passwordError);
       return;
     }
     if (!selectedUser?.id) return;
@@ -204,8 +237,13 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       toast.error('Complete nombre y email');
       return;
     }
-    if (!userForm.password || userForm.password.length < 6) {
-      toast.error('La contraseña es obligatoria y debe tener al menos 6 caracteres');
+    const passwordError = getPasswordError(userForm.password);
+    if (passwordError) {
+      toast.error(passwordError);
+      return;
+    }
+    if (userEmailError || checkingUserEmail || !isValidEmail(userForm.email)) {
+      toast.error(userEmailError || 'Escribe un correo válido y disponible');
       return;
     }
     try {
@@ -213,7 +251,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       await tenantsService.addUser({
         clientTenantId: tenant.id,
         name: userForm.name,
-        email: userForm.email,
+        email: normalizeEmail(userForm.email),
         password: userForm.password,
         role: userForm.role,
       });
@@ -758,8 +796,10 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 placeholder="juan@empresa.com" 
                 value={userForm.email}
                 onChange={e => setUserForm({...userForm, email: e.target.value})}
-                className="bg-muted/10 h-11"
+                aria-invalid={!!userEmailError}
+                className={cn('bg-muted/10 h-11', userEmailError && 'border-destructive')}
               />
+              {userEmailError && <p className="text-xs text-destructive">{userEmailError}</p>}
             </div>
             <div className="space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo de Acceso</Label>
@@ -789,11 +829,12 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Contraseña Temporal *</Label>
               <Input
                 type="password"
-                placeholder="Mínimo 10 caracteres"
+                placeholder="8 caracteres, mayúscula, número y símbolo"
                 value={userForm.password}
                 onChange={e => setUserForm({ ...userForm, password: e.target.value })}
-                className="bg-muted/10 h-11"
+                className={cn('bg-muted/10 h-11', getPasswordError(userForm.password) && 'border-destructive')}
               />
+              {getPasswordError(userForm.password) && <p className="text-xs text-destructive">{getPasswordError(userForm.password)}</p>}
             </div>
           </div>
           <DialogFooter>
@@ -801,7 +842,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
             <Button 
               className="bg-primary text-primary-foreground font-bold h-11 px-8" 
               onClick={handleAddUser}
-              disabled={uploading}
+              disabled={uploading || checkingUserEmail || !!userEmailError || !isValidEmail(userForm.email) || !!getPasswordError(userForm.password)}
             >
               {uploading ? 'Creando...' : 'Crear Acceso'}
             </Button>
@@ -853,16 +894,17 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nueva Contraseña</Label>
               <Input 
                 type="password" 
-                placeholder="Mínimo 6 caracteres" 
+                placeholder="8 caracteres, mayúscula, número y símbolo" 
                 value={newPasswordForUser}
                 onChange={(e) => setNewPasswordForUser(e.target.value)}
-                className="bg-muted/10 h-11"
+                className={cn('bg-muted/10 h-11', getPasswordError(newPasswordForUser) && 'border-destructive')}
               />
+              {getPasswordError(newPasswordForUser) && <p className="text-xs text-destructive">{getPasswordError(newPasswordForUser)}</p>}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsChangePasswordDialogOpen(false)} disabled={updatingPassword}>Cancelar</Button>
-            <Button onClick={handleAdminChangePassword} disabled={updatingPassword} className="bg-orange-500 hover:bg-orange-600 text-white font-bold h-10">
+            <Button onClick={handleAdminChangePassword} disabled={updatingPassword || !!getPasswordError(newPasswordForUser)} className="bg-orange-500 hover:bg-orange-600 text-white font-bold h-10">
               {updatingPassword ? 'Guardando...' : 'Actualizar Contraseña'}
             </Button>
           </DialogFooter>

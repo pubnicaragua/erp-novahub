@@ -428,7 +428,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
               {activeSection === 'facturacion-caja' && (
                 <FacturacionCajaView 
                   onNavigateToControlCaja={(registerId) => {
-                    setControlCajaTargetParams(registerId ? { registerId, section: 'dashboard' } : null);
+                    setControlCajaTargetParams(registerId ? { registerId, section: 'session' } : null);
                     setActiveSection('control-caja');
                     onSubModuleChange?.('control-caja');
                   }}

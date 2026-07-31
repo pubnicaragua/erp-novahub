@@ -64,7 +64,10 @@ export interface ImplementationTourContext {
 }
 
 export const IMPLEMENTATION_TOUR_STORAGE_KEY = 'novahub:implementation-setup-tour';
-const STEP_VALIDATION_TIMEOUT_MS = 2500;
+// Las consultas de configuración pueden atravesar Supabase y tardar más que una
+// petición normal. Un timeout demasiado corto convertía pasos válidos en tarjetas
+// rojas intermitentes mientras el backend todavía estaba respondiendo.
+const STEP_VALIDATION_TIMEOUT_MS = 10000;
 const SUMMARY_CACHE_TTL_MS = 45000;
 let cachedSummary: { value: ImplementationSetupSummary; createdAt: number; moduleKey: string } | null = null;
 
@@ -129,7 +132,27 @@ function hasAccountingConfig(value: unknown) {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'No se pudo validar este paso.';
+  const candidate = error as any;
+  return candidate?.response?.data?.message
+    || candidate?.message
+    || 'No se pudo validar este paso.';
+}
+
+async function loadWithTimeout<T>(load: () => Promise<T>): Promise<T> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error('La validación tardó más de lo esperado. Abre el módulo para revisar el dato.'));
+    }, STEP_VALIDATION_TIMEOUT_MS);
+  });
+
+  try {
+    // Encapsular la ejecución también convierte errores síncronos de un loader en
+    // rechazos controlados, sin abortar la validación del resto de pasos.
+    return await Promise.race([Promise.resolve().then(load), timeout]);
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  }
 }
 
 const STEP_DEFINITIONS: StepDefinition[] = [
@@ -360,14 +383,7 @@ export async function getImplementationSetupSummary(forceRefresh = false, enable
   }
 
   const activeDefinitions = STEP_DEFINITIONS.filter((definition) => hasModuleAccess(definition.target, enabledModules));
-  const settled = await Promise.allSettled(activeDefinitions.map((definition) =>
-    Promise.race([
-      definition.load(),
-      new Promise((_, reject) => {
-        window.setTimeout(() => reject(new Error('La validacion de este paso tardó más de lo esperado. Intenta entrar al modulo para revisar el dato.')), STEP_VALIDATION_TIMEOUT_MS);
-      }),
-    ])
-  ));
+  const settled = await Promise.allSettled(activeDefinitions.map((definition) => loadWithTimeout(definition.load)));
 
   const baseSteps = activeDefinitions.map<ImplementationStep>((definition, index) => {
     const result = settled[index];
