@@ -8,6 +8,9 @@ export interface Branding {
   portalPrimaryColor: string;
   portalBackgroundColor: string;
   portalAccentColor: string;
+  portalLightPrimaryColor: string;
+  portalLightBackgroundColor: string;
+  portalLightAccentColor: string;
   portalDefaultTheme: 'dark' | 'light';
   whiteLabel: boolean;
   companyName: string;
