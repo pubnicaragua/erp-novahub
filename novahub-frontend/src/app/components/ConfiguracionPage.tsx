@@ -413,6 +413,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [accentHex, setAccentHex] = useState(() => oklchToApproxHex(themeConfig.colors.accent));
   const [sidebarFgHex, setSidebarFgHex] = useState(() => oklchToApproxHex(themeConfig.colors.sidebarForeground));
   const [primaryFgHex, setPrimaryFgHex] = useState(() => oklchToApproxHex(themeConfig.colors.primaryForeground));
+  const [portalPrimaryHex, setPortalPrimaryHex] = useState('#10b981');
+  const [portalBackgroundHex, setPortalBackgroundHex] = useState('#020617');
+  const [portalAccentHex, setPortalAccentHex] = useState('#0f172a');
+  const [portalDefaultTheme, setPortalDefaultTheme] = useState<'dark' | 'light'>('dark');
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -521,6 +525,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       if (b.primaryColor) setPrimaryHex(b.primaryColor.startsWith('oklch') ? oklchToApproxHex(b.primaryColor) : b.primaryColor);
       if (b.sidebarColor) setSidebarHex(b.sidebarColor.startsWith('oklch') ? oklchToApproxHex(b.sidebarColor) : b.sidebarColor);
       if (b.accentColor) setAccentHex(b.accentColor.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : b.accentColor);
+      if (b.portalPrimaryColor) setPortalPrimaryHex(b.portalPrimaryColor);
+      if (b.portalBackgroundColor) setPortalBackgroundHex(b.portalBackgroundColor);
+      if (b.portalAccentColor) setPortalAccentHex(b.portalAccentColor);
+      if (b.portalDefaultTheme) setPortalDefaultTheme(b.portalDefaultTheme === 'light' ? 'light' : 'dark');
       if (b.companyName) setCompanyName(b.companyName);
       if (b.logo) setLogoPreview(b.logo);
       if (b.industry) setCompanyIndustry(b.industry);
@@ -815,6 +823,21 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setIsRoleDialogOpen(true);
   };
 
+  const handleSavePortalBranding = async () => {
+    try {
+      await brandingService.update({
+        portalPrimaryColor: portalPrimaryHex,
+        portalBackgroundColor: portalBackgroundHex,
+        portalAccentColor: portalAccentHex,
+        portalDefaultTheme,
+      });
+      toast.success('Personalización del portal guardada', { description: 'Estos colores son independientes del tema de cada usuario.' });
+    } catch (error) {
+      console.error('Error saving public portal branding:', error);
+      toast.error('No se pudo guardar la personalización del portal');
+    }
+  };
+
   const confirmDeleteRole = async () => {
     if (!pendingDeleteRole) return;
     const role = pendingDeleteRole;
@@ -1050,6 +1073,26 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <RotateCcw className="size-4" />Restaurar
                     </Button>
                   </div>
+                </CardContent>
+              </Card>
+              <Card className="border-border/50 shadow-sm">
+                <CardHeader className="border-b border-border/30 bg-muted/10">
+                  <CardTitle className="flex items-center gap-2 text-lg font-black"><Globe className="size-5 text-primary" />Personalización del portal del cliente</CardTitle>
+                  <CardDescription>Colores exclusivos del enlace público, independientes del tema de cada usuario.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 pt-6">
+                  <ColorField label="Color principal del portal" description="Botones, importes, enlaces y estados destacados" hexValue={portalPrimaryHex} onHexChange={setPortalPrimaryHex} />
+                  <ColorField label="Fondo del portal" description="Color base de toda la página pública" hexValue={portalBackgroundHex} onHexChange={setPortalBackgroundHex} />
+                  <ColorField label="Color de tarjetas" description="Fondos de encabezados, datos y documentos" hexValue={portalAccentHex} onHexChange={setPortalAccentHex} />
+                  <div className="space-y-2">
+                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Modo inicial</Label>
+                    <select value={portalDefaultTheme} onChange={event => setPortalDefaultTheme(event.target.value === 'light' ? 'light' : 'dark')} className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      <option value="dark">Oscuro</option>
+                      <option value="light">Claro</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground">La persona podrá cambiarlo desde el enlace; esta opción define cómo se abre inicialmente.</p>
+                  </div>
+                  <Button onClick={handleSavePortalBranding} className="rounded-xl gap-2 font-bold"><Save className="size-4" />Guardar portal</Button>
                 </CardContent>
               </Card>
             </div>
