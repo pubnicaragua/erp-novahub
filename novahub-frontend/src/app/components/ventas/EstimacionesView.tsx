@@ -19,6 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { storageService } from '../../services/storage.service';
+import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
@@ -187,26 +188,35 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       return;
     }
 
+    let secureDocumentUrl: string | null = null;
+    let securePortalUrl: string | null = null;
     let publicPdfUrl: string | null = null;
 
     if (localDoc) {
       const currentCustomer = customers.find((c) => c.id === localDoc.customerId) || localDoc.customer;
       try {
-        toast.info('Generando PDF y creando enlace público...');
-        const { blob } = await generateEstimatePDF({
-          estimate: { ...localDoc, customer: currentCustomer },
-          tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
-          tenantLogo: themeConfig?.logo,
-          formatAmount: formatConvertedAmount,
-          save: true, // Descarga la copia local en PDF
-        });
-
-        // Subir a la nube / Supabase Storage para obtener enlace público directo
-        const fileName = `${localDoc.number || 'Cotizacion'}_${Date.now()}.pdf`;
-        const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
-        const uploaded = await storageService.uploadFile('documents', pdfFile, { folder: 'cotizaciones' });
-        if (uploaded?.url) {
-          publicPdfUrl = uploaded.url;
+        toast.info('Generando PDF y preparando enlaces seguros...');
+        if (localDoc.customerId) {
+          const [documentLink, portalLink] = await Promise.all([
+            publicAccessService.createDocumentLink({ customerId: localDoc.customerId, documentType: 'estimate', documentId: localDoc.id, allowPrint: true, allowDownload: true, allowRelated: true }),
+            publicAccessService.createPortalLink({ customerId: localDoc.customerId }),
+          ]);
+          secureDocumentUrl = publicLinkUrl(documentLink.path);
+          securePortalUrl = publicLinkUrl(portalLink.path);
+        }
+        if (!secureDocumentUrl) {
+          const { blob } = await generateEstimatePDF({
+            estimate: { ...localDoc, customer: currentCustomer },
+            tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
+            tenantLogo: themeConfig?.logo,
+            formatAmount: formatConvertedAmount,
+            save: true,
+          });
+          // Compatibilidad: solo usa el enlace legado si el servicio seguro no está disponible.
+          const fileName = `${localDoc.number || 'Cotizacion'}_${Date.now()}.pdf`;
+          const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
+          const uploaded = await storageService.uploadFile('documents', pdfFile, { folder: 'cotizaciones' });
+          if (uploaded?.url) publicPdfUrl = uploaded.url;
         }
       } catch (err) {
         console.warn('No se pudo generar enlace en la nube, usando modo estándar:', err);
@@ -219,7 +229,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     const totalFormatted = formatConvertedAmount(Number(localDoc?.total || 0), localDoc?.currency || 'NIO');
 
     let message = `Hola ${customerName}, te compartimos la cotización ${localDoc?.number || ''} por un total de ${totalFormatted}.`;
-    if (publicPdfUrl) {
+    if (secureDocumentUrl) {
+      message += `\n\nPodés consultar la cotización de forma segura aquí:\n${secureDocumentUrl}`;
+      if (securePortalUrl) message += `\n\nTambién podés consultar tu historial y saldo en el portal del cliente:\n${securePortalUrl}`;
+    } else if (publicPdfUrl) {
       message += `\n\nPodés ver o descargar el documento PDF directamente desde este enlace:\n${publicPdfUrl}`;
     } else {
       message += ` Adjunto encontrarás el documento PDF con todos los detalles.`;
