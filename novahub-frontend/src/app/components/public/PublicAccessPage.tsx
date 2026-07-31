@@ -13,4 +13,53 @@ function DocumentView({ data, permissions }: { data: any; permissions: any }) { 
 
 function PortalView({ data }: { data: any }) { return <AccessShell company={data.company}><div className="grid gap-5 md:grid-cols-3"><div className="md:col-span-3 rounded-2xl border border-slate-800 bg-slate-900 p-6"><p className="text-sm text-slate-400">Cliente</p><h1 className="text-2xl font-semibold">{data.customer.name}</h1><p className="text-sm text-slate-400">{data.customer.email || data.customer.phone || ''}</p></div>{[['Facturado', data.summary.totalInvoiced], ['Pagado', data.summary.totalPaid], ['Saldo', data.summary.balance]].map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><p className="text-sm text-slate-400">{label}</p><p className="mt-2 text-2xl font-bold text-emerald-400">{Number(value).toLocaleString()}</p></div>)}<div className="md:col-span-3 rounded-2xl border border-slate-800 bg-slate-900 p-6"><div className="mb-4 flex items-center gap-2"><WalletCards className="size-5 text-emerald-400" /><h2 className="text-lg font-semibold">Documentos</h2></div><div className="space-y-2">{data.documents.map((doc: any) => <div key={`${doc.type}-${doc.document.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 p-4"><div><p className="font-semibold">{doc.document.number}</p><p className="text-sm text-slate-400">{doc.type} · {doc.document.status || 'Emitido'}</p></div><p className="font-semibold text-emerald-400">{doc.document.total ?? '—'} {doc.document.currency || ''}</p></div>)}</div></div></div></AccessShell>; }
 
-export function PublicAccessPage({ mode }: { mode: 'document' | 'portal' }) { const location = useLocation(); const token = location.pathname.split('/').filter(Boolean).pop() || ''; const [data, setData] = useState<any>(null); const [gate, setGate] = useState<any>(mode === 'portal' ? { requiresVerification: true } : null); const [error, setError] = useState(''); useEffect(() => { if (mode === 'document') publicRequest(`/public-access/document/${token}`).then(result => { if (result?.requiresVerification) setGate(result); else setData(result); }).catch((e: any) => setError(e.message)); }, [mode, token]); if (error) return <AccessShell><div className="rounded-2xl border border-rose-500/30 bg-slate-900 p-8 text-center"><FileText className="mx-auto mb-3 size-9 text-rose-400" /><h1 className="text-xl font-semibold">Enlace no disponible</h1><p className="mt-2 text-slate-400">{error}</p></div></AccessShell>; if (gate) return <AccessShell><OtpForm token={token} mode={mode} maskedTarget={gate.maskedTarget} onVerified={async session => { if (mode === 'document') { const result = await publicRequest(`/public-access/document/${token}`, { headers: { 'x-public-session': session } }); setData(result); setGate(null); } else { const result = await publicRequest('/public-access/portal/session', { headers: { 'x-public-session': session } }); setData(result); setGate(null); } }} /></AccessShell>; if (!data) return <AccessShell><div className="p-12 text-center text-slate-400">Cargando documento…</div></AccessShell>; return mode === 'document' ? <DocumentView data={data.data} permissions={data.permissions} /> : <PortalView data={data} />; }
+export function PublicAccessPage({ mode }: { mode: 'document' | 'portal' }) {
+  const location = useLocation();
+  const token = location.pathname.split('/').filter(Boolean).pop() || '';
+  const storageKey = `novahub-public-session:${token}`;
+  const [data, setData] = useState<any>(null);
+  const [gate, setGate] = useState<any>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        if (mode === 'document') {
+          const result = await publicRequest(`/public-access/document/${token}`);
+          if (cancelled) return;
+          if (result?.requiresVerification) setGate(result); else setData(result);
+          return;
+        }
+
+        const savedSession = localStorage.getItem(storageKey);
+        if (savedSession) {
+          try {
+            const result = await publicRequest('/public-access/portal/session', { headers: { 'x-public-session': savedSession } });
+            if (!cancelled) setData(result);
+            return;
+          } catch {
+            localStorage.removeItem(storageKey);
+          }
+        }
+
+        const result = await publicRequest(`/public-access/portal/${token}`);
+        if (cancelled) return;
+        if (result?.requiresVerification) setGate(result);
+        else {
+          if (result?.sessionToken) localStorage.setItem(storageKey, result.sessionToken);
+          setData(result);
+        }
+      } catch (e: any) {
+        if (!cancelled) setError(e.message);
+      }
+    };
+    if (token) load(); else setError('Enlace incompleto.');
+    return () => { cancelled = true; };
+  }, [mode, token, storageKey]);
+
+  if (error) return <AccessShell><div className="rounded-2xl border border-rose-500/30 bg-slate-900 p-8 text-center"><FileText className="mx-auto mb-3 size-9 text-rose-400" /><h1 className="text-xl font-semibold">Enlace no disponible</h1><p className="mt-2 text-slate-400">{error}</p></div></AccessShell>;
+  if (gate) return <AccessShell><OtpForm token={token} mode={mode} maskedTarget={gate.maskedTarget} onVerified={async session => { localStorage.setItem(storageKey, session); if (mode === 'document') { const result = await publicRequest(`/public-access/document/${token}`, { headers: { 'x-public-session': session } }); setData(result); setGate(null); } else { const result = await publicRequest('/public-access/portal/session', { headers: { 'x-public-session': session } }); setData(result); setGate(null); } }} /></AccessShell>;
+  if (!data) return <AccessShell><div className="p-12 text-center text-slate-400">Cargando documento…</div></AccessShell>;
+  return mode === 'document' ? <DocumentView data={data.data} permissions={data.permissions} /> : <PortalView data={data} />;
+}
