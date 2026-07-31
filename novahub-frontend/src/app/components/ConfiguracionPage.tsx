@@ -288,20 +288,24 @@ interface ColorFieldProps {
 }
 
 function ColorField({ label, description, hexValue, onHexChange }: ColorFieldProps) {
+  const validHex = /^#[0-9a-fA-F]{6}$/.test(hexValue) ? hexValue : '#000000';
+
   return (
     <div className="flex items-center gap-4 rounded-lg border border-border/50 p-3 transition-colors hover:bg-muted/20">
-      <div className="relative">
+      <label className="relative block size-10 shrink-0 cursor-pointer" title={`Elegir ${label.toLowerCase()}`}>
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-lg border-2 border-border shadow-sm transition-transform hover:scale-105"
+          style={{ backgroundColor: validHex }}
+        />
         <input
           type="color"
-          value={hexValue}
+          value={validHex}
           onChange={e => onHexChange(e.target.value)}
-          className="absolute inset-0 opacity-0 cursor-pointer"
+          aria-label={`Elegir ${label.toLowerCase()}`}
+          className="absolute inset-0 z-10 size-full cursor-pointer opacity-0"
         />
-        <div
-          className="size-10 rounded-lg border-2 border-border shadow-sm cursor-pointer transition-transform hover:scale-105"
-          style={{ backgroundColor: hexValue }}
-        />
-      </div>
+      </label>
       <div className="flex-1">
         <p className="text-sm font-medium">{label}</p>
         <p className="text-xs text-muted-foreground">{description}</p>
@@ -309,6 +313,8 @@ function ColorField({ label, description, hexValue, onHexChange }: ColorFieldPro
       <Input
         value={hexValue}
         onChange={e => { if (/^#[0-9a-fA-F]{0,6}$/.test(e.target.value)) onHexChange(e.target.value); }}
+        onBlur={() => { if (!/^#[0-9a-fA-F]{6}$/.test(hexValue)) onHexChange(validHex); }}
+        aria-label={`Código hexadecimal de ${label.toLowerCase()}`}
         className="w-28 font-mono text-xs"
       />
     </div>
