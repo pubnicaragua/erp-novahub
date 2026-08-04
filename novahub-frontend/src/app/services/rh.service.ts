@@ -2,7 +2,7 @@ import { api } from './api';
 import type { Employee, Payroll, TimeOff, PaginatedResponse, ApiFilters } from '../types';
 
 export const employeesService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<Employee>>('/hr/employees', filters as any),
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Employee>>('/hr/employees', { params: filters as any, signal }),
   getById: (id: string) => api.get<Employee>(`/hr/employees/${id}`),
   create: (data: Partial<Employee>) => api.post<Employee>('/hr/employees', data),
   update: (id: string, data: Partial<Employee>) => api.put<Employee>(`/hr/employees/${id}`, data),
@@ -10,7 +10,7 @@ export const employeesService = {
 };
 
 export const payrollService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<Payroll>>('/hr/payroll', filters as any),
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Payroll>>('/hr/payroll', { params: filters as any, signal }),
   getById: (id: string) => api.get<Payroll>(`/hr/payroll/${id}`),
   create: (data: Partial<Payroll>) => api.post<Payroll>('/hr/payroll', data),
   approve: (id: string) => api.patch<Payroll>(`/hr/payroll/${id}/approve`, {}),
@@ -18,7 +18,7 @@ export const payrollService = {
 };
 
 export const timeOffService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<TimeOff>>('/hr/leave/requests', filters as any),
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<TimeOff>>('/hr/leave/requests', { params: filters as any, signal }),
   getById: (id: string) => api.get<TimeOff>(`/hr/time-off/${id}`),
   create: (data: Partial<TimeOff>) => api.post<TimeOff>('/hr/time-off', data),
   approve: (id: string) => api.patch<TimeOff>(`/hr/time-off/${id}/approve`, {}),

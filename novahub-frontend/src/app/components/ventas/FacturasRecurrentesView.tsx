@@ -640,7 +640,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         <EditableDataTable data={filtered}
           pagination={pagination}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}
-          columns={columns} onRowUpdate={handleUpdate} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
+          columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setEditingId(row.id)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           actions={(row) => (
             <div className="flex items-center gap-1">
                {canPerform('SALES_RECURRING', 'edit') && (

@@ -5,8 +5,9 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { vendorCreditsService, suppliersService } from '../../services/compras.service';
+import { vendorCreditsService } from '../../services/compras.service';
 import type { SupplierCredit, Supplier } from '../../types';
+import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
@@ -14,8 +15,10 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
+import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 
-interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; }
+interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
 const statusOpts = [
   { label: 'Borrador',  value: 'draft',   color: 'bg-muted/20 text-muted-foreground' },
@@ -24,10 +27,11 @@ const statusOpts = [
   { label: 'Anulado',   value: 'voided',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
+export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform } = useAuth();
   const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ISSUED'>('ALL');
   
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
@@ -36,12 +40,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  useEffect(() => {
-    suppliersService.getAll().then(res => {
-      const list = Array.isArray(res) ? res : (res as any).data || [];
-      setSuppliers(list);
-    }).catch();
-  }, []);
+  useEffect(() => { setSuppliers(supplierCatalog); }, [supplierCatalog]);
 
   useEffect(() => {
     if (editingId) {
@@ -63,10 +62,11 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     }
   }, [editingId, data]);
 
-  const filtered = data.filter(c =>
-    (c.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = data.filter(c => {
+    if (statusFilter === 'ISSUED' && String(c.status || '').toLowerCase() !== 'issued') return false;
+    return (c.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   const resolveSourceCurrency = (value?: string) => ((value || '').toUpperCase() === 'USD' ? 'USD' : 'NIO');
 
@@ -285,7 +285,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
                   <div className="col-span-2 text-right">Total</div>
                 </div>
                 {(localDoc.items || []).map((item: any, idx: number) => (
-                  <div key={item.id || idx} className="grid grid-cols-12 gap-2 items-center">
+                  <div key={item.id || idx} data-item-layout="credit" className="purchase-item-row grid min-w-0 grid-cols-12 gap-2 items-center">
                     <div className="col-span-5">
                       <Input 
                         disabled={isNew ? !canPerform('PURCHASES_RETURNS', 'create') : !canPerform('PURCHASES_RETURNS', 'edit')}
@@ -346,34 +346,30 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     .filter(c => (c.status || '').toLowerCase() === 'issued')
     .reduce((a, c) => a + convertAmount(Number(c.total || 0), resolveSourceCurrency((c as any)?.currency), (c as any)?.exchangeRate), 0);
   const kpis = [
-    { title: 'Crédito Disponible', value: formatConvertedAmount(disponible, displayCurrency),                                                icon: TrendingUp,      color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Total Notas',        value: data.length,                                                                         icon: Hash,            color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Emitidas',           value: data.filter(c => (c.status||'').toLowerCase() === 'issued').length,                                icon: BadgeDollarSign, color: 'text-purple-500',  bg: 'bg-purple-500/10'  },
+    { title: 'Crédito Disponible', value: formatConvertedAmount(disponible, displayCurrency), icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'indicator' as const },
+    { title: 'Total Notas', value: data.length, icon: Hash, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Emitidas', value: data.filter(c => (c.status||'').toLowerCase() === 'issued').length, icon: BadgeDollarSign, color: 'text-purple-500', bg: 'bg-purple-500/10', kind: 'filter' as const, filter: 'ISSUED' as const },
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((k, i) => (
-          <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
-            <CardContent className="p-5"><div className="flex items-center gap-4">
-              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
-            </div></CardContent>
-          </Card>
+          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Créditos de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor</p></div>
-          <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor</p></div>
+          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
+            <PurchaseViewTutorial view="credits" />
+            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_RETURNS', 'create') && (
               <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Crédito</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
           actions={(row) => (
              <div className="flex gap-1">
               <Button title={canPerform('PURCHASES_RETURNS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>

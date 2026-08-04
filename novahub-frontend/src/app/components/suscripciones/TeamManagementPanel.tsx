@@ -6,6 +6,7 @@ import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
 import { toast } from 'sonner'
 import { api } from '../../services/api'
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery'
 
 interface TeamPanelProps {
   tenantId: string
@@ -26,20 +27,29 @@ export function TeamManagementPanel({ tenantId, tenantName }: TeamPanelProps) {
   const [newRole, setNewRole] = useState('')
   const [newBranch, setNewBranch] = useState('')
 
-  const load = async () => {
-    try {
+  const { data: teamData, refetch: refetchTeam } = useTenantQuery(
+    ['my-company-team-management', tenantId],
+    async (signal) => {
       const [dRes, rRes, bRes] = await Promise.all([
-        api.get<any>(`/hr/departments`).catch(() => []),
-        api.get<any>(`/roles`).catch(() => []),
-        api.get<any>(`/sucursales`).catch(() => []),
+        api.get<any>('/hr/departments', { signal }),
+        api.get<any>('/roles', { signal }),
+        api.get<any>('/sucursales', { signal }),
       ])
-      setDepartments(normalizeList(dRes))
-      setRoles(normalizeList(rRes))
-      setBranches(normalizeList(bRes))
-    } catch { /* silent */ }
-  }
+      return { departments: asList(dRes), roles: asList(rRes), branches: asList(bRes) }
+    },
+    { enabled: Boolean(tenantId), onError: (error) => toast.error(error.message || 'No se pudo cargar la configuración del equipo') },
+  )
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    if (!teamData) return
+    setDepartments(teamData.departments)
+    setRoles(teamData.roles)
+    setBranches(teamData.branches)
+  }, [teamData])
+
+  const load = async () => {
+    try { await refetchTeam() } catch { /* silent */ }
+  }
 
   const createDepartment = async () => {
     const name = newDept.trim()

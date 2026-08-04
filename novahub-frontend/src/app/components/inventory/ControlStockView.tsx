@@ -12,6 +12,7 @@ import { inventoryService } from '../../services/inventario.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import type { SalesPaginationControls } from '../../types';
 
 interface ControlStockViewProps {
   adjustments: any[];
@@ -19,6 +20,9 @@ interface ControlStockViewProps {
   products: any[];
   series?: any[];
   onRefresh: () => void;
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
+  onStatusChange?: (value: string) => void;
 }
 
 interface ReceptionAllocation {
@@ -71,7 +75,7 @@ const STOCK_TOUR_STEPS: GuidedTourStep[] = [
   },
 ];
 
-export function ControlStockView({ adjustments, warehouses, products, series = [], onRefresh }: ControlStockViewProps) {
+export function ControlStockView({ adjustments, warehouses, products, series = [], onRefresh, pagination, onSearchChange, onStatusChange }: ControlStockViewProps) {
   const { canPerform } = useAuth();
   const { baseCurrency } = useCurrency();
   const [showTutorial, setShowTutorial] = useState(false);
@@ -347,9 +351,16 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-semibold" data-tour="stock-title">Ajustes de Inventario</h3>
-          <p className="text-sm text-muted-foreground">{adjustments.length} ajustes registrados</p>
+          <p className="text-sm text-muted-foreground">{pagination?.total ?? adjustments.length} ajustes registrados</p>
         </div>
         <div className="flex items-center gap-2">
+          {pagination && <>
+            <Input placeholder="Buscar ajuste..." className="h-9 w-44" onChange={(event) => onSearchChange?.(event.target.value)} />
+            <Select defaultValue="ALL" onValueChange={(value) => onStatusChange?.(value)}>
+              <SelectTrigger className="h-9 w-32"><SelectValue placeholder="Estado" /></SelectTrigger>
+              <SelectContent><SelectItem value="ALL">Todos</SelectItem><SelectItem value="DRAFT">Borrador</SelectItem><SelectItem value="APPROVED">Aprobado</SelectItem></SelectContent>
+            </Select>
+          </>}
           {canPerform('INVENTORY_ADJUSTMENTS', 'create') && (
             <>
               <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="mr-2">
@@ -524,6 +535,14 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
           </TableBody>
         </Table>
       </div>
+      {pagination && <div className="mt-3 flex items-center justify-end gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+        <select value={pagination.pageSize} onChange={(event) => pagination.onPageSizeChange(Number(event.target.value) as 50 | 100 | 200)} className="h-7 rounded border bg-background px-1 font-bold text-foreground">
+          {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
+        </select>
+        <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" onClick={() => pagination.onPageChange(Math.max(1, pagination.page - 1))} disabled={pagination.page <= 1}>‹</button>
+        <span>Pág. {pagination.page}/{pagination.totalPages}</span>
+        <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" onClick={() => pagination.onPageChange(Math.min(pagination.totalPages, pagination.page + 1))} disabled={pagination.page >= pagination.totalPages}>›</button>
+      </div>}
 
       <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
         Los ajustes en borrador deben ser aprobados para aplicar cambios al stock

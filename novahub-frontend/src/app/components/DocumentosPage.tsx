@@ -10,6 +10,7 @@ import { ArchivosView } from './documentos/ArchivosView';
 import { NovaCloudPlanesView } from './documentos/NovaCloudPlanesView';
 import { contractsService, legalInvoicesService, reportsService, filesService } from '../services/documentos.service';
 import { useAuth } from '../contexts/AuthContext';
+import { asList, useTenantQuery } from '../hooks/useTenantQuery';
 
 interface DocumentosPageProps {
   activeSubModule?: string;
@@ -19,34 +20,17 @@ interface DocumentosPageProps {
 export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: DocumentosPageProps) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'archivos');
-  const [data, setData] = useState<any>({
-    contratos: [],
-    facturas: [],
-    reportes: [],
-    archivos: []
-  });
-  const [loading, setLoading] = useState(true);
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [contratos, facturas, reportes, archivos] = await Promise.all([
-        contractsService.getAll().catch(() => []),
-        legalInvoicesService.getAll().catch(() => []),
-        reportsService.getAll().catch(() => []),
-        filesService.getAll().catch(() => [])
-      ]);
-      setData({ contratos, facturas, reportes, archivos });
-    } catch (error) {
-      console.error('Error fetching documentos:', error);
-    } finally {
-      setLoading(false);
-    }
+  const filesQuery = useTenantQuery<any[]>(['documents', 'files'], signal => filesService.getAll(signal), { enabled: activeTab === 'archivos' });
+  const contractsQuery = useTenantQuery<any[]>(['documents', 'contracts'], signal => contractsService.getAll(signal), { enabled: activeTab === 'contratos' });
+  const invoicesQuery = useTenantQuery<any[]>(['documents', 'legal-invoices'], signal => legalInvoicesService.getAll(signal), { enabled: activeTab === 'facturas' });
+  const reportsQuery = useTenantQuery<any[]>(['documents', 'reports'], signal => reportsService.getAll(signal), { enabled: activeTab === 'reportes' });
+  const data = {
+    archivos: asList(filesQuery.data), contratos: asList(contractsQuery.data),
+    facturas: asList(invoicesQuery.data), reportes: asList(reportsQuery.data),
   };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const activeQuery = activeTab === 'archivos' ? filesQuery : activeTab === 'contratos' ? contractsQuery : activeTab === 'facturas' ? invoicesQuery : reportsQuery;
+  const loading = activeTab === 'planes' ? false : activeQuery.isLoading || activeQuery.isFetching;
+  const fetchData = () => activeQuery.refetch();
 
   useEffect(() => {
     if (activeSubModule) {

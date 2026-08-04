@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Calendar, Plus, Lock, Unlock, AlertTriangle
 } from 'lucide-react';
@@ -20,6 +21,7 @@ import {
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 const statusStyles: Record<string, string> = {
   OPEN: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
@@ -44,8 +46,7 @@ const months = [
 
 export function PeriodosView() {
   const { canPerform } = useAuth();
-  const [periods, setPeriods] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [closeConfirmId, setCloseConfirmId] = useState<string | null>(null);
   const [closeLoading, setCloseLoading] = useState(false);
@@ -56,21 +57,10 @@ export function PeriodosView() {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
 
-  const fetchPeriods = async () => {
-    try {
-      setLoading(true);
-      const res = await contabilidadService.getPeriods();
-      setPeriods(res || []);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar períodos');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPeriods();
-  }, []);
+  const periodsQuery = useAccountingQuery<any[]>(['periods'], async (signal) => accountingList(await contabilidadService.getPeriods(signal)));
+  const periods = periodsQuery.data || [];
+  const loading = periodsQuery.isLoading || periodsQuery.isFetching;
+  const fetchPeriods = () => periodsQuery.refetch();
 
   const handleCreate = async () => {
     if (!form.name || !form.month || !form.year) {
@@ -88,7 +78,7 @@ export function PeriodosView() {
       toast.success('Período creado');
       setShowCreate(false);
       setForm({ name: '', month: '', year: '' });
-      fetchPeriods();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.message || 'Error al crear período');
     }
@@ -101,7 +91,7 @@ export function PeriodosView() {
       await contabilidadService.closePeriod(closeConfirmId);
       toast.success('Período cerrado exitosamente');
       setCloseConfirmId(null);
-      fetchPeriods();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.message || 'Error al cerrar período');
     } finally {
@@ -116,7 +106,7 @@ export function PeriodosView() {
       await contabilidadService.reopenPeriod(reopenConfirmId);
       toast.success('Período reabierto');
       setReopenConfirmId(null);
-      fetchPeriods();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.message || 'Error al reabrir período');
     } finally {

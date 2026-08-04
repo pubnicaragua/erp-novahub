@@ -24,16 +24,13 @@ import { AlmacenesView } from './inventory/AlmacenesView';
 import { TransferenciasView } from './inventory/TransferenciasView';
 import { ControlStockView } from './inventory/ControlStockView';
 import { MovimientosView } from './inventory/MovimientosView';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { useCurrency } from '../contexts/CurrencyContext';
-
 import { inventoryService } from '../services/inventario.service';
 import { motion } from 'motion/react';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { BranchScopeFilter } from './ui/BranchScopeFilter';
+import type { SalesPageSize, SalesPaginationControls } from '../types';
 
 const INVENTORY_SECTIONS = [
-  { id: 'dashboard',       label: 'Resumen',         icon: Package,   requiredModules: ['INVENTORY_DASHBOARD'] },
   { id: 'productos',       label: 'Productos',       icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
   { id: 'servicios',       label: 'Servicios',       icon: BriefcaseBusiness, requiredModules: ['INVENTORY_PRODUCTS'] },
   { id: 'almacenes',       label: 'Almacenes',       icon: Warehouse, requiredModules: ['INVENTORY_WAREHOUSES'] },
@@ -50,10 +47,36 @@ interface InventarioPageProps {
 
 export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: InventarioPageProps) {
   const { user } = useAuth();
-  const { formatAmount } = useCurrency();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState(activeSubModule || 'productos');
+  const [activeTab, setActiveTab] = useState(activeSubModule === 'dashboard' ? 'productos' : (activeSubModule || 'productos'));
   const tenantKey = user?.tenantId || 'anonymous';
+  const [searchState, setSearchState] = useState<Record<string, string>>({});
+  const [debouncedSearchState, setDebouncedSearchState] = useState<Record<string, string>>({});
+  const [statusState, setStatusState] = useState<Record<string, string>>({});
+  const [movementFilters, setMovementFilters] = useState({ type: 'all', warehouseId: 'all' });
+  const [productFilters, setProductFilters] = useState<Record<string, { categoryIds: string[]; warehouseIds: string[] }>>({});
+  const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
+
+  const pageFor = (section: string) => paginationState[section] || { page: 1, pageSize: 50 as SalesPageSize };
+  const updatePage = (section: string, page: number) => setPaginationState((current) => ({ ...current, [section]: { ...pageFor(section), page: Math.max(1, page) } }));
+  const updatePageSize = (section: string, pageSize: SalesPageSize) => setPaginationState((current) => ({ ...current, [section]: { page: 1, pageSize } }));
+  const updateSearch = (section: string, value: string) => { setSearchState((current) => ({ ...current, [section]: value })); updatePage(section, 1); };
+  const updateStatus = (section: string, value: string) => { setStatusState((current) => ({ ...current, [section]: value })); updatePage(section, 1); };
+  const updateMovementFilter = (field: 'type' | 'warehouseId', value: string) => {
+    setMovementFilters((current) => ({ ...current, [field]: value }));
+    updatePage('movimientos', 1);
+  };
+  const updateProductFilters = (section: string, field: 'categoryIds' | 'warehouseIds', value: string[]) => {
+    setProductFilters((current) => ({ ...current, [section]: { ...(current[section] || { categoryIds: [], warehouseIds: [] }), [field]: value } }));
+    updatePage(section, 1);
+  };
+  const searchFor = (section: string) => debouncedSearchState[section]?.trim() || undefined;
+  const statusFor = (section: string) => statusState[section] && statusState[section] !== 'ALL' && statusState[section] !== 'all' ? statusState[section] : undefined;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearchState(searchState), 350);
+    return () => window.clearTimeout(timer);
+  }, [searchState]);
 
   const toList = (value: any) => value?.data || (Array.isArray(value) ? value : []);
   const commonQueryOptions = {
@@ -66,58 +89,69 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   } as const;
   const productsQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'products', tenantKey],
-    queryFn: () => inventoryService.getProducts(),
-    enabled: Boolean(user) && ['dashboard', 'productos', 'servicios', 'transferencias', 'ajustes'].includes(activeTab),
+    queryKey: ['inventory', 'products', tenantKey, activeTab, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').page, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').pageSize, searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos']],
+    queryFn: ({ signal }) => {
+      const section = activeTab === 'servicios' ? 'servicios' : 'productos';
+      const page = pageFor(section);
+      const filters = productFilters[section] || { categoryIds: [], warehouseIds: [] };
+      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', page: page.page, pageSize: page.pageSize, search: searchFor(section), categoryId: filters.categoryIds.join(',') || undefined, warehouseId: filters.warehouseIds.join(',') || undefined }, signal);
+    },
+    enabled: Boolean(user) && ['productos', 'servicios'].includes(activeTab),
+  });
+  const productCatalogQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'products-catalog', tenantKey],
+    queryFn: ({ signal }) => inventoryService.getProducts({ type: 'PRODUCT', page: 1, pageSize: 200 }, signal),
+    enabled: Boolean(user) && ['transferencias', 'ajustes'].includes(activeTab),
   });
   const warehousesQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'warehouses', tenantKey],
-    queryFn: inventoryService.getWarehouses,
-    enabled: Boolean(user) && activeTab !== 'dashboard',
+    queryFn: ({ signal }) => inventoryService.getWarehouses(signal),
+    enabled: Boolean(user),
   });
   const categoriesQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'categories', tenantKey],
-    queryFn: inventoryService.getCategories,
+    queryFn: ({ signal }) => inventoryService.getCategories(signal),
     enabled: Boolean(user) && ['productos', 'servicios'].includes(activeTab),
   });
   const transfersQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'transfers', tenantKey],
-    queryFn: inventoryService.getTransfers,
+    queryKey: ['inventory', 'transfers', tenantKey, pageFor('transferencias').page, pageFor('transferencias').pageSize, searchFor('transferencias'), statusFor('transferencias')],
+    queryFn: ({ signal }) => inventoryService.getTransfers({ page: pageFor('transferencias').page, pageSize: pageFor('transferencias').pageSize, search: searchFor('transferencias'), status: statusFor('transferencias') }, signal),
     enabled: Boolean(user) && activeTab === 'transferencias',
   });
   const adjustmentsQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'adjustments', tenantKey],
-    queryFn: inventoryService.getAdjustments,
+    queryKey: ['inventory', 'adjustments', tenantKey, pageFor('ajustes').page, pageFor('ajustes').pageSize, searchFor('ajustes'), statusFor('ajustes')],
+    queryFn: ({ signal }) => inventoryService.getAdjustments({ page: pageFor('ajustes').page, pageSize: pageFor('ajustes').pageSize, search: searchFor('ajustes'), status: statusFor('ajustes') }, signal),
     enabled: Boolean(user) && activeTab === 'ajustes',
   });
   const seriesQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'series', tenantKey],
-    queryFn: inventoryService.getSeries,
+    queryKey: ['inventory', 'series', tenantKey, activeTab],
+    queryFn: ({ signal }) => inventoryService.getSeries({ page: 1, pageSize: 200 }, signal),
     enabled: Boolean(user) && ['productos', 'servicios', 'transferencias', 'ajustes'].includes(activeTab),
   });
   const movementsQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'movements', tenantKey],
-    queryFn: inventoryService.getMovements,
-    enabled: Boolean(user) && ['productos', 'servicios', 'transferencias', 'ajustes', 'movimientos'].includes(activeTab),
-  });
-  const dashboardQuery = useQuery({
-    ...commonQueryOptions,
-    queryKey: ['inventory', 'dashboard', tenantKey],
-    queryFn: inventoryService.getDashboardStats,
-    enabled: Boolean(user) && activeTab === 'dashboard',
+    queryKey: ['inventory', 'movements', tenantKey, pageFor('movimientos').page, pageFor('movimientos').pageSize, searchFor('movimientos'), movementFilters.type, movementFilters.warehouseId],
+    queryFn: ({ signal }) => inventoryService.getMovements({
+      page: pageFor('movimientos').page,
+      pageSize: pageFor('movimientos').pageSize,
+      search: searchFor('movimientos'),
+      type: movementFilters.type !== 'all' ? movementFilters.type : undefined,
+      warehouseId: movementFilters.warehouseId !== 'all' ? movementFilters.warehouseId : undefined,
+    }, signal),
+    enabled: Boolean(user) && activeTab === 'movimientos',
   });
   const categories = toList(categoriesQuery.data).map((category: any) => ({
     ...category,
     type: String(category.type || 'PRODUCT').toUpperCase(),
   }));
   const data = {
-    products: toList(productsQuery.data).map((product: any) => ({
+    products: toList(productsQuery.data || productCatalogQuery.data).map((product: any) => ({
       ...product,
       itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
     })),
@@ -129,18 +163,34 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     lots: [],
     series: toList(seriesQuery.data),
     movements: toList(movementsQuery.data),
-    dashboardStats: dashboardQuery.data?.data || dashboardQuery.data || null,
   };
   const activeQueries = [
     ...(productsQuery.isEnabled ? [productsQuery] : []),
+    ...(productCatalogQuery.isEnabled ? [productCatalogQuery] : []),
     ...(warehousesQuery.isEnabled ? [warehousesQuery] : []),
     ...(categoriesQuery.isEnabled ? [categoriesQuery] : []),
     ...(transfersQuery.isEnabled ? [transfersQuery] : []),
     ...(adjustmentsQuery.isEnabled ? [adjustmentsQuery] : []),
     ...(seriesQuery.isEnabled ? [seriesQuery] : []),
     ...(movementsQuery.isEnabled ? [movementsQuery] : []),
-    ...(dashboardQuery.isEnabled ? [dashboardQuery] : []),
   ];
+  const makePagination = (section: string, query: any): SalesPaginationControls => {
+    const page = pageFor(section);
+    const meta = query.data?.meta;
+    return {
+      page: meta?.page || page.page,
+      pageSize: meta?.pageSize || page.pageSize,
+      total: meta?.total || 0,
+      totalPages: meta?.totalPages || 1,
+      onPageChange: (nextPage) => updatePage(section, nextPage),
+      onPageSizeChange: (nextSize) => updatePageSize(section, nextSize),
+    };
+  };
+  const productSection = activeTab === 'servicios' ? 'servicios' : 'productos';
+  const productsPagination = makePagination(productSection, productsQuery);
+  const transfersPagination = makePagination('transferencias', transfersQuery);
+  const adjustmentsPagination = makePagination('ajustes', adjustmentsQuery);
+  const movementsPagination = makePagination('movimientos', movementsQuery);
   const loading = activeQueries.some((query) => query.isPending && !query.data);
   const refreshing = activeQueries.some((query) => query.isFetching) && !loading;
   const firstError = activeQueries.find((query) => query.error)?.error;
@@ -157,10 +207,14 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const serviceItems = data.products.filter((product: any) => product.itemType === 'SERVICE');
 
   useEffect(() => {
-    if (!activeSubModule) return;
-    const exists = INVENTORY_SECTIONS.some((section) => section.id === activeSubModule);
-    if (exists) setActiveTab(activeSubModule);
-  }, [activeSubModule]);
+    const nextTab = activeSubModule === 'dashboard' ? 'productos' : activeSubModule;
+    if (!nextTab) return;
+    const exists = INVENTORY_SECTIONS.some((section) => section.id === nextTab);
+    if (exists) {
+      setActiveTab(nextTab);
+      if (activeSubModule === 'dashboard') onSubModuleChange?.('productos');
+    }
+  }, [activeSubModule, onSubModuleChange]);
 
   const handleExportData = async () => {
     try {
@@ -298,54 +352,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             </BoneyardSkeleton>
           ) : (
             <>
-              <TabsContent value="dashboard" className="m-0" asChild>
-                <motion.div
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-                >
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                      <Card className="rounded-2xl border-border/40 shadow-sm">
-                        <CardContent className="p-4">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Productos</p>
-                          <p className="text-2xl font-black mt-1">{productItems.length}</p>
-                        </CardContent>
-                      </Card>
-                      <Card className="rounded-2xl border-border/40 shadow-sm">
-                        <CardContent className="p-4">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Almacenes</p>
-                          <p className="text-2xl font-black mt-1">{data.warehouses.length}</p>
-                        </CardContent>
-                      </Card>
-                      <Card className="rounded-2xl border-border/40 shadow-sm">
-                        <CardContent className="p-4">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Valor Inventario</p>
-                          <p className="text-2xl font-black mt-1">{formatAmount(productItems.reduce((acc: number, p: any) => acc + Number(p.stock || 0) * Number(p.costPrice || 0), 0))}</p>
-                        </CardContent>
-                      </Card>
-                      <Card className="rounded-2xl border-border/40 shadow-sm">
-                        <CardContent className="p-4">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Stock Bajo</p>
-                          <p className="text-2xl font-black mt-1 text-amber-500">{productItems.filter((p: any) => Number(p.stock || 0) > 0 && Number(p.stock || 0) < 10).length}</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                    {data.dashboardStats && (
-                      <Card className="rounded-2xl border-border/40 shadow-sm">
-                        <CardHeader>
-                          <CardTitle className="text-sm font-black uppercase tracking-tight">Dashboard de Inventario</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <pre className="text-xs text-muted-foreground overflow-auto max-h-80">
-                            {JSON.stringify(data.dashboardStats, null, 2)}
-                          </pre>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
-                </motion.div>
-              </TabsContent>
               <TabsContent value="productos" className="m-0" asChild>
                 <motion.div 
                   initial={{ opacity: 0, y: 16 }} 
@@ -359,6 +365,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     series={data.series}
                     movements={data.movements}
                     onRefresh={() => fetchData('products')}
+                    pagination={productsPagination}
+                    onSearchChange={(value) => updateSearch('productos', value)}
+                    onCategoryChange={(value) => updateProductFilters('productos', 'categoryIds', value)}
+                    onWarehouseChange={(value) => updateProductFilters('productos', 'warehouseIds', value)}
                   />
                 </motion.div>
               </TabsContent>
@@ -375,6 +385,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     series={data.series}
                     movements={data.movements}
                     onRefresh={() => fetchData()}
+                    pagination={productsPagination}
+                    onSearchChange={(value) => updateSearch('servicios', value)}
+                    onCategoryChange={(value) => updateProductFilters('servicios', 'categoryIds', value)}
+                    onWarehouseChange={(value) => updateProductFilters('servicios', 'warehouseIds', value)}
                     isSidebarCollapsed={isSidebarCollapsed}
                   />
                 </motion.div>
@@ -403,6 +417,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     products={productItems}
                     series={data.series}
                     onRefresh={() => fetchData()}
+                    pagination={transfersPagination}
+                    onSearchChange={(value) => updateSearch('transferencias', value)}
+                    onStatusChange={(value) => updateStatus('transferencias', value)}
                   />
                 </motion.div>
               </TabsContent>
@@ -418,6 +435,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     products={productItems}
                     series={data.series}
                     onRefresh={() => fetchData()}
+                    pagination={adjustmentsPagination}
+                    onSearchChange={(value) => updateSearch('ajustes', value)}
+                    onStatusChange={(value) => updateStatus('ajustes', value)}
                   />
                 </motion.div>
               </TabsContent>
@@ -430,6 +450,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   <MovimientosView 
                     movements={data.movements}
                     warehouses={data.warehouses}
+                    pagination={movementsPagination}
+                    onSearchChange={(value) => updateSearch('movimientos', value)}
+                    onTypeChange={(value) => updateMovementFilter('type', value)}
+                    onWarehouseChange={(value) => updateMovementFilter('warehouseId', value)}
                   />
                 </motion.div>
               </TabsContent>

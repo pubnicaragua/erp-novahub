@@ -90,15 +90,15 @@ const URGENCY_LABELS: Record<string, string> = {
 };
 
 export const legalService = {
-  listCases: (type?: string, status?: string) => {
+  listCases: (type?: string, status?: string, signal?: AbortSignal) => {
     const params: Record<string, string> = {};
     if (type) params.type = type;
     if (status) params.status = status;
-    return api.get<LegalCase[]>('/legal/cases', { params });
+    return api.get<LegalCase[]>('/legal/cases', { params, signal });
   },
 
-  getCase: (id: string) =>
-    api.get<LegalCase>(`/legal/cases/${id}`),
+  getCase: (id: string, signal?: AbortSignal) =>
+    api.get<LegalCase>(`/legal/cases/${id}`, { signal }),
 
   createCase: (dto: {
     type: string;
@@ -118,8 +118,8 @@ export const legalService = {
   addDocument: (caseId: string, name: string, url: string, type?: string) =>
     api.post<LegalDocument>(`/legal/cases/${caseId}/documents`, { name, url, type }),
 
-  listMessages: (caseId: string) =>
-    api.get<LegalMessage[]>(`/legal/cases/${caseId}/messages`),
+  listMessages: (caseId: string, signal?: AbortSignal) =>
+    api.get<LegalMessage[]>(`/legal/cases/${caseId}/messages`, { signal }),
 
   addMessage: (caseId: string, data: {
     content?: string;
@@ -132,8 +132,8 @@ export const legalService = {
   }) =>
     api.post<LegalMessage>(`/legal/cases/${caseId}/messages`, data),
 
-  listReminders: () =>
-    api.get<LegalReminder[]>('/legal/reminders'),
+  listReminders: (signal?: AbortSignal) =>
+    api.get<LegalReminder[]>('/legal/reminders', { signal }),
 
   createReminder: (dto: { title: string; description?: string; dueDate: string; caseId?: string }) =>
     api.post<LegalReminder>('/legal/reminders', dto),

@@ -180,7 +180,7 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
   const tenantKey = user?.tenantId || 'anonymous';
   const matrixQuery = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', tenantKey],
-    queryFn: () => priceListsService.getMatrix(),
+    queryFn: ({ signal }) => priceListsService.getMatrix(signal),
     enabled: Boolean(user?.tenantId),
     staleTime: 30_000,
     gcTime: 5 * 60_000,

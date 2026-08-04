@@ -24,6 +24,7 @@ import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useTenantQuery } from '../../hooks/useTenantQuery';
 
 interface TicketsViewProps {
   data: Ticket[];
@@ -64,13 +65,24 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [comments, setComments] = useState<TicketComment[]>([]);
-  const [audit, setAudit] = useState<TicketAudit[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [detailLoading, setDetailLoading] = useState(false);
   const [commentLoading, setCommentLoading] = useState(false);
   const [pendingDeleteTicket, setPendingDeleteTicket] = useState<Ticket | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const commentsQuery = useTenantQuery<TicketComment[]>(
+    ['support', 'ticket-comments', selectedTicket?.id],
+    signal => supportService.getComments(selectedTicket!.id, signal),
+    { enabled: Boolean(selectedTicket?.id) },
+  );
+  const auditQuery = useTenantQuery<TicketAudit[]>(
+    ['support', 'ticket-audit', selectedTicket?.id],
+    signal => supportService.getAudit(selectedTicket!.id, signal),
+    { enabled: Boolean(selectedTicket?.id) },
+  );
+  const comments = Array.isArray(commentsQuery.data) ? commentsQuery.data : [];
+  const audit = Array.isArray(auditQuery.data) ? auditQuery.data : [];
+  const detailLoading = commentsQuery.isLoading || auditQuery.isLoading || commentsQuery.isFetching || auditQuery.isFetching;
 
   const statusOpts = [
     { value: 'OPEN', label: 'Abierto', color: 'bg-amber-500/10 text-amber-500' },
@@ -85,29 +97,6 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
     { value: 'HIGH', label: 'Alta', color: 'text-amber-500' },
     { value: 'URGENT', label: 'Urgente', color: 'text-rose-500' },
   ];
-
-  const loadTicketDetails = async (ticketId: string) => {
-    try {
-      setDetailLoading(true);
-      const [commentsRes, auditRes] = await Promise.all([
-        supportService.getComments(ticketId),
-        supportService.getAudit(ticketId),
-      ]);
-      setComments(Array.isArray(commentsRes) ? commentsRes : []);
-      setAudit(Array.isArray(auditRes) ? auditRes : []);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar detalle del ticket');
-      setComments([]);
-      setAudit([]);
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!selectedTicket?.id) return;
-    loadTicketDetails(selectedTicket.id);
-  }, [selectedTicket?.id]);
 
   useEffect(() => {
     if (!selectedTicket?.id) return;
@@ -212,8 +201,6 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
       toast.success('Ticket eliminado');
       if (selectedTicket?.id === ticket.id) {
         setSelectedTicket(null);
-        setComments([]);
-        setAudit([]);
       }
       onRefresh();
     } catch {
@@ -230,7 +217,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
       setCommentLoading(true);
       await supportService.addComment(selectedTicket.id, message);
       setNewComment('');
-      await loadTicketDetails(selectedTicket.id);
+      await Promise.all([commentsQuery.refetch(), auditQuery.refetch()]);
       onRefresh();
       toast.success('Comentario agregado');
     } catch {

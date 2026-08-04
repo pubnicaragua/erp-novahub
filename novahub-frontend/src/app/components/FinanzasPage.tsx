@@ -1,5 +1,6 @@
 import { cn } from './ui/utils';
 import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   DollarSign, TrendingUp, TrendingDown, BarChart3, 
   CalendarClock, Landmark, RotateCcw, Wallet,
@@ -40,8 +41,15 @@ const PERIOD_PRESETS = [
   { label: 'Año', days: 365 },
 ];
 
+const normalizeListResponse = (response: any) => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  return [];
+};
+
 export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: FinanzasPageProps) {
   const { user, canPerform } = useAuth();
+  const queryClient = useQueryClient();
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const { displayCurrency, exchangeRate: globalRate, convertAmount } = useCurrency();
 
@@ -66,12 +74,6 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   };
   
   const [activeTab, setActiveTab] = useState(() => activeSubModule ? (subModuleToTab[activeSubModule] || 'resumen') : 'resumen');
-  const [incomes, setIncomes] = useState<any[]>([]);
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [recurringExpenses, setRecurringExpenses] = useState<any[]>([]);
-  const [recurringIncomes, setRecurringIncomes] = useState<any[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [activePreset, setActivePreset] = useState<string>('');
@@ -100,17 +102,80 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     });
   };
 
+  const tenantKey = user?.clientTenantId || user?.tenantId || 'current';
+  const financeParams = { page: 1, pageSize: 500, ...(dateFrom && { dateFrom }), ...(dateTo && { dateTo }) };
+  const activeDataTabs = {
+    income: ['resumen', 'ingresos', 'analisis', 'balance-general'].includes(activeTab),
+    expense: ['resumen', 'gastos', 'analisis', 'balance-general'].includes(activeTab),
+    recurringExpense: ['resumen', 'recurrentes', 'calendario', 'analisis'].includes(activeTab),
+    recurringIncome: ['resumen', 'recurrentes', 'calendario', 'analisis'].includes(activeTab),
+    accounts: ['resumen', 'ingresos', 'gastos', 'recurrentes', 'balance-general'].includes(activeTab),
+  };
+  const incomesQuery = useQuery({
+    queryKey: ['finance', 'income', tenantKey, dateFrom, dateTo],
+    queryFn: ({ signal }) => incomeService.getAll(financeParams, signal),
+    enabled: activeDataTabs.income,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const expensesQuery = useQuery({
+    queryKey: ['finance', 'expenses', tenantKey, dateFrom, dateTo],
+    queryFn: ({ signal }) => expensesService.getAll(financeParams, signal),
+    enabled: activeDataTabs.expense,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const recurringExpensesQuery = useQuery({
+    queryKey: ['finance', 'recurring-expenses', tenantKey, dateFrom, dateTo],
+    queryFn: ({ signal }) => recurringExpensesService.getAll(financeParams, signal),
+    enabled: activeDataTabs.recurringExpense,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const recurringIncomesQuery = useQuery({
+    queryKey: ['finance', 'recurring-incomes', tenantKey, dateFrom, dateTo],
+    queryFn: ({ signal }) => recurringIncomesService.getAll(financeParams, signal),
+    enabled: activeDataTabs.recurringIncome,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const accountsQuery = useQuery({
+    queryKey: ['finance', 'accounts', tenantKey],
+    queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal),
+    enabled: activeDataTabs.accounts,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
+  const incomes = normalizeListResponse(incomesQuery.data);
+  const expenses = normalizeListResponse(expensesQuery.data);
+  const recurringExpenses = normalizeListResponse(recurringExpensesQuery.data);
+  const recurringIncomes = normalizeListResponse(recurringIncomesQuery.data);
+  const accounts = normalizeListResponse(accountsQuery.data);
+  const activeQueries = [
+    activeDataTabs.income && incomesQuery,
+    activeDataTabs.expense && expensesQuery,
+    activeDataTabs.recurringExpense && recurringExpensesQuery,
+    activeDataTabs.recurringIncome && recurringIncomesQuery,
+    activeDataTabs.accounts && accountsQuery,
+  ].filter(Boolean) as Array<{ isLoading: boolean; isError: boolean }>;
+  const loading = activeQueries.some(query => query.isLoading);
+
   const fIncomes = filterByDate(filterByBranch(incomes));
   const fExpenses = filterByDate(filterByBranch(expenses));
   const fRecurringExpenses = filterByDate(filterByBranch(recurringExpenses)).filter((r: any) => Number(r.amount) > 0);
   const fRecurringIncomes = filterByDate(filterByBranch(recurringIncomes)).filter((r: any) => Number(r.amount) > 0);
   const fAccounts = filterByDate(filterByBranch(accounts));
-
-  const normalizeListResponse = (response: any) => {
-    if (Array.isArray(response)) return response;
-    if (Array.isArray(response?.data)) return response.data;
-    return [];
-  };
 
   const normalizeItemResponse = (response: any) => {
     if (response && typeof response === 'object' && 'data' in response && response.data) {
@@ -147,7 +212,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     const createdResponse = await accountsService.create(payload);
     const createdAccount = normalizeItemResponse(createdResponse);
     if (!createdAccount?.id) throw new Error('No se pudo crear una cuenta contable por defecto');
-    setAccounts((prev) => [createdAccount, ...prev]);
+    queryClient.invalidateQueries({ queryKey: ['finance', 'accounts'] });
     toast.success(accountKind === 'INCOME' ? 'Se creó una cuenta de ingresos por defecto' : 'Se creó una cuenta de gastos por defecto');
     return createdAccount;
   };
@@ -166,35 +231,11 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     if (onSubModuleChange) onSubModuleChange(subModule);
   };
 
-  useEffect(() => { fetchData(); }, []);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [incRes, expRes, rexpRes, accRes, rincRes] = await Promise.allSettled([
-        incomeService.getAll(),
-        expensesService.getAll(),
-        recurringExpensesService.getAll(),
-        accountsService.getAll(),
-        recurringIncomesService.getAll(),
-      ]);
-
-      setIncomes(incRes.status === 'fulfilled' ? normalizeListResponse(incRes.value) : []);
-      setExpenses(expRes.status === 'fulfilled' ? normalizeListResponse(expRes.value) : []);
-      setRecurringExpenses(rexpRes.status === 'fulfilled' ? normalizeListResponse(rexpRes.value) : []);
-      setAccounts(accRes.status === 'fulfilled' ? normalizeListResponse(accRes.value) : []);
-      setRecurringIncomes(rincRes.status === 'fulfilled' ? normalizeListResponse(rincRes.value) : []);
-
-      if ([incRes, expRes, rexpRes, accRes].every((res) => res.status === 'rejected')) {
-        toast.error('Error al cargar datos financieros');
-      }
-    } catch (error) {
-      console.error('Error fetching finance data:', error);
+  useEffect(() => {
+    if (activeQueries.length > 0 && activeQueries.every(query => query.isError)) {
       toast.error('Error al cargar datos financieros');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [activeTab, dateFrom, dateTo, activeQueries.map(query => query.isError).join('|')]);
 
   const INCOME_COLUMNS = [
     { key: 'number', label: 'No. Recibo', type: 'text' as const, editable: false },
@@ -238,7 +279,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       return;
     }
     await expensesService.update(id, updates);
-    setExpenses(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+    await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
   };
 
   const handleUpdateIncome = async (id: string, updates: any) => {
@@ -248,17 +289,17 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       return;
     }
     await incomeService.update(id, updates);
-    setIncomes(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+    await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] });
   };
 
   const handleUpdateRecurring = async (id: string, updates: any) => {
     const isIncome = recurringIncomes.some(r => r.id === id);
     if (isIncome) {
       await recurringIncomesService.update(id, updates);
-      setRecurringIncomes(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] });
     } else {
       await recurringExpensesService.update(id, updates);
-      setRecurringExpenses(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
     }
   };
 
@@ -278,11 +319,11 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
         exchangeRate: globalRate,
       };
       if (type === 'INCOME') {
-        const res = await recurringIncomesService.create(payload);
-        setRecurringIncomes([res, ...recurringIncomes]);
+        await recurringIncomesService.create(payload);
+        await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] });
       } else {
-        const res = await recurringExpensesService.create(payload);
-        setRecurringExpenses([res, ...recurringExpenses]);
+        await recurringExpensesService.create(payload);
+        await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
       }
       toast.success(`Nuevo movimiento ${type === 'INCOME' ? 'de ingreso' : 'de gasto'} recurrente añadido`);
     } catch (error) {
@@ -294,8 +335,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     try {
       const defaultAccount = await ensureDefaultAccount('INCOME');
       const newItem = { source: 'Manual', description: '', amount: 0, date: new Date().toISOString(), accountId: defaultAccount.id, category: 'OTROS', currency: 'NIO' as any, exchangeRate: globalRate, notes: '' };
-      const res = await incomeService.create(newItem);
-      setIncomes([res, ...incomes]);
+      await incomeService.create(newItem);
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] });
       toast.success('Nuevo ingreso añadido');
     } catch (error) { toast.error('Error al crear ingreso'); }
   };
@@ -304,8 +345,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     try {
       const defaultAccount = await ensureDefaultAccount('EXPENSE');
       const newItem = { source: 'Manual', description: 'Nuevo Gasto', category: 'OTROS', amount: 0, date: new Date().toISOString(), accountId: defaultAccount.id, currency: 'NIO' as any, exchangeRate: globalRate, status: 'PENDING' as any, notes: '' };
-      const res = await expensesService.create(newItem);
-      setExpenses([res, ...expenses]);
+      await expensesService.create(newItem);
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
       toast.success('Nuevo gasto añadido');
     } catch (error) { toast.error('Error al crear gasto'); }
   };
@@ -430,7 +471,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     columns={INCOME_COLUMNS}
                     onUpdate={handleUpdateIncome}
                     onAdd={handleAddIncome}
-                    onDelete={async (id) => { await incomeService.delete(id); setIncomes(prev => prev.filter(i => i.id !== id)); toast.success('Ingreso eliminado'); }}
+                    onDelete={async (id) => { await incomeService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] }); toast.success('Ingreso eliminado'); }}
                     loading={loading}
                     canCreate={false}
                     canEdit={canPerform('FINANCIAL_INCOMES', 'edit')}
@@ -451,7 +492,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     onDelete={async (id) => {
                       const item = fExpenses.find((e: any) => e.id === id);
                       if (item && !['Manual', 'manual', '', null, undefined].includes(item.source)) { toast.error('No se puede eliminar un registro generado automáticamente'); return; }
-                      await expensesService.delete(id); setExpenses(prev => prev.filter(e => e.id !== id)); toast.success('Gasto eliminado');
+                      await expensesService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] }); toast.success('Gasto eliminado');
                     }}
                     loading={loading}
                     canCreate={false}
@@ -479,7 +520,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           columns={RECURRING_COLUMNS}
                           onUpdate={handleUpdateRecurring}
                           onAdd={() => handleAddRecurring('INCOME')}
-                          onDelete={async (id) => { await recurringIncomesService.delete(id); setRecurringIncomes(prev => prev.filter(r => r.id !== id)); toast.success('Eliminado'); }}
+                          onDelete={async (id) => { await recurringIncomesService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] }); toast.success('Eliminado'); }}
                           loading={loading}
                           canCreate={false}
                           canEdit={false}
@@ -494,7 +535,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           columns={RECURRING_COLUMNS}
                           onUpdate={handleUpdateRecurring}
                           onAdd={() => handleAddRecurring('EXPENSE')}
-                          onDelete={async (id) => { await recurringExpensesService.delete(id); setRecurringExpenses(prev => prev.filter(r => r.id !== id)); toast.success('Eliminado'); }}
+                          onDelete={async (id) => { await recurringExpensesService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] }); toast.success('Eliminado'); }}
                           loading={loading}
                           canCreate={false}
                           canEdit={false}

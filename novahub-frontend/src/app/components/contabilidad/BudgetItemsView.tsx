@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Wallet,
   AlertTriangle, CheckCircle
@@ -18,6 +19,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 const PERIODS = [
   { label: 'Este Mes', value: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}` },
@@ -25,9 +27,7 @@ const PERIODS = [
 ];
 
 export function BudgetItemsView() {
-  const [items, setItems] = useState<any[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterPeriod, setFilterPeriod] = useState(PERIODS[0].value);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -36,23 +36,17 @@ export function BudgetItemsView() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({ code: '', name: '', assignedAmount: 0, accountId: '', costCenterId: '', period: PERIODS[0].value, status: 'ACTIVE' });
 
-  useEffect(() => { loadData(); }, [filterPeriod]);
-
-  async function loadData() {
-    setLoading(true);
-    try {
-      const [bgt, accts] = await Promise.all([
-        contabilidadService.getBudgetItems(filterPeriod),
-        contabilidadService.getChartOfAccounts(),
-      ]);
-      const flat: any[] = [];
-      function flatten(nodes: any[]) { for (const n of nodes) { flat.push(n); if (n.children) flatten(n.children); } }
-      flatten(accts);
-      setItems(bgt);
-      setAccounts(flat);
-    } catch { toast.error('Error al cargar presupuestos'); }
-    finally { setLoading(false); }
-  }
+  const itemsQuery = useAccountingQuery<any[]>(['budget-items', filterPeriod], async (signal) => accountingList(await contabilidadService.getBudgetItems(filterPeriod, signal)));
+  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
+  const items = itemsQuery.data || [];
+  const accounts = useMemo(() => {
+    const flat: any[] = [];
+    const flatten = (nodes: any[]) => nodes.forEach(n => { const { children, ...rest } = n; flat.push(rest); if (children) flatten(children); });
+    flatten(accountsQuery.data || []);
+    return flat;
+  }, [accountsQuery.data]);
+  const loading = itemsQuery.isLoading || accountsQuery.isLoading;
+  const loadData = () => { itemsQuery.refetch(); accountsQuery.refetch(); };
 
   function openCreate() {
     setEditing(null);
@@ -84,7 +78,7 @@ export function BudgetItemsView() {
         toast.success('Partida creada');
       }
       setDialogOpen(false);
-      loadData();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al guardar');
     } finally { setSaving(false); }
@@ -100,7 +94,7 @@ export function BudgetItemsView() {
       await contabilidadService.deleteBudgetItem(pendingDeleteId);
       toast.success('Partida eliminada');
       setPendingDeleteId(null);
-      loadData();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) { toast.error(e?.response?.data?.message || 'Error'); }
   }
 

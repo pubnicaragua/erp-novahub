@@ -7,10 +7,15 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { toast } from 'sonner';
+import type { SalesPaginationControls } from '../../types';
 
 interface MovimientosViewProps {
   movements: any[];
   warehouses: any[];
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
+  onTypeChange?: (value: string) => void;
+  onWarehouseChange?: (value: string) => void;
 }
 
 const TYPE_OPTIONS = [
@@ -21,7 +26,7 @@ const TYPE_OPTIONS = [
   { value: 'ADJUSTMENT', label: 'Ajuste' },
 ];
 
-export function MovimientosView({ movements, warehouses }: MovimientosViewProps) {
+export function MovimientosView({ movements, warehouses, pagination, onSearchChange, onTypeChange, onWarehouseChange }: MovimientosViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [warehouseFilter, setWarehouseFilter] = useState('all');
@@ -83,10 +88,10 @@ export function MovimientosView({ movements, warehouses }: MovimientosViewProps)
               placeholder="Buscar producto o referencia..." 
               className="pl-9 h-9"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
             />
           </div>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <Select value={typeFilter} onValueChange={(value) => { setTypeFilter(value); onTypeChange?.(value); }}>
             <SelectTrigger className="w-32 h-9">
               <SelectValue />
             </SelectTrigger>
@@ -94,7 +99,7 @@ export function MovimientosView({ movements, warehouses }: MovimientosViewProps)
               {TYPE_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={warehouseFilter} onValueChange={setWarehouseFilter}>
+          <Select value={warehouseFilter} onValueChange={(value) => { setWarehouseFilter(value); onWarehouseChange?.(value); }}>
             <SelectTrigger className="w-36 h-9">
               <SelectValue placeholder="Almacén" />
             </SelectTrigger>
@@ -158,7 +163,15 @@ export function MovimientosView({ movements, warehouses }: MovimientosViewProps)
       </div>
 
       <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-        {filteredMovements.length} de {movements.length} movimientos
+        {pagination?.total ?? filteredMovements.length} movimientos
+        {pagination && <span className="ml-4 inline-flex items-center gap-2 normal-case tracking-normal">
+          <select value={pagination.pageSize} onChange={(event) => pagination.onPageSizeChange(Number(event.target.value) as 50 | 100 | 200)} className="h-7 rounded border bg-background px-1 font-bold text-foreground">
+            {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
+          </select>
+          <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" onClick={() => pagination.onPageChange(Math.max(1, pagination.page - 1))} disabled={pagination.page <= 1}>‹</button>
+          <span>Pág. {pagination.page}/{pagination.totalPages}</span>
+          <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" onClick={() => pagination.onPageChange(Math.min(pagination.totalPages, pagination.page + 1))} disabled={pagination.page >= pagination.totalPages}>›</button>
+        </span>}
       </div>
     </Card>
   );

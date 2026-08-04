@@ -206,6 +206,7 @@ export function ProductDetailDrawer({
       return;
     }
 
+    const controller = new AbortController();
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -213,14 +214,14 @@ export function ProductDetailDrawer({
     (async () => {
       try {
         // Fetch del producto completo
-        const resp: any = await inventoryService.getProduct(productId);
+        const resp: any = await inventoryService.getProduct(productId, controller.signal);
         const product = resp?.data?.data || resp?.data || resp;
         if (cancelled) return;
         setDetail(product);
 
         // Intentar traer movimientos frescos para el kardex
         try {
-          const movResp: any = await inventoryService.getMovements({ limit: 200 });
+          const movResp: any = await inventoryService.getMovements({ productId, page: 1, pageSize: 200 }, controller.signal);
           const list = Array.isArray(movResp) ? movResp : movResp?.data?.data || movResp?.data || [];
           if (!cancelled) setKardexMovements(Array.isArray(list) ? list : []);
         } catch {
@@ -240,6 +241,7 @@ export function ProductDetailDrawer({
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [productId]);
 

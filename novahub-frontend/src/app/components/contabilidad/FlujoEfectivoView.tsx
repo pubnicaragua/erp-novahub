@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -9,6 +9,7 @@ import { RefreshCw, Filter, X, ArrowUpCircle, ArrowDownCircle, DollarSign } from
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 interface CashFlowItem {
   concept: string;
@@ -56,17 +57,11 @@ const SECTION_CONFIG = [
 export function FlujoEfectivoView() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [data, setData] = useState<CashFlowData | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    if (!dateFrom || !dateTo) {
-      toast.error('Seleccione el rango de fechas');
-      return;
-    }
-    try {
-      setLoading(true);
-      const raw: any = await contabilidadService.getCashFlow({ dateFrom, dateTo });
+  const query = useAccountingQuery<CashFlowData | null>(
+    ['cash-flow', dateFrom, dateTo],
+    async (signal) => {
+      if (!dateFrom || !dateTo) return null;
+      const raw: any = await contabilidadService.getCashFlow({ dateFrom, dateTo }, signal);
       const result: CashFlowData = {
         operativas: {
           items: raw?.operatingActivities?.items || [{ concept: 'Actividades Operativas', amount: raw?.operatingActivities?.netCash || 0 }],
@@ -84,17 +79,15 @@ export function FlujoEfectivoView() {
         beginningCash: raw?.beginningCashBalance || 0,
         endingCash: raw?.endingCashBalance || 0,
       };
-      setData(result);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar flujo de efectivo');
-    } finally {
-      setLoading(false);
-    }
-  }, [dateFrom, dateTo]);
-
+      return result;
+    },
+    { enabled: Boolean(dateFrom && dateTo) },
+  );
+  const data = query.data;
+  const loading = query.isLoading || query.isFetching;
   useEffect(() => {
-    if (dateFrom && dateTo) fetchData();
-  }, [fetchData]);
+    if (query.error) toast.error(query.error.message || 'Error al cargar flujo de efectivo');
+  }, [query.error]);
 
   const fmt = (n: number) => {
     const abs = Math.abs(n).toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -166,7 +159,7 @@ export function FlujoEfectivoView() {
           )}
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20">
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="h-9">
+          <Button variant="outline" size="sm" onClick={() => query.refetch()} disabled={loading || !dateFrom || !dateTo} className="h-9">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
         </div>

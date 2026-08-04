@@ -14,6 +14,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ShoppingBag, CreditCard, Wallet, Activity, Truck, TrendingUp, Package, Scale, PieChart as PieChartIcon, AlertTriangle, Clock, Receipt, Info, Target, CalendarDays, ArrowUpRight, Percent, BarChart3, ClipboardList, FileWarning } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { cn } from '../ui/utils';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
@@ -198,16 +199,24 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const { user } = useAuth();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
 
-  const [bills, setBills] = useState<any[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
-  const [credits, setCredits] = useState<any[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [receipts, setReceipts] = useState<any[]>([]);
-  const [requests, setRequests] = useState<any[]>([]);
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'purchases'], async (signal) => {
+    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const [billRes, payRes, credRes, ordRes, recRes, reqRes] = await Promise.all([
+      billsService.getAll(filters, signal), paymentsMadeService.getAll(filters, signal),
+      supplierCreditsService.getAll(filters, signal), purchaseOrdersService.getAll(filters, signal),
+      purchaseReceiptsService.getAll(filters, signal), purchaseRequestsService.getAll(filters, signal),
+    ]);
+    return { bills: asList(billRes), payments: asList(payRes), credits: asList(credRes), orders: asList(ordRes), receipts: asList(recRes), requests: asList(reqRes) };
+  }, { onError: (e) => toast.error(e.message || 'Error cargando compras') });
+  const bills = reportData?.bills || [];
+  const payments = reportData?.payments || [];
+  const credits = reportData?.credits || [];
+  const orders = reportData?.orders || [];
+  const receipts = reportData?.receipts || [];
+  const requests = reportData?.requests || [];
   const [budgetItems, setBudgetItems] = useState<any[]>([]);
   const [budgetAccounts, setBudgetAccounts] = useState<any[]>([]);
   const [budgetTrial, setBudgetTrial] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<ModalState>(null);
   const [evolutionTab, setEvolutionTab] = useState<'evolucion' | 'aging'>('evolucion');
   const [productMetric, setProductMetric] = useState<'monto' | 'unidades' | 'variacion'>('monto');
@@ -228,40 +237,16 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   };
 
   useEffect(() => {
-    const fetch = async () => {
-      setLoading(true);
-      try {
-        const [billRes, payRes, credRes, ordRes, recRes, reqRes] = await Promise.all([
-          billsService.getAll().catch(() => ({ data: [] })),
-          paymentsMadeService.getAll().catch(() => ({ data: [] })),
-          supplierCreditsService.getAll().catch(() => ({ data: [] })),
-          purchaseOrdersService.getAll().catch(() => ({ data: [] })),
-          purchaseReceiptsService.getAll().catch(() => ({ data: [] })),
-          purchaseRequestsService.getAll().catch(() => ({ data: [] }))
-        ]);
-        const arr = (res: any) => Array.isArray(res) ? res : (res?.data || []);
-        setBills(arr(billRes));
-        setPayments(arr(payRes));
-        setCredits(arr(credRes));
-        setOrders(arr(ordRes));
-        setReceipts(arr(recRes));
-        setRequests(arr(reqRes));
-        const [bgtRes, accRes] = await Promise.all([
-          contabilidadService.getBudgetItems().catch(() => []),
-          contabilidadService.getChartOfAccounts().catch(() => [])
-        ]);
-        const flatAccounts: any[] = [];
-        const flatten = (nodes: any[]) => { for (const n of nodes) { flatAccounts.push(n); if (n.children) flatten(n.children); } };
-        flatten(Array.isArray(accRes) ? accRes : (accRes as any)?.data || []);
-        setBudgetItems(Array.isArray(bgtRes) ? bgtRes : (bgtRes as any)?.data || []);
-        setBudgetAccounts(flatAccounts);
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || "Error cargando compras");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
+    let active = true;
+    Promise.all([contabilidadService.getBudgetItems(), contabilidadService.getChartOfAccounts()]).then(([bgtRes, accRes]) => {
+      if (!active) return;
+      const flatAccounts: any[] = [];
+      const flatten = (nodes: any[]) => { for (const n of nodes) { flatAccounts.push(n); if (n.children) flatten(n.children); } };
+      flatten(asList(accRes));
+      setBudgetItems(asList(bgtRes));
+      setBudgetAccounts(flatAccounts);
+    }).catch(() => null);
+    return () => { active = false; };
   }, []);
 
   const { start: currentStart, prevStart, prevEnd, durationDays } = useMemo(() => getRangeDates(dateRange), [dateRange]);

@@ -4,7 +4,7 @@ import {
   ClipboardList, Search, Eye, X, AlertTriangle,
   CheckCircle, Clock, FileText, Printer,
   Building2, ArrowUpRight, FileSpreadsheet, Plus,
-  Loader2, Package,
+  Loader2, Package, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -16,10 +16,13 @@ import { toast } from 'sonner';
 import { purchaseRequestsService, purchaseManagementService } from '../../services/compras.service';
 import { inventoryService } from '../../services/inventario.service';
 import type { PurchaseRequest, PurchaseManagement, Warehouse } from '../../types';
+import type { SalesPaginationControls } from '../../types';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { PromptDialog } from '../ui/PromptDialog';
+import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-zinc-100 text-zinc-700 border-zinc-200',
@@ -54,9 +57,13 @@ interface SolicitudCompraViewProps {
   data: PurchaseRequest[];
   loading?: boolean;
   onRefresh: () => void;
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
+  onStatusChange?: (value: string) => void;
+  warehouseCatalog?: Warehouse[];
 }
 
-export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompraViewProps) {
+export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, warehouseCatalog = [] }: SolicitudCompraViewProps) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -154,6 +161,12 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
     new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
 
   const statusOptions = Object.keys(STATUS_STYLES);
+  const requestKpis = [
+    { title: 'Solicitudes', value: data.length, icon: ClipboardList, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'En Revisión', value: data.filter(r => r.status === 'IN_REVIEW').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10', kind: 'filter' as const, filter: 'IN_REVIEW' },
+    { title: 'Por Aprobar', value: data.filter(r => r.status === 'PENDING_APPROVAL').length, icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-500/10', kind: 'filter' as const, filter: 'PENDING_APPROVAL' },
+    { title: 'Aprobadas', value: data.filter(r => r.status === 'APPROVED').length, icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'APPROVED' },
+  ];
 
   // ─── Nueva Solicitud ──────────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
@@ -173,25 +186,21 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
   }>>([]);
   const [creating, setCreating] = useState(false);
 
-  const loadWarehouses = async () => {
-    try {
-      const res = await inventoryService.getWarehouses();
-      setWarehouses(Array.isArray(res) ? res : []);
-    } catch { /* ignore */ }
-  };
+  useEffect(() => { setWarehouses(warehouseCatalog); }, [warehouseCatalog]);
 
-  const searchProducts = async (q: string) => {
+  const searchProducts = async (q: string, signal?: AbortSignal) => {
     if (!q || q.length < 2) { setProducts([]); return; }
     try {
-      const res = await inventoryService.getProducts({ search: q, pageSize: 10 });
+      const res = await inventoryService.getProducts({ search: q, page: 1, pageSize: 10 }, signal);
       const list = Array.isArray(res) ? res : (res as any)?.data || [];
       setProducts(list);
-    } catch { setProducts([]); }
+    } catch (error: any) { if (error?.name !== 'AbortError') setProducts([]); }
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => searchProducts(productSearch), 300);
-    return () => clearTimeout(timer);
+    const controller = new AbortController();
+    const timer = setTimeout(() => searchProducts(productSearch, controller.signal), 300);
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [productSearch]);
 
   const addItem = (product: any) => {
@@ -245,29 +254,61 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
   };
 
   const openCreateDialog = () => {
-    loadWarehouses();
     setCreateOpen(true);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {requestKpis.map((k) => (
+          <PurchaseKpiCard
+            key={k.title}
+            title={k.title}
+            value={k.value}
+            icon={k.icon}
+            color={k.color}
+            bg={k.bg}
+            kind={k.kind}
+            active={k.filter === statusFilter}
+            onClick={k.filter ? () => {
+              const next = statusFilter === k.filter ? 'all' : k.filter;
+              setStatusFilter(next);
+              onStatusChange?.(next);
+            } : undefined}
+          />
+        ))}
+      </div>
+      <div className="flex flex-col gap-4">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <ClipboardList className="size-6 text-primary" />
-          <h2 className="text-xl font-bold">Solicitudes de Compra</h2>
+          <h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Solicitudes de Compra</h2>
           <Badge variant="secondary" className="text-xs">{data.length}</Badge>
         </div>
-        <Button size="sm" onClick={openCreateDialog}>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+        <PurchaseViewTutorial view="requests" />
+        <Button size="sm" onClick={openCreateDialog} className="rounded-xl font-black uppercase text-[10px] tracking-widest">
           <Plus className="size-3.5 mr-1" /> Nueva Solicitud
         </Button>
+        </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-3" data-tour="purchases-list-actions">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input placeholder="Buscar por número, solicitante, proveedor, bodega..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Buscar por número, solicitante, proveedor, bodega..." value={search} onChange={e => { setSearch(e.target.value); onSearchChange?.(e.target.value); }} className="pl-9" />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        {pagination && (
+          <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+            <span>Mostrando {filtered.length} de {pagination.total} solicitudes</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" className="size-8" onClick={() => pagination.onPageChange(pagination.page - 1)} disabled={pagination.page <= 1}><ChevronLeft className="size-4" /></Button>
+              <span className="min-w-20 text-center font-bold text-foreground">Pág. {pagination.page} / {Math.max(1, pagination.totalPages)}</span>
+              <Button variant="outline" size="icon" className="size-8" onClick={() => pagination.onPageChange(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}><ChevronRight className="size-4" /></Button>
+            </div>
+          </div>
+        )}
+        <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); onStatusChange?.(value); }}>
           <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filtrar por estado" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos los estados</SelectItem>
@@ -281,7 +322,7 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
       ) : filtered.length === 0 ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">No hay solicitudes de compra</CardContent></Card>
       ) : (
-        <div className="rounded-xl border border-border/40 overflow-hidden">
+        <div className="rounded-xl border border-border/40 overflow-hidden" data-tour="sales-data-table">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -358,6 +399,7 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
           </div>
         </div>
       )}
+      </div>
 
       {/* Detail Dialog */}
       <Dialog open={!!detailOpen} onOpenChange={(o) => { if (!o) setDetailOpen(null); }}>

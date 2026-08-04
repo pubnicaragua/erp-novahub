@@ -212,6 +212,7 @@ export function ControlDashboardCajaView({
               selectedRegister={selectedRegister}
               onSelectRegister={setSelectedRegister}
               onRegistersChanged={loadRegisters}
+              onOpenManageCajas={() => setManageCajasOpen(true)}
             />
 
             {sessionStep === 'idle' && (

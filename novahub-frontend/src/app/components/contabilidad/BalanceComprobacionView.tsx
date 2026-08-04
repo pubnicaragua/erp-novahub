@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -10,6 +10,7 @@ import { Search, Printer, RefreshCw, Filter, X } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   ASSET: 'ACTIVOS',
@@ -32,20 +33,18 @@ interface TrialBalanceRow {
 }
 
 export function BalanceComprobacionView() {
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [data, setData] = useState<TrialBalanceRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const today = new Date();
+  const [dateFrom, setDateFrom] = useState(`${today.getFullYear()}-01-01`);
+  const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10));
   const [searchTerm, setSearchTerm] = useState('');
-
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
+  const query = useAccountingQuery<TrialBalanceRow[]>(
+    ['trial-balance', dateFrom, dateTo],
+    async (signal) => {
       const params: { dateFrom?: string; dateTo?: string } = {};
       if (dateFrom) params.dateFrom = dateFrom;
       if (dateTo) params.dateTo = dateTo;
-      const raw: any = await contabilidadService.getTrialBalance(params);
-      const rows = (raw?.rows || raw || []).map((r: any) => ({
+      const raw: any = await contabilidadService.getTrialBalance(params, signal);
+      return (raw?.rows || raw || []).map((r: any) => ({
         accountId: r.accountId || r.accountCode || '',
         codigo: r.accountCode || r.codigo || '',
         cuenta: r.accountName || r.cuenta || '',
@@ -54,23 +53,22 @@ export function BalanceComprobacionView() {
         creditos: r.totalCredit || r.creditos || 0,
         saldo: r.balance || r.saldo || 0,
       }));
-      setData(rows);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar balance de comprobación');
-    } finally {
-      setLoading(false);
-    }
-  }, [dateFrom, dateTo]);
+    },
+    { enabled: Boolean(dateFrom || dateTo) },
+  );
+  const data = query.data || [];
+  const loading = query.isLoading || query.isFetching;
+  useEffect(() => {
+    if (query.error) toast.error(query.error.message || 'Error al cargar balance de comprobación');
+  }, [query.error]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  const grouped = ACCOUNT_TYPE_ORDER.map(type => ({
+  const grouped = useMemo(() => ACCOUNT_TYPE_ORDER.map(type => ({
     type,
     label: ACCOUNT_TYPE_LABELS[type],
     rows: data
       .filter(r => r.tipo === type)
       .filter(r => !searchTerm || r.cuenta.toLowerCase().includes(searchTerm.toLowerCase()) || r.codigo.toLowerCase().includes(searchTerm.toLowerCase())),
-  })).filter(g => g.rows.length > 0);
+  })).filter(g => g.rows.length > 0), [data, searchTerm]);
 
   const totalDebitos = data.reduce((s, r) => s + r.debitos, 0);
   const totalCreditos = data.reduce((s, r) => s + r.creditos, 0);
@@ -174,7 +172,7 @@ export function BalanceComprobacionView() {
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Buscar cuenta..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-9 w-[200px]" />
           </div>
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="h-9">
+          <Button variant="outline" size="sm" onClick={() => query.refetch()} disabled={loading} className="h-9">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
           <Button variant="outline" size="sm" onClick={handlePrint} className="h-9">

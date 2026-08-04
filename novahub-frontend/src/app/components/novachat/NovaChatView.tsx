@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Loader2, MessageSquare, Send, Search, Phone, Mail,
   Globe, Facebook, Instagram, Hash, User,
@@ -17,6 +17,7 @@ import {
   type ChatConversation,
   type ChatMessage,
 } from '../../services/novachat.service';
+import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 
 const CHANNEL_ICONS: Record<string, LucideIcon> = {
   WHATSAPP: Phone,
@@ -57,51 +58,37 @@ function formatRelativeTime(date: string) {
 }
 
 export function NovaChatView() {
-  const [channels, setChannels] = useState<ChatChannel[]>([]);
-  const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<ChatConversation | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [filterChannel, setFilterChannel] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showMobileChat, setShowMobileChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      let [chans, convs] = await Promise.all([
-        novachatService.getChannels(),
-        novachatService.getConversations(),
-      ]);
-      if (!chans || chans.length === 0) {
+  const inboxQuery = useTenantQuery<{ channels: ChatChannel[]; conversations: ChatConversation[] }>(
+    ['novachat', 'inbox'],
+    async signal => {
+      let channels = asList(await novachatService.getChannels(signal)) as ChatChannel[];
+      let conversations = asList(await novachatService.getConversations(undefined, signal)) as ChatConversation[];
+      if (channels.length === 0) {
         await novachatService.seedDemo();
-        [chans, convs] = await Promise.all([
-          novachatService.getChannels(),
-          novachatService.getConversations(),
-        ]);
+        channels = asList(await novachatService.getChannels(signal)) as ChatChannel[];
+        conversations = asList(await novachatService.getConversations(undefined, signal)) as ChatConversation[];
       }
-      setChannels(chans);
-      setConversations(convs);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar datos de NovaChat');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
-
-  useEffect(() => {
-    if (selectedConversation) {
-      novachatService.getMessages(selectedConversation.id).then(setMessages).catch(() => {});
-    }
-  }, [selectedConversation]);
+      return { channels, conversations };
+    },
+    { refetchInterval: 10000, refetchIntervalInBackground: false },
+  );
+  const channels = inboxQuery.data?.channels || [];
+  const conversations = inboxQuery.data?.conversations || [];
+  const messagesQuery = useTenantQuery<ChatMessage[]>(
+    ['novachat', 'messages', selectedConversation?.id],
+    signal => novachatService.getMessages(selectedConversation!.id, signal),
+    { enabled: Boolean(selectedConversation?.id), refetchInterval: 5000, refetchIntervalInBackground: false },
+  );
+  const messages = asList(messagesQuery.data) as ChatMessage[];
+  const loading = inboxQuery.isLoading || inboxQuery.isFetching;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -128,7 +115,7 @@ export function NovaChatView() {
         conversationId: selectedConversation.id,
         content: newMessage.trim(),
       });
-      setMessages((prev) => [...prev, msg]);
+      await Promise.all([messagesQuery.refetch(), inboxQuery.refetch()]);
       setNewMessage('');
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al enviar mensaje');
@@ -140,9 +127,7 @@ export function NovaChatView() {
   const handleStatusChange = async (convId: string, status: string) => {
     try {
       await novachatService.updateConversationStatus(convId, status);
-      setConversations((prev) =>
-        prev.map((c) => (c.id === convId ? { ...c, status } : c)),
-      );
+      await inboxQuery.refetch();
       if (selectedConversation?.id === convId) {
         setSelectedConversation((prev) => (prev ? { ...prev, status } : null));
       }

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -11,6 +12,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 interface FixedAsset {
   id: string;
@@ -38,26 +40,16 @@ function emptyForm(): NewAssetForm {
 
 export function ActivosFijosView() {
   const { canPerform } = useAuth();
-  const [assets, setAssets] = useState<FixedAsset[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<NewAssetForm>(emptyForm());
 
-  const loadAssets = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await contabilidadService.getFixedAssets();
-      setAssets(data as FixedAsset[]);
-    } catch (err: any) {
-      toast.error(err.message || 'Error al cargar activos fijos');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadAssets(); }, [loadAssets]);
+  const assetsQuery = useAccountingQuery<FixedAsset[]>(['fixed-assets'], async (signal) => accountingList(await contabilidadService.getFixedAssets(signal)) as FixedAsset[]);
+  const assets = assetsQuery.data || [];
+  const loading = assetsQuery.isLoading || assetsQuery.isFetching;
+  const loadAssets = () => assetsQuery.refetch();
 
   const filtered = assets.filter((a) =>
     !searchTerm ||
@@ -88,7 +80,7 @@ export function ActivosFijosView() {
       toast.success('Activo fijo registrado exitosamente');
       setCreateOpen(false);
       resetForm();
-      loadAssets();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar activo fijo');
     } finally {

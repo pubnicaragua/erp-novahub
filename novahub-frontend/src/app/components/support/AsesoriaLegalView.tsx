@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { legalService, type LegalCase, type LegalReminder } from '../../services/legal.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { LegalChatPanel } from './LegalChatPanel';
+import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 
 interface AsesoriaLegalViewProps {
   activeSubModule?: string;
@@ -29,33 +30,26 @@ interface AsesoriaLegalViewProps {
 export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: AsesoriaLegalViewProps) {
   const { canPerform } = useAuth();
   const [activeTab, setActiveTab] = useState(activeSubModule || 'cases');
-  const [cases, setCases] = useState<LegalCase[]>([]);
-  const [reminders, setReminders] = useState<LegalReminder[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedCase, setSelectedCase] = useState<LegalCase | null>(null);
   const [showNewCase, setShowNewCase] = useState(false);
   const [showNewReminder, setShowNewReminder] = useState(false);
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [search, setSearch] = useState('');
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [casesRes, remindersRes]: any[] = await Promise.all([
-        legalService.listCases(filterType !== 'all' ? filterType : undefined, filterStatus !== 'all' ? filterStatus : undefined),
-        legalService.listReminders(),
-      ]);
-      setCases(casesRes?.data || casesRes || []);
-      setReminders(remindersRes?.data || remindersRes || []);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar datos legales');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchData(); }, [filterType, filterStatus]);
+  const casesQuery = useTenantQuery<LegalCase[]>(
+    ['legal', 'cases', filterType, filterStatus],
+    signal => legalService.listCases(filterType !== 'all' ? filterType : undefined, filterStatus !== 'all' ? filterStatus : undefined, signal),
+    { enabled: activeTab === 'cases' },
+  );
+  const remindersQuery = useTenantQuery<LegalReminder[]>(['legal', 'reminders'], signal => legalService.listReminders(signal), {
+    enabled: activeTab === 'reminders',
+  });
+  const cases = asList(casesQuery.data) as LegalCase[];
+  const reminders = asList(remindersQuery.data) as LegalReminder[];
+  const loading = activeTab === 'cases'
+    ? casesQuery.isLoading || casesQuery.isFetching
+    : remindersQuery.isLoading || remindersQuery.isFetching;
+  const fetchData = () => activeTab === 'cases' ? casesQuery.refetch() : remindersQuery.refetch();
 
   useEffect(() => {
     if (activeSubModule && activeSubModule !== activeTab) {
@@ -334,12 +328,13 @@ function NewCaseForm({ onComplete, onCancel }: { onComplete: (c: LegalCase) => v
 
 function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBack: () => void; onRefresh: () => void }) {
   const { canPerform } = useAuth();
+  const detailQuery = useTenantQuery<LegalCase>(['legal', 'case', caseData.id], signal => legalService.getCase(caseData.id, signal));
   const [note, setNote] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  const [c, setCase] = useState<LegalCase>(caseData);
+  const c = detailQuery.data || caseData;
 
   const handleAddNote = async () => {
     if (!note.trim()) return;
@@ -349,8 +344,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
       setNote('');
       setIsInternal(false);
       toast.success('Nota agregada');
-      const res: any = await legalService.getCase(c.id);
-      setCase(res?.data || res);
+      await detailQuery.refetch();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al agregar nota'); }
     finally { setAddingNote(false); }
   };
@@ -359,8 +353,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
     try {
       await legalService.updateStatus(c.id, newStatus);
       toast.success('Estado actualizado');
-      const res: any = await legalService.getCase(c.id);
-      setCase(res?.data || res);
+      await detailQuery.refetch();
       setShowStatusDialog(false);
       onRefresh();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al cambiar estado'); }

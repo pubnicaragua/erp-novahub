@@ -80,49 +80,102 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const loadDataRef = useRef<() => void>();
   const mountedRef = useRef(true);
   const pollCountRef = useRef(0);
+  const requestIdRef = useRef(0);
+  const setupSummaryRef = useRef<ImplementationSetupSummary | null>(null);
+  const setupPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cajaDataRef = useRef<any>(null);
+  const dashboardControllerRef = useRef<AbortController | null>(null);
+
+  const normalizeDashboardResponse = (value: unknown): any | null => {
+    const candidate = (value as any)?.data ?? value;
+    return candidate && typeof candidate === 'object' && candidate.kpis && typeof candidate.kpis === 'object'
+      ? candidate
+      : null;
+  };
+
+  const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, onTimeout?: () => void): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            onTimeout?.();
+            reject(new Error('Timeout'));
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  };
 
   const loadData = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    const isCurrentRequest = () => mountedRef.current && requestId === requestIdRef.current;
+    dashboardControllerRef.current?.abort();
+    const dashboardController = new AbortController();
+    dashboardControllerRef.current = dashboardController;
     setLoading(true);
-    try {
-      const force = setupSummary === null || !setupSummary.isComplete;
-      const setup = await getImplementationSetupSummary(force, user?.enabledModules);
-      if (!mountedRef.current) return;
+    setDataLoadError(false);
+
+    // La validación de implementación no debe bloquear la primera pintura del
+    // dashboard. Se ejecuta en paralelo y solo cambia la vista si realmente hay
+    // pasos pendientes.
+    const setupPromise = getImplementationSetupSummary(
+      setupSummaryRef.current === null || !setupSummaryRef.current.isComplete,
+      user?.enabledModules,
+    );
+    setupPromise.then((setup) => {
+      if (!isCurrentRequest()) return;
+      setupSummaryRef.current = setup;
       setSetupSummary(setup);
+    }).catch(() => {
+      // El dashboard sigue siendo utilizable aunque falle la validación auxiliar.
+    });
 
-      if (!setup.isComplete && !skipSetup) {
-        setCajaData(null);
-        setPrevData(null);
-        if (mountedRef.current) setLoading(false);
-        return;
-      }
+    const effectivePeriod = period === 'custom' ? 'month' : period;
+    const params = period === 'custom'
+      ? { startDate: dateFrom || undefined, endDate: dateTo || undefined }
+      : {};
 
-      const effectivePeriod = period === 'custom' ? 'month' : period;
-      const params = period === 'custom'
-        ? { startDate: dateFrom || undefined, endDate: dateTo || undefined }
-        : {};
-      const [current, prev] = await Promise.all([
-        Promise.race([
-          cajaService.getDashboard(effectivePeriod, undefined, params.startDate, params.endDate),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000)),
-        ]).catch(() => null),
-        Promise.race([
-          cajaService.getDashboard('last-month' as any),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000)),
-        ]).catch(() => null),
-      ]);
-      if (!mountedRef.current) return;
-      setCajaData(current);
-      setPrevData(prev);
-      setDataLoadError(current === null);
+    let current: any | null = null;
+    try {
+      current = normalizeDashboardResponse(await withTimeout(
+        cajaService.getDashboard(effectivePeriod, undefined, params.startDate, params.endDate, dashboardController.signal),
+        12000,
+        () => dashboardController.abort(),
+      ));
     } catch {
-      if (!mountedRef.current) return;
-      setCajaData(null);
-      setPrevData(null);
-      setDataLoadError(true);
-    } finally {
-      if (mountedRef.current) setLoading(false);
+      if (isCurrentRequest()) setDataLoadError(true);
     }
-  }, [period, skipSetup, dateFrom, dateTo]);
+
+    if (!isCurrentRequest()) return;
+
+    // Nunca reemplazar datos válidos por null durante un refresh transitorio.
+    // Así una latencia puntual no convierte el dashboard en una tarjeta vacía.
+    if (current) {
+      cajaDataRef.current = current;
+      setCajaData(current);
+      setDataLoadError(false);
+    } else if (!cajaDataRef.current) {
+      setDataLoadError(true);
+    }
+    setLoading(false);
+
+    // La comparación con el período anterior es secundaria. Se carga después
+    // del período actual para no duplicar la carga pesada del endpoint inicial.
+    try {
+      const previous = normalizeDashboardResponse(await withTimeout(
+        cajaService.getDashboard('last-month' as any, undefined, undefined, undefined, dashboardController.signal),
+        12000,
+        () => dashboardController.abort(),
+      ));
+      if (isCurrentRequest() && previous) setPrevData(previous);
+    } catch {
+      // Los KPIs actuales no dependen de esta consulta secundaria.
+    }
+  }, [period, dateFrom, dateTo, user?.enabledModules]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -144,7 +197,10 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     window.addEventListener('focus', onFocus);
     return () => {
       mountedRef.current = false;
+      requestIdRef.current++;
+      dashboardControllerRef.current?.abort();
       clearTimeout(focusTimer);
+      if (setupPollTimerRef.current) clearTimeout(setupPollTimerRef.current);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onFocus);
     };
@@ -157,7 +213,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         if (!mountedRef.current) return;
         pollCountRef.current++;
         const delay = Math.min(4000 * Math.pow(1.5, pollCountRef.current), 30000);
-        setTimeout(() => {
+        setupPollTimerRef.current = setTimeout(() => {
           if (!mountedRef.current) return;
           loadDataRef.current?.();
           fn();
@@ -165,6 +221,12 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       };
       fn();
     }
+    return () => {
+      if (setupPollTimerRef.current) {
+        clearTimeout(setupPollTimerRef.current);
+        setupPollTimerRef.current = null;
+      }
+    };
   }, [setupSummary?.isComplete, skipSetup]);
 
   const handleExport = async () => {
@@ -444,7 +506,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         </div>
       </div>
 
-      {loading ? (
+      {loading && !cajaData ? (
         <div className="space-y-4 py-8">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (

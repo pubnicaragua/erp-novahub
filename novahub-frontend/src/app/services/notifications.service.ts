@@ -26,8 +26,8 @@ const mapInboxNotification = (item: InboxNotificationDto): Notification => ({
 });
 
 export const notificationsService = {
-  getAll: async () => {
-    const data = await api.get<InboxNotificationDto[]>('/notifications/inbox');
+  getAll: async (signal?: AbortSignal) => {
+    const data = await api.get<InboxNotificationDto[]>('/notifications/inbox', { signal });
     return data.map(mapInboxNotification);
   },
   markAsRead: (id: string) => api.patch<{ success: boolean }>(`/notifications/inbox/${id}/read`, {}),

@@ -26,7 +26,7 @@ export function SalesLinePriceListSelect({ productId, productCode, productName, 
   const { user } = useAuth();
   const query = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', user?.tenantId || 'anonymous'],
-    queryFn: priceListsService.getMatrix,
+    queryFn: ({ signal }) => priceListsService.getMatrix(signal),
     enabled: Boolean(user?.tenantId),
     staleTime: 60_000,
   });

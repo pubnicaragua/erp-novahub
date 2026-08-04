@@ -30,19 +30,19 @@ export interface TenantUser {
 }
 
 export const tenantsService = {
-  getAll: () => api.get<any[]>('/tenants'),
-  getOne: (id: string) => api.get<any>(`/tenants/${id}`),
+  getAll: (filters?: Record<string, any>, signal?: AbortSignal) => api.get<any[]>('/tenants', { params: filters, signal }),
+  getOne: (id: string, signal?: AbortSignal) => api.get<any>(`/tenants/${id}`, { signal }),
   create: (data: CreateTenantDto) => api.post<any>('/tenants', data),
   update: (id: string, data: any) => api.patch<any>(`/tenants/${id}`, data),
   delete: (id: string) => api.delete(`/tenants/${id}`),
   
   // User management within a tenant
-  getUsers: async (tenantId: string) => {
+  getUsers: async (tenantId: string, signal?: AbortSignal) => {
     try {
-      return await api.get<TenantUser[]>(`/tenants/${tenantId}/users`);
+      return await api.get<TenantUser[]>(`/tenants/${tenantId}/users`, { signal });
     } catch (primaryError) {
       try {
-        return await api.get<TenantUser[]>('/tenant/users', { tenantId });
+        return await api.get<TenantUser[]>('/tenant/users', { params: { tenantId }, signal });
       } catch {
         throw primaryError;
       }

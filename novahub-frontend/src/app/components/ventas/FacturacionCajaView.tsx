@@ -30,8 +30,6 @@ import {
   type CashRegisterAvailability,
   type PotentialDuplicateSale,
 } from '../../services/caja.service';
-import { accountsService } from '../../services/finanzas.service';
-import type { Account } from '../../types';
 import { QuickAddCustomerModal } from './QuickAddCustomerModal';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { brandingService } from '../../services/branding.service';
@@ -321,7 +319,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const [showPayment, setShowPayment] = useState(false);
   const [paymentCurrency, setPaymentCurrency] = useState<PaymentCurrency>('NIO');
   const [activeSession, setActiveSession] = useState<CashRegisterSession | null>(null);
-  const [bankAccounts, setBankAccounts] = useState<Account[]>([]);
   const [payments, setPayments] = useState<PosPaymentLine[]>([{ method: 'CASH', amount: 0 }]);
   const [createdInvoice, setCreatedInvoice] = useState<PosInvoice | null>(null);
   const [createdTicketCart, setCreatedTicketCart] = useState<CartItem[]>([]);
@@ -462,10 +459,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     brandingService.getCurrent().then((branding) => {
       if (branding?.companyName?.trim()) setCompanyName(branding.companyName.trim());
     }).catch(() => undefined);
-    accountsService.getAll({ page: 1, pageSize: 100 }).then((response: any) => {
-      const items = response?.data ?? response?.items ?? response;
-      setBankAccounts(Array.isArray(items) ? items.filter((account: Account) => account.isActive && String(account.type || '').toUpperCase() === 'ASSET') : []);
-    }).catch(() => setBankAccounts([]));
   }, [loadInitialData]);
 
   useEffect(() => {
@@ -685,6 +678,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       toast.error(missingPriceMessage);
       return;
     }
+    if (!selectedRegister?.accountId) {
+      toast.error('Configura la cuenta contable de la caja antes de cobrar');
+      return;
+    }
     setPayments([{ method: 'CASH', amount: 0 }]);
     setPaymentCurrency('NIO');
     setCreatedInvoice(null);
@@ -705,10 +702,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     const received = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     if (received + 0.005 < totalInPaymentCurrency) {
       toast.error('El monto recibido debe ser igual o mayor al total');
-      return;
-    }
-    if (payments.some((payment) => !payment.accountId)) {
-      toast.error('Cada método de pago requiere una cuenta contable');
       return;
     }
     if (payments.some((payment) => payment.method === 'TRANSFER' && !payment.reference?.trim())) {
@@ -1478,15 +1471,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                           <Button variant="ghost" disabled={payments.length === 1} onClick={() => setPayments(current => current.filter((_, itemIndex) => itemIndex !== index))}>✕</Button>
                         </div>
                         {payment.method === 'CARD' && <Input className="mt-2" placeholder="Voucher / referencia (opcional)" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          <Select value={payment.accountId || ''} onValueChange={(value) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, accountId: value } : item))}>
-                            <SelectTrigger><SelectValue placeholder="Cuenta contable del cobro *" /></SelectTrigger>
-                            <SelectContent>{bankAccounts.map(account => <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>)}</SelectContent>
-                          </Select>
-                          {payment.method === 'TRANSFER' && (
-                            <Input placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
-                          )}
-                        </div>
+                        {payment.method === 'TRANSFER' && (
+                          <Input className="mt-2" placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
+                        )}
                       </div>
                     ))}
                   </div>

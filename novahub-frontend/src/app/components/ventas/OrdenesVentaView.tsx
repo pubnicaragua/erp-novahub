@@ -944,6 +944,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           fitContent
           columns={columns}
           onRowUpdate={handleUpdate}
+          onRowClick={(row) => setEditingId(row.id)}
           isLoading={loading}
           actions={(row) => (
             <div className="flex min-w-max items-center justify-end gap-2 pr-1">
@@ -956,13 +957,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     disabled={invoicingOrderId === row.id}
                     variant="ghost" 
                     size="icon" 
-                    className="size-8 shrink-0 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
+                    className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors"
                   >
-                    <ArrowRightCircle className={cn('size-4', invoicingOrderId === row.id && 'animate-pulse')} />
+                    <ArrowRightCircle className={cn('size-4 text-muted-foreground', invoicingOrderId === row.id && 'animate-pulse')} />
                   </Button>
                 )}
-                <Button type="button" title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-                <Button type="button" title="Exportar PDF" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch (e: any) { console.error(e) } }}><FileDown className="size-4" /></Button>
+                <Button type="button" title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4 text-muted-foreground" /></Button>
+                <Button type="button" title="Exportar PDF" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch (e: any) { console.error(e) } }}><FileDown className="size-4 text-muted-foreground" /></Button>
                 {canPerform('SALES_ORDERS', 'delete') &&
                   !['CANCELLED', 'DELIVERED'].includes(String(row.status || '').toUpperCase()) &&
                   !row.invoiceId && !row.invoiceNumber && (
@@ -972,7 +973,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     aria-label="Cancelar orden"
                     variant="ghost"
                     size="icon"
-                    className="size-8 shrink-0 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                    className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors"
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
                       event.preventDefault();
@@ -980,7 +981,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       setPendingCancelId(row.id);
                     }}
                   >
-                    <Ban className="size-4" />
+                  <Ban className="size-4 text-muted-foreground" />
                   </Button>
                 )}
              </div>

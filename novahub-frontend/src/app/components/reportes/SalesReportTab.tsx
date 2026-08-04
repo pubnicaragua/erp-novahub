@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, ComposedChart, BarChart, LineChart, Line, Bar, ReferenceLine, LabelList } from 'recharts';
 import { invoicesService, paymentsService, salesReturnsService, creditNotesService } from '../../services/ventas.service';
@@ -12,6 +12,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, PieChart as PieChartIcon, Users, Eye, Clock, DollarSign, Percent, Target, CalendarDays, AlertTriangle, Package, CreditCard, Receipt, Info } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
@@ -187,11 +188,18 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
 
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
-  const [returns, setReturns] = useState<any[]>([]);
-  const [creditNotes, setCreditNotes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'sales'], async (signal) => {
+    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const [invRes, payRes, retRes, cnRes] = await Promise.all([
+      invoicesService.getAll(filters, signal), paymentsService.getAll(filters, signal),
+      salesReturnsService.getAll(filters, signal), creditNotesService.getAll(filters, signal),
+    ]);
+    return { invoices: asList(invRes), payments: asList(payRes), returns: asList(retRes), creditNotes: asList(cnRes) };
+  }, { onError: (e) => toast.error(e.message || 'Error cargando ventas') });
+  const invoices = reportData?.invoices || [];
+  const payments = reportData?.payments || [];
+  const returns = reportData?.returns || [];
+  const creditNotes = reportData?.creditNotes || [];
   const [modal, setModal] = useState<ModalState>(null);
   const [evolutionTab, setEvolutionTab] = useState<'acumulada' | 'aging'>('acumulada');
   const [productMetric, setProductMetric] = useState<'revenue' | 'qty' | 'profit'>('revenue');
@@ -208,29 +216,6 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     if (abs >= 1_000) return `${currencySymbol}${(converted / 1_000).toLocaleString('es-NI', { maximumFractionDigits: 1 })} mil`;
     return `${currencySymbol}${converted.toLocaleString('es-NI', { maximumFractionDigits: 0 })}`;
   };
-
-  useEffect(() => {
-    const fetch = async () => {
-      setLoading(true);
-      try {
-        const [invRes, payRes, retRes, cnRes] = await Promise.all([
-          invoicesService.getAll().catch(() => ({ data: [] })),
-          paymentsService.getAll().catch(() => ({ data: [] })),
-          salesReturnsService.getAll().catch(() => ({ data: [] })),
-          creditNotesService.getAll().catch(() => ({ data: [] }))
-        ]);
-        setInvoices(Array.isArray(invRes) ? invRes : (invRes as any)?.data || []);
-        setPayments(Array.isArray(payRes) ? payRes : (payRes as any)?.data || []);
-        setReturns(Array.isArray(retRes) ? retRes : (retRes as any)?.data || []);
-        setCreditNotes(Array.isArray(cnRes) ? cnRes : (cnRes as any)?.data || []);
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || "Error cargando ventas");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
-  }, []);
 
   const { start: currentStart, prevStart, prevEnd, durationDays } = useMemo(() => getRangeDates(dateRange), [dateRange]);
 

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { hrService } from '../../services/hr.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { useQuery } from '@tanstack/react-query';
 
 interface PayrollConfigData {
   id?: string;
@@ -53,7 +54,6 @@ const DEFAULT_CONFIG: PayrollConfigData = {
 
 export function ConfigNominaView() {
   const { canPerform } = useAuth();
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<PayrollConfigData>(DEFAULT_CONFIG);
   const [hasExisting, setHasExisting] = useState(false);
@@ -61,13 +61,19 @@ export function ConfigNominaView() {
   // Simulation calculator state
   const [simSalaryBruto, setSimSalaryBruto] = useState<number>(13000);
 
-  useEffect(() => { fetchConfig(); }, []);
+  const configQuery = useQuery({
+    queryKey: ['hr', 'payroll-config', 'active'],
+    queryFn: ({ signal }) => hrService.getActivePayrollConfig(signal) as any,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const loading = configQuery.isLoading;
 
-  const fetchConfig = async () => {
-    try {
-      setLoading(true);
-      const res = await hrService.getActivePayrollConfig() as any;
-      if (res && res.id) {
+  useEffect(() => {
+    const res = configQuery.data as any;
+    if (res && res.id) {
         setConfig({
           id: res.id,
           name: res.name || 'Configuración Default',
@@ -86,13 +92,8 @@ export function ConfigNominaView() {
           isActive: res.isActive ?? true,
         });
         setHasExisting(true);
-      }
-    } catch (error) {
-      console.error('Error fetching payroll config:', error);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [configQuery.data]);
 
   const handleSave = async () => {
     try {

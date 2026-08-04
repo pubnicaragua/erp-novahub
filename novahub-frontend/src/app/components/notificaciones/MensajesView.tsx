@@ -14,6 +14,7 @@ import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { ChatMessage, Message, MessageParticipant } from '../../types';
 import { messagesService } from '../../services/notificaciones.service';
+import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import {
@@ -79,8 +80,6 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
-  const [recipients, setRecipients] = useState<MessageParticipant[]>([]);
-  const [recipientsLoading, setRecipientsLoading] = useState(false);
   const [recipientId, setRecipientId] = useState('');
   const [subject, setSubject] = useState('');
   const [content, setContent] = useState('');
@@ -90,6 +89,19 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
   const [replyError, setReplyError] = useState('');
   const [replying, setReplying] = useState(false);
   const [markingReadId, setMarkingReadId] = useState<string | null>(null);
+  const recipientsQuery = useTenantQuery<MessageParticipant[]>(
+    ['notifications', 'recipients'],
+    signal => messagesService.getRecipients(signal),
+    { enabled: composeOpen },
+  );
+  const recipients = asList(recipientsQuery.data) as MessageParticipant[];
+  const recipientsLoading = recipientsQuery.isLoading || recipientsQuery.isFetching;
+
+  useEffect(() => {
+    if (composeOpen && recipientsQuery.isError) {
+      setComposeError('No pudimos cargar las personas de tu empresa.');
+    }
+  }, [composeOpen, recipientsQuery.isError]);
 
   useEffect(() => {
     if (selectedId && !data.some((thread) => thread.id === selectedId)) {
@@ -165,15 +177,6 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
   const openComposer = async () => {
     setComposeOpen(true);
     setComposeError('');
-    if (recipients.length > 0) return;
-    setRecipientsLoading(true);
-    try {
-      setRecipients(await messagesService.getRecipients());
-    } catch {
-      setComposeError('No pudimos cargar las personas de tu empresa.');
-    } finally {
-      setRecipientsLoading(false);
-    }
   };
 
   const resetComposer = () => {

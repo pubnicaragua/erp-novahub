@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Landmark, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { useCurrency } from '../../contexts/CurrencyContext'
-import { contabilidadService } from '../../services/contabilidad.service'
+import { accountsService } from '../../services/finanzas.service'
 import { invoicesService } from '../../services/ventas.service'
 import { supplierInvoicesService, paymentsMadeService } from '../../services/compras.service'
 import { toast } from 'sonner'
+import { useAuth } from '../../contexts/AuthContext'
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, ComposedChart, Cell, Legend,
 } from 'recharts'
@@ -16,6 +17,8 @@ const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316'
 
 export function FinanceCashView() {
   const { displayCurrency } = useCurrency()
+  const { user } = useAuth()
+  const tenantKey = user?.clientTenantId || user?.tenantId || 'current'
   const sym = displayCurrency === 'USD' ? '$' : 'C$'
   const fmt = (n: number) => sym + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const fmtShort = (n: number) => {
@@ -24,30 +27,16 @@ export function FinanceCashView() {
     return sym + n.toLocaleString(undefined, { minimumFractionDigits: 0 })
   }
 
-  const [bankAccounts, setBankAccounts] = useState<any[]>([])
-  const [salesInvoices, setSalesInvoices] = useState<any[]>([])
-  const [supplierInvoices, setSupplierInvoices] = useState<any[]>([])
-  const [paymentsMade, setPaymentsMade] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    Promise.all([
-      contabilidadService.getChartOfAccounts(),
-      invoicesService.getAll(),
-      supplierInvoicesService.getAll(),
-      paymentsMadeService.getAll(),
-    ]).then(([accRes, invRes, suppRes, payRes]: any[]) => {
-      const all = accRes?.data || accRes || []
-      setBankAccounts(all.filter((a: any) =>
-        ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) ||
-        String(a.name || '').toUpperCase().includes('CAJA') ||
-        String(a.name || '').toUpperCase().includes('BANCO')
-      ))
-      setSalesInvoices(invRes?.data || invRes || [])
-      setSupplierInvoices(suppRes?.data || suppRes || [])
-      setPaymentsMade(payRes?.data || payRes || [])
-    }).catch(() => {}).finally(() => setLoading(false))
-  }, [])
+  const toList = (response: any) => Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : [])
+  const accountsQuery = useQuery({ queryKey: ['finance', 'accounts', tenantKey], queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal), staleTime: 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const salesInvoicesQuery = useQuery({ queryKey: ['finance', 'sales-invoices', tenantKey], queryFn: ({ signal }) => invoicesService.getAll({ page: 1, pageSize: 200 }, signal), staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const supplierInvoicesQuery = useQuery({ queryKey: ['finance', 'supplier-invoices', tenantKey], queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal), staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const paymentsQuery = useQuery({ queryKey: ['finance', 'payments-made', tenantKey], queryFn: ({ signal }) => paymentsMadeService.getAll({ page: 1, pageSize: 200 }, signal), staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const bankAccounts = toList(accountsQuery.data).filter((a: any) => ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) || String(a.name || '').toUpperCase().includes('CAJA') || String(a.name || '').toUpperCase().includes('BANCO'))
+  const salesInvoices = toList(salesInvoicesQuery.data)
+  const supplierInvoices = toList(supplierInvoicesQuery.data)
+  const paymentsMade = toList(paymentsQuery.data)
+  const loading = [accountsQuery, salesInvoicesQuery, supplierInvoicesQuery, paymentsQuery].some(query => query.isLoading)
 
   const totalBalance = bankAccounts.reduce((a, acc: any) => a + Number(acc.balance || 0), 0)
   const cashAccounts = bankAccounts.filter((a: any) => String(a.subtype || '').toUpperCase() === 'CASH')

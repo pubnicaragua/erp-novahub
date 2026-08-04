@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -10,6 +10,7 @@ import { RefreshCw, Filter, X, TrendingUp, TrendingDown } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 interface PnLAccount {
   accountId: string;
@@ -32,21 +33,15 @@ export function EstadoResultadosView() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [showPreviousYear, setShowPreviousYear] = useState(false);
-  const [data, setData] = useState<PnLData | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    if (!dateFrom || !dateTo) {
-      toast.error('Seleccione el rango de fechas');
-      return;
-    }
-    try {
-      setLoading(true);
+  const query = useAccountingQuery<PnLData | null>(
+    ['profit-loss', dateFrom, dateTo, showPreviousYear],
+    async (signal) => {
+      if (!dateFrom || !dateTo) return null;
       const raw: any = await contabilidadService.getProfitLoss({
         dateFrom,
         dateTo,
         previousYear: showPreviousYear,
-      });
+      }, signal);
       const curr = raw?.current || raw || {};
       const prev = raw?.previous || null;
       const mapAccounts = (list: any[]): PnLAccount[] => (list || []).map((a: any) => ({
@@ -70,17 +65,15 @@ export function EstadoResultadosView() {
         result.ingresos = result.ingresos.map(a => ({ ...a, previousAmount: prevIngMap.get(a.codigo) as number | undefined }));
         result.gastos = result.gastos.map(a => ({ ...a, previousAmount: prevGasMap.get(a.codigo) as number | undefined }));
       }
-      setData(result);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar estado de resultados');
-    } finally {
-      setLoading(false);
-    }
-  }, [dateFrom, dateTo, showPreviousYear]);
-
+      return result;
+    },
+    { enabled: Boolean(dateFrom && dateTo) },
+  );
+  const data = query.data;
+  const loading = query.isLoading || query.isFetching;
   useEffect(() => {
-    if (dateFrom && dateTo) fetchData();
-  }, [fetchData]);
+    if (query.error) toast.error(query.error.message || 'Error al cargar estado de resultados');
+  }, [query.error]);
 
   const netIncome = (data?.totalIngresos || 0) - (data?.totalGastos || 0);
   const netIncomePrev = (data?.totalIngresosPrev || 0) - (data?.totalGastosPrev || 0);
@@ -182,7 +175,7 @@ export function EstadoResultadosView() {
           )}
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20">
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="h-9">
+          <Button variant="outline" size="sm" onClick={() => query.refetch()} disabled={loading || !dateFrom || !dateTo} className="h-9">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
         </div>

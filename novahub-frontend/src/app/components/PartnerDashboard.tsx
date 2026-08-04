@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { 
   Users, Zap, TrendingUp, AlertCircle, 
@@ -12,33 +11,26 @@ import { tenantsService } from '../services/tenants.service';
 import { subscriptionsService } from '../services/subscriptions.service';
 import { type Module } from '../contexts/AuthContext';
 import { cn } from './ui/utils';
+import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 
 interface PartnerDashboardProps {
   onNavigate?: (module: Module) => void;
 }
 
 export function PartnerDashboard({ onNavigate }: PartnerDashboardProps) {
-  const [tenants, setTenants] = useState<any[]>([]);
-  const [requests, setRequests] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [tList, rList] = await Promise.all([
-          tenantsService.getAll(),
-          subscriptionsService.getAllRequests()
-        ]);
-        setTenants(tList);
-        setRequests(rList);
-      } catch (error) {
-        console.error('Error loading partner data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, []);
+  const { data: partnerData, isLoading: loading } = useTenantQuery(
+    ['partner-dashboard'],
+    async (signal) => {
+      const [tList, rList] = await Promise.all([
+        tenantsService.getAll(undefined, signal),
+        subscriptionsService.getAllRequests(undefined, signal),
+      ]);
+      return { tenants: asList(tList), requests: asList(rList) };
+    },
+    { onError: (error) => console.error('Error loading partner data:', error) },
+  );
+  const tenants = partnerData?.tenants || [];
+  const requests = partnerData?.requests || [];
 
   const stats = [
     { title: 'Clientes Activos', value: tenants.length, icon: Building2, color: 'text-blue-500', bgColor: 'bg-blue-500/10' },

@@ -48,14 +48,14 @@ export function SucursalesView({
   const [savingUsers, setSavingUsers] = useState(false);
   const autoOpenHandledRef = useRef(false);
 
-  const fetchBranches = async () => {
+  const fetchBranches = async (signal?: AbortSignal) => {
     try {
       setLoading(true);
-      const response: any = await api.get('/sucursales');
+      const response: any = await api.get('/sucursales', { signal });
       const branchesData = Array.isArray(response) ? response : (response?.data || []);
       setBranches(branchesData);
 
-      const cajasRes: any = await api.get('/caja/registers?all=true');
+      const cajasRes: any = await api.get('/caja/registers', { params: { all: 'true' }, signal });
       const cajasData = Array.isArray(cajasRes) ? cajasRes : (cajasRes?.data || []);
       setCajas(cajasData);
     } catch (e: any) {
@@ -104,7 +104,9 @@ export function SucursalesView({
   };
 
   useEffect(() => {
-    fetchBranches();
+    const controller = new AbortController();
+    void fetchBranches(controller.signal);
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {

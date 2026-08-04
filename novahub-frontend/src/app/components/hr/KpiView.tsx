@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { hrService } from '../../services/hr.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import type { KpiDefinition, KpiResult } from '../../types';
 
 interface KpiViewProps {
@@ -50,9 +51,7 @@ const defaultKpiResult = () => ({
 
 export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
   const { canPerform } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [definitions, setDefinitions] = useState<KpiDefinition[]>([]);
-  const [results, setResults] = useState<KpiResult[]>([]);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('definitions');
 
   const [showDefForm, setShowDefForm] = useState(false);
@@ -64,24 +63,25 @@ export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
   const [savingResult, setSavingResult] = useState(false);
   const [resultForm, setResultForm] = useState(defaultKpiResult());
 
-  useEffect(() => { fetchAll(); }, []);
-
-  const fetchAll = async () => {
-    try {
-      setLoading(true);
+  const kpiQuery = useQuery({
+    queryKey: ['hr', 'kpi-data'],
+    queryFn: async ({ signal }) => {
       const [defRes, resRes] = await Promise.all([
-        hrService.getKpiDefinitions() as any,
-        hrService.getKpiResults() as any,
+        hrService.getKpiDefinitions(undefined, signal) as any,
+        hrService.getKpiResults(undefined, undefined, signal) as any,
       ]);
-      setDefinitions(Array.isArray(defRes) ? defRes : defRes?.data || []);
-      setResults(Array.isArray(resRes) ? resRes : resRes?.data || []);
-    } catch (error) {
-      console.error('Error fetching KPI data:', error);
-      toast.error('Error al cargar datos de KPI');
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { definitions: Array.isArray(defRes) ? defRes : defRes?.data || [], results: Array.isArray(resRes) ? resRes : resRes?.data || [] };
+    },
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    placeholderData: keepPreviousData,
+  });
+  const loading = kpiQuery.isLoading;
+  const definitions = (kpiQuery.data?.definitions || []) as KpiDefinition[];
+  const results = (kpiQuery.data?.results || []) as KpiResult[];
+  const fetchAll = () => queryClient.invalidateQueries({ queryKey: ['hr', 'kpi-data'] });
 
   const resetDefForm = () => { setDefForm(defaultKpiDef()); setEditingDefId(null); setShowDefForm(false); };
   const openEditDef = (d: KpiDefinition) => {

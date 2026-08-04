@@ -34,21 +34,23 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
   const { user } = useAuth();
 
   useEffect(() => {
+    const controller = new AbortController();
     if (open && supplier) {
-      loadHistory();
+      loadHistory(controller.signal);
     } else {
       setItems([]);
     }
+    return () => controller.abort();
   }, [open, supplier]);
 
-  const loadHistory = async () => {
+  const loadHistory = async (signal?: AbortSignal) => {
     try {
       setLoading(true);
       const [ordersRes, invoicesRes, expensesRes, recurringRes] = await Promise.all([
-        purchaseOrdersService.getAll({ supplierId: supplier!.id } as any),
-        supplierInvoicesService.getAll({ supplierId: supplier!.id } as any),
-        expensesService.getAll({ supplierId: supplier!.id } as any),
-        recurringExpensesService.getAll({ supplierId: supplier!.id } as any),
+        purchaseOrdersService.getAll({ supplierId: supplier!.id, page: 1, pageSize: 200 } as any, signal),
+        supplierInvoicesService.getAll({ supplierId: supplier!.id, page: 1, pageSize: 200 } as any, signal),
+        expensesService.getAll({ supplierId: supplier!.id, page: 1, pageSize: 200 } as any, signal),
+        recurringExpensesService.getAll({ supplierId: supplier!.id, page: 1, pageSize: 200 } as any, signal),
       ]);
       
       const rawOrders = Array.isArray(ordersRes) ? ordersRes : ((ordersRes as any).data || []);
@@ -130,9 +132,10 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
       historyItems.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
       setItems(historyItems);
 
-      const priceRes = await supplierPricesService.getAll(supplier!.id);
+      const priceRes = await supplierPricesService.getAll(supplier!.id, signal);
       setPrices(Array.isArray(priceRes) ? priceRes : []);
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return;
       console.error('Error loading history:', error);
     } finally {
       setLoading(false);

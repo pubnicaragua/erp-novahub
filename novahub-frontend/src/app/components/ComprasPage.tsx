@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ShoppingCart, Truck, Wallet, CalendarClock,
   ClipboardList, PackageCheck, FileInput, RotateCcw,
@@ -9,7 +10,6 @@ import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { cn } from './ui/utils';
-import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranchScope } from '../hooks/useBranchScope';
@@ -21,11 +21,15 @@ import {
   paymentsMadeService, supplierCreditsService,
   purchaseRequestsService,
 } from '../services/compras.service';
+import { contabilidadService } from '../services/contabilidad.service';
+import { accountsService } from '../services/finanzas.service';
+import { inventoryService } from '../services/inventario.service';
 import type {
   Supplier, Expense, RecurringExpense, PurchaseOrder,
   PurchaseReceipt, SupplierInvoice, RecurringSupplierInvoice,
   PaymentMade, SupplierCredit, PurchaseRequest,
 } from '../types';
+import type { SalesPageSize, SalesPaginationControls } from '../types';
 
 import { ProveedoresView }         from './compras/ProveedoresView';
 import { GastosView }              from './compras/GastosView';
@@ -71,7 +75,7 @@ type ComprasData = {
 
 export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageProps) {
   const { user } = useAuth();
-  const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
+  const { filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const normalize = (s?: string) => {
     if (!s) return 'solicitudes';
     const map: Record<string, string> = {
@@ -94,12 +98,37 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const [activeSection, setActiveSection] = useState(normalize(activeSubModule));
   const [draftInvoiceFromOrder, setDraftInvoiceFromOrder] = useState<any>(null);
   const [draftPaymentFromInvoice, setDraftPaymentFromInvoice] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<ComprasData>({
-    proveedores: [], gastos: [], gastosRec: [], ordenes: [],
-    recepciones: [], facturasProv: [], facturasRec: [], pagos: [], creditos: [],
-    solicitudes: [],
-  });
+  const queryClient = useQueryClient();
+  const tenantKey = user?.tenantId || 'anonymous';
+  const purchasesStaleTime = 15_000;
+  const [searchState, setSearchState] = useState<Record<string, string>>({});
+  const [debouncedSearchState, setDebouncedSearchState] = useState<Record<string, string>>({});
+  const [statusState, setStatusState] = useState<Record<string, string>>({});
+  const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
+
+  const pageFor = (section: string) => paginationState[section] || { page: 1, pageSize: 50 as SalesPageSize };
+  const updatePage = (section: string, page: number) => setPaginationState((current) => ({
+    ...current,
+    [section]: { ...pageFor(section), page: Math.max(1, page) },
+  }));
+  const updatePageSize = (section: string, pageSize: SalesPageSize) => setPaginationState((current) => ({
+    ...current,
+    [section]: { page: 1, pageSize },
+  }));
+  const updateSearch = (section: string, value: string) => {
+    setSearchState((current) => ({ ...current, [section]: value }));
+    updatePage(section, 1);
+  };
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearchState(searchState), 350);
+    return () => window.clearTimeout(timer);
+  }, [searchState]);
+  const searchFor = (section: string) => debouncedSearchState[section]?.trim() || undefined;
+  const statusFor = (section: string) => statusState[section] && statusState[section] !== 'ALL' && statusState[section] !== 'all' ? statusState[section] : undefined;
+  const updateStatus = (section: string, value: string) => {
+    setStatusState((current) => ({ ...current, [section]: value }));
+    updatePage(section, 1);
+  };
 
   const handleConvertToInvoice = (draft: any) => {
     setDraftInvoiceFromOrder(draft);
@@ -115,8 +144,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
     if (activeSubModule) setActiveSection(normalize(activeSubModule));
   }, [activeSubModule]);
 
-  useEffect(() => { fetchData(); }, [activeSection]);
-
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       if (activeSection === 'solicitudes' && tabsRef.current) {
@@ -131,38 +158,207 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
 
   const toArr = (r: any) => Array.isArray(r) ? r : (r?.data || []);
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [sup, exp, expRec, ord, rec, inv, invRec, pay, cred, req] = await Promise.all([
-        suppliersService.getAll().catch(() => []),
-        expensesService.getAll().catch(() => []),
-        recurringExpensesService.getAll().catch(() => []),
-        purchaseOrdersService.getAll().catch(() => []),
-        purchaseReceiptsService.getAll().catch(() => []),
-        supplierInvoicesService.getAll().catch(() => []),
-        recurringSupplierInvoicesService.getAll().catch(() => []),
-        paymentsMadeService.getAll().catch(() => []),
-        supplierCreditsService.getAll().catch(() => []),
-        purchaseRequestsService.getAll().catch(() => []),
-      ]);
-      setData({
-        proveedores:   toArr(sup),
-        gastos:        toArr(exp),
-        gastosRec:     toArr(expRec),
-        ordenes:       toArr(ord),
-        recepciones:   toArr(rec),
-        facturasProv:  toArr(inv),
-        facturasRec:   toArr(invRec),
-        pagos:         toArr(pay),
-        creditos:      toArr(cred),
-        solicitudes:   toArr(req),
-      });
-    } catch (e: any) {
-      toast.error('Error al cargar módulo de Compras');
-    } finally {
-      setLoading(false);
-    }
+  // Cada pestaña consulta únicamente lo que necesita. React Query conserva las
+  // pestañas visitadas y cancela solicitudes obsoletas cuando se cambia rápido.
+  const suppliersPage = pageFor('proveedores');
+  const suppliersQuery = useQuery({
+    queryKey: ['purchases', 'suppliers', tenantKey, suppliersPage.page, suppliersPage.pageSize, searchFor('proveedores')],
+    queryFn: ({ signal }) => suppliersService.getAll({ page: suppliersPage.page, pageSize: suppliersPage.pageSize, search: searchFor('proveedores') }, signal),
+    enabled: activeSection === 'proveedores',
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const suppliersCatalogQuery = useQuery({
+    queryKey: ['purchases', 'suppliers-catalog', tenantKey, 1, 200],
+    queryFn: ({ signal }) => suppliersService.getAll({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal),
+    enabled: ['gastos', 'gastos-rec', 'ordenes', 'recepciones', 'facturas-prov', 'facturas-rec', 'pagos', 'creditos'].includes(activeSection),
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const supplierCatalog = useMemo(() => toArr(suppliersCatalogQuery.data) as Supplier[], [suppliersCatalogQuery.data]);
+  const chartAccountsQuery = useQuery({
+    queryKey: ['purchases', 'chart-accounts-catalog', tenantKey],
+    queryFn: ({ signal }) => contabilidadService.getChartOfAccounts(false, signal),
+    enabled: ['gastos', 'facturas-prov', 'recepciones'].includes(activeSection),
+    staleTime: 30_000,
+  });
+  const expenseCategoriesQuery = useQuery({
+    queryKey: ['purchases', 'expense-categories-catalog', tenantKey],
+    queryFn: ({ signal }) => contabilidadService.getExpenseCategories(undefined, signal),
+    enabled: activeSection === 'gastos',
+    staleTime: 30_000,
+  });
+  const accountCatalogQuery = useQuery({
+    queryKey: ['purchases', 'financial-accounts-catalog', tenantKey],
+    queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 200 }, signal),
+    enabled: activeSection === 'gastos-rec',
+    staleTime: 30_000,
+  });
+  const warehouseCatalogQuery = useQuery({
+    queryKey: ['purchases', 'warehouses-catalog', tenantKey],
+    queryFn: ({ signal }) => inventoryService.getWarehouses(signal),
+    enabled: ['solicitudes', 'recepciones'].includes(activeSection),
+    staleTime: 30_000,
+  });
+  const productCatalogQuery = useQuery({
+    queryKey: ['purchases', 'products-catalog', tenantKey, 1, 200],
+    queryFn: ({ signal }) => inventoryService.getProducts({ page: 1, pageSize: 200 }, signal),
+    enabled: activeSection === 'ordenes',
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+  const orderCatalogQuery = useQuery({
+    queryKey: ['purchases', 'orders-catalog', tenantKey, 1, 200],
+    queryFn: ({ signal }) => purchaseOrdersService.getAll({ page: 1, pageSize: 200 }, signal),
+    enabled: activeSection === 'recepciones',
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const receiptCatalogQuery = useQuery({
+    queryKey: ['purchases', 'receipts-catalog', tenantKey, 1, 200],
+    queryFn: ({ signal }) => purchaseReceiptsService.getAll({ page: 1, pageSize: 200 }, signal),
+    enabled: activeSection === 'facturas-prov',
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const chartAccountCatalog = useMemo(() => toArr(chartAccountsQuery.data) as any[], [chartAccountsQuery.data]);
+  const expenseCategoryCatalog = useMemo(() => toArr(expenseCategoriesQuery.data) as any[], [expenseCategoriesQuery.data]);
+  const accountCatalog = useMemo(() => toArr(accountCatalogQuery.data) as any[], [accountCatalogQuery.data]);
+  const warehouseCatalog = useMemo(() => toArr(warehouseCatalogQuery.data) as any[], [warehouseCatalogQuery.data]);
+  const productCatalog = useMemo(() => toArr(productCatalogQuery.data) as any[], [productCatalogQuery.data]);
+  const orderCatalog = useMemo(() => toArr(orderCatalogQuery.data) as any[], [orderCatalogQuery.data]);
+  const receiptCatalog = useMemo(() => toArr(receiptCatalogQuery.data) as any[], [receiptCatalogQuery.data]);
+  const expensesPage = pageFor('gastos');
+  const expensesQuery = useQuery({
+    queryKey: ['purchases', 'expenses', tenantKey, expensesPage.page, expensesPage.pageSize, searchFor('gastos')],
+    queryFn: ({ signal }) => expensesService.getAll({ page: expensesPage.page, pageSize: expensesPage.pageSize, search: searchFor('gastos') }, signal),
+    enabled: activeSection === 'gastos',
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const recurringExpensesPage = pageFor('gastos-rec');
+  const recurringExpensesQuery = useQuery({
+    queryKey: ['purchases', 'recurring-expenses', tenantKey, recurringExpensesPage.page, recurringExpensesPage.pageSize, searchFor('gastos-rec')],
+    queryFn: ({ signal }) => recurringExpensesService.getAll({ page: recurringExpensesPage.page, pageSize: recurringExpensesPage.pageSize, search: searchFor('gastos-rec') }, signal),
+    enabled: activeSection === 'gastos-rec',
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const ordersPage = pageFor('ordenes');
+  const ordersQuery = useQuery({
+    queryKey: ['purchases', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes'), statusFor('ordenes')],
+    queryFn: ({ signal }) => purchaseOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes'), status: statusFor('ordenes') }, signal),
+    enabled: activeSection === 'ordenes',
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const receiptsPage = pageFor('recepciones');
+  const receiptsQuery = useQuery({
+    queryKey: ['purchases', 'receipts', tenantKey, receiptsPage.page, receiptsPage.pageSize, searchFor('recepciones')],
+    queryFn: ({ signal }) => purchaseReceiptsService.getAll({ page: receiptsPage.page, pageSize: receiptsPage.pageSize, search: searchFor('recepciones') }, signal),
+    enabled: activeSection === 'recepciones',
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const invoicesPage = pageFor('facturas-prov');
+  const invoicesQuery = useQuery({
+    queryKey: ['purchases', 'invoices', tenantKey, invoicesPage.page, invoicesPage.pageSize, searchFor('facturas-prov'), statusFor('facturas-prov')],
+    queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: invoicesPage.page, pageSize: invoicesPage.pageSize, search: searchFor('facturas-prov'), status: statusFor('facturas-prov') }, signal),
+    enabled: activeSection === 'facturas-prov',
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const invoicesCatalogQuery = useQuery({
+    queryKey: ['purchases', 'invoices-catalog', tenantKey, 1, 200],
+    queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal),
+    enabled: ['ordenes', 'pagos'].includes(activeSection),
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const invoiceCatalog = useMemo(() => toArr(invoicesCatalogQuery.data) as SupplierInvoice[], [invoicesCatalogQuery.data]);
+  const recurringInvoicesPage = pageFor('facturas-rec');
+  const recurringInvoicesQuery = useQuery({
+    queryKey: ['purchases', 'recurring-invoices', tenantKey, recurringInvoicesPage.page, recurringInvoicesPage.pageSize, searchFor('facturas-rec')],
+    queryFn: ({ signal }) => recurringSupplierInvoicesService.getAll({ page: recurringInvoicesPage.page, pageSize: recurringInvoicesPage.pageSize, search: searchFor('facturas-rec') }, signal),
+    enabled: activeSection === 'facturas-rec',
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const paymentsPage = pageFor('pagos');
+  const paymentsQuery = useQuery({
+    queryKey: ['purchases', 'payments', tenantKey, paymentsPage.page, paymentsPage.pageSize, searchFor('pagos')],
+    queryFn: ({ signal }) => paymentsMadeService.getAll({ page: paymentsPage.page, pageSize: paymentsPage.pageSize, search: searchFor('pagos') }, signal),
+    enabled: activeSection === 'pagos',
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const creditsPage = pageFor('creditos');
+  const creditsQuery = useQuery({
+    queryKey: ['purchases', 'credits', tenantKey, creditsPage.page, creditsPage.pageSize, searchFor('creditos')],
+    queryFn: ({ signal }) => supplierCreditsService.getAll({ page: creditsPage.page, pageSize: creditsPage.pageSize, search: searchFor('creditos') }, signal),
+    enabled: activeSection === 'creditos',
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+  const requestsPage = pageFor('solicitudes');
+  const requestsQuery = useQuery({
+    queryKey: ['purchases', 'requests', tenantKey, requestsPage.page, requestsPage.pageSize, searchFor('solicitudes'), statusFor('solicitudes')],
+    queryFn: ({ signal }) => purchaseRequestsService.getAll({ page: requestsPage.page, pageSize: requestsPage.pageSize, search: searchFor('solicitudes'), status: statusFor('solicitudes') }, signal),
+    enabled: activeSection === 'solicitudes',
+    placeholderData: keepPreviousData,
+    staleTime: purchasesStaleTime,
+  });
+
+  const data: ComprasData = {
+    proveedores: toArr(activeSection === 'proveedores' ? suppliersQuery.data : suppliersCatalogQuery.data) as Supplier[],
+    gastos: toArr(expensesQuery.data) as Expense[],
+    gastosRec: toArr(recurringExpensesQuery.data) as RecurringExpense[],
+    ordenes: toArr(ordersQuery.data) as PurchaseOrder[],
+    recepciones: toArr(receiptsQuery.data) as PurchaseReceipt[],
+    facturasProv: toArr(invoicesQuery.data) as SupplierInvoice[],
+    facturasRec: toArr(recurringInvoicesQuery.data) as RecurringSupplierInvoice[],
+    pagos: toArr(paymentsQuery.data) as PaymentMade[],
+    creditos: toArr(creditsQuery.data) as SupplierCredit[],
+    solicitudes: toArr(requestsQuery.data) as PurchaseRequest[],
+  };
+  const activeQuery = activeSection === 'gastos' ? expensesQuery
+    : activeSection === 'gastos-rec' ? recurringExpensesQuery
+    : activeSection === 'ordenes' ? ordersQuery
+    : activeSection === 'recepciones' ? receiptsQuery
+    : activeSection === 'facturas-prov' ? invoicesQuery
+    : activeSection === 'facturas-rec' ? recurringInvoicesQuery
+    : activeSection === 'pagos' ? paymentsQuery
+    : activeSection === 'creditos' ? creditsQuery
+    : activeSection === 'solicitudes' ? requestsQuery
+    : suppliersQuery;
+  const needsCatalog = ['ordenes', 'pagos'].includes(activeSection);
+  const loading = activeQuery.isLoading || (needsCatalog && invoicesCatalogQuery.isLoading);
+  const fetchData = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['purchases'] });
+  }, [queryClient]);
+
+  const makePagination = (section: string, query: any): SalesPaginationControls => {
+    const state = pageFor(section);
+    const meta = query.data?.meta;
+    return {
+      ...state,
+      total: Number(meta?.total || 0),
+      totalPages: Number(meta?.totalPages || 1),
+      onPageChange: (page) => updatePage(section, page),
+      onPageSizeChange: (pageSize) => updatePageSize(section, pageSize),
+    };
+  };
+  const pagination = {
+    proveedores: makePagination('proveedores', suppliersQuery),
+    gastos: makePagination('gastos', expensesQuery),
+    gastosRec: makePagination('gastos-rec', recurringExpensesQuery),
+    ordenes: makePagination('ordenes', ordersQuery),
+    recepciones: makePagination('recepciones', receiptsQuery),
+    facturasProv: makePagination('facturas-prov', invoicesQuery),
+    facturasRec: makePagination('facturas-rec', recurringInvoicesQuery),
+    pagos: makePagination('pagos', paymentsQuery),
+    creditos: makePagination('creditos', creditsQuery),
+    solicitudes: makePagination('solicitudes', requestsQuery),
   };
 
   const filteredData = {
@@ -233,7 +429,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
           <AnimatePresence mode="wait">
             {COMPRAS_SECTIONS.map(section => {
                if (activeSection !== section.id) return null;
-               const commonProps = { loading, onRefresh: fetchData };
+               const commonProps = { loading, onRefresh: fetchData, isSidebarCollapsed };
                return (
                  <motion.div
                    className="min-w-0 max-w-full"
@@ -243,32 +439,41 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                    exit={{ opacity: 0, y: -10 }}
                    transition={{ duration: 0.2 }}
                  >
-                    {section.id === 'solicitudes'  && <SolicitudCompraView  {...commonProps} data={filteredData.solicitudes} />}
-                    {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={filteredData.proveedores} />}
-                    {section.id === 'gastos'        && <GastosView         {...commonProps} data={filteredData.gastos} />}
-                    {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} data={filteredData.gastosRec} />}
-                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} data={filteredData.ordenes} supplierInvoices={filteredData.facturasProv} onConvertToInvoice={handleConvertToInvoice} />}
-                     {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} data={filteredData.recepciones} onConvertToInvoice={handleConvertToInvoice} />}
+                    {section.id === 'solicitudes'  && <SolicitudCompraView  {...commonProps} warehouseCatalog={warehouseCatalog} data={filteredData.solicitudes} pagination={pagination.solicitudes} onSearchChange={(value) => updateSearch('solicitudes', value)} onStatusChange={(value) => updateStatus('solicitudes', value)} />}
+                    {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={filteredData.proveedores} pagination={pagination.proveedores} onSearchChange={(value) => updateSearch('proveedores', value)} />}
+                    {section.id === 'gastos'        && <GastosView         {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} />}
+                    {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={accountCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
+                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} supplierCatalog={supplierCatalog} productCatalog={productCatalog} data={filteredData.ordenes} supplierInvoices={invoiceCatalog} onConvertToInvoice={handleConvertToInvoice} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
+                     {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} data={filteredData.recepciones} onConvertToInvoice={handleConvertToInvoice} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
                    {section.id === 'facturas-prov' && (
                      <FacturasProveedorView
                        {...commonProps}
+                       supplierCatalog={supplierCatalog}
+                       accountCatalog={chartAccountCatalog}
+                       purchaseReceiptCatalog={receiptCatalog}
                        data={filteredData.facturasProv}
                        draftInvoiceFromOrder={draftInvoiceFromOrder}
                        onDraftConsumed={() => setDraftInvoiceFromOrder(null)}
                        onRegisterPaymentFromInvoice={handleRegisterPaymentFromInvoice}
+                       pagination={pagination.facturasProv}
+                       onSearchChange={(value) => updateSearch('facturas-prov', value)}
+                       onStatusChange={(value) => updateStatus('facturas-prov', value)}
                      />
                    )}
-                   {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} data={filteredData.facturasRec} />}
+                   {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.facturasRec} pagination={pagination.facturasRec} onSearchChange={(value) => updateSearch('facturas-rec', value)} />}
                    {section.id === 'pagos'         && (
                     <PagosRealizadosView
                       {...commonProps}
+                      supplierCatalog={supplierCatalog}
                       data={filteredData.pagos}
-                      supplierInvoices={filteredData.facturasProv}
+                      supplierInvoices={invoiceCatalog}
                       draftPaymentFromInvoice={draftPaymentFromInvoice}
                       onDraftConsumed={() => setDraftPaymentFromInvoice(null)}
+                      pagination={pagination.pagos}
+                      onSearchChange={(value) => updateSearch('pagos', value)}
                     />
-                   )}
-                   {section.id === 'creditos'      && <CreditosProveedorView {...commonProps} data={filteredData.creditos} />}
+                  )}
+                   {section.id === 'creditos'      && <CreditosProveedorView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.creditos} pagination={pagination.creditos} onSearchChange={(value) => updateSearch('creditos', value)} />}
                  </motion.div>
                );
             })}

@@ -10,9 +10,9 @@ import { Combobox } from '../ui/Combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Calendar } from '../ui/calendar';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { expensesService, suppliersService } from '../../services/compras.service';
-import { contabilidadService } from '../../services/contabilidad.service';
+import { expensesService } from '../../services/compras.service';
 import type { Expense, Supplier } from '../../types';
+import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -22,8 +22,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { storageService } from '../../services/storage.service';
 import { generateExpensePDF } from '../../utils/pdfGenerator';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
+import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 
-interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; }
+interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 type KpiFilter = { type: 'none' } | { type: 'pending' } | { type: 'category'; category: string };
 type DateFilterPreset = 'all' | 'last4' | 'last9' | 'month' | 'year' | 'specific';
 const paymentSourceOptions = ['EFECTIVO', 'BAC', 'LAFISE', 'ATLANTIDA', 'FICOHSA', 'BANPRO', 'BDF', 'AVANZ'] as const;
@@ -37,14 +39,11 @@ const statusOpts = [
   { label: 'Rechazado', value: 'REJECTED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function GastosView({ data, loading, onRefresh }: Props) {
+export function GastosView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
-
-  useEffect(() => {
-    contabilidadService.getExpenseCategories().then(setExpenseCategories).catch(() => {});
-  }, []);
+  useEffect(() => { setExpenseCategories(expenseCategoryCatalog); }, [expenseCategoryCatalog]);
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -64,24 +63,18 @@ export function GastosView({ data, loading, onRefresh }: Props) {
   const [localDoc, setLocalDoc] = useState<Partial<Expense> | null>(null);
 
   useEffect(() => {
-    suppliersService.getAll().then(res => {
-      const list = Array.isArray(res) ? res : (res as any).data || [];
-      setSuppliers(list);
-    }).catch();
-    contabilidadService.getChartOfAccounts(true).then(res => {
-      const tree = Array.isArray(res) ? res : (res as any)?.data || [];
-      const flatten = (items: any[]): any[] => {
-        const result: any[] = [];
-        for (const item of items) {
-          const { children, ...rest } = item;
-          result.push(rest);
-          if (Array.isArray(children) && children.length > 0) result.push(...flatten(children));
-        }
-        return result;
-      };
-      setAccounts(flatten(tree));
-    }).catch();
-  }, []);
+    setSuppliers(supplierCatalog);
+    const flatten = (items: any[]): any[] => {
+      const result: any[] = [];
+      for (const item of items) {
+        const { children, ...rest } = item;
+        result.push(rest);
+        if (Array.isArray(children) && children.length > 0) result.push(...flatten(children));
+      }
+      return result;
+    };
+    setAccounts(flatten(accountCatalog));
+  }, [supplierCatalog, accountCatalog]);
 
   useEffect(() => {
     if (editingId) {
@@ -704,14 +697,16 @@ export function GastosView({ data, loading, onRefresh }: Props) {
             (k.key === 'pending' && activeKpiFilter.type === 'pending') ||
             (k.key === 'category' && activeKpiFilter.type === 'category');
           return (
-          <Card
+          <PurchaseKpiCard
             key={i}
-            className={cn(
-              "bg-card border-border/50 rounded-2xl shadow-sm",
-              k.interactive ? "cursor-pointer hover:border-primary/50 transition-colors" : "",
-              isActive ? "ring-1 ring-primary border-primary/50" : "",
-            )}
-            onClick={() => {
+            title={k.title}
+            value={k.value}
+            icon={k.icon}
+            color={k.color}
+            bg={k.bg}
+            kind={k.interactive ? 'filter' : 'indicator'}
+            active={isActive}
+            onClick={k.interactive ? () => {
               if (!k.interactive) return;
               if (k.key === 'pending') {
                 setActiveKpiFilter(prev => prev.type === 'pending' ? { type: 'none' } : { type: 'pending' });
@@ -725,19 +720,15 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   prev.type === 'category' ? { type: 'none' } : { type: 'category', category: fallbackCategory },
                 );
               }
-            }}
-          >
-            <CardContent className="p-5"><div className="flex items-center gap-4">
-              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
-            </div></CardContent>
-          </Card>
+            } : undefined}
+          />
         )})}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Gastos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Egresos operativos y administrativos</p></div>
-          <div className="flex items-center gap-3">
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Egresos operativos y administrativos</p></div>
+          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
+            <PurchaseViewTutorial view="expenses" />
         <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/60 p-1">
           <Button variant={datePreset === 'month' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('month')}>Último mes</Button>
           <Button variant={datePreset === 'year' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('year')}>Último año</Button>
@@ -797,7 +788,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                 Limpiar filtro
               </Button>
             )}
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_EXPENSES', 'create') && (
               <Button
                 variant="outline"
@@ -812,7 +803,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
           onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {

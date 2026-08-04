@@ -246,7 +246,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
                 <span className="font-black">Total Nota de Crédito</span>
                 <span className="text-rose-500 font-black text-lg">{formatConvertedAmount(Number(localDoc?.total||0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
               </div>
-              <p className="text-[10px] text-muted-foreground italic">Al emitir esta nota, el balance del cliente se reducirá por el monto total.</p>
+              <p className="text-[10px] text-muted-foreground italic">Al emitir esta nota, el ajuste se aplicará a la factura relacionada según el flujo de devoluciones y crédito.</p>
             </CardContent>
           </Card>
         </div>
@@ -318,7 +318,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
         <EditableDataTable data={filtered}
           pagination={pagination}
           onBulkDelete={async (ids) => { try { for (const id of ids) { await creditNotesService.delete(id as string); } toast.success('Eliminadas'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error'); } }}
-          columns={columns} onRowUpdate={async () => {}} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
+          columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setEditingId(row.id)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           actions={(row) => (
             <div className="flex items-center gap-1">
                {canPerform('SALES_CREDIT_NOTES', 'edit') && (row.status||'').toUpperCase() === 'DRAFT' && (

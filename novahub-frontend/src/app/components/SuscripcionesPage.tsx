@@ -78,6 +78,7 @@ import { storageService } from '../services/storage.service';
 import { authService } from '../services/auth.service';
 import { TenantSubscriptionView } from './suscripciones/TenantSubscriptionView';
 import { getPasswordError, isValidEmail, normalizeEmail } from '../utils/accountValidation';
+import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 
 const AVAILABLE_MODULES = [
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes', submodules: SALES_SUBMODULES },
@@ -193,42 +194,52 @@ export function SuscripcionesPage() {
     return () => window.clearTimeout(timer);
   }, [tenantForm.adminEmail, selectedTenant]);
 
-  useEffect(() => {
-    if (user && (user.isPlatformAdmin || user.isTenantAdmin)) {
-      fetchData();
-      // Actualización automática cada 5 segundos SOLO para platform admins
+  const { data: subscriptionData, isLoading: subscriptionLoading, refetch: refetchSubscriptions } = useTenantQuery(
+    ['my-company', user?.tenantId || 'platform', user?.role || 'unknown'],
+    async (signal) => {
+      if (!user?.isPlatformAdmin && !user?.isTenantAdmin) return { requests: [], tenants: [], customRoles: [] };
       if (user.isPlatformAdmin) {
-        const interval = setInterval(() => {
-          fetchData();
-        }, 5000);
-        return () => clearInterval(interval);
+        const [reqs, allTenants, rolesRes] = await Promise.all([
+          user.role === 'partner' ? subscriptionsService.getPartnerRequests(undefined, signal) : subscriptionsService.getAllRequests(undefined, signal),
+          tenantsService.getAll(undefined, signal),
+          rolesService.getAll(undefined, signal),
+        ]);
+        return { requests: asList(reqs), tenants: asList(allTenants), customRoles: asList(rolesRes) };
       }
-    }
-  }, [user]);
+      const [reqs, myTenants, rolesRes] = await Promise.all([
+        subscriptionsService.getAllRequests({ clientTenantId: user.tenantId } as any, signal),
+        tenantsService.getAll(undefined, signal),
+        rolesService.getAll({ clientTenantId: user.tenantId }, signal),
+      ]);
+      return {
+        requests: asList(reqs).filter((request: any) => request.clientTenantId === user.tenantId),
+        tenants: asList(myTenants).filter((tenant: any) => tenant.id === user.tenantId),
+        customRoles: asList(rolesRes),
+      };
+    },
+    {
+      enabled: Boolean(user && (user.isPlatformAdmin || user.isTenantAdmin)),
+      refetchInterval: user?.isPlatformAdmin ? 5000 : false,
+      onError: (error) => toast.error(error.message || 'Error al cargar datos de Mi Empresa'),
+    },
+  );
+
+  useEffect(() => {
+    setLoading(subscriptionLoading);
+    if (!subscriptionData) return;
+    setRequests(subscriptionData.requests as SubscriptionRequest[]);
+    setTenants(subscriptionData.tenants);
+    setCustomRoles(subscriptionData.customRoles);
+  }, [subscriptionData, subscriptionLoading]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      if (user?.isPlatformAdmin) {
-        const [reqs, allTenants, rolesRes] = await Promise.all([
-          user.role === 'partner' ? subscriptionsService.getPartnerRequests() : subscriptionsService.getAllRequests(),
-          tenantsService.getAll(),
-          rolesService.getAll()
-        ]);
-        setRequests(reqs);
-        setTenants(allTenants);
-        setCustomRoles(Array.isArray((rolesRes as any)?.data) ? (rolesRes as any).data : []);
-      } else if (user?.isTenantAdmin) {
-        const [reqs, myTenants, rolesRes] = await Promise.all([
-          subscriptionsService.getAllRequests({ clientTenantId: user.tenantId } as any),
-          tenantsService.getAll(),
-          rolesService.getAll({ clientTenantId: user.tenantId })
-        ]);
-        const filteredRequests = (Array.isArray(reqs) ? reqs : []).filter((r: any) => r.clientTenantId === user.tenantId);
-        const filteredTenants = (Array.isArray(myTenants) ? myTenants : []).filter((t: any) => t.id === user.tenantId);
-        setRequests(filteredRequests);
-        setTenants(filteredTenants);
-        setCustomRoles(Array.isArray(rolesRes) ? rolesRes : (rolesRes as any)?.data || []);
+      const refreshed = await refetchSubscriptions();
+      if (refreshed.data) {
+        setRequests(refreshed.data.requests as SubscriptionRequest[]);
+        setTenants(refreshed.data.tenants);
+        setCustomRoles(refreshed.data.customRoles);
       }
     } catch (error) {
       console.error('Error fetching subscription data:', error);

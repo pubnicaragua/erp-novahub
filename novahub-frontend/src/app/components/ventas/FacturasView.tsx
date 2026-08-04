@@ -463,6 +463,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount };
   };
 
+  const getInvoiceBalance = (invoice: Partial<Invoice>) => {
+    const status = String(invoice.status || '').toUpperCase();
+    if (status === 'DRAFT' || status === 'CANCELLED') return 0;
+    return Math.max(0, Number(invoice.balance ?? invoice.total ?? 0));
+  };
+
 
 
   const columns: ColumnDef<Invoice>[] = [
@@ -505,6 +511,19 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       )
     },
     {
+      key: 'balance',
+      header: 'Saldo deudor',
+      width: '150px',
+      render: (_val, row) => (
+        <span className={cn(
+          "text-[13px] font-black tabular-nums",
+          getInvoiceBalance(row) > 0 ? "text-orange-500" : "text-emerald-500"
+        )}>
+          {formatConvertedAmount(getInvoiceBalance(row), row.currency, row.exchangeRate)}
+        </span>
+      )
+    },
+    {
       key: 'status',
       header: 'Estado',
       width: '110px',
@@ -528,14 +547,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   );
   const accountsReceivableInDisplayCurrency = data
     .filter(invoice => ['PENDING', 'OVERDUE', 'PARTIAL'].includes((invoice.status || '').toUpperCase()))
-    .reduce((acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate), 0);
-  const paidInDisplayCurrency = data
-    .filter(invoice => (invoice.status || '').toUpperCase() === 'PAID')
-    .reduce((acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate), 0);
+    .reduce((acc, invoice) => acc + convertAmount(getInvoiceBalance(invoice), invoice.currency, invoice.exchangeRate), 0);
+  const paidInDisplayCurrency = data.reduce(
+    (acc, invoice) => acc + convertAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate),
+    0,
+  );
 
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
     const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED'].includes(String(localDoc?.status || '').toUpperCase());
+    const isCashRegisterInvoice = !isCreating && Boolean(localDoc?.registerId || localDoc?.sessionId);
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -675,7 +696,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     <p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc?.currency === 'NIO' ? '1.00' : Number(localDoc?.exchangeRate || globalRate || 1).toFixed(2)}</span></p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Forma de pago al emitir</p>
+                    <p className="text-[10px] text-muted-foreground mb-1">Forma sugerida para el cobro</p>
                      <select disabled={isInvoiceLocked} value={localDoc?.paymentMethod || 'CASH'} onChange={(event) => setLocalDoc({ ...localDoc, paymentMethod: event.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                       <option value="CASH">Efectivo</option>
                       <option value="CARD">Tarjeta</option>
@@ -689,10 +710,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       setLocalDoc({ ...localDoc, accountId });
                       if (!isCreating) void handleUpdate(localDoc!.id, { accountId });
                      }}
-                     label="Cuenta contable de la venta"
+                     label={isCashRegisterInvoice ? 'Cuenta contable de la caja' : 'Cuenta contable de la venta'}
                      required
-                     disabled={isInvoiceLocked}
+                     disabled={isInvoiceLocked || isCashRegisterInvoice}
                    />
+                   {isCashRegisterInvoice && <p className="mt-1 text-[10px] italic text-muted-foreground">Cuenta definida por la caja de facturación; no se puede cambiar.</p>}
               </div>
             </CardContent>
           </Card>
@@ -737,6 +759,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     {localDoc?.currency === 'NIO' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ $ {formatSalesAmount(Number(localDoc?.total || 0) / (localDoc?.exchangeRate || globalRate))}</p>}
                   </div>
                 </div>
+                {!isCreating && String(localDoc?.status || '').toUpperCase() !== 'DRAFT' && (
+                  <div className="flex justify-between items-center border-t border-border/40 pt-3">
+                    <span className="text-sm font-black text-orange-500">Saldo deudor</span>
+                    <span className="text-orange-500 font-black text-lg">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(getInvoiceBalance(localDoc))}</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1017,7 +1045,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         showHorizontalControls
         actionsWidth="w-52"
         fitContent
-        onRowUpdate={async (id, updates) => { await handleUpdate(id, updates); }}
+          onRowUpdate={async (id, updates) => { await handleUpdate(id, updates); }}
+          onRowClick={(row) => setEditingId(row.id)}
         onBulkDelete={async (ids) => {
             await Promise.all(ids.map(id => invoicesService.cancel(id.toString(), 'Anulación masiva')));
             toast.success(`${ids.length} Facturas anuladas`);
@@ -1027,7 +1056,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           bulkActions={() => null}
           actions={(row) => (
               <div className="flex min-w-max items-center justify-end gap-2 pr-1">
-                <Button type="button" title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="relative z-20 size-8 shrink-0 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => {
+                <Button type="button" title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="relative z-20 size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
                   void (async () => {
@@ -1038,18 +1067,18 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       toast.error(error?.message || 'No se pudo descargar el PDF');
                     }
                   })();
-                }}><FileDown className="size-4" /></Button>
-                <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4" /></Button>
+                }}><FileDown className="size-4 text-muted-foreground" /></Button>
+                <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4 text-muted-foreground" /></Button>
                 {canPerform('SALES_PAYMENTS', 'create') &&
                   !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
                   Number(row.balance ?? row.total ?? 0) > 0 && (
-                  <Button type="button" title="Pagar factura" variant="ghost" size="icon" disabled={payingInvoiceId === row.id} className="size-8 shrink-0 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" onClick={() => void handlePayInvoice(row)}>
-                    {payingInvoiceId === row.id ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                  <Button type="button" title="Pagar factura" variant="ghost" size="icon" disabled={payingInvoiceId === row.id} className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => void handlePayInvoice(row)}>
+                    {payingInvoiceId === row.id ? <Loader2 className="size-4 text-muted-foreground animate-spin" /> : <CheckCircle2 className="size-4 text-muted-foreground" />}
                   </Button>
                 )}
-                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4 text-muted-foreground" /></Button>
                 {canPerform('SALES_INVOICES', 'delete') && row.status !== 'CANCELLED' && (
-                  <Button title="Cancelar factura" aria-label="Cancelar factura" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>
+                  <Button title="Cancelar factura" aria-label="Cancelar factura" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4 text-muted-foreground" /></Button>
                 )}
               </div>
           )}

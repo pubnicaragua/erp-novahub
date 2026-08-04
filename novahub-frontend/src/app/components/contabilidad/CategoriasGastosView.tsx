@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Tag
 } from 'lucide-react';
@@ -17,6 +18,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 const ACCOUNT_TYPES = [
   { value: 'ASSET', label: 'Activo' },
@@ -27,9 +29,7 @@ const ACCOUNT_TYPES = [
 ];
 
 export function CategoriasGastosView() {
-  const [categories, setCategories] = useState<any[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -38,29 +38,17 @@ export function CategoriasGastosView() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({ code: '', name: '', description: '', accountId: '', isActive: true });
 
-  useEffect(() => { loadData(); }, [filterType]);
-
-  async function loadData() {
-    setLoading(true);
-    try {
-      const [cats, accts] = await Promise.all([
-        contabilidadService.getExpenseCategories(filterType || undefined),
-        contabilidadService.getChartOfAccounts(),
-      ]);
-      const flat: any[] = [];
-      function flatten(nodes: any[]) {
-        for (const n of nodes) {
-          flat.push(n);
-          if (n.children) flatten(n.children);
-        }
-      }
-      flatten(accts);
-      setCategories(cats);
-      setAccounts(flat);
-    } catch {
-      toast.error('Error al cargar categorías');
-    } finally { setLoading(false); }
-  }
+  const categoriesQuery = useAccountingQuery<any[]>(['expense-categories', filterType], async (signal) => accountingList(await contabilidadService.getExpenseCategories(filterType || undefined, signal)));
+  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
+  const categories = categoriesQuery.data || [];
+  const accounts = useMemo(() => {
+    const flat: any[] = [];
+    const flatten = (nodes: any[]) => nodes.forEach(n => { const { children, ...rest } = n; flat.push(rest); if (children) flatten(children); });
+    flatten(accountsQuery.data || []);
+    return flat;
+  }, [accountsQuery.data]);
+  const loading = categoriesQuery.isLoading || accountsQuery.isLoading;
+  const loadData = () => { categoriesQuery.refetch(); accountsQuery.refetch(); };
 
   function openCreate() {
     setEditing(null);
@@ -89,7 +77,7 @@ export function CategoriasGastosView() {
         toast.success('Categoría creada');
       }
       setDialogOpen(false);
-      loadData();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al guardar');
     } finally { setSaving(false); }
@@ -105,7 +93,7 @@ export function CategoriasGastosView() {
       await contabilidadService.deleteExpenseCategory(pendingDeleteId);
       toast.success('Categoría eliminada');
       setPendingDeleteId(null);
-      loadData();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al eliminar');
     }

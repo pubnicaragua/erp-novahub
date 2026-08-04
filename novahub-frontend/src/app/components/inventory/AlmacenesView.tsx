@@ -88,7 +88,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [cajasLoading, setCajasLoading] = useState(false);
   const [isCajaFormOpen, setIsCajaFormOpen] = useState(false);
   const [cajaForm, setCajaForm] = useState<Partial<CashRegister>>({});
-  const [pendingDeleteCajaId, setPendingDeleteCajaId] = useState<string | null>(null);
   const [sucursalesList, setSucursalesList] = useState<any[]>([]);
 
   const fetchSucursales = async () => {
@@ -150,9 +149,29 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   };
 
   React.useEffect(() => {
-    fetchCajas();
-    fetchSucursales();
-    contabilidadService.getChartOfAccounts().then(res => setAccounts(res.data || [])).catch(() => {});
+    const controller = new AbortController();
+    const loadCatalogs = async () => {
+      try {
+        setCajasLoading(true);
+        const [cajas, sucursales, chart] = await Promise.all([
+          cajaService.getRegisters(true, controller.signal),
+          api.get('/sucursales', { signal: controller.signal }),
+          contabilidadService.getChartOfAccounts(false, controller.signal),
+        ]);
+        setCajasList(Array.isArray(cajas) ? cajas : []);
+        const branches: any = sucursales;
+        setSucursalesList(Array.isArray(branches) ? branches : (branches?.data || []));
+        setAccounts((chart as any)?.data || chart || []);
+      } catch (error: any) {
+        if (error?.code !== 'ERR_CANCELED' && error?.name !== 'CanceledError') {
+          toast.error(getApiErrorMessage(error, 'Error al cargar catálogos de almacenes'));
+        }
+      } finally {
+        if (!controller.signal.aborted) setCajasLoading(false);
+      }
+    };
+    void loadCatalogs();
+    return () => controller.abort();
   }, []);
 
   const handleAddNewRow = () => {
@@ -541,26 +560,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         loading={deleteLoading}
         onConfirm={handleConfirmDeleteWarehouse}
       />
-      <ConfirmDialog
-        open={pendingDeleteCajaId !== null}
-        onOpenChange={(open) => !open && setPendingDeleteCajaId(null)}
-        title="¿Eliminar caja?"
-        description="¿Estás seguro de que deseas eliminar esta caja registradora? Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
-        variant="destructive"
-        onConfirm={async () => {
-          if (!pendingDeleteCajaId) return;
-          try {
-            await cajaService.deleteRegister(pendingDeleteCajaId);
-            toast.success('Caja eliminada');
-            fetchCajas();
-          } catch (e: any) {
-            toast.error(getApiErrorMessage(e, 'Error al eliminar la caja'));
-          } finally {
-            setPendingDeleteCajaId(null);
-          }
-        }}
-      />
       {showTutorial && <GuidedTour steps={ALMACEN_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Almacenes y Sucursales" allowTargetInteraction />}
     </Card>
     {/* Modal de Gestión de Cajas */}
@@ -620,9 +619,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                             setIsCajaFormOpen(true);
                           }}>
                             <Edit2 className="size-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setPendingDeleteCajaId(caja.id!)}>
-                            <Trash2 className="size-4" />
                           </Button>
                         </div>
                       </td>

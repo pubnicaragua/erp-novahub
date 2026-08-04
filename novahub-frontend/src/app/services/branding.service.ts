@@ -13,6 +13,6 @@ export interface Branding {
 }
 
 export const brandingService = {
-  getCurrent: () => api.get<Branding>('/branding/current'),
+  getCurrent: (signal?: AbortSignal) => api.get<Branding>('/branding/current', { signal }),
   update: (data: Partial<Branding>) => api.post('/branding/update', data),
 };

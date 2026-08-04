@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
+import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 
 interface EventosViewProps {
   data: Event[];
@@ -22,16 +23,10 @@ interface EventosViewProps {
 
 export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [defaultAccountId, setDefaultAccountId] = useState<string>('');
   const { formatAmount, currency, convertAmount, displayCurrency } = useCurrency();
   const { canPerform } = useAuth();
-
-  React.useEffect(() => {
-    accountsService.getAll().then((res: any) => {
-      const list = Array.isArray(res) ? res : res.data;
-      if (list && list.length > 0) setDefaultAccountId(list[0].id);
-    }).catch(e => console.error('Error fetching accounts', e));
-  }, []);
+  const accountsQuery = useTenantQuery<any>(['finance', 'accounts'], signal => accountsService.getAll(undefined, signal));
+  const defaultAccountId = asList(accountsQuery.data)[0]?.id || '';
 
   const columns: ColumnDef<Event>[] = [
     { key: 'title', header: 'Título', width: '25%', editable: canPerform('ACTIVITIES_EVENTS', 'edit') },

@@ -2,8 +2,8 @@ import { api } from './api';
 import { storageService } from './storage.service';
 
 export const trainingService = {
-  getVideos: (filters?: any) => api.get('/training-videos', { params: filters }),
-  getVideo: (id: string) => api.get(`/training-videos/${id}`),
+  getVideos: (filters?: any, signal?: AbortSignal) => api.get('/training-videos', { params: filters, signal }),
+  getVideo: (id: string, signal?: AbortSignal) => api.get(`/training-videos/${id}`, { signal }),
   createVideo: (data: any) => api.post('/training-videos', data),
   updateVideo: (id: string, data: any) => api.patch(`/training-videos/${id}`, data),
   deleteVideo: (id: string) => api.delete(`/training-videos/${id}`),

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   FileBarChart, FileText, Receipt, Users, Building2, Eye, ChevronDown, ChevronUp, Download
 } from 'lucide-react';
@@ -20,6 +21,7 @@ import {
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 const statusStyles: Record<string, string> = {
   DRAFT: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -41,8 +43,7 @@ const reportTypeInfo: Record<string, { label: string; icon: any; desc: string }>
 };
 
 export function ReportesFiscalesView() {
-  const [reports, setReports] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [expandedGenerate, setExpandedGenerate] = useState(true);
   const [showMeta, setShowMeta] = useState<any>(null);
   const [generating, setGenerating] = useState<string | null>(null);
@@ -53,28 +54,17 @@ export function ReportesFiscalesView() {
   const [inssForm, setInssForm] = useState({ month: '1', year: String(new Date().getFullYear()) });
   const [inatecForm, setInatecForm] = useState({ month: '1', year: String(new Date().getFullYear()) });
 
-  const fetchReports = async () => {
-    try {
-      setLoading(true);
-      const res = await contabilidadService.getFiscalReports();
-      setReports(res || []);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar reportes fiscales');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchReports();
-  }, []);
+  const reportsQuery = useAccountingQuery<any[]>(['fiscal-reports'], async (signal) => accountingList(await contabilidadService.getFiscalReports(signal)));
+  const reports = reportsQuery.data || [];
+  const loading = reportsQuery.isLoading || reportsQuery.isFetching;
+  const fetchReports = () => reportsQuery.refetch();
 
   const handleGenerate = async (type: string, promise: Promise<any>) => {
     try {
       setGenerating(type);
       await promise;
       toast.success(`${reportTypeInfo[type]?.label || type} generado exitosamente`);
-      fetchReports();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.message || `Error al generar ${type}`);
     } finally {

@@ -28,6 +28,7 @@ import {
   buildCajaInfo, isPeriodClosed, buildBreakEven, buildIndicadores,
 } from './financialAnalytics';
 import type { FinancialData, BreakEvenConfig, BreakEvenResult, CostBehavior } from './financialAnalytics';
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -96,7 +97,39 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   const [registers, setRegisters] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [journalsPending, setJournalsPending] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const { data: financeData, isLoading: loading } = useTenantQuery(['reports', 'finance', dateRange], async (signal) => {
+    const { start, prevStart, prevEnd } = getRangeDates(dateRange);
+    const now = new Date();
+    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const [invR, payR, bilR, ppayR, incR, expR, rincR, rexpR, plR, plPrevR, bsR, bsStartR, tbR, bdR, accR, perR, recR, jR, regR, sesR] = await Promise.all([
+      invoicesService.getAll(filters, signal), paymentsService.getAll(filters, signal), billsService.getAll(filters, signal), paymentsMadeService.getAll(filters, signal),
+      incomeService.getAll(filters, signal), expensesService.getAll(filters, signal), recurringIncomesService.getAll(filters, signal), recurringExpensesService.getAll(filters, signal),
+      contabilidadService.getProfitLoss({ dateFrom: toIso(start), dateTo: toIso(now) }, signal),
+      (prevStart && prevEnd) ? contabilidadService.getProfitLoss({ dateFrom: toIso(prevStart), dateTo: toIso(prevEnd) }, signal) : Promise.resolve(null),
+      contabilidadService.getBalanceSheet({ date: toIso(now) }, signal),
+      contabilidadService.getBalanceSheet({ date: toIso(new Date(start.getTime() - DAY_MS)) }, signal),
+      contabilidadService.getTrialBalance({ dateFrom: toIso(start), dateTo: toIso(now) }, signal),
+      contabilidadService.getBudgetItems(undefined, signal), contabilidadService.getChartOfAccounts(false, signal),
+      contabilidadService.getPeriods(signal), contabilidadService.getReconciliations(signal),
+      contabilidadService.getJournals({ page: 1, pageSize: 5000 }, signal),
+      cajaService.getRegisters(true, signal), cajaService.getSessionHistory(undefined, 1, signal),
+    ]);
+    const flatAccounts: any[] = [];
+    const flatten = (nodes: any[]) => { for (const n of nodes) { flatAccounts.push(n); if (n.children) flatten(n.children); } };
+    flatten(asList(accR));
+    const journals = asList(jR);
+    return {
+      raw: {
+        salesInvoices: asList(invR), salesPayments: asList(payR), salesReturns: [], salesCreditNotes: [],
+        purchaseBills: asList(bilR), purchasePayments: asList(ppayR), purchaseCredits: [],
+        incomes: asList(incR), expenses: asList(expR), recurringIncomes: asList(rincR), recurringExpenses: asList(rexpR), orders: [],
+      } as FinancialData,
+      profitLoss: plR, profitLossPrev: plPrevR, balanceSheet: bsR, balanceSheetStart: bsStartR,
+      trialRows: Array.isArray(tbR) ? tbR : (tbR?.rows || []), budgetItems: asList(bdR), budgetAccounts: flatAccounts,
+      periods: asList(perR), reconciliations: asList(recR), registers: asList(regR), sessions: arr2(sesR),
+      journalsPending: journals.filter((j: any) => !['POSTED', 'APPROVED', 'VOIDED', 'CANCELLED', 'CANCELED'].includes(String(j.status || '').toUpperCase())).length,
+    };
+  }, { onError: (e) => toast.error(e.message || 'Error cargando finanzas') });
   const [modal, setModal] = useState<ModalState>(null);
   const [comparison, setComparison] = useState<'anterior' | 'anio-anterior'>('anterior');
   const [serieMode, setSerieMode] = useState<'intervalo' | 'acumulado'>('intervalo');
@@ -125,76 +158,13 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   const toIso = (d: Date) => d.toISOString();
 
   useEffect(() => {
-    const fetchAll = async () => {
-      setLoading(true);
-      try {
-        const { start, prevStart, prevEnd } = getRangeDates(dateRange);
-        const now = new Date();
-        const [
-          invR, payR, bilR, ppayR, incR, expR, rincR, rexpR,
-          plR, plPrevR, bsR, bsStartR, tbR, bdR, accR, perR, recR, jR, regR, sesR
-        ] = await Promise.all([
-          invoicesService.getAll().catch(() => ({ data: [] })),
-          paymentsService.getAll().catch(() => ({ data: [] })),
-          billsService.getAll().catch(() => ({ data: [] })),
-          paymentsMadeService.getAll().catch(() => ({ data: [] })),
-          incomeService.getAll().catch(() => []),
-          expensesService.getAll().catch(() => []),
-          recurringIncomesService.getAll().catch(() => []),
-          recurringExpensesService.getAll().catch(() => []),
-          contabilidadService.getProfitLoss({ dateFrom: toIso(start), dateTo: toIso(now) }).catch(() => null),
-          (prevStart && prevEnd) ? contabilidadService.getProfitLoss({ dateFrom: toIso(prevStart), dateTo: toIso(prevEnd) }).catch(() => null) : Promise.resolve(null),
-          contabilidadService.getBalanceSheet({ date: toIso(now) }).catch(() => null),
-          contabilidadService.getBalanceSheet({ date: toIso(new Date(start.getTime() - DAY_MS)) }).catch(() => null),
-          contabilidadService.getTrialBalance({ dateFrom: toIso(start), dateTo: toIso(now) }).catch(() => null) as Promise<any>,          contabilidadService.getBudgetItems().catch(() => []),
-          contabilidadService.getChartOfAccounts().catch(() => []),
-          contabilidadService.getPeriods().catch(() => []),
-          contabilidadService.getReconciliations().catch(() => []),
-          contabilidadService.getJournals().catch(() => []),
-          cajaService.getRegisters(true).catch(() => []),
-          cajaService.getSessionHistory().catch(() => ({ items: [] })),
-        ]);
-        const flatAccounts: any[] = [];
-        const flatten = (nodes: any[]) => { for (const n of nodes) { flatAccounts.push(n); if (n.children) flatten(n.children); } };
-        flatten(arr(accR));
-        setRaw({
-          salesInvoices: arr(invR),
-          salesPayments: arr(payR),
-          salesReturns: [],
-          salesCreditNotes: [],
-          purchaseBills: arr(bilR),
-          purchasePayments: arr(ppayR),
-          purchaseCredits: [],
-          incomes: arr(incR),
-          expenses: arr(expR),
-          recurringIncomes: arr(rincR),
-          recurringExpenses: arr(rexpR),
-          orders: [],
-        });
-        setProfitLoss(plR);
-        setProfitLossPrev(plPrevR);
-        setBalanceSheet(bsR);
-        setBalanceSheetStart(bsStartR);
-        setTrialRows(Array.isArray(tbR) ? tbR : (tbR?.rows || []));
-        setBudgetItems(arr(bdR));
-        setBudgetAccounts(flatAccounts);
-        setPeriods(arr(perR));
-        setReconciliations(arr(recR));
-        setRegisters(arr(regR));
-        setSessions(arr2(sesR));
-        const jList = arr(jR);
-        setJournalsPending(jList.filter((j: any) => {
-          const s = String(j.status || '').toUpperCase();
-          return s !== 'POSTED' && s !== 'APPROVED' && s !== 'VOIDED' && s !== 'CANCELLED' && s !== 'CANCELED';
-        }).length);
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || "Error cargando finanzas");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchAll();
-  }, [dateRange]);
+    if (!financeData) return;
+    setRaw(financeData.raw); setProfitLoss(financeData.profitLoss); setProfitLossPrev(financeData.profitLossPrev);
+    setBalanceSheet(financeData.balanceSheet); setBalanceSheetStart(financeData.balanceSheetStart);
+    setTrialRows(financeData.trialRows); setBudgetItems(financeData.budgetItems); setBudgetAccounts(financeData.budgetAccounts);
+    setPeriods(financeData.periods); setReconciliations(financeData.reconciliations); setRegisters(financeData.registers);
+    setSessions(financeData.sessions); setJournalsPending(financeData.journalsPending);
+  }, [financeData]);
 
   const { start: currentStart, prevStart, prevEnd, durationDays } = useMemo(() => getRangeDates(dateRange), [dateRange]);
 

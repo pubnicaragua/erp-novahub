@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { suppliersService, billsService, paymentsMadeService, purchaseOrdersService } from '../../services/compras.service';
@@ -11,6 +11,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Users, Scale, TrendingUp, Package, Activity, Truck, ShoppingBag, Wallet, CreditCard } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { cn } from '../ui/utils';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
@@ -69,11 +70,18 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const { user } = useAuth();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   
-  const [bills, setBills] = useState<any[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'providers'], async (signal) => {
+    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const [billRes, payRes, ordRes, suppRes] = await Promise.all([
+      billsService.getAll(filters, signal), paymentsMadeService.getAll(filters, signal),
+      purchaseOrdersService.getAll(filters, signal), suppliersService.getAll(filters, signal),
+    ]);
+    return { bills: asList(billRes), payments: asList(payRes), orders: asList(ordRes), suppliers: asList(suppRes) };
+  }, { onError: (e) => toast.error(e.message || 'Error cargando proveedores') });
+  const bills = reportData?.bills || [];
+  const payments = reportData?.payments || [];
+  const orders = reportData?.orders || [];
+  const suppliers = reportData?.suppliers || [];
 
   const fmtShort = (v: number) => {
     const num = Number(v);
@@ -83,29 +91,6 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
-
-  useEffect(() => {
-    const fetch = async () => {
-      setLoading(true);
-      try {
-        const [billRes, payRes, ordRes, suppRes] = await Promise.all([
-          billsService.getAll().catch(() => ({ data: [] })),
-          paymentsMadeService.getAll().catch(() => ({ data: [] })),
-          purchaseOrdersService.getAll().catch(() => ({ data: [] })),
-          suppliersService.getAll().catch(() => ({ data: [] }))
-        ]);
-        setBills(Array.isArray(billRes) ? billRes : billRes?.data || []);
-        setPayments(Array.isArray(payRes) ? payRes : payRes?.data || []);
-        setOrders(Array.isArray(ordRes) ? ordRes : ordRes?.data || []);
-        setSuppliers(Array.isArray(suppRes) ? suppRes : suppRes?.data || []);
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || "Error cargando proveedores");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
-  }, []);
 
   const { start: currentStart, prevStart, prevEnd } = useMemo(() => getRangeDates(dateRange), [dateRange]);
 

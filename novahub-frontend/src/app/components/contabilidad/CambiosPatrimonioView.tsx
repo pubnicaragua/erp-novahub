@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -8,6 +8,7 @@ import { RefreshCw, Filter, X, DollarSign, TrendingUp, TrendingDown } from 'luci
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 interface EquityRow {
   accountId: string;
@@ -32,17 +33,11 @@ function formatCurrency(n: number): string {
 export function CambiosPatrimonioView() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [data, setData] = useState<EquityData | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    if (!dateFrom || !dateTo) {
-      toast.error('Seleccione el rango de fechas');
-      return;
-    }
-    try {
-      setLoading(true);
-      const raw: any = await contabilidadService.getEquityChanges({ dateFrom, dateTo });
+  const query = useAccountingQuery<EquityData | null>(
+    ['equity-changes', dateFrom, dateTo],
+    async (signal) => {
+      if (!dateFrom || !dateTo) return null;
+      const raw: any = await contabilidadService.getEquityChanges({ dateFrom, dateTo }, signal);
       const rows: EquityRow[] = (raw?.rows || raw || []).map((r: any) => ({
         accountId: r.accountId || r.accountCode || '',
         accountCode: r.accountCode || r.codigo || '',
@@ -51,22 +46,20 @@ export function CambiosPatrimonioView() {
         periodChange: r.periodChange || r.cambioPeriodo || 0,
         closingBalance: r.closingBalance || r.saldoFinal || 0,
       }));
-      setData({
+      return {
         rows,
         totalOpening: raw?.totalOpening || raw?.totalSaldoInicial || rows.reduce((s: number, r: EquityRow) => s + r.openingBalance, 0),
         totalClosing: raw?.totalClosing || raw?.totalSaldoFinal || rows.reduce((s: number, r: EquityRow) => s + r.closingBalance, 0),
         netIncome: raw?.netIncome || raw?.resultadoEjercicio || 0,
-      });
-    } catch (err: any) {
-      toast.error(err.message || 'Error al cargar cambios en el patrimonio');
-    } finally {
-      setLoading(false);
-    }
-  }, [dateFrom, dateTo]);
-
+      };
+    },
+    { enabled: Boolean(dateFrom && dateTo) },
+  );
+  const data = query.data;
+  const loading = query.isLoading || query.isFetching;
   useEffect(() => {
-    if (dateFrom && dateTo) fetchData();
-  }, [fetchData]);
+    if (query.error) toast.error(query.error.message || 'Error al cargar cambios en el patrimonio');
+  }, [query.error]);
 
   const netIncomePositive = (data?.netIncome ?? 0) >= 0;
 
@@ -103,7 +96,7 @@ export function CambiosPatrimonioView() {
           )}
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20">
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading || !dateFrom || !dateTo} className="h-9">
+          <Button variant="outline" size="sm" onClick={() => query.refetch()} disabled={loading || !dateFrom || !dateTo} className="h-9">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
         </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -11,6 +11,7 @@ import { RefreshCw, Filter, Scale, CheckCircle2, AlertTriangle } from 'lucide-re
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 interface BSAccount {
   accountId: string;
@@ -35,14 +36,11 @@ interface BSData {
 export function BalanceGeneralView() {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [showPreviousYear, setShowPreviousYear] = useState(false);
-  const [data, setData] = useState<BSData | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    if (!date) return;
-    try {
-      setLoading(true);
-      const raw: any = await contabilidadService.getBalanceSheet({ date, previousYear: showPreviousYear });
+  const query = useAccountingQuery<BSData | null>(
+    ['balance-sheet', date, showPreviousYear],
+    async (signal) => {
+      if (!date) return null;
+      const raw: any = await contabilidadService.getBalanceSheet({ date, previousYear: showPreviousYear }, signal);
       const curr = raw?.current || raw || {};
       const prev = raw?.previous || null;
       const mapAccounts = (accounts: any[]): BSAccount[] => (accounts || []).map((a: any) => ({
@@ -71,15 +69,14 @@ export function BalanceGeneralView() {
         result.liabilities = result.liabilities.map(a => ({ ...a, previousAmount: prevLiabMap.get(a.codigo) as number | undefined }));
         result.equity = result.equity.map(a => ({ ...a, previousAmount: prevEqMap.get(a.codigo) as number | undefined }));
       }
-      setData(result);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar balance general');
-    } finally {
-      setLoading(false);
-    }
-  }, [date, showPreviousYear]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+      return result;
+    },
+  );
+  const data = query.data;
+  const loading = query.isLoading || query.isFetching;
+  useEffect(() => {
+    if (query.error) toast.error(query.error.message || 'Error al cargar balance general');
+  }, [query.error]);
 
   const totalActivos = data?.totalAssets || 0;
   const totalPasivos = data?.totalLiabilities || 0;
@@ -153,7 +150,7 @@ export function BalanceGeneralView() {
           </div>
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20">
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="h-9">
+          <Button variant="outline" size="sm" onClick={() => query.refetch()} disabled={loading} className="h-9">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
         </div>

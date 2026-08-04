@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { legalService, type LegalMessage } from '../../services/legal.service';
 import { storageService } from '../../services/storage.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 
 interface LegalChatPanelProps {
   caseId: string;
@@ -30,31 +31,18 @@ function formatPhone(phone: string): string {
 
 export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelProps) {
   const { user } = useAuth();
-  const [messages, setMessages] = useState<LegalMessage[]>([]);
+  const messagesQuery = useTenantQuery<LegalMessage[]>(['legal', 'messages', caseId], signal => legalService.listMessages(caseId, signal), {
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
+  });
+  const messages = asList(messagesQuery.data) as LegalMessage[];
   const [newText, setNewText] = useState('');
   const [sending, setSending] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const loading = messagesQuery.isLoading || messagesQuery.isFetching;
   const [uploading, setUploading] = useState(false);
   const [customerPhone, setCustomerPhone] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-
-  const fetchMessages = async () => {
-    try {
-      const res: any = await legalService.listMessages(caseId);
-      setMessages(res?.data || res || []);
-    } catch {
-      // silent
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 5000);
-    return () => clearInterval(interval);
-  }, [caseId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -69,7 +57,7 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
         sender: 'lawyer',
         senderName: user?.name || 'Abogado',
       });
-      setMessages((prev) => [...prev, res?.data || res]);
+      await messagesQuery.refetch();
       setNewText('');
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al enviar mensaje');
@@ -99,7 +87,7 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
         fileSize: file.size,
         fileType: file.type,
       });
-      setMessages((prev) => [...prev, res?.data || res]);
+      await messagesQuery.refetch();
       toast.success('Archivo subido');
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al subir archivo');

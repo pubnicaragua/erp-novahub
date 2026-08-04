@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Building2, Plus, Trash2, Edit2, Loader2, Landmark } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -9,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from 'sonner';
 import { api, getApiErrorMessage } from '../../services/api';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 const ACCOUNT_TYPES = [
   { value: 'CHECKING', label: 'Monetaria' },
@@ -20,26 +22,16 @@ const ACCOUNT_TYPES = [
 const CURRENCIES = ['NIO', 'USD'];
 
 export function BankAccountsView() {
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ bankName: '', accountNumber: '', accountType: 'CHECKING', currency: 'NIO', notes: '', accountId: '' });
 
-  const fetch = async () => {
-    setLoading(true);
-    try {
-      const res: any = await api.get('/bank-accounts');
-      setAccounts(Array.isArray(res) ? res : (res?.data || []));
-    } catch (e: any) {
-      toast.error(getApiErrorMessage(e, 'Error al cargar cuentas bancarias'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetch(); }, []);
+  const accountsQuery = useAccountingQuery<any[]>(['bank-accounts'], async (signal) => accountingList(await api.get('/bank-accounts', { signal })));
+  const accounts = accountsQuery.data || [];
+  const loading = accountsQuery.isLoading || accountsQuery.isFetching;
+  const fetch = () => accountsQuery.refetch();
 
   const openCreate = () => {
     setEditing(null);
@@ -65,7 +57,7 @@ export function BankAccountsView() {
         toast.success('Cuenta bancaria creada');
       }
       setFormOpen(false);
-      fetch();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al guardar'));
     } finally {
@@ -77,7 +69,7 @@ export function BankAccountsView() {
     try {
       await api.delete(`/bank-accounts/${id}`);
       toast.success('Cuenta bancaria eliminada');
-      fetch();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al eliminar'));
     }

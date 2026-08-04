@@ -1,9 +1,9 @@
 import React from 'react';
 import { cn } from './ui/utils';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import {
   Users,
@@ -38,8 +38,7 @@ interface RecursosHumanosPageProps {
 
 export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: RecursosHumanosPageProps) {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
   
   // Map sidebar submodule IDs to tab values
   const subModuleToTab: Record<string, string> = {
@@ -61,7 +60,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
   );
   
   // Sync tab when activeSubModule changes from sidebar
-  React.useEffect(() => {
+  useEffect(() => {
     if (activeSubModule && subModuleToTab[activeSubModule]) {
       if (activeTab !== subModuleToTab[activeSubModule]) {
         setActiveTab(subModuleToTab[activeSubModule]);
@@ -79,68 +78,100 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     }
   };
 
-  const [data, setData] = useState<any>({
-    employees: [],
-    departments: [],
-    positions: [],
-    payrolls: [],
-    attendance: [],
-    leaveRequests: [],
-    reviews: [],
-    trainings: [],
-    benefits: [],
-    stats: null,
+  const hrQuery = useQuery({
+    queryKey: ['hr', activeTab],
+    queryFn: async ({ signal }) => {
+      const page = { page: 1, pageSize: 200 };
+      switch (activeTab) {
+        case 'dashboard': {
+          const [stats, employees, departments, leaveRequests, reviews] = await Promise.all([
+            hrService.getDashboardStats(signal),
+            hrService.getEmployees(page, signal),
+            hrService.getDepartments(signal),
+            hrService.getLeaveRequests({ ...page, status: 'PENDING' }, signal),
+            hrService.getPerformanceReviews(undefined, signal, page),
+          ]);
+          return { stats, employees, departments, leaveRequests, reviews };
+        }
+        case 'empleados': {
+          const [employees, departments, positions] = await Promise.all([
+            hrService.getEmployees(page, signal),
+            hrService.getDepartments(signal),
+            hrService.getPositions(undefined, signal),
+          ]);
+          return { employees, departments, positions };
+        }
+        case 'nominas': {
+          const [payrolls, employees] = await Promise.all([
+            hrService.getPayrolls(page, signal),
+            hrService.getEmployees(page, signal),
+          ]);
+          return { payrolls, employees };
+        }
+        case 'asistencia': {
+          const [attendance, employees] = await Promise.all([
+            hrService.getAttendanceRecords(page, signal),
+            hrService.getEmployees(page, signal),
+          ]);
+          return { attendance, employees };
+        }
+        case 'ausencias': {
+          const [leaveRequests, employees] = await Promise.all([
+            hrService.getLeaveRequests(page, signal),
+            hrService.getEmployees(page, signal),
+          ]);
+          return { leaveRequests, employees };
+        }
+        case 'evaluaciones': {
+          const [reviews, employees] = await Promise.all([
+            hrService.getPerformanceReviews(undefined, signal, page),
+            hrService.getEmployees(page, signal),
+          ]);
+          return { reviews, employees };
+        }
+        case 'capacitaciones': {
+          const [trainings, employees] = await Promise.all([
+            hrService.getTrainings(page, signal),
+            hrService.getEmployees(page, signal),
+          ]);
+          return { trainings, employees };
+        }
+        case 'beneficios': {
+          const [benefits, employees] = await Promise.all([
+            hrService.getBenefits(page, signal),
+            hrService.getEmployees(page, signal),
+          ]);
+          return { benefits, employees };
+        }
+        case 'kpi':
+          return { employees: await hrService.getEmployees(page, signal) };
+        default:
+          return {};
+      }
+    },
+    enabled: activeTab !== 'config-nomina' && activeTab !== 'ausencias-config',
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    placeholderData: keepPreviousData,
   });
 
-  const fetchData = useCallback(async (showRefresh = false) => {
-    try {
-      if (showRefresh) setRefreshing(true);
-      else setLoading(true);
-
-      const results = await Promise.allSettled([
-        hrService.getEmployees(),
-        hrService.getDepartments(),
-        hrService.getPositions(),
-        hrService.getPayrolls(),
-        hrService.getAttendanceRecords(),
-        hrService.getLeaveRequests(),
-        hrService.getPerformanceReviews(),
-        hrService.getTrainings(),
-        hrService.getBenefits(),
-        hrService.getDashboardStats(),
-      ]);
-
-      const safeVal = (i: number) => {
-        const r = results[i];
-        if (r.status !== 'fulfilled') return [];
-        const v = (r as any).value;
-        return Array.isArray(v) ? v : (v?.data || []);
-      };
-
-      setData({
-        employees: safeVal(0),
-        departments: safeVal(1),
-        positions: safeVal(2),
-        payrolls: safeVal(3),
-        attendance: safeVal(4),
-        leaveRequests: safeVal(5),
-        reviews: safeVal(6),
-        trainings: safeVal(7),
-        benefits: safeVal(8),
-        stats: results[9].status === 'fulfilled' ? (results[9] as any).value : null,
-      });
-    } catch (error) {
-      console.error('Error fetching HR data:', error);
-      toast.error('Error al cargar datos de Recursos Humanos');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const list = (value: any) => Array.isArray(value) ? value : (value?.data || []);
+  const data = useMemo(() => ({
+    employees: list(hrQuery.data?.employees),
+    departments: list(hrQuery.data?.departments),
+    positions: list(hrQuery.data?.positions),
+    payrolls: list(hrQuery.data?.payrolls),
+    attendance: list(hrQuery.data?.attendance),
+    leaveRequests: list(hrQuery.data?.leaveRequests),
+    reviews: list(hrQuery.data?.reviews),
+    trainings: list(hrQuery.data?.trainings),
+    benefits: list(hrQuery.data?.benefits),
+    stats: hrQuery.data?.stats || null,
+  }), [hrQuery.data]);
+  const loading = hrQuery.isLoading;
+  const refreshData = () => queryClient.invalidateQueries({ queryKey: ['hr'] });
 
 
   return (
@@ -238,7 +269,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
                   employees={data.employees}
                   departments={data.departments}
                   positions={data.positions}
-                  onRefresh={() => fetchData(true)}
+                  onRefresh={refreshData}
                 />
               </TabsContent>
 
@@ -246,7 +277,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
                 <NominasView
                   payrolls={data.payrolls}
                   employees={data.employees}
-                  onRefresh={() => fetchData(true)}
+                  onRefresh={refreshData}
                 />
               </TabsContent>
 
@@ -254,7 +285,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
                 <AsistenciaView
                   attendance={data.attendance}
                   employees={data.employees}
-                  onRefresh={() => fetchData(true)}
+                  onRefresh={refreshData}
                 />
               </TabsContent>
 
@@ -262,26 +293,26 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
                 <AusenciasView
                   leaveRequests={data.leaveRequests}
                   employees={data.employees}
-                  onRefresh={() => fetchData(true)}
+                  onRefresh={refreshData}
                 />
               </TabsContent>
 
               <TabsContent value="ausencias-config" className="m-0">
-                <AusenciasConfigView onRefresh={() => fetchData(true)} />
+                <AusenciasConfigView onRefresh={refreshData} />
               </TabsContent>
 
               <TabsContent value="evaluaciones" className="m-0">
                 <EvaluacionesView
                   reviews={data.reviews}
                   employees={data.employees}
-                  onRefresh={() => fetchData(true)}
+                  onRefresh={refreshData}
                 />
               </TabsContent>
 
               <TabsContent value="kpi" className="m-0">
                 <KpiView
                   employees={data.employees}
-                  onRefresh={() => fetchData(true)}
+                  onRefresh={refreshData}
                 />
               </TabsContent>
 
@@ -289,12 +320,12 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
                 <CapacitacionesView
                   trainings={data.trainings}
                   employees={data.employees}
-                  onRefresh={() => fetchData(true)}
+                  onRefresh={refreshData}
                 />
               </TabsContent>
 
               <TabsContent value="beneficios" className="m-0">
-                <BeneficiosView benefits={data.benefits} employees={data.employees} onRefresh={() => fetchData(true)} />
+                <BeneficiosView benefits={data.benefits} employees={data.employees} onRefresh={refreshData} />
               </TabsContent>
 
               <TabsContent value="config-nomina" className="m-0">

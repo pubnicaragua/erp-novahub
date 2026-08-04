@@ -21,6 +21,7 @@ import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
+import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
@@ -48,6 +49,8 @@ const statusOptions = [
   { label: 'Cancelada',value: 'CANCELLED', color: 'bg-muted/20 text-muted-foreground' },
 ];
 const editableStatusOptions = statusOptions.filter((status) => status.value !== 'APPROVED');
+const actionButtonClass = 'text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors';
+const actionIconClass = 'size-4 text-muted-foreground';
 
 export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: EstimacionesViewProps) {
   const { user, canPerform } = useAuth();
@@ -152,6 +155,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     currency: localDoc?.currency,
     exchangeRate: localDoc?.exchangeRate,
     baseTotal: (localDoc as any)?.baseTotal,
+    accountId: (localDoc as any)?.accountId || null,
     notes: localDoc?.notes,
     items: localDoc?.items || [],
     status,
@@ -496,6 +500,18 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                     </Select>
                     <p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc?.currency === 'NIO' ? '1.00' : Number(localDoc?.exchangeRate || globalRate || 1).toFixed(2)}</span></p>
                   </div>
+                <div className="sm:col-span-2">
+                  <AccountingAccountSelect
+                    value={(localDoc as any)?.accountId || ''}
+                    onChange={(accountId) => {
+                      setLocalDoc({ ...localDoc, accountId } as any);
+                      void handleUpdate(localDoc!.id, { accountId } as any);
+                    }}
+                    label="Cuenta contable de ingresos"
+                    required
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">Necesaria para enviar este borrador a orden de venta o emitirlo como factura.</p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -798,6 +814,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           pagination={pagination}
           columns={columns}
           onRowUpdate={handleUpdate}
+          onRowClick={(row) => setEditingId(row.id)}
           actionsWidth="w-52"
           fitContent
           showHorizontalControls
@@ -812,12 +829,12 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                   size="icon"
                   disabled={convertingId === row.id}
                   onClick={(e) => { e.stopPropagation(); void handleConvertToOrder(row); }}
-                  className="text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500"
+                  className={actionButtonClass}
                 >
-                  <ArrowRightCircle className={cn('size-4', convertingId === row.id && 'animate-pulse')} />
+                  <ArrowRightCircle className={cn(actionIconClass, convertingId === row.id && 'animate-pulse')} />
                 </Button>
               )}
-              <Button type="button" variant="ghost" title="Descargar PDF" size="icon" className="relative z-20" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { 
+              <Button type="button" variant="ghost" title="Descargar PDF" size="icon" className={cn('relative z-20', actionButtonClass)} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => {
                 e.stopPropagation();
                 void (async () => {
                   try {
@@ -833,14 +850,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                   }
                 })();
               }}>
-                <FileDown className="size-4 text-muted-foreground hover:text-primary" />
+                <FileDown className={actionIconClass} />
               </Button>
-              <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setEditingId(row.id); }}>
-                <Eye className="size-4 text-muted-foreground hover:text-primary" />
+              <Button variant="ghost" size="icon" className={actionButtonClass} onClick={(e) => { e.stopPropagation(); setEditingId(row.id); }}>
+                <Eye className={actionIconClass} />
               </Button>
               {canPerform('SALES_QUOTES', 'edit') && !['CANCELLED', 'APPROVED'].includes(String(row.status).toUpperCase()) && (
-                <Button type="button" title="Cancelar cotización" variant="ghost" size="icon" className="hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingCancelId(row.id)}>
-                  <Ban className="size-4" />
+                <Button type="button" title="Cancelar cotización" variant="ghost" size="icon" className={actionButtonClass} onClick={() => setPendingCancelId(row.id)}>
+                  <Ban className={actionIconClass} />
                 </Button>
               )}
             </>

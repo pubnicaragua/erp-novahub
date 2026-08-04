@@ -7,7 +7,7 @@ export interface ModulePriceItem {
 }
 
 export const modulePricingService = {
-  getAll: () => api.get<ModulePriceItem[]>('/module-pricing'),
+  getAll: (signal?: AbortSignal) => api.get<ModulePriceItem[]>('/module-pricing', { signal }),
   upsert: (module: string, price: number) => api.post('/module-pricing/upsert', { module, price }),
   bulkUpsert: (prices: { module: string; price: number }[]) => api.post('/module-pricing/bulk', { prices }),
 };

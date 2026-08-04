@@ -25,6 +25,7 @@ import { AddProductsModal } from './AddProductsModal';
 import { EditProductModal } from './EditProductModal';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import type { SalesPaginationControls } from '../../types';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -48,6 +49,10 @@ interface ProductosViewProps {
   series?: any[];
   movements?: any[];
   onRefresh: () => void;
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
+  onCategoryChange?: (value: string[]) => void;
+  onWarehouseChange?: (value: string[]) => void;
   itemType?: 'PRODUCT' | 'SERVICE';
   isSidebarCollapsed?: boolean;
 }
@@ -231,7 +236,7 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, itemType, isSidebarCollapsed = true }: ProductosViewProps) {
+export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true }: ProductosViewProps) {
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
   const catalogItemType = itemType || 'PRODUCT';
@@ -315,10 +320,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [batchPrCreating, setBatchPrCreating] = useState(false);
 
   const openBatchPurchaseRequest = async () => {
-    try {
-      const res = await inventoryService.getWarehouses();
-      setBatchPrWarehouses(Array.isArray(res) ? res : []);
-    } catch { setBatchPrWarehouses([]); }
+    setBatchPrWarehouses(warehouses);
     setBatchPrWarehouseId('');
     setBatchPrJustification('');
     setBatchPrOpen(true);
@@ -360,7 +362,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       await Promise.all(Array.from(selectedIds).map(id => inventoryService.deleteProduct(id)));
       toast.success(`${selectedIds.size} producto(s) desactivado(s)`);
       setSelectedIds(new Set());
-      fetchProducts();
+      onRefresh();
     } catch (e: any) {
       toast.error(e?.message || 'Error al desactivar productos');
     }
@@ -390,18 +392,22 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
   useEffect(() => {
     if (isServiceView) return;
-    inventoryService.getInitialImportStatus().then((status) => {
+    const controller = new AbortController();
+    inventoryService.getInitialImportStatus(controller.signal).then((status) => {
       setInitialImportCompleted(Boolean(status.completed) || products.length > 0);
     }).catch(() => undefined);
+    return () => controller.abort();
   }, [isServiceView, products.length]);
 
   useEffect(() => {
     if (!warehouseModalOpen || warehouseAccounts.length > 0) return;
+    const controller = new AbortController();
     setWarehouseAccountsLoading(true);
-    contabilidadService.getChartOfAccounts()
+    contabilidadService.getChartOfAccounts(false, controller.signal)
       .then((response: any) => setWarehouseAccounts(response?.data || response || []))
       .catch(() => setWarehouseAccounts([]))
       .finally(() => setWarehouseAccountsLoading(false));
+    return () => controller.abort();
   }, [warehouseModalOpen, warehouseAccounts.length]);
 
 
@@ -409,6 +415,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   useEffect(() => {
     setPage(1);
     setSelectedIds(new Set());
+    pagination?.onPageChange(1);
   }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, catalogItemType]);
 
   // Clear selection when products list changes (e.g. after refresh)
@@ -443,11 +450,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       });
 
   const paginatedProducts = useMemo(() => {
+    if (pagination) return filteredProducts;
     const start = (page - 1) * pageSize;
     return filteredProducts.slice(start, start + pageSize);
-  }, [filteredProducts, page, pageSize]);
+  }, [filteredProducts, page, pageSize, pagination]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
+  const totalPages = pagination?.totalPages || Math.max(1, Math.ceil(filteredProducts.length / pageSize));
 
   const inventorySummary = useMemo(() => {
     const stockProducts = products.filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() === catalogItemType);
@@ -1691,7 +1699,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               placeholder="Buscar por nombre o código..." 
               className="pl-9 h-9"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
             />
           </div>
           <div className="flex items-center gap-1">
@@ -1700,7 +1708,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               placeholder="Buscar categoría..."
               options={categories.map((c: any) => ({ value: c.id, label: c.name }))}
               selected={categoryFilters}
-              onChange={setCategoryFilters}
+              onChange={(value) => { setCategoryFilters(value); onCategoryChange?.(value); }}
               className="h-9 rounded-lg"
             />
             <Button type="button" variant="outline" size="sm" className="h-9 w-9 shrink-0 rounded-lg p-0" onClick={() => { setPendingCategoryRowIndex(null); setCategoryModalOpen(true); }} title="Agregar categoría" aria-label="Agregar categoría">
@@ -1714,7 +1722,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               searchable
               options={warehouses.map((w: any) => ({ value: w.id, label: w.name }))}
               selected={warehouseFilters}
-              onChange={setWarehouseFilters}
+              onChange={(value) => { setWarehouseFilters(value); onWarehouseChange?.(value); }}
               className="h-9 rounded-lg"
             />
             <Button type="button" variant="outline" size="sm" className="h-9 w-9 shrink-0 rounded-lg p-0" onClick={() => { setPendingWarehouseRowIndex(null); setNewWarehouseName(''); setNewWarehouseLocation(''); setNewWarehouseType('STORE'); setNewWarehouseParentId('none'); setNewWarehouseInventoryAccountId('none'); setWarehouseModalOpen(true); }} title="Agregar almacén" aria-label="Agregar almacén">
@@ -1730,6 +1738,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 setSearchTerm('');
                 setCategoryFilters([]);
                 setWarehouseFilters([]);
+                onCategoryChange?.([]);
+                onWarehouseChange?.([]);
                 setStockFilter('all');
               }}
             >
@@ -2102,20 +2112,20 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
           <span>Mostrar</span>
-          <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }} className="h-8 rounded-lg border border-border/50 bg-background px-2 font-bold text-foreground outline-none" aria-label="Registros por página">
+          <select value={pagination?.pageSize || pageSize} onChange={(event) => { const nextSize = Number(event.target.value) as 50 | 100 | 200; if (pagination) pagination.onPageSizeChange(nextSize); else { setPageSize(nextSize); setPage(1); } }} className="h-8 rounded-lg border border-border/50 bg-background px-2 font-bold text-foreground outline-none" aria-label="Registros por página">
             {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
           </select>
           <span>por página</span>
           <span className="ml-2 rounded-lg border border-border/40 px-2 py-1">
-            {filteredProducts.length === 0 ? 0 : `${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, filteredProducts.length)}`} de {filteredProducts.length}
+            {filteredProducts.length === 0 ? 0 : `${((pagination?.page || page) - 1) * (pagination?.pageSize || pageSize) + 1}-${Math.min((pagination?.page || page) * (pagination?.pageSize || pageSize), pagination?.total || filteredProducts.length)}`} de {pagination?.total || filteredProducts.length}
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage(1)} disabled={page <= 1} aria-label="Primera página"><ChevronsLeft className="size-4" /></button>
-          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} aria-label="Página anterior"><ChevronLeft className="size-4" /></button>
-          <span className="min-w-24 text-center font-bold text-foreground">Pág. {page} / {Math.max(1, totalPages)}</span>
-          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} aria-label="Página siguiente"><ChevronRight className="size-4" /></button>
-          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage(totalPages)} disabled={page >= totalPages} aria-label="Última página"><ChevronsRight className="size-4" /></button>
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination ? pagination.onPageChange(1) : setPage(1)} disabled={(pagination?.page || page) <= 1} aria-label="Primera página"><ChevronsLeft className="size-4" /></button>
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination ? pagination.onPageChange(Math.max(1, pagination.page - 1)) : setPage((p) => Math.max(1, p - 1))} disabled={(pagination?.page || page) <= 1} aria-label="Página anterior"><ChevronLeft className="size-4" /></button>
+          <span className="min-w-24 text-center font-bold text-foreground">Pág. {pagination?.page || page} / {Math.max(1, totalPages)}</span>
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination ? pagination.onPageChange(Math.min(totalPages, pagination.page + 1)) : setPage((p) => Math.min(totalPages, p + 1))} disabled={(pagination?.page || page) >= totalPages} aria-label="Página siguiente"><ChevronRight className="size-4" /></button>
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination ? pagination.onPageChange(totalPages) : setPage(totalPages)} disabled={(pagination?.page || page) >= totalPages} aria-label="Última página"><ChevronsRight className="size-4" /></button>
         </div>
       </div>
         </>

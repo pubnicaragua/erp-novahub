@@ -289,24 +289,79 @@
   .sales-item-row[data-item-layout="recurrent"] > div:nth-child(5)::before { content: "Total"; }
   .sales-item-row[data-item-layout="recurrent"] > div:nth-child(6)::before { content: "Acciones"; }
 
-  .sales-module .grid-cols-1 > [class*="col-span-"] {
+  .sales-module .grid-cols-1 > [class*="col-span-"],
+  .purchases-module .grid-cols-1 > [class*="col-span-"] {
     grid-column: 1 / -1 !important;
     min-width: 0;
   }
 
   .sales-module .grid-cols-1,
   .sales-module .grid-cols-1 > *,
+  .purchases-module .grid-cols-1,
+  .purchases-module .grid-cols-1 > *,
   .sales-module input,
   .sales-module textarea,
   .sales-module button,
-  .sales-module [role="combobox"] {
+  .sales-module [role="combobox"],
+  .purchases-module input,
+  .purchases-module textarea,
+  .purchases-module button,
+  .purchases-module [role="combobox"] {
     min-width: 0;
     max-width: 100%;
   }
 
-  .sales-module [role="combobox"] {
+  .sales-module [role="combobox"],
+  .purchases-module [role="combobox"] {
     overflow: hidden;
   }
+
+  /* Compras: los editores densos se comportan como tarjetas en compacto. */
+  .purchases-module .purchase-item-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .purchases-module .purchase-item-fields > [class*="col-span-"] {
+    grid-column: auto !important;
+    min-width: 0;
+  }
+
+  .purchases-module .purchase-item-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    border: 1px solid hsl(var(--border) / 0.5);
+    border-radius: 0.75rem;
+    background: hsl(var(--muted) / 0.05);
+    padding: 0.75rem;
+  }
+
+  .purchases-module .purchase-item-row > [class*="col-span-"] {
+    grid-column: auto !important;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+
+  .purchases-module .purchase-item-row > [class*="col-span-"]::before {
+    display: block;
+    color: hsl(var(--muted-foreground) / 0.7);
+    font-size: 0.625rem;
+    font-weight: 900;
+    line-height: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  .purchases-module .purchase-item-row[data-item-layout="recurring"] > div:nth-child(1)::before { content: "Concepto"; }
+  .purchases-module .purchase-item-row[data-item-layout="recurring"] > div:nth-child(2)::before { content: "Cantidad"; }
+  .purchases-module .purchase-item-row[data-item-layout="recurring"] > div:nth-child(3)::before { content: "Precio unitario"; }
+  .purchases-module .purchase-item-row[data-item-layout="recurring"] > div:nth-child(4)::before { content: "Total y acciones"; }
+  .purchases-module .purchase-item-row[data-item-layout="credit"] > div:nth-child(1)::before { content: "Descripción"; }
+  .purchases-module .purchase-item-row[data-item-layout="credit"] > div:nth-child(2)::before { content: "Cantidad"; }
+  .purchases-module .purchase-item-row[data-item-layout="credit"] > div:nth-child(3)::before { content: "Precio unitario"; }
+  .purchases-module .purchase-item-row[data-item-layout="credit"] > div:nth-child(4)::before { content: "Total y acciones"; }
 }
 
 /* Scrollbar estable: siempre visible y sin desplazar el contenido al aparecer. */

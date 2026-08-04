@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import type { SalesPaginationControls } from '../../types';
 
 interface TransferenciasViewProps {
   transfers: any[];
@@ -19,6 +20,9 @@ interface TransferenciasViewProps {
   products: any[];
   series?: any[];
   onRefresh: () => void;
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
+  onStatusChange?: (value: string) => void;
 }
 
 const STATUS_OPTIONS = [
@@ -63,7 +67,7 @@ const TRANSFER_TOUR_STEPS: GuidedTourStep[] = [
   },
 ];
 
-export function TransferenciasView({ transfers, warehouses, products, series = [], onRefresh }: TransferenciasViewProps) {
+export function TransferenciasView({ transfers, warehouses, products, series = [], onRefresh, pagination, onSearchChange, onStatusChange }: TransferenciasViewProps) {
   const { canPerform } = useAuth();
   const [showTutorial, setShowTutorial] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -198,9 +202,13 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
               placeholder="Buscar por guía o almacén..." 
               className="pl-9 h-9"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
             />
           </div>
+          {pagination && <Select defaultValue="ALL" onValueChange={(value) => onStatusChange?.(value)}>
+            <SelectTrigger className="h-9 w-36"><SelectValue placeholder="Estado" /></SelectTrigger>
+            <SelectContent><SelectItem value="ALL">Todos</SelectItem>{STATUS_OPTIONS.map((status) => <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>)}</SelectContent>
+          </Select>}
         </div>
         {canPerform('INVENTORY_TRANSFERS', 'create') && (
           <>
@@ -347,7 +355,17 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
       </div>
 
       <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-        {filteredTransfers.length} transferencias
+        {pagination?.total ?? filteredTransfers.length} transferencias
+        {pagination && (
+          <span className="ml-4 inline-flex items-center gap-2 normal-case tracking-normal">
+            <select value={pagination.pageSize} onChange={(event) => pagination.onPageSizeChange(Number(event.target.value) as 50 | 100 | 200)} className="h-7 rounded border bg-background px-1 font-bold text-foreground">
+              {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
+            </select>
+            <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" onClick={() => pagination.onPageChange(Math.max(1, pagination.page - 1))} disabled={pagination.page <= 1}>‹</button>
+            <span>Pág. {pagination.page}/{pagination.totalPages}</span>
+            <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" onClick={() => pagination.onPageChange(Math.min(pagination.totalPages, pagination.page + 1))} disabled={pagination.page >= pagination.totalPages}>›</button>
+          </span>
+        )}
       </div>
       <Dialog open={serialPickerOpen} onOpenChange={setSerialPickerOpen}>
         <DialogContent className="sm:max-w-2xl">

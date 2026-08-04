@@ -143,7 +143,6 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'analisis-ingresos-gastos': ['FINANCIAL_BALANCE'],
   'balance-general': ['FINANCIAL_BALANCE'],
   // Inventario
-  dashboard: ['INVENTORY_DASHBOARD'],
   productos: ['INVENTORY_PRODUCTS'],
   almacenes: ['INVENTORY_WAREHOUSES'],
   transferencias: ['INVENTORY_TRANSFERS'],
@@ -228,7 +227,6 @@ const menuItems: MenuItem[] = [
     submenu: [
       { id: 'productos', label: 'Productos', icon: <Package className="size-4" /> },
       { id: 'servicios', label: 'Servicios', icon: <BriefcaseBusiness className="size-4" /> },
-      { id: 'dashboard', label: 'Resumen', icon: <BarChart3 className="size-4" /> },
       { id: 'almacenes', label: 'Almacenes', icon: <Archive className="size-4" /> },
       { id: 'transferencias', label: 'Transferencias', icon: <Truck className="size-4" /> },
       { id: 'ajustes', label: 'Ajustes', icon: <Scale className="size-4" /> },

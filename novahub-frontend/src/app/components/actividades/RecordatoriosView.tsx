@@ -16,6 +16,7 @@ import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
+import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 
 interface RecordatoriosViewProps {
   data: Reminder[];
@@ -26,10 +27,16 @@ interface RecordatoriosViewProps {
 export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, loading, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
-  const [availableDepts, setAvailableDepts] = useState<any[]>([]);
 
   const { user, canPerform } = useAuth();
+  const usersQuery = useTenantQuery<any[]>(['activities', 'users'], signal => tenantsService.getUsers(user!.tenantId!, signal), {
+    enabled: Boolean(isAddOpen && user?.tenantId),
+  });
+  const departmentsQuery = useTenantQuery<any[]>(['activities', 'departments'], signal => hrService.getDepartments(signal), {
+    enabled: isAddOpen,
+  });
+  const availableUsers = asList(usersQuery.data);
+  const availableDepts = asList(departmentsQuery.data);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -39,17 +46,6 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
     selectedUsers: [] as string[],
     selectedDept: ''
   });
-
-  React.useEffect(() => {
-    if (isAddOpen && user?.tenantId) {
-      tenantsService.getUsers(user.tenantId)
-        .then(res => setAvailableUsers(Array.isArray(res) ? res : ((res as any).data || [])))
-        .catch(() => {});
-      hrService.getDepartments()
-        .then(res => setAvailableDepts(Array.isArray(res) ? res : ((res as any).data || [])))
-        .catch(() => {});
-    }
-  }, [isAddOpen, user]);
 
   const statusOpts = [
     { value: 'PENDING', label: 'Pendiente', color: 'bg-amber-500/10 text-amber-500' },

@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { useCurrency } from '../../contexts/CurrencyContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { supplierInvoicesService } from '../../services/compras.service'
 import { toast } from 'sonner'
 import {
@@ -14,6 +16,8 @@ const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#3b82f6']
 
 export function FinancePayablesView() {
   const { displayCurrency } = useCurrency()
+  const { user } = useAuth()
+  const tenantKey = user?.clientTenantId || user?.tenantId || 'current'
   const sym = displayCurrency === 'USD' ? '$' : 'C$'
   const fmt = (n: number) => sym + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const fmtShort = (n: number) => {
@@ -22,12 +26,19 @@ export function FinancePayablesView() {
     return sym + n.toLocaleString(undefined, { minimumFractionDigits: 0 })
   }
 
-  const [invoices, setInvoices] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    supplierInvoicesService.getAll().then((res: any) => { const list = res?.data || res || []; setInvoices(Array.isArray(list) ? list : []) }).catch(() => {}).finally(() => setLoading(false))
-  }, [])
+  const invoicesQuery = useQuery({
+    queryKey: ['finance', 'supplier-invoices', tenantKey],
+    queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  })
+  const invoices = useMemo(() => {
+    const response: any = invoicesQuery.data
+    return Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : [])
+  }, [invoicesQuery.data])
+  const loading = invoicesQuery.isLoading
 
   const pending = invoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' })
   const totalPending = pending.reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0)

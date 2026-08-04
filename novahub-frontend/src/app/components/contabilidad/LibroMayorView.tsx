@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -9,6 +9,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { Combobox } from '../ui/Combobox';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 // import { motion } from 'motion/react';
 
 interface LedgerEntry {
@@ -28,41 +29,27 @@ function formatCurrency(n: number): string {
 }
 
 export function LibroMayorView() {
-  const [entries, setEntries] = useState<LedgerEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [accounts, setAccounts] = useState<{ id: string; code: string; name: string }[]>([]);
-
   const [filterAccountId, setFilterAccountId] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
 
-  const loadEntries = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params: { accountId?: string; dateFrom?: string; dateTo?: string } = {};
-      if (filterAccountId) params.accountId = filterAccountId;
-      if (filterDateFrom) params.dateFrom = filterDateFrom;
-      if (filterDateTo) params.dateTo = filterDateTo;
-      const data = await contabilidadService.getLedger(params);
-      setEntries(data as LedgerEntry[]);
-    } catch (err: any) {
-      toast.error(err.message || 'Error al cargar libro mayor');
-    } finally {
-      setLoading(false);
-    }
-  }, [filterAccountId, filterDateFrom, filterDateTo]);
-
-  const loadAccounts = useCallback(async () => {
-    try {
-      const data: any = await contabilidadService.getChartOfAccounts();
-      setAccounts(data.map((a: any) => ({ id: a.id, code: a.code, name: a.name })));
-    } catch {
-      // non-critical
-    }
-  }, []);
-
-  useEffect(() => { loadEntries(); }, [loadEntries]);
-  useEffect(() => { loadAccounts(); }, [loadAccounts]);
+  const ledgerParams = useMemo(() => ({
+    ...(filterAccountId ? { accountId: filterAccountId } : {}),
+    ...(filterDateFrom ? { dateFrom: filterDateFrom } : {}),
+    ...(filterDateTo ? { dateTo: filterDateTo } : {}),
+  }), [filterAccountId, filterDateFrom, filterDateTo]);
+  const entriesQuery = useAccountingQuery<LedgerEntry[]>(['ledger', ledgerParams], async (signal) => accountingList(await contabilidadService.getLedger(ledgerParams, signal)) as LedgerEntry[]);
+  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
+  const entries = entriesQuery.data || [];
+  const loading = entriesQuery.isLoading || entriesQuery.isFetching;
+  const accounts = useMemo(() => {
+    const result: { id: string; code: string; name: string }[] = [];
+    const flatten = (items: any[]) => items.forEach(a => { result.push({ id: a.id, code: a.code, name: a.name }); if (a.children) flatten(a.children); });
+    flatten(accountsQuery.data || []);
+    return result;
+  }, [accountsQuery.data]);
+  const loadEntries = () => entriesQuery.refetch();
+  const loadAccounts = () => accountsQuery.refetch();
 
   const accountOptions = accounts.map((a) => ({
     label: `${a.code} - ${a.name}`,

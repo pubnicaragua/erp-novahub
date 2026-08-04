@@ -36,6 +36,7 @@ import { CountriesView } from './admin/CountriesView';
 import { SucursalesView } from './inventory/SucursalesView';
 import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
+import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -115,7 +116,6 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'FINANCIAL_BALANCE', label: 'Balance General', parent: 'FINANCIAL' },
 
   // Inventario
-  { id: 'INVENTORY_DASHBOARD', label: 'Dashboard', parent: 'INVENTORY' },
   { id: 'INVENTORY_PRODUCTS', label: 'Productos', parent: 'INVENTORY' },
   { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', parent: 'INVENTORY' },
   { id: 'INVENTORY_TRANSFERS', label: 'Transferencias', parent: 'INVENTORY' },
@@ -458,18 +458,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
   // New role dialog state (removed unused)
 
-  // Load branding and currency on mount
-  useEffect(() => {
-    fetchBranding();
-    fetchCurrencySettings();
-    if (user?.tenantId) fetchIndustries();
-  }, []);
-
   const fetchIndustries = async () => {
-    if (!user?.tenantId) return;
     try {
-      const data = await api.get<{ id?: string; code: string; name: string; isDefault: boolean }[]>(`/tenants/${user.tenantId}/industries`);
-      if (data) setIndustryOptions(data);
+      await refetchConfiguration();
     } catch (error) {
       console.error('Error fetching industries:', error);
     }
@@ -500,51 +491,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     }
   };
 
-  const fetchCurrencySettings = async () => {
-    try {
-      const data = await api.get<{
-        rate: number;
-        auto: boolean;
-        baseCurrency?: 'NIO' | 'USD';
-        displayCurrency?: 'NIO' | 'USD';
-        allowCurrencySwitch?: boolean;
-      }>('/tools/exchange-rate');
-      if (data) {
-        setExchangeRateAuto(data.auto);
-        setCurrentBackendRate(data.rate);
-        if (!data.auto) {
-          setManualRate(data.rate.toString());
-        }
-        setDisplayCurrencySetting(data.displayCurrency === 'USD' ? 'USD' : (data.baseCurrency === 'USD' ? 'USD' : 'NIO'));
-        setAllowCurrencySwitch(data.allowCurrencySwitch !== false);
-      }
-    } catch (error) {
-      console.error('Error fetching currency settings:', error);
-    }
-  };
-
-  const fetchBranding = async () => {
-    try {
-      const b = await brandingService.getCurrent();
-      if (b.primaryColor) setPrimaryHex(b.primaryColor.startsWith('oklch') ? oklchToApproxHex(b.primaryColor) : b.primaryColor);
-      if (b.sidebarColor) setSidebarHex(b.sidebarColor.startsWith('oklch') ? oklchToApproxHex(b.sidebarColor) : b.sidebarColor);
-      if (b.accentColor) setAccentHex(b.accentColor.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : b.accentColor);
-      if (b.portalPrimaryColor) setPortalPrimaryHex(b.portalPrimaryColor);
-      if (b.portalAccentColor) setPortalAccentHex(b.portalAccentColor);
-      if (b.companyName) setCompanyName(b.companyName);
-      if (b.logo) setLogoPreview(b.logo);
-      if (b.industry) setCompanyIndustry(b.industry);
-      if (b.whiteLabel !== undefined) setWhiteLabel(b.whiteLabel);
-      updateTheme(generateThemeFromColor(
-        b.primaryColor?.startsWith('oklch') ? oklchToApproxHex(b.primaryColor) : (b.primaryColor || '#10b981'),
-        b.sidebarColor?.startsWith('oklch') ? oklchToApproxHex(b.sidebarColor) : (b.sidebarColor || '#0c1a12'),
-        b.accentColor?.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : (b.accentColor || '#064e3b'),
-      ));
-    } catch (error) {
-      console.error('Error fetching branding:', error);
-    }
-  };
-
   const handleSaveCompanyInfo = async () => {
     try {
       updateConfig({ tenantName: companyName });
@@ -552,6 +498,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         companyName,
         industry: companyIndustry,
       });
+      await refetchConfiguration();
       toast.success('Información corporativa guardada');
       const raw = sessionStorage.getItem('novahub:implementation-setup-tour');
       if (raw) {
@@ -587,6 +534,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         accentColor: accentHex,
         logo: themeConfig.logo || undefined
       });
+      await refetchConfiguration();
 
       toast.success('Marca actualizada correctamente', {
         description: `Los cambios se guardaron para nivel: ${user?.role.toUpperCase()}`,
@@ -629,6 +577,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       }
       updateConfig({ logo: logoUrl });
       await brandingService.update({ logo: logoUrl });
+      await refetchConfiguration();
       toast.success('Logo guardado en Supabase Storage ✓');
     } catch (error) {
       console.error('Logo upload error:', error);
@@ -636,6 +585,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       if (logoPreview) {
         updateConfig({ logo: logoPreview });
         await brandingService.update({ logo: logoPreview }).catch(() => { });
+        await refetchConfiguration();
         toast.success('Logo aplicado localmente');
       } else {
         toast.error('Error al subir el logo');
@@ -654,44 +604,18 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [sucursalModalOpen, setSucursalModalOpen] = useState(false);
 
-  useEffect(() => {
-    if (scenario === 'superadmin') {
-      fetchPricing();
-    }
-  }, [scenario]);
-
   const fetchPricing = async () => {
     setPricingLoading(true);
     try {
-      const res = await modulePricingService.getAll();
-      setPricingData(Array.isArray(res) ? res : []);
+      await refetchConfiguration();
     } catch { /* ignore */ }
     finally { setPricingLoading(false); }
   };
 
-  useEffect(() => {
-    if (user?.tenantId && canViewRoles) {
-      fetchRoles();
-    }
-    if (user?.tenantId) {
-      fetchEnabledModules();
-    }
-  }, [user?.tenantId, canViewRoles]);
-
   const fetchRoles = async () => {
     setIsLoadingRoles(true);
     try {
-      console.log('[Config] Fetching roles for tenant:', user?.tenantId);
-      const res = await rolesService.getAll({ clientTenantId: user?.tenantId });
-      let rolesList = Array.isArray(res) ? res : (res as any)?.data || [];
-      
-      console.log('[Config] Roles received:', rolesList.length);
-      
-      if (!user?.isPlatformAdmin) {
-        rolesList = rolesList.filter((r: any) => r.clientTenantId === user?.tenantId);
-      }
-      
-      setRoles(rolesList);
+      await refetchConfiguration();
     } catch (error) {
       console.error('Error fetching roles:', error);
     } finally {
@@ -701,23 +625,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
   const fetchWarehouses = async () => {
     try {
-      const res: any = await api.get('/inventory/warehouses');
-      const list = Array.isArray(res) ? res : (res as any)?.data || [];
-      setWarehouses(list);
+      await refetchConfiguration();
     } catch { /* ignore */ }
-  };
-
-  const fetchEnabledModules = async () => {
-    if (!user?.tenantId) return;
-    setIsLoadingModules(true);
-    try {
-      const res = await subscriptionsService.getEnabledModules(user.tenantId);
-      setEnabledModules(res);
-    } catch (error) {
-      console.error('Error fetching modules:', error);
-    } finally {
-      setIsLoadingModules(false);
-    }
   };
 
   const handleSaveCurrencySettings = async () => {
@@ -766,6 +675,64 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [pricingSaving, setPricingSaving] = useState(false);
   const [pricingSearch, setPricingSearch] = useState('');
   const [pricingEdits, setPricingEdits] = useState<Record<string, number>>({});
+
+  const { data: configurationData, refetch: refetchConfiguration } = useTenantQuery(
+    ['configuration', user?.tenantId || 'current', scenario, canViewRoles],
+    async (signal) => {
+      const tenantId = user?.tenantId;
+      const [branding, currency, industries, pricing, rolesData, warehouseData, modules] = await Promise.all([
+        brandingService.getCurrent(signal),
+        api.get<any>('/tools/exchange-rate', { signal }),
+        tenantId ? api.get<any>(`/tenants/${tenantId}/industries`, { signal }) : Promise.resolve([]),
+        scenario === 'superadmin' ? modulePricingService.getAll(signal) : Promise.resolve([]),
+        tenantId && canViewRoles ? rolesService.getAll({ clientTenantId: tenantId }, signal) : Promise.resolve([]),
+        tenantId ? api.get<any>('/inventory/warehouses', { signal }) : Promise.resolve([]),
+        tenantId ? subscriptionsService.getEnabledModules(tenantId, undefined, signal) : Promise.resolve([]),
+      ]);
+      return { branding, currency, industries, pricing, roles: rolesData, warehouses: warehouseData, modules };
+    },
+    { enabled: Boolean(user), onError: (error) => toast.error(error.message || 'Error cargando configuración') },
+  );
+
+  useEffect(() => {
+    if (!configurationData) return;
+    const branding = configurationData.branding as any;
+    const currency = configurationData.currency as any;
+    const industries = asList(configurationData.industries);
+    const rolesList = asList(configurationData.roles);
+    const warehouseList = asList(configurationData.warehouses);
+    const pricingList = asList(configurationData.pricing);
+    const modulesList = asList(configurationData.modules);
+
+    if (branding?.primaryColor) setPrimaryHex(branding.primaryColor.startsWith('oklch') ? oklchToApproxHex(branding.primaryColor) : branding.primaryColor);
+    if (branding?.sidebarColor) setSidebarHex(branding.sidebarColor.startsWith('oklch') ? oklchToApproxHex(branding.sidebarColor) : branding.sidebarColor);
+    if (branding?.accentColor) setAccentHex(branding.accentColor.startsWith('oklch') ? oklchToApproxHex(branding.accentColor) : branding.accentColor);
+    if (branding?.portalPrimaryColor) setPortalPrimaryHex(branding.portalPrimaryColor);
+    if (branding?.portalAccentColor) setPortalAccentHex(branding.portalAccentColor);
+    if (branding?.companyName) setCompanyName(branding.companyName);
+    if (branding?.logo) setLogoPreview(branding.logo);
+    if (branding?.industry) setCompanyIndustry(branding.industry);
+    if (branding?.whiteLabel !== undefined) setWhiteLabel(branding.whiteLabel);
+    if (branding) {
+      updateTheme(generateThemeFromColor(
+        branding.primaryColor?.startsWith('oklch') ? oklchToApproxHex(branding.primaryColor) : (branding.primaryColor || '#10b981'),
+        branding.sidebarColor?.startsWith('oklch') ? oklchToApproxHex(branding.sidebarColor) : (branding.sidebarColor || '#0c1a12'),
+        branding.accentColor?.startsWith('oklch') ? oklchToApproxHex(branding.accentColor) : (branding.accentColor || '#064e3b'),
+      ));
+    }
+    if (currency) {
+      setExchangeRateAuto(currency.auto !== false);
+      setCurrentBackendRate(currency.rate ?? null);
+      if (currency.auto === false && currency.rate !== undefined) setManualRate(String(currency.rate));
+      setDisplayCurrencySetting(currency.displayCurrency === 'USD' ? 'USD' : (currency.baseCurrency === 'USD' ? 'USD' : 'NIO'));
+      setAllowCurrencySwitch(currency.allowCurrencySwitch !== false);
+    }
+    setIndustryOptions(industries);
+    setPricingData(pricingList);
+    setRoles(rolesList);
+    setWarehouses(warehouseList);
+    setEnabledModules(modulesList);
+  }, [configurationData]);
 
   const handleCreateRole = () => {
     if (!canCreateRoles) {

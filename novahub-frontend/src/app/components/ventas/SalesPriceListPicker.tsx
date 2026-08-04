@@ -24,7 +24,7 @@ export function SalesPriceListPicker({ customer, value, items, currency = 'NIO',
   const { user } = useAuth();
   const matrixQuery = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', user?.tenantId || 'anonymous'],
-    queryFn: priceListsService.getMatrix,
+    queryFn: ({ signal }) => priceListsService.getMatrix(signal),
     enabled: Boolean(user?.tenantId),
     staleTime: 60_000,
   });

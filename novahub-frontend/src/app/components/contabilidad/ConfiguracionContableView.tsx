@@ -20,6 +20,7 @@ import { BankAccountsView } from './BankAccountsView'
 import { TaxCatalogView } from './TaxCatalogView'
 import { contabilidadService } from '../../services/contabilidad.service'
 import { CHART_ACCOUNT_CSV_HEADERS, csvRowsToText, downloadCsv, templateRows } from '../../utils/chartOfAccountsCsv'
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery'
 
 const INDUSTRIES = [
   { value: 'RETAIL', label: 'Comercio Minorista' },
@@ -180,7 +181,6 @@ type ConnectionModule = {
 }
 
 export function ConfiguracionContableView() {
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [seeding, setSeeding] = useState(false)
 
@@ -190,22 +190,24 @@ export function ConfiguracionContableView() {
   const [industry, setIndustry] = useState('RETAIL')
   const [accountMappings, setAccountMappings] = useState<Record<string, any>>({})
   const [customModules, setCustomModules] = useState<ConnectionModule[]>([])
-  const [allAccounts, setAllAccounts] = useState<AccountInfo[]>([])
-
-  const [connections, setConnections] = useState<any>(null)
-  const [connectionsLoading, setConnectionsLoading] = useState(false)
+  const configQuery = useAccountingQuery<any>(['config'], async (signal) => contabilidadService.getConfig(signal))
+  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)))
+  const connectionsQuery = useAccountingQuery<any>(['connections'], async (signal) => contabilidadService.testConnections(signal), { enabled: false, staleTime: 30_000 })
+  const loading = configQuery.isLoading
+  const connections = connectionsQuery.data
+  const connectionsLoading = connectionsQuery.isFetching
+  const allAccounts = useMemo(() => {
+    const flat: AccountInfo[] = []
+    const flatten = (items: any[]) => items.forEach(item => { flat.push({ id: item.id, code: item.code, name: item.name, type: item.type }); if (item.children) flatten(item.children) })
+    flatten(accountsQuery.data || [])
+    return flat
+  }, [accountsQuery.data])
 
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set(['invoice', 'payment']))
 
   useEffect(() => {
-    loadConfig()
-    loadAccounts()
-  }, [])
-
-  const loadConfig = async () => {
-    setLoading(true)
-    try {
-      const res = await contabilidadService.getConfig()
+    const res = configQuery.data
+    if (!res) return
       const cfg = res?.config || res || {}
       setAutoGenEnabled(cfg.autoGenEnabled ?? true)
       setDefaultCurrency(cfg.defaultCurrency || 'NIO')
@@ -213,41 +215,15 @@ export function ConfiguracionContableView() {
       setIndustry(cfg.industry || 'RETAIL')
       setAccountMappings(cfg.accountMappings || {})
       setCustomModules(cfg.customModules || [])
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar configuración')
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [configQuery.data])
 
-  const loadAccounts = async () => {
-    try {
-      const res = await contabilidadService.getChartOfAccounts()
-      const flat: AccountInfo[] = []
-      const flatten = (items: any[]) => {
-        for (const item of items) {
-          flat.push({ id: item.id, code: item.code, name: item.name, type: item.type })
-          if (item.children) flatten(item.children)
-        }
-      }
-      flatten(Array.isArray(res) ? res : [])
-      setAllAccounts(flat)
-    } catch {
-      // non-critical
-    }
-  }
+  useEffect(() => {
+    if (configQuery.error) toast.error(configQuery.error.message || 'Error al cargar configuración')
+  }, [configQuery.error])
 
-  const loadConnections = useCallback(async () => {
-    setConnectionsLoading(true)
-    try {
-      const res = await contabilidadService.testConnections()
-      setConnections(res)
-    } catch {
-      setConnections(null)
-    } finally {
-      setConnectionsLoading(false)
-    }
-  }, [])
+  const loadConfig = () => configQuery.refetch()
+  const loadAccounts = () => accountsQuery.refetch()
+  const loadConnections = () => connectionsQuery.refetch()
 
   const handleSave = async () => {
     setSaving(true)

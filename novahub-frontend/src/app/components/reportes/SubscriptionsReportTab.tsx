@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { subscriptionsService } from '../../services/subscriptions.service';
@@ -10,6 +10,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Layers, CheckCircle2, TrendingUp, DollarSign, Activity, ShoppingCart, ArrowUpRight, Scale, RefreshCw, UserMinus } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -65,8 +66,10 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   
-  const [requests, setRequests] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: requests = [], isLoading: loading } = useTenantQuery(['reports', 'subscriptions'], async (signal) => {
+    const result = await subscriptionsService.getAllRequests({ report: true, pageSize: 5000 } as any, signal);
+    return asList(result);
+  }, { onError: (e) => toast.error(e.message || 'Error cargando suscripciones') });
 
   const fmtShort = (v: number) => {
     const converted = convertAmount(v, 'NIO');
@@ -74,21 +77,6 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
-
-  useEffect(() => {
-    const fetch = async () => {
-      setLoading(true);
-      try {
-        const res = await subscriptionsService.getAllRequests().catch(() => ({ data: [] }));
-        setRequests(Array.isArray(res) ? res : (res as any)?.data || []);
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || "Error cargando suscripciones");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
-  }, []);
 
   const { start: currentStart } = useMemo(() => getRangeDates(dateRange), [dateRange]);
 

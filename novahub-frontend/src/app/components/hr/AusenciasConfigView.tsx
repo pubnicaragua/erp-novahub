@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { hrService } from '../../services/hr.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AbsenceType } from '../../types';
 
 interface AbsenceTypeForm {
@@ -42,27 +43,23 @@ const DEFAULT_FORM: AbsenceTypeForm = {
 
 export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
   const { canPerform } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [absenceTypes, setAbsenceTypes] = useState<AbsenceType[]>([]);
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AbsenceTypeForm>(DEFAULT_FORM);
 
-  useEffect(() => { fetchAbsenceTypes(); }, []);
-
-  const fetchAbsenceTypes = async () => {
-    try {
-      setLoading(true);
-      const res = await hrService.getAbsenceTypes() as any;
-      setAbsenceTypes(Array.isArray(res) ? res : res?.data || []);
-    } catch (error) {
-      console.error('Error fetching absence types:', error);
-      toast.error('Error al cargar tipos de ausencia');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const absenceQuery = useQuery({
+    queryKey: ['hr', 'absence-types'],
+    queryFn: ({ signal }) => hrService.getAbsenceTypes(signal) as any,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const loading = absenceQuery.isLoading;
+  const absenceTypes = (Array.isArray(absenceQuery.data) ? absenceQuery.data : absenceQuery.data?.data || []) as AbsenceType[];
+  const fetchAbsenceTypes = () => queryClient.invalidateQueries({ queryKey: ['hr', 'absence-types'] });
 
   const resetForm = () => {
     setForm(DEFAULT_FORM);

@@ -27,12 +27,14 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
   const [internalWarehouses, setInternalWarehouses] = useState<any[]>([]);
 
   useEffect(() => {
+    const controller = new AbortController();
     if (!categories && open) {
-      inventoryService.getCategories().then(r => setInternalCategories((r as any)?.data || r || []));
+      inventoryService.getCategories(controller.signal).then(r => setInternalCategories((r as any)?.data || r || [])).catch(() => undefined);
     }
     if (!warehouses && open) {
-      inventoryService.getWarehouses().then(r => setInternalWarehouses((r as any)?.data || r || []));
+      inventoryService.getWarehouses(controller.signal).then(r => setInternalWarehouses((r as any)?.data || r || [])).catch(() => undefined);
     }
+    return () => controller.abort();
   }, [open, categories, warehouses]);
 
   const effectiveCategories = categories ?? internalCategories;

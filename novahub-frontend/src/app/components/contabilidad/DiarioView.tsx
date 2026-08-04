@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, FileText, Eye, Send, XCircle, Trash2, Search, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { contabilidadService } from '../../services/contabilidad.service';
@@ -37,6 +37,7 @@ import { cn } from '../ui/utils';
 import type { JournalEntry } from '../../types';
 import type { ChartAccount } from '../../types/accounting';
 import { useAuth } from '../../contexts/AuthContext';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -77,10 +78,6 @@ function emptyLine(): JournalLineInput {
 
 export function DiarioView() {
   const { canPerform } = useAuth();
-  const [journals, setJournals] = useState<JournalEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [accounts, setAccounts] = useState<ChartAccount[]>([]);
-
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -88,10 +85,18 @@ export function DiarioView() {
   const [filterRefType, setFilterRefType] = useState('');
   const [filterRefId, setFilterRefId] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [journalPage, setJournalPage] = useState(1);
+  const journalPageSize = 50;
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [viewJournal, setViewJournal] = useState<JournalEntry | null>(null);
+  const [viewJournalId, setViewJournalId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(filterSearch.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [filterSearch]);
 
   const [formDate, setFormDate] = useState(new Date().toISOString().slice(0, 10));
   const [formDescription, setFormDescription] = useState('');
@@ -100,38 +105,34 @@ export function DiarioView() {
   const [formRefId, setFormRefId] = useState('');
   const [formCostCenter, setFormCostCenter] = useState('');
 
-  const loadJournals = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params: Record<string, string> = {};
-      if (filterStatus && filterStatus !== 'ALL') params.status = filterStatus;
-      if (filterDateFrom) params.dateFrom = filterDateFrom;
-      if (filterDateTo) params.dateTo = filterDateTo;
-      if (filterAccountId) params.accountId = filterAccountId;
-      if (filterRefType) params.referenceType = filterRefType;
-      if (filterRefId) params.referenceId = filterRefId;
-      if (filterSearch) params.search = filterSearch;
-      const data = await contabilidadService.getJournals(params);
-      setJournals(data as JournalEntry[]);
-    } catch (err: any) {
-      toast.error(err.message || 'Error al cargar asientos');
-    } finally {
-      setLoading(false);
-    }
-  }, [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, filterSearch]);
-
-  const loadAccounts = useCallback(async () => {
-    try {
-      const data = await contabilidadService.getChartOfAccounts();
-      const flatten = (items: ChartAccount[]): ChartAccount[] => items.flatMap(account => [account, ...flatten(account.children ?? [])]);
-      setAccounts(flatten(data));
-    } catch {
-      // non-critical
-    }
-  }, []);
-
-  useEffect(() => { loadJournals(); }, [loadJournals]);
-  useEffect(() => { loadAccounts(); }, [loadAccounts]);
+  const journalParams = useMemo(() => ({
+    ...(filterStatus && filterStatus !== 'ALL' ? { status: filterStatus } : {}),
+    ...(filterDateFrom ? { dateFrom: filterDateFrom } : {}),
+    ...(filterDateTo ? { dateTo: filterDateTo } : {}),
+    ...(filterAccountId ? { accountId: filterAccountId } : {}),
+    ...(filterRefType ? { referenceType: filterRefType } : {}),
+    ...(filterRefId ? { referenceId: filterRefId } : {}),
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    page: journalPage,
+    pageSize: journalPageSize,
+  }), [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, debouncedSearch, journalPage]);
+  const journalsQuery = useAccountingQuery<any>(['journals', journalParams], async (signal) => await contabilidadService.getJournals(journalParams, signal));
+  const accountsQuery = useAccountingQuery<ChartAccount[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)) as ChartAccount[]);
+  const journalDetailQuery = useAccountingQuery<JournalEntry | null>(
+    ['journal-detail', viewJournalId],
+    async (signal) => viewJournalId ? await contabilidadService.getJournal(viewJournalId, signal) as JournalEntry : null,
+    { enabled: Boolean(viewJournalId), staleTime: 5 * 60_000 },
+  );
+  const journals = accountingList(journalsQuery.data) as JournalEntry[];
+  const journalMeta = journalsQuery.data?.meta as { total: number; page: number; pageSize: number; totalPages: number } | undefined;
+  const viewJournal = journalDetailQuery.data || null;
+  const loading = journalsQuery.isLoading || journalsQuery.isFetching;
+  const accounts = useMemo(() => {
+    const flatten = (items: ChartAccount[]): ChartAccount[] => items.flatMap(account => [account, ...flatten(account.children ?? [])]);
+    return flatten(accountsQuery.data || []);
+  }, [accountsQuery.data]);
+  const loadJournals = () => journalsQuery.refetch();
+  const loadAccounts = () => accountsQuery.refetch();
 
   const accountOptions = accounts
     .filter((account) => account.isActive && account.allowManualEntry !== false && account.acceptsPostings !== false)
@@ -220,14 +221,17 @@ export function DiarioView() {
     }
   }
 
-  async function handleView(journal: JournalEntry) {
-    try {
-      const full = await contabilidadService.getJournal(journal.id);
-      setViewJournal(full as JournalEntry);
-    } catch (err: any) {
-      toast.error(err.message || 'Error al cargar detalle');
-    }
+  function handleView(journal: JournalEntry) {
+    setViewJournalId(journal.id);
   }
+
+  useEffect(() => {
+    if (journalDetailQuery.error) toast.error(journalDetailQuery.error.message || 'Error al cargar detalle');
+  }, [journalDetailQuery.error]);
+
+  useEffect(() => {
+    setJournalPage(1);
+  }, [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, debouncedSearch]);
 
   return (
     <div className="space-y-6">
@@ -632,10 +636,20 @@ export function DiarioView() {
             </Table>
           )}
         </CardContent>
+        {journalMeta && journalMeta.totalPages > 1 && (
+          <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
+            <span>Mostrando {journals.length} de {journalMeta.total} asientos</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={journalPage <= 1 || loading} onClick={() => setJournalPage((page) => page - 1)}>Anterior</Button>
+              <span>Página {journalMeta.page} de {journalMeta.totalPages}</span>
+              <Button variant="outline" size="sm" disabled={journalPage >= journalMeta.totalPages || loading} onClick={() => setJournalPage((page) => page + 1)}>Siguiente</Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* View Detail Dialog */}
-      <Dialog open={!!viewJournal} onOpenChange={(open) => { if (!open) setViewJournal(null); }}>
+      <Dialog open={!!viewJournalId} onOpenChange={(open) => { if (!open) setViewJournalId(null); }}>
         <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
@@ -646,7 +660,9 @@ export function DiarioView() {
             </DialogDescription>
           </DialogHeader>
 
-          {viewJournal && (
+          {journalDetailQuery.isLoading ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">Cargando detalle...</div>
+          ) : viewJournal ? (
             <div className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
                 <div>
@@ -741,10 +757,10 @@ export function DiarioView() {
                 )}
               </div>
             </div>
-          )}
+          ) : null}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setViewJournal(null)}>
+            <Button variant="outline" onClick={() => setViewJournalId(null)}>
               Cerrar
             </Button>
           </DialogFooter>

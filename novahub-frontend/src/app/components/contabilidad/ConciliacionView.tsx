@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Landmark, Plus, Search, ChevronLeft, CheckCircle2, RefreshCw, Eye
 } from 'lucide-react';
@@ -21,6 +22,7 @@ import {
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 const statusStyles: Record<string, string> = {
   PENDING: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -36,9 +38,7 @@ const statusLabels: Record<string, string> = {
 
 export function ConciliacionView() {
   const { canPerform } = useAuth();
-  const [reconciliations, setReconciliations] = useState<any[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -50,41 +50,26 @@ export function ConciliacionView() {
     accountId: '', period: '', startDate: '', endDate: '', startBalance: '', endBalance: '',
   });
 
-  const fetchReconciliations = async () => {
-    try {
-      setLoading(true);
-      const res = await contabilidadService.getReconciliations();
-      setReconciliations(res || []);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar conciliaciones');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAccounts = async () => {
-    try {
-      const res = await contabilidadService.getChartOfAccounts(true);
-      const tree = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
-      const flatten = (items: any[]): any[] => {
-        const result: any[] = [];
-        for (const item of items) {
-          const { children, ...rest } = item;
-          result.push(rest);
-          if (Array.isArray(children) && children.length > 0) result.push(...flatten(children));
-        }
-        return result;
-      };
-      setAccounts(flatten(tree));
-    } catch {
-      // Silently fail
-    }
-  };
+  const reconciliationsQuery = useAccountingQuery<any[]>(['reconciliations'], async (signal) => accountingList(await contabilidadService.getReconciliations(signal)));
+  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
+  const reconciliations = reconciliationsQuery.data || [];
+  const accounts = (() => {
+    const result: any[] = [];
+    const flatten = (items: any[]) => items.forEach(item => { const { children, ...rest } = item; result.push(rest); if (Array.isArray(children)) flatten(children); });
+    flatten(accountsQuery.data || []);
+    return result;
+  })();
+  const loading = reconciliationsQuery.isLoading || accountsQuery.isLoading;
+  const fetchReconciliations = () => reconciliationsQuery.refetch();
 
   const fetchDetail = async (id: string) => {
     try {
       setDetailLoading(true);
-      const res = await contabilidadService.getReconciliation(id);
+      const res = await queryClient.fetchQuery({
+        queryKey: ['accounting', 'reconciliation-detail', id],
+        queryFn: ({ signal }) => contabilidadService.getReconciliation(id, signal),
+        staleTime: 5 * 60_000,
+      });
       setDetail(res);
       setSelectedId(id);
     } catch (e: any) {
@@ -93,11 +78,6 @@ export function ConciliacionView() {
       setDetailLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchReconciliations();
-    fetchAccounts();
-  }, []);
 
   const filtered = reconciliations.filter((r) => {
     const q = searchTerm.toLowerCase();
@@ -125,7 +105,7 @@ export function ConciliacionView() {
       toast.success('Conciliación creada');
       setShowCreate(false);
       setForm({ accountId: '', period: '', startDate: '', endDate: '', startBalance: '', endBalance: '' });
-      fetchReconciliations();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al crear');
     }

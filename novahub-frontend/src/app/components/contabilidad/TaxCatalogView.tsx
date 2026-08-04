@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -7,6 +8,7 @@ import { Switch } from '../ui/switch'
 import { toast } from 'sonner'
 import { Plus, Trash2, Save, ShieldAlert, Loader2 } from 'lucide-react'
 import { contabilidadService } from '../../services/contabilidad.service'
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery'
 
 interface TaxEntry {
   id?: string
@@ -22,8 +24,7 @@ interface TaxEntry {
 }
 
 export function TaxCatalogView() {
-  const [entries, setEntries] = useState<TaxEntry[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [newEntry, setNewEntry] = useState<TaxEntry>({
     name: '', code: '', type: 'WITHHOLDING', category: 'IR',
     rate: 0, baseCalculation: 'LINE_TOTAL', appliesTo: 'ALL',
@@ -31,14 +32,10 @@ export function TaxCatalogView() {
   })
   const [editingId, setEditingId] = useState<string | null>(null)
 
-  const fetchEntries = () => {
-    setLoading(true)
-    contabilidadService.getTaxCatalog().then((res: any) => {
-      setEntries(res?.data || res || [])
-    }).catch(() => {}).finally(() => setLoading(false))
-  }
-
-  useEffect(() => { fetchEntries() }, [])
+  const entriesQuery = useAccountingQuery<TaxEntry[]>(['tax-catalog'], async (signal) => accountingList(await contabilidadService.getTaxCatalog(undefined, signal)))
+  const entries = entriesQuery.data || []
+  const loading = entriesQuery.isLoading || entriesQuery.isFetching
+  const fetchEntries = () => entriesQuery.refetch()
 
   const handleCreate = async () => {
     if (!newEntry.name || !newEntry.code) { toast.error('Nombre y código requeridos'); return }
@@ -46,7 +43,7 @@ export function TaxCatalogView() {
       await contabilidadService.createTaxCatalogEntry(newEntry)
       toast.success('Entrada creada')
       setNewEntry({ name: '', code: '', type: 'WITHHOLDING', category: 'IR', rate: 0, baseCalculation: 'LINE_TOTAL', appliesTo: 'ALL', requiresAuth: false, isActive: true })
-      fetchEntries()
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] })
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error')
     }
@@ -57,7 +54,7 @@ export function TaxCatalogView() {
       await contabilidadService.updateTaxCatalogEntry(id, data)
       toast.success('Actualizado')
       setEditingId(null)
-      fetchEntries()
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] })
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error')
     }
@@ -67,7 +64,7 @@ export function TaxCatalogView() {
     try {
       await contabilidadService.deleteTaxCatalogEntry(id)
       toast.success('Eliminado')
-      fetchEntries()
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] })
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error')
     }
@@ -78,7 +75,7 @@ export function TaxCatalogView() {
       const res = await contabilidadService.seedDefaultTaxCatalog()
       const data = res?.data || res
       toast.success(data?.skipped ? 'Catálogo ya sembrado' : `Creadas ${data?.created || 0} entradas`)
-      fetchEntries()
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] })
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error')
     }

@@ -441,13 +441,13 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       editable: canPerform('SALES_CLIENTS', 'edit'),
       type: 'select',
       options: [
-        { label: 'Particular', value: 'INDIVIDUAL', color: 'bg-blue-500/10 text-blue-500' },
-        { label: 'Empresa', value: 'COMPANY', color: 'bg-purple-500/10 text-purple-500' }
+        { label: 'Particular', value: 'INDIVIDUAL', color: 'bg-primary/10 text-primary' },
+        { label: 'Empresa', value: 'COMPANY', color: 'bg-primary/10 text-primary' }
       ],
       render: (val) => (
         <Badge variant="outline" className={cn(
           "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
-          (val || '').toUpperCase() === 'COMPANY' ? 'bg-purple-500/10 text-purple-500' : 'bg-blue-500/10 text-blue-500'
+          'bg-primary/10 text-primary'
         )}>
           {(val || '').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Particular'}
         </Badge>
@@ -492,19 +492,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'department', header: 'Departamento', width: '150px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'creditLimit', header: 'Límite de crédito', width: '140px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="text-xs font-bold tabular-nums">{formatConvertedAmount(val || 0, 'NIO')}</span> },
-    { 
-      key: 'balance', 
-      header: 'Saldo Deudor', 
-      width: '150px',
-      render: (val) => (
-        <span className={cn(
-          "text-[13px] font-black tabular-nums",
-          (val || 0) > 0 ? "text-rose-500" : "text-emerald-500"
-        )}>
-          {formatConvertedAmount(val || 0, 'NIO')}
-        </span>
-      )
-    },
+    { key: 'balance', header: 'Saldo deudor', width: '150px', render: (val) => <span className={cn('text-[13px] font-black tabular-nums', Number(val || 0) > 0 ? 'text-destructive' : 'text-primary')}>{formatConvertedAmount(val || 0, 'NIO')}</span> },
     { 
       key: 'status', 
       header: 'Estado', 
@@ -513,12 +501,12 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       type: 'select',
       options: [
         { label: 'Activo', value: 'ACTIVE', color: 'bg-emerald-500/10 text-emerald-500' },
-        { label: 'Inactivo', value: 'INACTIVE', color: 'bg-muted/20 text-muted-foreground' }
+        { label: 'Inactivo', value: 'INACTIVE', color: 'bg-primary/10 text-primary' }
       ],
       render: (val) => (
         <Badge variant="outline" className={cn(
           "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
-          (val || '').toUpperCase() === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/20 text-muted-foreground'
+          (val || '').toUpperCase() === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-primary/10 text-primary'
         )}>
           {(val || '').toUpperCase() === 'ACTIVE' ? 'Activo' : 'Inactivo'}
         </Badge>
@@ -548,9 +536,9 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       {/* KPIs Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <SalesKpiCard title="Total Clientes" value={data.length} icon={Users} color="text-primary" bg="bg-primary/10" kind="filter" active={customerTypeFilter === 'ALL' && statusFilter === 'ALL'} onClick={() => { setCustomerTypeFilter('ALL'); setStatusFilter('ALL'); }} />
-        <SalesKpiCard title="Particulares" value={data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length} icon={Users} color="text-blue-500" bg="bg-blue-500/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
-        <SalesKpiCard title="Empresas" value={data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length} icon={CheckCircle2} color="text-amber-500" bg="bg-amber-500/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
-        <SalesKpiCard title="Saldo Pendiente" value={formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.balance || 0), 0), 'NIO')} icon={CreditCard} color="text-rose-500" bg="bg-rose-500/10" />
+        <SalesKpiCard title="Particulares" value={data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length} icon={Users} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
+        <SalesKpiCard title="Empresas" value={data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
+        <SalesKpiCard title="Saldo deudor" value={formatConvertedAmount(data.reduce((acc, customer) => acc + Number(customer.balance || 0), 0), 'NIO')} icon={CreditCard} color="text-destructive" bg="bg-destructive/10" />
       </div>
 
       {/* Main Content */}
@@ -622,6 +610,9 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               data={filtered}
               columns={visibleColumns}
               onRowUpdate={handleUpdate}
+              onRowClick={(row) => setSelectedCustomerDetail(row)}
+              onRowDoubleClick={(row) => openEditCustomer(row)}
+              editOnPencilOnly
               isLoading={loading}
               pagination={pagination}
               showClearSelection={false}
@@ -636,7 +627,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                      <Button variant="ghost" size="icon" title="Editar cliente" aria-label="Editar cliente" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => openEditCustomer(row)}><Pencil className="size-4" /></Button>
                    )}
                    {canPerform('SALES_CLIENTS', 'edit') && (
-                     <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Inactivar cliente'} className={cn('size-8 rounded-lg transition-colors', String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'hover:bg-emerald-500/10 hover:text-emerald-500' : 'hover:bg-amber-500/10 hover:text-amber-500')} onClick={() => setPendingStatusChange(row)}><Ban className="size-4" /></Button>
+                   <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Inactivar cliente'} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setPendingStatusChange(row)}><Ban className="size-4" /></Button>
                    )}
                 </div>
               )}
@@ -644,7 +635,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 text-[10px] font-black uppercase tracking-wider text-amber-600 hover:bg-amber-500/10"
+                  className="h-8 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10"
                   onClick={() => setPendingBulkDeactivateIds(selectedIds)}
                 >
                   <Ban className="mr-2 size-3" /> Desactivar clientes

@@ -9,10 +9,10 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { billsService, suppliersService, purchaseOrdersService, paymentsService, expensesService, purchaseReceiptsService } from '../../services/compras.service';
-import { contabilidadService } from '../../services/contabilidad.service';
+import { billsService, purchaseOrdersService, paymentsService, expensesService } from '../../services/compras.service';
 import { TaxDetail } from '../ui/TaxSelector';
 import type { SupplierInvoice, Supplier } from '../../types';
+import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -21,6 +21,8 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateSupplierInvoicePDF } from '../../utils/pdfGenerator';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
+import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 
 interface Props {
   data: SupplierInvoice[];
@@ -29,6 +31,12 @@ interface Props {
   draftInvoiceFromOrder?: any;
   onDraftConsumed?: () => void;
   onRegisterPaymentFromInvoice?: (draft: any) => void;
+  supplierCatalog?: Supplier[];
+  accountCatalog?: any[];
+  purchaseReceiptCatalog?: any[];
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
+  onStatusChange?: (value: string) => void;
 }
 
 const statusOpts = [
@@ -39,7 +47,7 @@ const statusOpts = [
   { label: 'Reembolsada', value: 'REFUNDED', color: 'bg-muted/30 text-muted-foreground/50' },
 ];
 
-export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice }: Props) {
+export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], accountCatalog = [], purchaseReceiptCatalog = [], pagination, onSearchChange, onStatusChange }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,19 +68,10 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const generateSupplierInvoiceNumber = () => `INV-${Date.now().toString().slice(-6)}`;
 
   useEffect(() => {
-    suppliersService.getAll().then(res => {
-      const list = Array.isArray(res) ? res : (res as any).data || [];
-      setSuppliers(list);
-    }).catch();
-    contabilidadService.getChartOfAccounts().then((res: any) => {
-      const list = Array.isArray(res) ? res : (res as any)?.data || [];
-      setAccounts(Array.isArray(list) ? list : []);
-    }).catch();
-    purchaseReceiptsService.getAll().then((res: any) => {
-      const list = Array.isArray(res) ? res : (res as any)?.data || [];
-      setReceipts(Array.isArray(list) ? list : []);
-    }).catch();
-  }, []);
+    setSuppliers(supplierCatalog);
+    setAccounts(accountCatalog);
+    setReceipts(purchaseReceiptCatalog);
+  }, [supplierCatalog, accountCatalog, purchaseReceiptCatalog]);
 
   useEffect(() => {
     if (draftInvoiceFromOrder) {
@@ -251,8 +250,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     const supplier = suppliers.find((s) => s.id === invoice.supplierId);
     const syncReference = `AUTO-INV-${invoice.id}`;
     const [paymentsResponse, expensesResponse] = await Promise.all([
-      paymentsService.getAll().catch(() => ({ data: [] as any[] })),
-      expensesService.getAll().catch(() => ({ data: [] as any[] })),
+      paymentsService.getAll({ supplierInvoiceId: invoice.id, page: 1, pageSize: 200 }).catch(() => ({ data: [] as any[] })),
+      expensesService.getAll({ search: syncReference, page: 1, pageSize: 50 }).catch(() => ({ data: [] as any[] })),
     ]);
     const existingPayments = (paymentsResponse as any)?.data || [];
     const existingExpenses = (expensesResponse as any)?.data || [];
@@ -786,7 +785,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                       </Button>
                     )}
                   </div>
-                  <div className="grid grid-cols-12 gap-2 items-end">
+                  <div className="purchase-item-fields grid grid-cols-12 gap-2 items-end">
                     <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Cant.</p>
                       <Input 
@@ -947,25 +946,15 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((k, i) => (
-          <Card key={i}
-            className={cn(
-              'bg-card border-border/50 rounded-2xl shadow-sm transition-all cursor-pointer',
-              statusFilter === k.filter ? 'ring-2 ring-primary/30 border-primary/30' : 'hover:border-border'
-            )}
-            onClick={() => setStatusFilter(prev => prev === k.filter ? 'ALL' : k.filter)}
-          >
-            <CardContent className="p-5"><div className="flex items-center gap-4">
-              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
-            </div></CardContent>
-          </Card>
+          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind="filter" active={statusFilter === k.filter} onClick={() => { const next = statusFilter === k.filter ? 'ALL' : k.filter; setStatusFilter(next); onStatusChange?.(next); }} />
         ))}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Facturas de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Cuentas por pagar</p></div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-            <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Facturas de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Cuentas por pagar</p></div>
+          <div className="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
+            <PurchaseViewTutorial view="invoices" />
+            <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_INVOICES', 'create') && (
               <>
                 <Button onClick={handleCreateNew} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Factura</Button>
@@ -973,7 +962,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
           onBulkDelete={canPerform('PURCHASES_INVOICES', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {

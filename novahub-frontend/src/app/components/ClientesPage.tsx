@@ -33,15 +33,18 @@ export function ClientesPage() {
   });
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    void fetchData(controller.signal);
+    return () => controller.abort();
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (signal?: AbortSignal) => {
     try {
       setLoading(true);
-      const res = await customersService.getAll();
+      const res = await customersService.getAll(undefined, signal);
       setClientesData(res.data || []);
     } catch (error) {
+      if (signal?.aborted) return;
       console.error('Error fetching customers:', error);
     } finally {
       setLoading(false);
@@ -206,9 +209,6 @@ export function ClientesPage() {
               <TableBody>
                 {filtered.map(c => {
                   const limite = c.creditLimit || 0;
-                  const usado = (c as any).balance || 0;
-                  const percent = limite > 0 ? Math.min(Math.round((usado / limite) * 100), 100) : 0;
-                  const isHigh = percent > 80;
                   return (
                     <TableRow key={c.id} className="hover:bg-muted/20">
                       <TableCell>
@@ -233,11 +233,11 @@ export function ClientesPage() {
                       <TableCell>
                         <div className="w-48 space-y-1.5">
                           <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">Usado: {formatConvertedAmount(usado, 'NIO')}</span>
-                            <span className="font-medium text-foreground">Max: {formatConvertedAmount(limite, 'NIO')}</span>
+                            <span className="text-muted-foreground">Límite configurado</span>
+                            <span className="font-medium text-foreground">{formatConvertedAmount(limite, 'NIO')}</span>
                           </div>
                           <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                            <div className={`h-full ${isHigh ? 'bg-red-500' : 'bg-primary'} transition-all`} style={{ width: `${percent}%` }} />
+                            <div className="h-full bg-primary transition-all" style={{ width: limite > 0 ? '100%' : '0%' }} />
                           </div>
                         </div>
                       </TableCell>

@@ -12,6 +12,7 @@ import { api } from '../../services/api';
 import { rolesService } from '../../services/roles.service';
 import { tenantsService } from '../../services/tenants.service';
 import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 
 interface TeamAccessPanelProps {
   tenantId: string;
@@ -23,7 +24,6 @@ interface TeamAccessPanelProps {
   onUsersChange?: () => void;
 }
 
-const normalizeList = (res: any): any[] => Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
 const permissionActions = ['read', 'create', 'edit', 'delete'] as const;
 type PermissionAction = typeof permissionActions[number];
 
@@ -64,20 +64,34 @@ export function TeamAccessPanel({ tenantId, tenantName, users, departmentDialogO
   const [viewingRole, setViewingRole] = useState<any | null>(null);
   const [assignedUsersRole, setAssignedUsersRole] = useState<any | null>(null);
 
+  const { data: teamData, refetch: refetchTeam } = useTenantQuery(
+    ['my-company-team-access', tenantId],
+    async (signal) => {
+      const [departmentsResponse, rolesResponse] = await Promise.all([
+        api.get<any>('/hr/departments', { signal }),
+        rolesService.getAll({ clientTenantId: tenantId }, signal),
+      ]);
+      return {
+        departments: asList(departmentsResponse),
+        roles: asList(rolesResponse).filter((role: any) => !role.clientTenantId || role.clientTenantId === tenantId),
+      };
+    },
+    { enabled: Boolean(tenantId), onError: (error) => toast.error(error.message || 'No se pudo cargar la configuración del equipo') },
+  );
+
+  useEffect(() => {
+    if (!teamData) return;
+    setDepartments(teamData.departments);
+    setRoles(teamData.roles);
+  }, [teamData]);
+
   const load = async () => {
     try {
-      const [departmentsResponse, rolesResponse] = await Promise.all([
-        api.get<any>('/hr/departments'),
-        rolesService.getAll({ clientTenantId: tenantId }),
-      ]);
-      setDepartments(normalizeList(departmentsResponse));
-      setRoles(normalizeList(rolesResponse).filter((role: any) => !role.clientTenantId || role.clientTenantId === tenantId));
+      await refetchTeam();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'No se pudo cargar la configuración del equipo');
     }
   };
-
-  useEffect(() => { void load(); }, [tenantId]);
 
   const groupedModules = useMemo(() => ALL_PERM_MODULES.reduce((groups: Record<string, any[]>, module: any) => {
     const group = module.parent || module.id;

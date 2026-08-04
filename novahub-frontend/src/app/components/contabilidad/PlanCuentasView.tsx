@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Plus, Search, Upload, FileDown, Pencil, Trash2,
   ChevronRight, ChevronDown, FolderTree,
@@ -27,6 +27,7 @@ import type { AccountDetailType, AccountSubtype, AccountType, ChartAccountCsvRow
 import { downloadCsv, downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv';
 import { useAuth } from '../../contexts/AuthContext';
 import { AccountImportPreview } from './AccountImportPreview';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 interface AccountNode {
   id: string;
@@ -122,8 +123,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   const { canPerform } = useAuth();
   const { formatConvertedAmount } = useCurrency();
 
-  const [accounts, setAccounts] = useState<AccountNode[]>([]);
-  const [loading, setLoading] = useState(true);
+  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
+  const loading = accountsQuery.isLoading || accountsQuery.isFetching;
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAccount, setSelectedAccount] = useState<AccountNode | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -152,10 +153,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importFileName, setImportFileName] = useState('');
 
-  const fetchAccounts = useCallback(async (refresh = false) => {
-    setLoading(true);
-    try {
-      const raw = await contabilidadService.getChartOfAccounts(refresh);
+  const accounts = useMemo(() => {
+      const raw = accountsQuery.data || [];
       const tree = Array.isArray(raw) ? raw : Array.isArray((raw as any)?.data) ? (raw as any).data : [];
       const flatten = (items: any[]): any[] => {
         const result: any[] = [];
@@ -180,15 +179,9 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         children: [], level: 0,
         _count: a._count ?? { children: 0, transactions: 0 },
       }));
-      setAccounts(buildTree(nodes));
-    } catch (e: any) {
-      toast.error(e?.message || 'Error al cargar plan de cuentas');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchAccounts(true); }, [fetchAccounts]);
+      return buildTree(nodes);
+  }, [accountsQuery.data]);
+  const fetchAccounts = (_refresh = false) => accountsQuery.refetch();
 
   const flatList = useMemo(() => flattenTree(accounts), [accounts]);
 

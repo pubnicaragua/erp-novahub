@@ -73,14 +73,14 @@ export interface SeedDemoResponse {
 }
 
 export const novachatService = {
-  getChannels: () =>
-    api.get<ChatChannel[]>('/novachat/channels'),
+  getChannels: (signal?: AbortSignal) =>
+    api.get<ChatChannel[]>('/novachat/channels', { signal }),
 
   createChannel: (data: { name: string; type: string; channelIdentifier?: string }) =>
     api.post<ChatChannel>('/novachat/channels', data),
 
-  getConversations: (params?: { channelId?: string; status?: string }) =>
-    api.get<ChatConversation[]>('/novachat/conversations', { params }),
+  getConversations: (params?: { channelId?: string; status?: string }, signal?: AbortSignal) =>
+    api.get<ChatConversation[]>('/novachat/conversations', { params, signal }),
 
   createConversation: (data: { channelId: string; contactId: string; subject?: string }) =>
     api.post<ChatConversation>('/novachat/conversations', data),
@@ -88,20 +88,20 @@ export const novachatService = {
   updateConversationStatus: (id: string, status: string) =>
     api.patch<ChatConversation>(`/novachat/conversations/${id}/status`, { status }),
 
-  getMessages: (conversationId: string) =>
-    api.get<ChatMessage[]>(`/novachat/conversations/${conversationId}/messages`),
+  getMessages: (conversationId: string, signal?: AbortSignal) =>
+    api.get<ChatMessage[]>(`/novachat/conversations/${conversationId}/messages`, { signal }),
 
   sendMessage: (data: { conversationId: string; content: string; agentName?: string }) =>
     api.post<ChatMessage>('/novachat/messages', data),
 
-  getContacts: () =>
-    api.get<ChatContact[]>('/novachat/contacts'),
+  getContacts: (signal?: AbortSignal) =>
+    api.get<ChatContact[]>('/novachat/contacts', { signal }),
 
   createContact: (data: { name: string; phone?: string; email?: string; notes?: string }) =>
     api.post<ChatContact>('/novachat/contacts', data),
 
-  getDashboard: () =>
-    api.get<ChatDashboard>('/novachat/dashboard'),
+  getDashboard: (signal?: AbortSignal) =>
+    api.get<ChatDashboard>('/novachat/dashboard', { signal }),
 
   seedDemo: () =>
     api.post<SeedDemoResponse>('/novachat/seed', {}),

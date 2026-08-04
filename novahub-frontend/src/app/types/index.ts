@@ -22,6 +22,12 @@ export interface PaginatedResponse<T> {
 
 export interface ApiFilters {
   search?: string;
+  categoryId?: string;
+  type?: string;
+  warehouseId?: string;
+  productId?: string;
+  supplierId?: string;
+  supplierInvoiceId?: string;
   status?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -29,6 +35,8 @@ export interface ApiFilters {
   pageSize?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  /** Bounded bulk mode used by reports; regular lists remain capped at 200. */
+  report?: boolean;
 }
 
 export type SalesPageSize = 50 | 100 | 200;
@@ -228,6 +236,8 @@ export interface Invoice {
   exchangeRate?: number;
   baseTotal?: number;
   accountId?: string;
+  registerId?: string | null;
+  sessionId?: string | null;
   status: PaymentStatus;
   notes?: string;
   sellerEmployeeId?: string | null;

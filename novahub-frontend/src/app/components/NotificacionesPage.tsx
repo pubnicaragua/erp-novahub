@@ -9,6 +9,7 @@ import { MensajesView } from './notificaciones/MensajesView';
 import { PushView } from './notificaciones/PushView';
 import { alertsService, messagesService, pushNotificationsService } from '../services/notificaciones.service';
 import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
+import { asList, useTenantQuery } from '../hooks/useTenantQuery';
 
 const NOTIFICACIONES_TOUR_STEPS: GuidedTourStep[] = [
   {
@@ -66,66 +67,30 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
   const tabIds = tabs.map((tab) => tab.id);
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'alertas');
   const [showTour, setShowTour] = useState(false);
-  const [data, setData] = useState<{ alertas: any[]; mensajes: any[]; push: any[] }>({
-    alertas: [],
-    mensajes: [],
-    push: [],
+  const alertsQuery = useTenantQuery<any[]>(['notifications', 'alerts'], signal => alertsService.getAll(signal), {
+    enabled: activeTab === 'alertas',
   });
-  const [loading, setLoading] = useState(true);
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [alertas, mensajes, push] = await Promise.all([
-        alertsService.getAll().catch(() => []),
-        messagesService.getAll().catch(() => []),
-        pushNotificationsService.getAll().catch(() => []),
-      ]);
-      setData({ alertas, mensajes, push });
-    } catch (error) {
-      console.error('Error fetching notificaciones:', error);
-    } finally {
-      setLoading(false);
-    }
+  const messagesQuery = useTenantQuery<any[]>(['notifications', 'messages'], signal => messagesService.getAll(signal), {
+    enabled: activeTab === 'mensajes',
+    refetchInterval: activeTab === 'mensajes' ? 5000 : false,
+    refetchIntervalInBackground: false,
+  });
+  const pushQuery = useTenantQuery<any[]>(['notifications', 'push'], signal => pushNotificationsService.getAll(signal), {
+    enabled: activeTab === 'push',
+  });
+  const data = {
+    alertas: asList(alertsQuery.data),
+    mensajes: asList(messagesQuery.data),
+    push: asList(pushQuery.data),
   };
-
-  useEffect(() => {
-    void fetchData();
-  }, []);
+  const activeQuery = activeTab === 'alertas' ? alertsQuery : activeTab === 'mensajes' ? messagesQuery : pushQuery;
+  const loading = activeQuery.isLoading || activeQuery.isFetching;
+  const fetchData = () => activeQuery.refetch();
 
   useEffect(() => {
     if (!activeSubModule) return;
     setActiveTab(tabIds.includes(activeSubModule) ? activeSubModule : 'alertas');
   }, [activeSubModule]);
-
-  useEffect(() => {
-    if (activeTab !== 'mensajes') return;
-    let active = true;
-    const syncMessages = async () => {
-      try {
-        const mensajes = await messagesService.getAll();
-        if (active) setData((current) => ({ ...current, mensajes }));
-      } catch {
-        // Keep the last successful inbox visible and retry on the next cycle.
-      }
-    };
-    const syncWhenVisible = () => {
-      if (document.visibilityState === 'visible') void syncMessages();
-    };
-    const syncWhenFocused = () => void syncMessages();
-
-    void syncMessages();
-    const timer = window.setInterval(syncMessages, 5000);
-    window.addEventListener('focus', syncWhenFocused);
-    document.addEventListener('visibilitychange', syncWhenVisible);
-
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-      window.removeEventListener('focus', syncWhenFocused);
-      document.removeEventListener('visibilitychange', syncWhenVisible);
-    };
-  }, [activeTab]);
 
   return (
     <div className="min-h-full bg-background">

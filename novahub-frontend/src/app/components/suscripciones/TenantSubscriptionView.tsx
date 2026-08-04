@@ -30,6 +30,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
 import { getPasswordError, isValidEmail, normalizeEmail } from '../../utils/accountValidation';
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
@@ -82,20 +83,32 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [userEmailError, setUserEmailError] = useState('');
   const [checkingUserEmail, setCheckingUserEmail] = useState(false);
 
+  const { data: tenantData, isLoading: tenantDataLoading, refetch: refetchTenantData } = useTenantQuery(
+    ['my-company-detail', tenant?.id || 'none'],
+    async (signal) => {
+      if (!tenant?.id) return null;
+      const [usersRes, warehouseRes, branding, industriesRes] = await Promise.all([
+        tenantsService.getUsers(tenant.id, signal),
+        inventoryService.getWarehouses(signal),
+        brandingService.getCurrent(signal),
+        api.get<any[]>(`/tenants/${tenant.id}/industries`, { signal }),
+      ]);
+      return { users: asList(usersRes), warehouses: asList(warehouseRes), branding, industries: asList(industriesRes) };
+    },
+    { enabled: Boolean(tenant?.id), onError: (error) => toast.error(error.message || 'Error cargando Mi Empresa') },
+  );
+
   useEffect(() => {
-    if (tenant?.id) {
-      fetchUsers();
-      inventoryService.getWarehouses().then((response: any) => setWarehouses(Array.isArray(response) ? response : (response?.data || []))).catch(() => setWarehouses([]));
-      setCompanyName(tenant.name || '');
-      setCompanySlug(tenant.slug || '');
-      setCompanyIndustry(tenant.industry || 'OTHER');
-      brandingService.getCurrent().then((branding) => {
-        if (branding.companyName) setCompanyName(branding.companyName);
-        if (branding.industry) setCompanyIndustry(branding.industry);
-      }).catch(() => undefined);
-      api.get<any[]>(`/tenants/${tenant.id}/industries`).then((response) => setIndustryOptions(Array.isArray(response) ? response : [])).catch(() => setIndustryOptions([]));
-    }
-  }, [tenant?.id]);
+    setLoadingUsers(tenantDataLoading);
+    if (!tenant) return;
+    setCompanyName(tenantData?.branding?.companyName || tenant.name || '');
+    setCompanySlug(tenant.slug || '');
+    setCompanyIndustry(tenantData?.branding?.industry || tenant.industry || 'OTHER');
+    if (!tenantData) return;
+    setUsers(tenantData.users);
+    setWarehouses(tenantData.warehouses);
+    setIndustryOptions(tenantData.industries);
+  }, [tenant, tenantData, tenantDataLoading]);
 
   useEffect(() => {
     const email = normalizeEmail(userForm.email);
@@ -133,8 +146,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       await api.post(`/tenants/${tenant.id}/industries`, { name, code });
       setNewIndustryName('');
       setShowAddIndustry(false);
-      const response = await api.get<any[]>(`/tenants/${tenant.id}/industries`);
-      setIndustryOptions(Array.isArray(response) ? response : []);
+      await refetchTenantData();
       toast.success('Industria agregada correctamente');
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Error al agregar industria');

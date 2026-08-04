@@ -1,4 +1,5 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   TrendingUp, TrendingDown, DollarSign, Landmark,
   AlertTriangle, CalendarClock, BarChart3, ArrowUpRight, ArrowDownRight, Wallet,
@@ -9,9 +10,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { invoicesService } from '../../services/ventas.service';
 import { supplierInvoicesService } from '../../services/compras.service';
-import { contabilidadService } from '../../services/contabilidad.service';
+import { accountsService } from '../../services/finanzas.service';
 import { toast } from 'sonner';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme';
 
@@ -26,22 +28,45 @@ interface Props {
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899']
 
+const toList = (response: any) => Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
+
 export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, accounts, onNavigate }: Props) {
   const { displayCurrency, convertAmount } = useCurrency();
+  const { user } = useAuth();
+  const tenantKey = user?.clientTenantId || user?.tenantId || 'current';
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
 
-  const [salesInvoices, setSalesInvoices] = useState<any[]>([]);
-  const [supplierInvoices, setSupplierInvoices] = useState<any[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
-
-  useEffect(() => {
-    invoicesService.getAll().then((res: any) => setSalesInvoices(res?.data || res || [])).catch(() => {});
-    supplierInvoicesService.getAll().then((res: any) => setSupplierInvoices(res?.data || res || [])).catch(() => {});
-    contabilidadService.getChartOfAccounts().then((res: any) => {
-      const all = res?.data || res || [];
-      setBankAccounts(all.filter((a: any) => ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) || String(a.name || '').toUpperCase().includes('CAJA') || String(a.name || '').toUpperCase().includes('BANCO')));
-    }).catch(() => {});
-  }, []);
+  const salesInvoicesQuery = useQuery({
+    queryKey: ['finance', 'sales-invoices', tenantKey],
+    queryFn: ({ signal }) => invoicesService.getAll({ page: 1, pageSize: 200 }, signal),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const supplierInvoicesQuery = useQuery({
+    queryKey: ['finance', 'supplier-invoices', tenantKey],
+    queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const chartAccountsQuery = useQuery({
+    queryKey: ['finance', 'accounts', tenantKey],
+    queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal),
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const salesInvoices = toList(salesInvoicesQuery.data);
+  const supplierInvoices = toList(supplierInvoicesQuery.data);
+  const bankAccounts = toList(chartAccountsQuery.data).filter((a: any) =>
+    ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) ||
+    String(a.name || '').toUpperCase().includes('CAJA') ||
+    String(a.name || '').toUpperCase().includes('BANCO')
+  );
 
   const totalIncome = useMemo(() => incomes.reduce((a, i) => a + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0), [incomes, convertAmount]);
   const totalExpense = useMemo(() => expenses.reduce((a, e) => a + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0), [expenses, convertAmount]);

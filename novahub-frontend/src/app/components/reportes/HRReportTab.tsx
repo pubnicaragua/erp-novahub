@@ -14,6 +14,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Users, DollarSign, Clock, Activity, Plane, TrendingUp, Scale, GraduationCap, FileText, Gift, Star, ShieldCheck, UserPlus, UserMinus, RefreshCw, AlertTriangle, Filter, Lightbulb, BadgeCheck, Timer, CalendarX, Trophy, Gauge } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 
@@ -211,17 +212,30 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
 
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [payrolls, setPayrolls] = useState<any[]>([]);
-  const [leaves, setLeaves] = useState<any[]>([]);
-  const [attendances, setAttendances] = useState<any[]>([]);
-  const [vacations, setVacations] = useState<any[]>([]);
-  const [reviews, setReviews] = useState<any[]>([]);
-  const [trainings, setTrainings] = useState<any[]>([]);
-  const [benefits, setBenefits] = useState<any[]>([]);
-  const [documents, setDocuments] = useState<any[]>([]);
-  const [kpiResults, setKpiResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'hr'], async (signal) => {
+    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const [empRes, payRes, toRes, attRes, vacRes, revRes, traRes, benRes, docRes, kpiRes] = await Promise.all([
+      employeesService.getAll(filters, signal), payrollService.getAll(filters, signal), timeOffService.getAll(filters, signal),
+      hrService.getAttendanceRecords(filters, signal), hrService.getVacationBalances(undefined, signal),
+      hrService.getPerformanceReviews(undefined, signal, filters), hrService.getTrainings(filters, signal),
+      hrService.getBenefits(filters, signal), hrService.getDocuments(undefined, signal, filters), hrService.getKpiResults(undefined, undefined, signal),
+    ]);
+    return {
+      employees: asList(empRes), payrolls: asList(payRes), leaves: asList(toRes), attendances: asList(attRes),
+      vacations: asList(vacRes), reviews: asList(revRes), trainings: asList(traRes), benefits: asList(benRes),
+      documents: asList(docRes), kpiResults: asList(kpiRes),
+    };
+  }, { onError: (e) => toast.error(e.message || 'Error cargando RRHH') });
+  const employees = reportData?.employees || [];
+  const payrolls = reportData?.payrolls || [];
+  const leaves = reportData?.leaves || [];
+  const attendances = reportData?.attendances || [];
+  const vacations = reportData?.vacations || [];
+  const reviews = reportData?.reviews || [];
+  const trainings = reportData?.trainings || [];
+  const benefits = reportData?.benefits || [];
+  const documents = reportData?.documents || [];
+  const kpiResults = reportData?.kpiResults || [];
 
   const [movTab, setMovTab] = useState('altas-bajas');
   const [evoTab, setEvoTab] = useState('costo');
@@ -271,41 +285,6 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       </span>
     );
   };
-
-  useEffect(() => {
-    const fetch = async () => {
-      setLoading(true);
-      try {
-        const [empRes, payRes, toRes, attRes, vacRes, revRes, traRes, benRes, docRes, kpiRes] = await Promise.all([
-          employeesService.getAll().catch(() => ({ data: [] })),
-          payrollService.getAll().catch(() => ({ data: [] })),
-          timeOffService.getAll().catch(() => ({ data: [] })),
-          hrService.getAttendanceRecords().catch(() => ({ data: [] })),
-          hrService.getVacationBalances().catch(() => ({ data: [] })),
-          hrService.getPerformanceReviews().catch(() => ({ data: [] })),
-          hrService.getTrainings().catch(() => ({ data: [] })),
-          hrService.getBenefits().catch(() => ({ data: [] })),
-          hrService.getDocuments().catch(() => ({ data: [] })),
-          hrService.getKpiResults().catch(() => ({ data: [] })),
-        ]);
-        setEmployees(Array.isArray(empRes) ? empRes : (empRes as any)?.data || []);
-        setPayrolls(Array.isArray(payRes) ? payRes : (payRes as any)?.data || []);
-        setLeaves(Array.isArray(toRes) ? toRes : (toRes as any)?.data || []);
-        setAttendances(Array.isArray(attRes) ? attRes : (attRes as any)?.data || []);
-        setVacations(Array.isArray(vacRes) ? vacRes : (vacRes as any)?.data || []);
-        setReviews(Array.isArray(revRes) ? revRes : (revRes as any)?.data || []);
-        setTrainings(Array.isArray(traRes) ? traRes : (traRes as any)?.data || []);
-        setBenefits(Array.isArray(benRes) ? benRes : (benRes as any)?.data || []);
-        setDocuments(Array.isArray(docRes) ? docRes : (docRes as any)?.data || []);
-        setKpiResults(Array.isArray(kpiRes) ? kpiRes : (kpiRes as any)?.data || []);
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || "Error cargando RRHH");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
-  }, []);
 
   const now = useMemo(() => new Date(), []);
   const { start: currentStart, prevStart, prevEnd } = useMemo(() => getRangeDates(dateRange), [dateRange]);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { customersService, invoicesService, paymentsService, salesOrdersService } from '../../services/ventas.service';
@@ -10,6 +10,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Users, Scale, TrendingUp, DollarSign, Package, ArrowUpRight, Activity, Wallet, CreditCard, ShoppingCart } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
@@ -67,11 +68,18 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'customers'], async (signal) => {
+    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const [invRes, payRes, ordRes, cusRes] = await Promise.all([
+      invoicesService.getAll(filters, signal), paymentsService.getAll(filters, signal),
+      salesOrdersService.getAll(filters, signal), customersService.getAll(filters, signal),
+    ]);
+    return { invoices: asList(invRes), payments: asList(payRes), orders: asList(ordRes), customers: asList(cusRes) };
+  }, { onError: (e) => toast.error(e.message || 'Error cargando clientes') });
+  const invoices = reportData?.invoices || [];
+  const payments = reportData?.payments || [];
+  const orders = reportData?.orders || [];
+  const customers = reportData?.customers || [];
 
   const fmtShort = (v: number) => {
     const num = Number(v);
@@ -81,29 +89,6 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
-
-  useEffect(() => {
-    const fetch = async () => {
-      setLoading(true);
-      try {
-        const [invRes, payRes, ordRes, cusRes] = await Promise.all([
-          invoicesService.getAll().catch(() => ({ data: [] })),
-          paymentsService.getAll().catch(() => ({ data: [] })),
-          salesOrdersService.getAll().catch(() => ({ data: [] })),
-          customersService.getAll().catch(() => ({ data: [] }))
-        ]);
-        setInvoices(Array.isArray(invRes) ? invRes : invRes?.data || []);
-        setPayments(Array.isArray(payRes) ? payRes : payRes?.data || []);
-        setOrders(Array.isArray(ordRes) ? ordRes : ordRes?.data || []);
-        setCustomers(Array.isArray(cusRes) ? cusRes : cusRes?.data || []);
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || "Error cargando clientes");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
-  }, []);
 
   const { start: currentStart, prevStart, prevEnd } = useMemo(() => getRangeDates(dateRange), [dateRange]);
 

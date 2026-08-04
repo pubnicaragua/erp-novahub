@@ -15,6 +15,7 @@ import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';
 import type { AbsenceType, VacationBalance } from '../../types';
 import { PromptDialog } from '../ui/PromptDialog';
+import { useQuery } from '@tanstack/react-query';
 
 export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
@@ -30,9 +31,6 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     reason: '',
   });
 
-  const [vacationBalance, setVacationBalance] = useState<VacationBalance | null>(null);
-  const [balanceLoading, setBalanceLoading] = useState(false);
-  const [absenceTypes, setAbsenceTypes] = useState<AbsenceType[]>([]);
   const [pendingRejectId, setPendingRejectId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,38 +49,37 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     }
   }, [newRequest.startDate, newRequest.endDate]);
 
-  useEffect(() => {
-    loadVacationBalance();
-    loadAbsenceTypes();
-  }, [newRequest.employeeId]);
-
-  const loadVacationBalance = async () => {
-    if (!newRequest.employeeId) { setVacationBalance(null); return; }
-    try {
-      setBalanceLoading(true);
-      const res = await hrService.getVacationBalance(newRequest.employeeId, new Date().getFullYear()) as any;
-      setVacationBalance(res || null);
-    } catch { setVacationBalance(null); }
-    finally { setBalanceLoading(false); }
-  };
-
-  const loadAbsenceTypes = async () => {
-    try {
-      const res = await hrService.getAbsenceTypes() as any;
-      setAbsenceTypes(Array.isArray(res) ? res : res?.data || []);
-    } catch {}
-  };
+  const currentYear = new Date().getFullYear();
+  const balanceQuery = useQuery({
+    queryKey: ['hr', 'vacation-balance', newRequest.employeeId, currentYear],
+    queryFn: ({ signal }) => hrService.getVacationBalance(newRequest.employeeId, currentYear, signal) as any,
+    enabled: Boolean(newRequest.employeeId),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const absenceTypesQuery = useQuery({
+    queryKey: ['hr', 'absence-types'],
+    queryFn: ({ signal }) => hrService.getAbsenceTypes(signal) as any,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const vacationBalance = (balanceQuery.data || null) as VacationBalance | null;
+  const balanceLoading = balanceQuery.isFetching;
+  const absenceTypes = (Array.isArray(absenceTypesQuery.data) ? absenceTypesQuery.data : absenceTypesQuery.data?.data || []) as AbsenceType[];
 
   const handleRecalcVacation = async () => {
     if (!newRequest.employeeId) return;
     try {
-      setBalanceLoading(true);
-      const res = await hrService.recalcVacationBalance(newRequest.employeeId, new Date().getFullYear()) as any;
-      setVacationBalance(res || null);
+      await hrService.recalcVacationBalance(newRequest.employeeId, currentYear);
+      await balanceQuery.refetch();
       toast.success('Saldo de vacaciones recalculado');
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al recalcular');
-    } finally { setBalanceLoading(false); }
+    }
   };
 
   const handleCreateRequest = async () => {
