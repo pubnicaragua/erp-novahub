@@ -1125,6 +1125,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             type="number"
             min={0}
             value={product.maxStock ?? 0}
+            onFocus={(e) => e.target.select()}
             onChange={(e) => handleUpdateField(product.id, 'maxStock', Math.max(0, Number(e.target.value) || 0))}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
             className="h-8 min-w-0 w-full text-right text-xs"
