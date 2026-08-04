@@ -312,7 +312,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title="Total Devuelto" value={formatConvertedAmount(totalReturnedInDisplayCurrency, displayCurrency)} icon={FileOutput} color="text-rose-500" bg="bg-rose-500/10" />
         <SalesKpiCard title="Pendientes" value={data.filter(r => (r.status||'').toUpperCase() === 'PENDING').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'PENDING'} onClick={() => setStatusFilter(statusFilter === 'PENDING' ? 'ALL' : 'PENDING')} />
         <SalesKpiCard title="Aprobadas" value={data.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />

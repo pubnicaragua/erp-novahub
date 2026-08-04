@@ -400,10 +400,10 @@ export function ConfiguracionContableView() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="accounting-config-view min-w-0 max-w-5xl space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Settings2 className="size-6 text-primary" />
             Configuración Contable
@@ -412,7 +412,7 @@ export function ConfiguracionContableView() {
             Define las cuentas contables que usa cada módulo del ERP para generar asientos automáticos
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <Button variant="outline" size="sm" onClick={handleSeedConfig} disabled={seeding}>
             {seeding ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <RefreshCw className="size-3.5 mr-1" />}
             Restablecer
@@ -425,7 +425,7 @@ export function ConfiguracionContableView() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <BookOpen className="size-5 text-primary shrink-0" />
@@ -698,7 +698,7 @@ export function ConfiguracionContableView() {
           </p>
           <div className="flex items-center gap-3 flex-wrap">
             <Select value={industry} onValueChange={v => { setIndustry(v); setShowPreviewCatalog(false) }}>
-              <SelectTrigger className="w-64 h-9">
+              <SelectTrigger className="h-9 w-full sm:w-64">
                 <SelectValue placeholder="Seleccionar industria..." />
               </SelectTrigger>
               <SelectContent>
@@ -726,7 +726,7 @@ export function ConfiguracionContableView() {
                   <X className="size-3.5" />
                 </button>
               </div>
-              <div className="max-h-60 overflow-y-auto">
+              <div className="hidden max-h-60 overflow-y-auto sm:block">
                 <table className="w-full text-[11px]">
                   <thead className="sticky top-0 bg-muted/30">
                     <tr className="border-b border-border/20">
@@ -750,6 +750,21 @@ export function ConfiguracionContableView() {
                   </tbody>
                 </table>
               </div>
+              <div className="space-y-2 p-2 sm:hidden">
+                {previewAccounts.map((acc, i) => (
+                  <div key={i} className="rounded-lg border border-border/50 bg-card/60 p-2.5">
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-mono text-[10px] text-muted-foreground">{acc.code}</p>
+                        <p className="truncate text-xs font-bold" title={acc.name}>{acc.name}</p>
+                      </div>
+                      <Badge variant="outline" className="shrink-0 text-[9px]">
+                        {acc.type === 'ASSET' ? 'Activo' : acc.type === 'LIABILITY' ? 'Pasivo' : acc.type === 'EQUITY' ? 'Patrimonio' : acc.type === 'INCOME' ? 'Ingreso' : 'Gasto'}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>
@@ -767,7 +782,8 @@ export function ConfiguracionContableView() {
           <p className="text-xs text-muted-foreground">
             Subtipos de cuenta y su tipo de detalle asignado a cada cuenta del catálogo.
           </p>
-          <div className="overflow-x-auto rounded-xl border border-border/30">
+          <div className="rounded-xl border border-border/30">
+            <div className="hidden overflow-x-auto sm:block">
             <table className="w-full text-[11px]">
               <thead className="bg-muted/30">
                 <tr className="border-b border-border/20">
@@ -802,6 +818,26 @@ export function ConfiguracionContableView() {
                 ))}
               </tbody>
             </table>
+            </div>
+            <div className="space-y-2 p-2 sm:hidden">
+              {allAccounts.length === 0 ? (
+                <p className="py-8 text-center text-xs text-muted-foreground">No hay cuentas contables</p>
+              ) : allAccounts.slice(0, 50).map((acc, i) => (
+                <div key={i} className="rounded-lg border border-border/50 bg-card/60 p-2.5">
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold" title={`${acc.code} - ${acc.name}`}>{acc.code} - {acc.name}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">{acc.subtype === 'MAIN_GROUP' ? 'Grupo principal' : acc.subtype === 'GROUP' ? 'Grupo' : acc.subtype === 'DETAIL_ACCOUNT' ? 'Cuenta de detalle' : 'Subcuenta'}</p>
+                    </div>
+                    <Badge variant={acc.isActive !== false ? 'default' : 'secondary'} className="shrink-0 text-[9px]">{acc.isActive !== false ? 'Activo' : 'Inactivo'}</Badge>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between border-t border-border/50 pt-2 text-[10px]">
+                    <span className="text-muted-foreground">Tipo detalle</span>
+                    <Badge variant="outline" className="text-[9px]">{acc.detailType === 'BALANCE_SHEET' ? 'Balance General' : 'Estado de Resultados'}</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
             {allAccounts.length > 50 && (
               <p className="text-center text-[10px] text-muted-foreground py-2 border-t border-border/10">
                 Mostrando 50 de {allAccounts.length} cuentas
@@ -831,7 +867,7 @@ export function ConfiguracionContableView() {
           <div className="bg-muted/20 rounded-xl p-3 font-mono text-[10px] overflow-x-auto">
             <pre className="text-muted-foreground whitespace-pre">{csvRowsToText(templateRows())}</pre>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Button variant="outline" size="sm" onClick={handleExportAccounts}>
               <FileDown className="size-3.5 mr-1" /> Exportar Cuentas
             </Button>

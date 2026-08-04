@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { History, ArrowUpRight, ArrowDownLeft, RefreshCcw, Search, Download } from 'lucide-react';
+import { History, ArrowUpRight, ArrowDownLeft, RefreshCcw, Search, Download, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { toast } from 'sonner';
 import type { SalesPaginationControls } from '../../types';
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
 interface MovimientosViewProps {
   movements: any[];
@@ -26,7 +27,15 @@ const TYPE_OPTIONS = [
   { value: 'ADJUSTMENT', label: 'Ajuste' },
 ];
 
+const MOVEMENTS_TOUR_STEPS: GuidedTourStep[] = [
+  { target: '[data-tour="movements-title"]', title: 'Movimientos de inventario', description: 'Consulta las entradas, salidas, transferencias y ajustes que modifican las existencias.', placement: 'bottom' },
+  { target: '[data-tour="movements-filters"]', title: 'Buscar y filtrar', description: 'Busca por producto o referencia y combina el tipo de movimiento con el almacén. Al cambiar un criterio se reinicia la página.', placement: 'bottom' },
+  { target: '[data-tour="movements-table"]', title: 'Detalle del movimiento', description: 'Cada registro muestra fecha, tipo, producto, almacén, cantidad y referencia de origen.', placement: 'top' },
+  { target: '[data-tour="movements-pagination"]', title: 'Paginación', description: 'Selecciona la cantidad de registros por página y utiliza los controles para revisar todo el historial.', placement: 'top' },
+];
+
 export function MovimientosView({ movements, warehouses, pagination, onSearchChange, onTypeChange, onWarehouseChange }: MovimientosViewProps) {
+  const [showTutorial, setShowTutorial] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [warehouseFilter, setWarehouseFilter] = useState('all');
@@ -80,9 +89,9 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
 
   return (
     <Card className="p-4 border bg-card rounded-xl">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-        <div className="flex items-center gap-2 flex-1 flex-wrap">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
+      <div className="flex min-w-0 flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between" data-tour="movements-title">
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap" data-tour="movements-filters">
+          <div className="relative min-w-0 flex-1 sm:min-w-[200px] sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input 
               placeholder="Buscar producto o referencia..." 
@@ -92,7 +101,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
             />
           </div>
           <Select value={typeFilter} onValueChange={(value) => { setTypeFilter(value); onTypeChange?.(value); }}>
-            <SelectTrigger className="w-32 h-9">
+            <SelectTrigger className="h-9 w-full sm:w-32">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -100,7 +109,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
             </SelectContent>
           </Select>
           <Select value={warehouseFilter} onValueChange={(value) => { setWarehouseFilter(value); onWarehouseChange?.(value); }}>
-            <SelectTrigger className="w-36 h-9">
+            <SelectTrigger className="h-9 w-full sm:w-36">
               <SelectValue placeholder="Almacén" />
             </SelectTrigger>
             <SelectContent>
@@ -109,13 +118,19 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" size="sm" className="gap-2 rounded-xl font-bold" onClick={handleExport}>
-          <Download className="size-4" />
-          Exportar
-        </Button>
+        <div className="flex w-full gap-2 sm:w-auto"><Button type="button" variant="outline" size="sm" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={() => setShowTutorial(true)}><CircleHelp className="size-4" /> Tutorial</Button><Button variant="outline" size="sm" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={handleExport}><Download className="size-4" /> Exportar</Button></div>
       </div>
 
-      <div className="rounded-lg border overflow-x-auto">
+      <div className="space-y-3 lg:hidden" data-tour="movements-table">
+        {filteredMovements.length === 0 ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><History className="mx-auto mb-2 size-9 opacity-20" /><p>No hay movimientos</p></Card> : filteredMovements.map((move: any) => (
+          <Card key={move.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{getMovementIcon(move.type)}<div className="min-w-0"><p className="truncate font-bold">{move.product?.name || 'Producto sin nombre'}</p><p className="truncate text-xs text-muted-foreground">{move.reference || 'Sin referencia'}</p></div></div><Badge variant="outline" className="shrink-0 text-[10px]">{getTypeLabel(move.type)}</Badge></div>
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</p><p>{new Date(move.date).toLocaleDateString('es-ES')}</p></div><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Almacén</p><p className="truncate">{move.warehouse?.name || '—'}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cantidad</p><p className={`font-bold tabular-nums ${move.type === 'IN' ? 'text-emerald-500' : move.type === 'OUT' ? 'text-destructive' : 'text-primary'}`}>{move.type === 'OUT' ? '-' : '+'}{move.quantity}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Hora</p><p>{new Date(move.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p></div></div>
+          </Card>
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="movements-table">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
@@ -162,9 +177,9 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
         </Table>
       </div>
 
-      <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+      <div className="mt-3 flex flex-col gap-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground sm:flex-row sm:items-center sm:justify-between" data-tour="movements-pagination">
         {pagination?.total ?? filteredMovements.length} movimientos
-        {pagination && <span className="ml-4 inline-flex items-center gap-2 normal-case tracking-normal">
+        {pagination && <span className="inline-flex flex-wrap items-center gap-2 normal-case tracking-normal sm:ml-4">
           <select value={pagination.pageSize} onChange={(event) => pagination.onPageSizeChange(Number(event.target.value) as 50 | 100 | 200)} className="h-7 rounded border bg-background px-1 font-bold text-foreground">
             {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
           </select>
@@ -173,6 +188,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
           <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" onClick={() => pagination.onPageChange(Math.min(pagination.totalPages, pagination.page + 1))} disabled={pagination.page >= pagination.totalPages}>›</button>
         </span>}
       </div>
+      {showTutorial && <GuidedTour steps={MOVEMENTS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Movimientos de inventario" allowTargetInteraction />}
     </Card>
   );
 }

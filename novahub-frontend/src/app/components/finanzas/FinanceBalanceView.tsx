@@ -964,7 +964,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       {/* Filters */}
       <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 bg-muted/30 rounded-2xl border border-border/50 shadow-sm relative overflow-hidden">
         {/* Subtle background glow */}

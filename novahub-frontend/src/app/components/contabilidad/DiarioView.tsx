@@ -225,6 +225,53 @@ export function DiarioView() {
     setViewJournalId(journal.id);
   }
 
+  function journalStatusLabel(status?: string) {
+    const statusKey = status?.toLowerCase();
+    return statusKey === 'draft' ? 'Borrador'
+      : statusKey === 'posted' ? 'Contabilizado'
+        : statusKey === 'voided' ? 'Anulado'
+          : status || 'Sin estado';
+  }
+
+  function renderJournalActions(journal: JournalEntry) {
+    const statusKey = journal.status?.toLowerCase();
+    return (
+      <div className="flex items-center justify-end gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          onClick={() => handleView(journal)}
+          title="Ver detalle"
+        >
+          <Eye className="size-3.5" />
+        </Button>
+        {statusKey === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-600"
+            onClick={() => handlePost(journal)}
+            title="Contabilizar"
+          >
+            <Send className="size-3.5" />
+          </Button>
+        )}
+        {statusKey === 'posted' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 text-destructive hover:text-destructive"
+            onClick={() => handleVoid(journal)}
+            title="Anular"
+          >
+            <XCircle className="size-3.5" />
+          </Button>
+        )}
+      </div>
+    );
+  }
+
   useEffect(() => {
     if (journalDetailQuery.error) toast.error(journalDetailQuery.error.message || 'Error al cargar detalle');
   }, [journalDetailQuery.error]);
@@ -234,7 +281,7 @@ export function DiarioView() {
   }, [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, debouncedSearch]);
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       {/* Header & Actions */}
       <div className="flex flex-col lg:flex-row lg:items-center sm:justify-between gap-4">
         <div>
@@ -430,8 +477,8 @@ export function DiarioView() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1 min-w-[180px]">
+          <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="min-w-0 space-y-1 sm:min-w-[180px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Buscar
               </Label>
@@ -442,7 +489,7 @@ export function DiarioView() {
                 className="h-8 text-xs"
               />
             </div>
-            <div className="space-y-1 min-w-[140px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[140px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Estado
               </Label>
@@ -458,7 +505,7 @@ export function DiarioView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1 min-w-[140px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[140px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Desde
               </Label>
@@ -469,7 +516,7 @@ export function DiarioView() {
                 className="h-8 text-xs"
               />
             </div>
-            <div className="space-y-1 min-w-[140px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[140px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Hasta
               </Label>
@@ -480,7 +527,7 @@ export function DiarioView() {
                 className="h-8 text-xs"
               />
             </div>
-            <div className="space-y-1 min-w-[200px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[200px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Cuenta Contable
               </Label>
@@ -492,7 +539,7 @@ export function DiarioView() {
                 emptyMessage="Sin resultados"
               />
             </div>
-            <div className="space-y-1 min-w-[160px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[160px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Tipo Referencia
               </Label>
@@ -504,7 +551,7 @@ export function DiarioView() {
                 emptyMessage="Sin resultados"
               />
             </div>
-            <div className="space-y-1 min-w-[140px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[140px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 ID Referencia
               </Label>
@@ -550,7 +597,9 @@ export function DiarioView() {
               <p className="text-xs mt-1">Crea un nuevo asiento para comenzar</p>
             </div>
           ) : (
-            <Table>
+            <>
+              <div className="hidden overflow-x-auto sm:block">
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[80px]">#</TableHead>
@@ -579,7 +628,7 @@ export function DiarioView() {
                           variant={STATUS_COLORS[statusKey] || 'outline'}
                           className="text-[10px] font-black uppercase tracking-wider"
                         >
-                          {statusKey === 'draft' ? 'Borrador' : statusKey === 'posted' ? 'Contabilizado' : statusKey === 'voided' ? 'Anulado' : j.status}
+                          {journalStatusLabel(j.status)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-xs">
@@ -594,52 +643,67 @@ export function DiarioView() {
                       <TableCell className="text-xs font-mono max-w-[130px] truncate" title={j.referenceId || ''}>
                         {j.referenceId || '-'}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-7"
-                            onClick={() => handleView(j)}
-                            title="Ver detalle"
-                          >
-                            <Eye className="size-3.5" />
-                          </Button>
-                          {statusKey === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-7 text-emerald-600 hover:text-emerald-600 hover:bg-emerald-500/10"
-                              onClick={() => handlePost(j)}
-                              title="Contabilizar"
-                            >
-                              <Send className="size-3.5" />
-                            </Button>
-                          )}
-                          {statusKey === 'posted' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-7 text-destructive hover:text-destructive"
-                              onClick={() => handleVoid(j)}
-                              title="Anular"
-                            >
-                              <XCircle className="size-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
+                      <TableCell>{renderJournalActions(j)}</TableCell>
                     </TableRow>
                   );
                 })}
               </TableBody>
-            </Table>
+              </Table>
+              </div>
+              <div className="space-y-3 p-3 sm:hidden">
+                {journals.map((j) => {
+                  const totalDeb = j.lines?.reduce((s, l) => s + l.debit, 0) || 0;
+                  const totalCred = j.lines?.reduce((s, l) => s + l.credit, 0) || 0;
+                  const statusKey = j.status?.toLowerCase();
+                  const referenceType = (j as any).referenceType;
+                  return (
+                    <div key={j.id} className="rounded-xl border border-border/70 bg-card/60 p-3 shadow-sm transition-colors hover:border-primary/40">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="shrink-0 font-mono text-xs font-black text-primary">#{j.number}</span>
+                            <Badge
+                              variant={STATUS_COLORS[statusKey] || 'outline'}
+                              className="shrink-0 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider"
+                            >
+                              {journalStatusLabel(j.status)}
+                            </Badge>
+                          </div>
+                          <p className="mt-1.5 truncate text-sm font-bold" title={j.description}>{j.description}</p>
+                          <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            {new Date(j.date).toLocaleDateString('es-NI')}
+                          </p>
+                        </div>
+                        {renderJournalActions(j)}
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/50 pt-3">
+                        <div className="min-w-0 rounded-lg bg-muted/30 px-2.5 py-2">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Débitos</p>
+                          <p className="mt-0.5 truncate text-sm font-black tabular-nums">{formatCurrency(totalDeb)}</p>
+                        </div>
+                        <div className="min-w-0 rounded-lg bg-muted/30 px-2.5 py-2">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Créditos</p>
+                          <p className="mt-0.5 truncate text-sm font-black tabular-nums">{formatCurrency(totalCred)}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex min-w-0 flex-wrap gap-x-3 gap-y-1 border-t border-border/50 pt-2 text-[10px] text-muted-foreground">
+                        {referenceType && <span className="truncate"><strong className="text-foreground/80">Ref.:</strong> {referenceType}</span>}
+                        {j.referenceId && <span className="truncate font-mono"><strong className="font-sans text-foreground/80">ID:</strong> {j.referenceId}</span>}
+                        {!referenceType && !j.referenceId && <span>Sin referencia asociada</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </CardContent>
         {journalMeta && journalMeta.totalPages > 1 && (
-          <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
+          <div className="flex flex-col gap-3 border-t px-3 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-4">
             <span>Mostrando {journals.length} de {journalMeta.total} asientos</span>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" disabled={journalPage <= 1 || loading} onClick={() => setJournalPage((page) => page - 1)}>Anterior</Button>
               <span>Página {journalMeta.page} de {journalMeta.totalPages}</span>
               <Button variant="outline" size="sm" disabled={journalPage >= journalMeta.totalPages || loading} onClick={() => setJournalPage((page) => page + 1)}>Siguiente</Button>
@@ -664,7 +728,7 @@ export function DiarioView() {
             <div className="py-12 text-center text-sm text-muted-foreground">Cargando detalle...</div>
           ) : viewJournal ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
                 <div>
                   <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block">Fecha</span>
                   <span className="font-medium">{new Date(viewJournal.date).toLocaleDateString('es-NI')}</span>

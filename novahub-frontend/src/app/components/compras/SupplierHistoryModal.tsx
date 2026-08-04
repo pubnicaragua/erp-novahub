@@ -250,7 +250,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                         <tr key={idx} className="hover:bg-muted/30 transition-colors">
                           <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{it.date}</td>
                           <td className="px-4 py-3">
-                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${it.type === 'Factura' ? 'bg-primary/10 text-primary' : it.type.includes('Gasto') ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'}`}>
+                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${it.type === 'Factura' ? 'bg-primary/10 text-primary' : it.type.includes('Gasto') ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary'}`}>
                                {it.type}
                              </span>
                           </td>

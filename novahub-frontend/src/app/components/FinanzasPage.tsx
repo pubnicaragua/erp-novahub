@@ -1,4 +1,3 @@
-import { cn } from './ui/utils';
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
@@ -47,7 +46,7 @@ const normalizeListResponse = (response: any) => {
   return [];
 };
 
-export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: FinanzasPageProps) {
+export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPageProps) {
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
@@ -354,7 +353,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const totalIncome = fIncomes.reduce((acc, i) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0);
   const totalExpense = fExpenses.reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
 
-  const tabTriggerClass = "flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all";
+  const tabTriggerClass = "flex min-w-10 shrink-0 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all sm:min-w-0 sm:justify-start sm:px-4";
 
   const tabs = [
     { id: 'resumen', label: 'Resumen', icon: BarChart3, module: 'FINANCIAL_DASHBOARD' },
@@ -370,7 +369,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   ];
 
   return (
-    <div className="mx-auto w-full max-w-[1700px] space-y-4 p-4 pb-20 sm:p-6 md:p-10">
+    <div className="finance-module mx-auto min-w-0 w-full max-w-[1700px] space-y-4 overflow-x-hidden p-3 pb-20 sm:p-6 md:p-10">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
@@ -395,37 +394,37 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       </div>
 
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl border border-border/40 bg-card/50">
-        <CalendarDays className="size-4 text-muted-foreground" />
+      <div className="grid min-w-0 grid-cols-2 gap-2 rounded-xl border border-border/40 bg-card/50 p-3 sm:flex sm:flex-wrap sm:items-center">
+        <CalendarDays className="col-span-2 size-4 text-muted-foreground sm:col-span-1" />
         {PERIOD_PRESETS.map(p => (
           <button key={p.label} onClick={() => applyPreset(p.label, p.days)}
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activePreset === p.label ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>
+            className={`min-w-0 rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all sm:px-3 ${activePreset === p.label ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>
             {p.label}
           </button>
         ))}
-        <div className="h-5 w-px bg-border mx-1" />
-        <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setActivePreset(''); }} className="h-8 w-36 text-xs" placeholder="Desde" />
-        <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setActivePreset(''); }} className="h-8 w-36 text-xs" placeholder="Hasta" />
+        <div className="hidden h-5 w-px bg-border mx-1 sm:block" />
+        <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setActivePreset(''); }} className="h-8 min-w-0 w-full text-xs sm:w-36" placeholder="Desde" />
+        <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setActivePreset(''); }} className="h-8 min-w-0 w-full text-xs sm:w-36" placeholder="Hasta" />
         {(dateFrom || dateTo || activePreset) && (
-          <button onClick={clearFilters} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground" title="Limpiar filtros"><X className="size-3.5" /></button>
+          <button onClick={clearFilters} className="col-span-2 justify-self-start rounded-lg p-1.5 text-muted-foreground hover:bg-muted sm:col-span-1" title="Limpiar filtros"><X className="size-3.5" /></button>
         )}
-        <BranchScopeFilter className="ml-auto" showLabel={false} />
+        <BranchScopeFilter className="col-span-2 w-full sm:col-span-1 sm:ml-auto sm:w-auto" showLabel={false} />
       </div>
 
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
+        <TabsList className="w-full min-w-0 scroll-px-2 h-auto overflow-x-auto rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 pl-2 pr-2 mb-6 flex flex-nowrap gap-1.5 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
           {tabs.map((tab) => {
             if (!hasAccess(tab.module)) return null;
             return (
               <TabsTrigger key={tab.id} value={tab.id} className={tabTriggerClass}>
                 <tab.icon className="size-4" />
-                <span>{tab.label}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
               </TabsTrigger>
             );
           })}
         </TabsList>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-4 min-h-[600px]">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-4 min-h-[600px] min-w-0">
           {loading ? (
             <div className="flex items-center justify-center h-96">
               <div className="flex flex-col items-center gap-4">
@@ -505,8 +504,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
               <TabsContent value="recurrentes" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
                         <h3 className="text-lg font-black uppercase tracking-tight">Movimientos Recurrentes</h3>
                         <p className="text-xs text-muted-foreground">Plantillas de compromisos programados. No afectan totales hasta generar el movimiento real.</p>
                       </div>

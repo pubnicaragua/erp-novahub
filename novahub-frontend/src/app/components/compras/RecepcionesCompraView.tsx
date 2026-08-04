@@ -337,7 +337,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           <Card className="rounded-2xl border-border/50 col-span-2">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
                   <Combobox 
@@ -545,13 +545,13 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                       />
                     </div>
                   </div>
-                  <div className="flex items-center justify-end gap-2">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1 mr-auto">Cuenta Contable</p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                    <p className="mr-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Cuenta Contable</p>
                     <select
                       disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
                       value={item.accountId || ''}
                       onChange={(e) => handleItemChange(idx, 'accountId', e.target.value)}
-                      className="h-7 rounded-md border border-input bg-background px-1 text-[10px] font-bold max-w-[250px]"
+                      className="h-8 w-full max-w-full rounded-md border border-input bg-background px-2 text-[10px] font-bold sm:w-auto sm:max-w-[250px]"
                     >
                       <option value="">Seleccionar...</option>
                       {accounts
@@ -608,7 +608,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}

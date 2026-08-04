@@ -726,7 +726,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       </div>
 
       {pagination && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground" data-tour="sales-list-pagination">
           <div className="flex items-center gap-2">
             <span>Mostrar</span>
             <select

@@ -598,7 +598,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div className="col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Número de Factura <span className="text-rose-500">*</span></p>
                   <Input 
@@ -904,7 +904,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   Total: <b>{importResult.total}</b> · Creadas: <b className="text-emerald-500">{importResult.created}</b> · Omitidas: <b className="text-amber-500">{importResult.skipped}</b>
                 </p>
                 {importResult.errors.length > 0 && (
-                  <div className="mt-2 text-xs text-amber-600 space-y-1">
+                  <div className="mt-2 space-y-1 text-xs text-amber-500">
                     <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
                     {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
                   </div>
@@ -944,7 +944,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind="filter" active={statusFilter === k.filter} onClick={() => { const next = statusFilter === k.filter ? 'ALL' : k.filter; setStatusFilter(next); onStatusChange?.(next); }} />
         ))}

@@ -242,9 +242,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   };
 
   return (
-    <div className="mx-auto min-w-0 w-full max-w-[1700px] space-y-4 overflow-x-hidden p-4 pb-20 sm:p-6 md:p-10">
+    <div className="inventory-module mx-auto min-w-0 w-full max-w-[1700px] space-y-4 overflow-x-hidden p-3 pb-20 sm:p-6 md:p-10">
       {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <Package className="size-9 text-primary" />
@@ -262,13 +262,13 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
           <Button
             variant="outline"
             size="sm"
             onClick={() => fetchData()}
             disabled={refreshing}
-            className="rounded-xl font-bold"
+            className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none"
           >
             <RefreshCw className={`size-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Actualizar
@@ -277,7 +277,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             variant="outline" 
             size="sm"
             onClick={handleExportData}
-            className="rounded-xl font-bold"
+            className="min-w-0 flex-1 rounded-xl font-bold sm:flex-none"
           >
             <Download className="size-4 mr-2" />
             Exportar
@@ -286,7 +286,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       </div>
 
       {/* Branch Scope Filter */}
-      <div className="flex items-center justify-between mb-4">
+        <div className="flex min-w-0 flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <BranchScopeFilter />
         <div />
       </div>
@@ -300,8 +300,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           if (onSubModuleChange) onSubModuleChange(nextTab);
         }}
       >
-        <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
-        <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
+        <div className="mb-6 w-full overflow-x-auto custom-scrollbar">
+        <TabsList className="flex h-auto w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground sm:min-w-0">
           {INVENTORY_SECTIONS.map((section) => {
             const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
             const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('INVENTORY_'));

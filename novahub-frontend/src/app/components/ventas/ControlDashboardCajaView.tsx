@@ -4,7 +4,7 @@ import { cajaService, CashRegister } from '../../services/caja.service';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
-import { Coins, Settings2, Eye } from 'lucide-react';
+import { Coins, Settings2, Eye, CircleHelp } from 'lucide-react';
 import { DashboardCajaView } from './DashboardCajaView';
 import { AperturaCajaStep } from './caja/AperturaCajaStep';
 import { SesionActivaStep } from './caja/SesionActivaStep';
@@ -20,8 +20,17 @@ import { getApiErrorMessage } from '../../services/api';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { formatSalesAmount } from '../../utils/salesPriceList';
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
 type SectionType = 'dashboard' | 'session' | 'history';
+
+const CASH_CONTROL_TOUR_STEPS: GuidedTourStep[] = [
+  { target: '[data-tour="cash-control-title"]', title: 'Control de Caja', description: 'Esta vista centraliza la apertura, operación, cierre y consulta histórica de las cajas registradoras.', placement: 'bottom' },
+  { target: '[data-tour="cash-control-manage"]', title: 'Administrar cajas', description: 'Crea y configura cajas, códigos y parámetros operativos. Esta acción se usa al preparar una nueva caja o corregir su configuración.', placement: 'bottom' },
+  { target: '[data-tour="cash-control-tabs"]', title: 'Sesión e historial', description: 'Control de Cajas muestra la operación actual; Historial de Cajas permite consultar aperturas, cierres, arqueos, diferencias y movimientos registrados.', placement: 'bottom' },
+  { target: '[data-tour="cash-control-register"]', title: 'Seleccionar caja', description: 'Elige una caja específica para abrir o cerrar sesión. Todas las cajas sirve para consolidar el historial; para operar debes seleccionar una caja concreta.', placement: 'bottom' },
+  { target: '[data-tour="cash-control-content"]', title: 'Operación, KPIs y movimientos', description: 'El asistente de configuración explica los prerrequisitos. Con una sesión activa verás los indicadores de efectivo esperado, movimientos, arqueo y diferencia; registra cada entrada o salida con su método y moneda.', tip: 'La paginación no aplica a la sesión operativa: el historial se consulta por acordeones para abrir cada cierre y revisar su detalle completo.', placement: 'top' },
+];
 
 export function ControlDashboardCajaView({ 
   onNavigateToFacturacion,
@@ -40,6 +49,7 @@ export function ControlDashboardCajaView({
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [manageCajasOpen, setManageCajasOpen] = useState(false);
   const [initialCajaModalMode, setInitialCajaModalMode] = useState<'create-register' | undefined>();
+  const [showTutorial, setShowTutorial] = useState(false);
   const cameFromSetupRef = useRef(false);
 
   const { displayCurrency, exchangeRate: globalRate } = useCurrency();
@@ -136,12 +146,16 @@ export function ControlDashboardCajaView({
         
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-black tracking-tight flex items-center gap-2">
+            <h2 className="text-xl font-black tracking-tight flex items-center gap-2" data-tour="cash-control-title">
               <Coins className="size-5 text-primary" /> Control de Caja
             </h2>
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="h-7 rounded-full px-3 text-[10px] font-black uppercase tracking-widest">
+              <CircleHelp className="mr-1.5 size-3" /> Tutorial
+            </Button>
             <Button 
               size="sm" 
               onClick={() => setManageCajasOpen(true)}
+              data-tour="cash-control-manage"
               className="h-7 px-3 gap-1.5 text-[10px] font-bold uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90 transition-all rounded-full shadow-sm"
             >
               <Settings2 className="size-3" /> Administrar Cajas
@@ -149,7 +163,7 @@ export function ControlDashboardCajaView({
           </div>
 
           <Tabs value={activeSection} onValueChange={(v: any) => setActiveSection(v)} className="w-full mt-4">
-            <TabsList className="w-full h-auto min-w-0 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-nowrap overflow-x-auto justify-start gap-1.5 rounded-2xl border border-border/40 mb-2 [&>button]:flex-none">
+            <TabsList data-tour="cash-control-tabs" className="w-full h-auto min-w-0 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-nowrap overflow-x-auto justify-start gap-1.5 rounded-2xl border border-border/40 mb-2 [&>button]:flex-none">
               <TabsTrigger 
                 value="session"
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
@@ -177,7 +191,7 @@ export function ControlDashboardCajaView({
             </Badge>
           )}
           <Select value={selectedRegister} onValueChange={setSelectedRegister}>
-            <SelectTrigger className="h-9 w-full md:w-[220px] font-medium bg-background shadow-sm border-border/60">
+            <SelectTrigger data-tour="cash-control-register" className="h-9 w-full md:w-[220px] font-medium bg-background shadow-sm border-border/60">
               <SelectValue placeholder="Seleccione caja" />
             </SelectTrigger>
             <SelectContent>
@@ -191,7 +205,7 @@ export function ControlDashboardCajaView({
       </div>
 
       {/* Contenido Dinámico */}
-      <div className="min-h-[400px]">
+      <div className="min-h-[400px]" data-tour="cash-control-content">
         {activeSection === 'dashboard' && (
           <DashboardCajaView 
             onNavigateToFacturacion={onNavigateToFacturacion || (() => {})} 
@@ -511,6 +525,7 @@ export function ControlDashboardCajaView({
           </Card>
         )}
       </div>
+      {showTutorial && <GuidedTour steps={CASH_CONTROL_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Control de Caja" allowTargetInteraction />}
 
       <AdministrarCajasModal 
         open={manageCajasOpen} 

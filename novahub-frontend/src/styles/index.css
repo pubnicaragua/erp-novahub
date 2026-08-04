@@ -7,19 +7,65 @@
 .sales-module,
 .sales-module *,
 .purchases-module,
-.purchases-module * {
+.purchases-module *,
+.inventory-module,
+.inventory-module *,
+.finance-module,
+.finance-module *,
+.accounting-module,
+.accounting-module * {
   box-sizing: border-box;
 }
 
 .sales-module [data-slot="table-container"],
-.purchases-module [data-slot="table-container"] {
+.purchases-module [data-slot="table-container"],
+.inventory-module [data-slot="table-container"],
+.finance-module [data-slot="table-container"] {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
 }
 
+.accounting-module {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.accounting-module input,
+.accounting-module select,
+.accounting-module textarea,
+.accounting-module button {
+  max-width: 100%;
+}
+
+.accounting-module .grid > *,
+.accounting-module .flex > * {
+  min-width: 0;
+}
+
+.accounting-module [data-slot="table-container"],
+.accounting-module .accounting-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+.accounting-module table {
+  max-width: 100%;
+}
+
+.accounting-module [data-slot="table-head"],
+.accounting-module [data-slot="table-cell"],
+.accounting-module th,
+.accounting-module td {
+  overflow-wrap: anywhere;
+}
+
 .sales-module [data-slot="table"],
-.purchases-module [data-slot="table"] {
+.purchases-module [data-slot="table"],
+.inventory-module [data-slot="table"],
+.finance-module [data-slot="table"] {
   width: 100%;
   max-width: 100%;
   table-layout: fixed;
@@ -28,7 +74,11 @@
 .sales-module [data-slot="table-head"],
 .sales-module [data-slot="table-cell"],
 .purchases-module [data-slot="table-head"],
-.purchases-module [data-slot="table-cell"] {
+.purchases-module [data-slot="table-cell"],
+.inventory-module [data-slot="table-head"],
+.inventory-module [data-slot="table-cell"],
+.finance-module [data-slot="table-head"],
+.finance-module [data-slot="table-cell"] {
   min-width: 0 !important;
   max-width: 100%;
   white-space: normal;
@@ -39,7 +89,8 @@
    previous column when a table gets narrow. */
 [data-actions-column="true"],
 .sales-module [data-actions-column="true"],
-.purchases-module [data-actions-column="true"] {
+.purchases-module [data-actions-column="true"],
+.finance-module [data-actions-column="true"] {
   width: 15rem !important;
   min-width: 15rem !important;
   max-width: 15rem !important;
@@ -66,7 +117,13 @@
 .sales-module [data-slot="table-cell"] p,
 .purchases-module [data-slot="table-cell"] > *,
 .purchases-module [data-slot="table-cell"] span,
-.purchases-module [data-slot="table-cell"] p {
+.purchases-module [data-slot="table-cell"] p,
+.inventory-module [data-slot="table-cell"] > *,
+.inventory-module [data-slot="table-cell"] span,
+.inventory-module [data-slot="table-cell"] p,
+.finance-module [data-slot="table-cell"] > *,
+.finance-module [data-slot="table-cell"] span,
+.finance-module [data-slot="table-cell"] p {
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -77,9 +134,92 @@
 .sales-module .sales-data-table table,
 .purchases-module .sales-data-table,
 .purchases-module .sales-data-table > div,
-.purchases-module .sales-data-table table {
+.purchases-module .sales-data-table table,
+.inventory-module .sales-data-table,
+.inventory-module .sales-data-table > div,
+.inventory-module .sales-data-table table,
+.finance-module .sales-data-table,
+.finance-module .sales-data-table > div,
+.finance-module .sales-data-table table {
   min-width: 0;
   max-width: 100%;
+}
+
+/* Los acentos informativos de Compras heredan la marca configurada por cada
+   empresa. Los colores de estado (éxito, alerta, error) permanecen semánticos. */
+.purchases-module .text-blue-500,
+.purchases-module .text-purple-500,
+.purchases-module .text-indigo-500 {
+  color: var(--primary) !important;
+}
+
+.purchases-module .bg-blue-500\/10,
+.purchases-module .bg-purple-500\/10,
+.purchases-module .bg-indigo-500\/10 {
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent) !important;
+}
+
+.purchases-module .border-blue-500\/20,
+.purchases-module .border-purple-500\/20,
+.purchases-module .border-indigo-500\/20 {
+  border-color: color-mix(in srgb, var(--primary) 20%, transparent) !important;
+}
+
+.inventory-module .text-blue-500,
+.inventory-module .text-purple-500,
+.inventory-module .text-indigo-500,
+.inventory-module .text-blue-600,
+.inventory-module .text-purple-600,
+.inventory-module .text-indigo-600 {
+  color: var(--primary) !important;
+}
+
+.inventory-module .bg-blue-500\/10,
+.inventory-module .bg-purple-500\/10,
+.inventory-module .bg-indigo-500\/10 {
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent) !important;
+}
+
+.finance-module .text-blue-500,
+.finance-module .text-purple-500,
+.finance-module .text-indigo-500,
+.finance-module .text-blue-600,
+.finance-module .text-purple-600,
+.finance-module .text-indigo-600 {
+  color: var(--primary) !important;
+}
+
+.finance-module .bg-blue-500\/10,
+.finance-module .bg-purple-500\/10,
+.finance-module .bg-indigo-500\/10 {
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent) !important;
+}
+
+.finance-module .border-blue-500\/20,
+.finance-module .border-purple-500\/20,
+.finance-module .border-indigo-500\/20 {
+  border-color: color-mix(in srgb, var(--primary) 20%, transparent) !important;
+}
+
+.accounting-module .text-blue-500,
+.accounting-module .text-purple-500,
+.accounting-module .text-indigo-500,
+.accounting-module .text-blue-600,
+.accounting-module .text-purple-600,
+.accounting-module .text-indigo-600 {
+  color: var(--primary) !important;
+}
+
+.accounting-module .bg-blue-500\/10,
+.accounting-module .bg-purple-500\/10,
+.accounting-module .bg-indigo-500\/10 {
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent) !important;
+}
+
+.accounting-module .border-blue-500\/20,
+.accounting-module .border-purple-500\/20,
+.accounting-module .border-indigo-500\/20 {
+  border-color: color-mix(in srgb, var(--primary) 20%, transparent) !important;
 }
 
 .sales-module input,
@@ -89,8 +229,24 @@
 .purchases-module input,
 .purchases-module select,
 .purchases-module textarea,
-.purchases-module button {
+.purchases-module button,
+.inventory-module input,
+.inventory-module select,
+.inventory-module textarea,
+.inventory-module button,
+.finance-module input,
+.finance-module select,
+.finance-module textarea,
+.finance-module button {
   max-width: 100%;
+}
+
+/* Native selects using the shared input token need a visible light-theme
+   border; --input is intentionally transparent in the light theme. */
+.sales-module select.border-input {
+  border-color: var(--border);
+  background-color: var(--background);
+  color: var(--foreground);
 }
 
 /* Ventas: todo control accionable debe comunicar que puede pulsarse. */
@@ -110,8 +266,21 @@
 .sales-module .grid > *,
 .sales-module .flex > *,
 .purchases-module .grid > *,
-.purchases-module .flex > * {
+.purchases-module .flex > *,
+.inventory-module .grid > *,
+.inventory-module .flex > *,
+.finance-module .grid > *,
+.finance-module .flex > * {
   min-width: 0;
+}
+
+.finance-module {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.finance-module table {
+  max-width: 100%;
 }
 
 .sales-responsive-table {
@@ -137,7 +306,8 @@
 }
 
 .sales-module table:not([data-slot]),
-.purchases-module table:not([data-slot]) {
+.purchases-module table:not([data-slot]),
+.inventory-module table:not([data-slot]) {
   width: 100%;
   max-width: 100%;
   table-layout: fixed;
@@ -206,14 +376,18 @@
   .sales-module .w-64,
   .sales-module .w-\[220px\],
   .purchases-module .w-64,
-  .purchases-module .w-\[220px\] {
+  .purchases-module .w-\[220px\],
+  .inventory-module .w-64,
+  .inventory-module .w-\[220px\] {
     width: 100%;
   }
 
   .sales-module [data-slot="table-head"],
   .sales-module [data-slot="table-cell"],
   .purchases-module [data-slot="table-head"],
-  .purchases-module [data-slot="table-cell"] {
+  .purchases-module [data-slot="table-cell"],
+  .inventory-module [data-slot="table-head"],
+  .inventory-module [data-slot="table-cell"] {
     padding-left: 0.375rem;
     padding-right: 0.375rem;
   }
@@ -227,12 +401,14 @@
 
 @media (max-width: 1023px) {
   .sales-module .flex:has(> button),
-  .purchases-module .flex:has(> button) {
+  .purchases-module .flex:has(> button),
+  .inventory-module .flex:has(> button) {
     flex-wrap: wrap;
   }
 
   .sales-module .flex > button,
-  .purchases-module .flex > button {
+  .purchases-module .flex > button,
+  .inventory-module .flex > button {
     min-width: 0;
     max-width: 100%;
     white-space: normal;
@@ -324,6 +500,12 @@
   .purchases-module .purchase-item-fields > [class*="col-span-"] {
     grid-column: auto !important;
     min-width: 0;
+  }
+
+  /* El bloque fiscal necesita toda la fila para que sus dos subgrids no
+     compitan con Cuenta Contable en pantallas angostas. */
+  .purchases-module .purchase-item-fields > .col-span-4 {
+    grid-column: 1 / -1 !important;
   }
 
   .purchases-module .purchase-item-row {

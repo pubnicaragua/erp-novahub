@@ -616,7 +616,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title={`MRR Activo (${displayCurrency})`} value={formatConvertedAmount(activeRecurringInDisplayCurrency, displayCurrency)} icon={RotateCcw} color="text-primary" bg="bg-primary/10" />
         <SalesKpiCard title="Próximas 7 días" value={upcomingIn7Days} icon={Calendar} color="text-blue-500" bg="bg-blue-500/10" />
         <SalesKpiCard title="Activas" value={data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length} icon={Clock} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'ACTIVE'} onClick={() => setStatusFilter(statusFilter === 'ACTIVE' ? 'ALL' : 'ACTIVE')} />

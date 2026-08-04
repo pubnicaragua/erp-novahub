@@ -9,7 +9,9 @@ import { Plus, Search, AlertTriangle, Info, AlertCircle, Eye } from 'lucide-reac
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../hooks/useNotifications';
 import { alertsService } from '../../services/notificaciones.service';
+import { navigateToNotification } from '../../utils/notificationNavigation';
 import { format } from 'date-fns';
 
 interface AlertasViewProps {
@@ -20,6 +22,7 @@ interface AlertasViewProps {
 
 export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefresh }) => {
   const { canPerform } = useAuth();
+  const { markAsRead } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -56,6 +59,16 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
     finally { setCreating(false); }
   };
 
+  const handleNotificationClick = async (alert: Alert) => {
+    try {
+      if (!alert.isRead) await markAsRead(alert.id);
+      navigateToNotification(alert);
+      await onRefresh();
+    } catch (e: any) {
+      toast.error(errMsg(e, 'No se pudo marcar la notificación como leída'));
+    }
+  };
+
   const kpis = [
     { title: 'Total Alertas',   value: data.length,                                                              icon: AlertCircle,   color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Críticas',        value: data.filter(a => (a.severity||'').toUpperCase() === 'CRITICAL').length,    icon: AlertTriangle, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },
@@ -88,7 +101,7 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={canPerform('NOTIFICATIONS_ALERTS', 'edit') ? handleUpdate : undefined} isLoading={loading} onRowDelete={canPerform('NOTIFICATIONS_ALERTS', 'delete') ? async (id) => { try { await alertsService.delete(id as string); toast.success('Alerta eliminada'); onRefresh(); } catch (e: any) { toast.error(errMsg(e, 'Error al eliminar')); } } : undefined} />
+        <EditableDataTable data={filtered} columns={columns} onRowClick={handleNotificationClick} onRowUpdate={canPerform('NOTIFICATIONS_ALERTS', 'edit') ? handleUpdate : undefined} isLoading={loading} onRowDelete={canPerform('NOTIFICATIONS_ALERTS', 'delete') ? async (id) => { try { await alertsService.delete(id as string); toast.success('Alerta eliminada'); onRefresh(); } catch (e: any) { toast.error(errMsg(e, 'Error al eliminar')); } } : undefined} />
       </Card>
     </div>
   );

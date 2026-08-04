@@ -165,29 +165,39 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   };
 
   useEffect(() => {
-    if (invoiceDraft) {
-      setIsCreating(true);
-      setEditingId(null);
-      const draftSnapshot = { paymentMethod: 'CASH', accountId: '', ...JSON.parse(JSON.stringify(invoiceDraft)) };
-      setLocalDoc(draftSnapshot);
-      setPricingMode(inferPricingMode(draftSnapshot));
+    if (!invoiceDraft) return;
 
-      const sub = Number(invoiceDraft.subtotal || 0);
-      if (sub > 0) {
-        const dRate = (Number(invoiceDraft.discountAmount || 0) / sub) * 100;
-        const base = sub - Number(invoiceDraft.discountAmount || 0);
-        const tRate = base > 0 ? (Number(invoiceDraft.taxAmount || 0) / base) * 100 : 0;
-        setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
-      } else {
-        setLocalRates({ dRate: 0, tRate: 15 });
-      }
+    const draftId = (invoiceDraft as Partial<Invoice>).id;
+    const isExistingInvoice = Boolean(draftId);
+    setIsCreating(!isExistingInvoice);
+    setEditingId(isExistingInvoice ? draftId! : null);
+    const draftSnapshot = { paymentMethod: 'CASH', accountId: '', ...JSON.parse(JSON.stringify(invoiceDraft)) };
+    setLocalDoc(draftSnapshot);
+    setPricingMode(inferPricingMode(draftSnapshot));
 
-      if (onClearInvoiceDraft) {
-        setTimeout(() => onClearInvoiceDraft(), 0);
-      }
-    } else if (editingId) {
+    const sub = Number(invoiceDraft.subtotal || 0);
+    if (sub > 0) {
+      const dRate = (Number(invoiceDraft.discountAmount || 0) / sub) * 100;
+      const base = sub - Number(invoiceDraft.discountAmount || 0);
+      const tRate = base > 0 ? (Number(invoiceDraft.taxAmount || 0) / base) * 100 : 0;
+      setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
+    } else {
+      setLocalRates({ dRate: 0, tRate: 15 });
+    }
+
+    if (onClearInvoiceDraft && !isExistingInvoice) {
+      setTimeout(() => onClearInvoiceDraft(), 0);
+    }
+  }, [invoiceDraft]);
+
+  // El documento abierto es un snapshot local. Las actualizaciones de la
+  // lista paginada no deben reemplazarlo con una respuesta parcial sin líneas.
+  useEffect(() => {
+    if (invoiceDraft) return;
+    if (editingId) {
       const inv = data.find(x => x.id === editingId);
       if (inv) {
+        setIsCreating(false);
         const invoiceSnapshot = JSON.parse(JSON.stringify(inv));
         setLocalDoc(invoiceSnapshot);
         setPricingMode(inferPricingMode(invoiceSnapshot));
@@ -202,7 +212,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     } else if (!isCreating) {
       setLocalDoc(null);
     }
-  }, [editingId, invoiceDraft, data]);
+    // `data` se usa únicamente para inicializar al cambiar de factura.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId, invoiceDraft, isCreating]);
 
   useEffect(() => {
     if (targetInvoiceId) {
@@ -443,7 +455,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const base = subtotal - discountAmount;
     const taxAmount = base * (tRate / 100);
     const total = base + taxAmount;
-    return { subtotal, discountAmount, taxAmount, total };
+    // Mantener las líneas en ambos modos. El selector de lista de precios
+    // también recalcula los totales cuando su matriz termina de cargar; si
+    // este retorno no incluye `items`, esa actualización visualiza la factura
+    // sin líneas aunque la base de datos las conserve.
+    return { items, subtotal, discountAmount, taxAmount, total };
   };
 
   const recalcIndividualTotals = (items: any[]) => {
@@ -561,7 +577,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setIsCreating(false); setLocalDoc(null); }} className="rounded-full">
+          <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setIsCreating(false); setLocalDoc(null); onClearInvoiceDraft?.(); }} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -1006,7 +1022,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title={`Facturado Total (${displayCurrency})`} value={formatConvertedAmount(totalBilledInDisplayCurrency, displayCurrency)} icon={FileText} color="text-primary" bg="bg-primary/10" />
         <SalesKpiCard title={`Por Cobrar (${displayCurrency})`} value={formatConvertedAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />
         <SalesKpiCard title="Vencidas" value={data.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length} icon={AlertCircle} color="text-rose-500" bg="bg-rose-500/10" active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(statusFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />

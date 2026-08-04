@@ -36,10 +36,12 @@ const WAREHOUSE_TYPES = [
 
 const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="inventory-products-title"]', title: 'Vista de Productos', description: 'Aquí administras el catálogo, el costo, el stock y la distribución por almacén. Los precios de venta se gestionan desde Listas de precios.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-kpis"]', title: 'Indicadores y filtros rápidos', description: 'Productos muestra el total, disponibles, stock bajo y sin stock. Servicios muestra categorías, promedio semanal y precio promedio. Las tarjetas de existencias filtran la lista; los valores de referencia solo informan.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-filters"]', title: 'Buscar y filtrar', description: 'Busca por nombre o SKU y filtra por categoría, almacén o nivel de stock para encontrar rápidamente los productos.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-actions"]', title: 'Acciones del catálogo', description: 'Desde aquí puedes iniciar la importación inicial, consultar solicitudes de reabastecimiento y crear categorías o almacenes cuando corresponda.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-actions"]', title: 'Importar catálogo inicial', description: 'La importación inicial solo se habilita cuando la empresa todavía no tiene productos. Descarga la plantilla, completa SKU, datos, costo, precios y stock, carga opcionalmente las imágenes y previsualiza antes de confirmar.', tip: 'Los errores se omiten y los precios faltantes se muestran como avisos.', placement: 'bottom' },
-  { target: '[data-tour="inventory-products-table"]', title: 'Tabla y tarjetas', description: 'Consulta los productos en tabla o tarjetas. Puedes editar únicamente los campos permitidos y abrir el detalle haciendo clic en el registro o en su imagen.', placement: 'top' },
+  { target: '[data-tour="inventory-products-table"]', title: 'Registros y edición', description: 'Consulta los productos, edita únicamente los campos permitidos y abre el detalle haciendo clic en el registro o en su imagen.', placement: 'top' },
+  { target: '[data-tour="inventory-products-pagination"]', title: 'Paginación', description: 'Selecciona 50, 100 o 200 registros, revisa el rango mostrado y utiliza los controles para ir al inicio, anterior, siguiente o final.', placement: 'top' },
 ];
 
 interface ProductosViewProps {
@@ -1661,7 +1663,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           </div>
           <p className="text-xs font-medium text-muted-foreground">{warehouses.length} almacenes registrados</p>
         </div>
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4" data-tour="inventory-products-kpis">
           {[
             { id: 'all', label: isServiceView ? 'Servicios' : 'Productos', value: inventorySummary.total, tone: 'text-foreground' },
             ...(isServiceView ? [
@@ -1679,7 +1681,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               type="button"
               aria-pressed={['all', 'available', 'low', 'out'].includes(item.id) && stockFilter === item.id}
               onClick={() => ['all', 'available', 'low', 'out'].includes(item.id) && setStockFilter(item.id as typeof stockFilter)}
-              className={`rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              className={`min-w-0 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 stockFilter === item.id ? 'border-primary bg-primary/5' : 'border-border/70 bg-muted/20 hover:bg-muted/50'
               }`}
             >
@@ -1692,8 +1694,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
       {/* Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4" data-tour="inventory-products-filters">
-        <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap">
-          <div className="relative min-w-56 flex-1">
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:flex sm:flex-row sm:flex-wrap">
+          <div className="relative col-span-2 min-w-0 flex-1 sm:min-w-56">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input 
               placeholder="Buscar por nombre o código..." 
@@ -1702,20 +1704,20 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
             />
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex min-w-0 items-center gap-1">
             <MultiSelectFilter
               label="Categorías"
               placeholder="Buscar categoría..."
               options={categories.map((c: any) => ({ value: c.id, label: c.name }))}
               selected={categoryFilters}
               onChange={(value) => { setCategoryFilters(value); onCategoryChange?.(value); }}
-              className="h-9 rounded-lg"
+              className="h-9 min-w-0 flex-1 rounded-lg"
             />
             <Button type="button" variant="outline" size="sm" className="h-9 w-9 shrink-0 rounded-lg p-0" onClick={() => { setPendingCategoryRowIndex(null); setCategoryModalOpen(true); }} title="Agregar categoría" aria-label="Agregar categoría">
               <Plus className="size-4" />
             </Button>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex min-w-0 items-center gap-1">
             <MultiSelectFilter
               label="Almacenes"
               placeholder="Buscar almacén..."
@@ -1723,7 +1725,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               options={warehouses.map((w: any) => ({ value: w.id, label: w.name }))}
               selected={warehouseFilters}
               onChange={(value) => { setWarehouseFilters(value); onWarehouseChange?.(value); }}
-              className="h-9 rounded-lg"
+              className="h-9 min-w-0 flex-1 rounded-lg"
             />
             <Button type="button" variant="outline" size="sm" className="h-9 w-9 shrink-0 rounded-lg p-0" onClick={() => { setPendingWarehouseRowIndex(null); setNewWarehouseName(''); setNewWarehouseLocation(''); setNewWarehouseType('STORE'); setNewWarehouseParentId('none'); setNewWarehouseInventoryAccountId('none'); setWarehouseModalOpen(true); }} title="Agregar almacén" aria-label="Agregar almacén">
               <Plus className="size-4" />
@@ -1733,7 +1735,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <Button
               variant="ghost"
               size="sm"
-              className="h-9 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+              className="col-span-2 h-9 justify-self-start text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground sm:col-span-1"
               onClick={() => {
                 setSearchTerm('');
                 setCategoryFilters([]);
@@ -1748,14 +1750,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             </Button>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-wrap" data-tour="inventory-products-actions">
-          <Button type="button" size="sm" variant="outline" className="h-9 rounded-lg px-3 font-black text-[10px] uppercase tracking-widest" onClick={() => setShowTutorial(true)}>
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center" data-tour="inventory-products-actions">
+          <Button type="button" size="sm" variant="outline" className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto" onClick={() => setShowTutorial(true)}>
             <CircleHelp className="mr-2 size-4" /> Tutorial
           </Button>
           {!isServiceView && !initialImportCompleted && products.length === 0 && <Button
             size="sm"
             variant="outline"
-            className="h-9 rounded-lg px-3 font-black text-[10px] uppercase tracking-widest"
+            className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto"
             onClick={() => setInitialImportIntroOpen(true)}
             data-tour="inventory-products-import"
             disabled={initialImportCompleted}
@@ -1764,7 +1766,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <Upload className="size-4 mr-2" /> {initialImportCompleted ? 'Carga inicial completada' : 'Importar catálogo'}
           </Button>}
           {!isServiceView && <Select value={replenishmentPeriod} onValueChange={(value) => setReplenishmentPeriod(value as 'weekly' | 'biweekly' | 'monthly')}>
-            <SelectTrigger className="h-9 w-[120px] rounded-lg text-xs font-bold">
+            <SelectTrigger className="h-9 w-full min-w-0 rounded-lg text-xs font-bold sm:w-[120px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1776,7 +1778,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           {!isServiceView && <Button
             size="sm"
             variant="outline"
-            className="h-9 rounded-lg px-3 font-black text-[10px] uppercase tracking-widest"
+            className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto"
             onClick={handlePreviewReplenishment}
             disabled={downloadingReport}
           >
@@ -1791,14 +1793,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <>
               <Button
                 size="sm"
-                className="hidden 2xl:flex h-9 rounded-lg bg-gradient-to-br from-primary to-primary/80 px-4 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl"
+                className="hidden h-9 min-w-0 rounded-lg bg-gradient-to-br from-primary to-primary/80 px-4 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl 2xl:flex 2xl:w-auto"
                 onClick={handleAddRow}
               >
                 <Plus className="size-4" /> Agregar servicio
               </Button>
               <Button
                 size="sm"
-                className="flex h-9 rounded-lg bg-gradient-to-br from-primary to-primary/80 px-4 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl 2xl:hidden"
+                className="flex h-9 min-w-0 w-full rounded-lg bg-gradient-to-br from-primary to-primary/80 px-4 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl 2xl:hidden sm:w-auto"
                 onClick={() => setCreateModalOpen(true)}
               >
                 <Plus className="size-4" /> Agregar servicio
@@ -1808,7 +1810,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           {selectedIds.size > 0 && (
             <Button
               size="sm"
-              className="h-9 rounded-lg px-3 font-black text-[10px] uppercase tracking-widest bg-amber-600 hover:bg-amber-700 text-white"
+              className="h-9 min-w-0 w-full rounded-lg bg-amber-600 px-3 font-black text-[10px] uppercase tracking-widest text-white hover:bg-amber-700 sm:w-auto"
               onClick={openBatchPurchaseRequest}
             >
               <Package className="size-4 mr-2" />
@@ -1819,7 +1821,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       </div>
 
       {/* Mobile cards: the desktop table stays available at md+ without forcing page overflow. */}
-      <div className="space-y-3 2xl:hidden">
+      <div className="space-y-3 xl:hidden" data-tour="inventory-products-table">
         {paginatedProducts.length === 0 ? (
           <Card className="rounded-2xl border-border/40 p-6 text-center">
             <Package className="mx-auto mb-2 size-9 opacity-20" />
@@ -1901,7 +1903,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       </div>
 
       {/* Desktop table */}
-      <div className="hidden max-w-full overflow-x-auto rounded-lg border 2xl:block" data-tour="inventory-products-table">
+      <div className="hidden max-w-full overflow-x-auto rounded-lg border xl:block" data-tour="inventory-products-table">
         <Table className="w-full table-fixed">
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
@@ -2109,7 +2111,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       </div>
 
       {/* Pagination Footer */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground">
+      <div className="mt-4 flex flex-col items-stretch justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground sm:flex-row sm:items-center" data-tour="inventory-products-pagination">
         <div className="flex items-center gap-2">
           <span>Mostrar</span>
           <select value={pagination?.pageSize || pageSize} onChange={(event) => { const nextSize = Number(event.target.value) as 50 | 100 | 200; if (pagination) pagination.onPageSizeChange(nextSize); else { setPageSize(nextSize); setPage(1); } }} className="h-8 rounded-lg border border-border/50 bg-background px-2 font-bold text-foreground outline-none" aria-label="Registros por página">
@@ -2120,7 +2122,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             {filteredProducts.length === 0 ? 0 : `${((pagination?.page || page) - 1) * (pagination?.pageSize || pageSize) + 1}-${Math.min((pagination?.page || page) * (pagination?.pageSize || pageSize), pagination?.total || filteredProducts.length)}`} de {pagination?.total || filteredProducts.length}
           </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between gap-1 sm:justify-end">
           <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination ? pagination.onPageChange(1) : setPage(1)} disabled={(pagination?.page || page) <= 1} aria-label="Primera página"><ChevronsLeft className="size-4" /></button>
           <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => pagination ? pagination.onPageChange(Math.max(1, pagination.page - 1)) : setPage((p) => Math.max(1, p - 1))} disabled={(pagination?.page || page) <= 1} aria-label="Página anterior"><ChevronLeft className="size-4" /></button>
           <span className="min-w-24 text-center font-bold text-foreground">Pág. {pagination?.page || page} / {Math.max(1, totalPages)}</span>

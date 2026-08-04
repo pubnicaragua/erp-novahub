@@ -64,7 +64,7 @@ export function CambiosPatrimonioView() {
   const netIncomePositive = (data?.netIncome ?? 0) >= 0;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase italic">
@@ -80,14 +80,14 @@ export function CambiosPatrimonioView() {
         <div className="flex items-center gap-2 text-xs font-black text-muted-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
           <Filter className="size-3.5" /> Filtros
         </div>
-        <div className="flex flex-wrap items-center gap-4 flex-1">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Desde</label>
-            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 w-[150px]" />
+            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Hasta</label>
-            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 w-[150px]" />
+            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           {(dateFrom || dateTo) && (
             <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all mt-5">
@@ -103,7 +103,7 @@ export function CambiosPatrimonioView() {
       </div>
 
       {data && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
@@ -167,7 +167,8 @@ export function CambiosPatrimonioView() {
               <p className="text-xs mt-1">No se encontraron movimientos en el período seleccionado</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="hidden overflow-x-auto md:block">
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow className="hover:bg-transparent border-border/50">
@@ -197,6 +198,27 @@ export function CambiosPatrimonioView() {
                 </TableBody>
               </Table>
             </div>
+            <div className="space-y-2 p-3 md:hidden">
+              {data.rows.map((row, i) => (
+                <div key={row.accountId || i} className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[10px] text-muted-foreground">{row.accountCode}</p>
+                      <p className="mt-0.5 truncate text-sm font-bold" title={row.accountName}>{row.accountName}</p>
+                    </div>
+                    <span className={cn("shrink-0 text-right font-mono text-sm font-black", row.closingBalance >= 0 ? "text-emerald-600" : "text-red-600")}>
+                      {formatCurrency(row.closingBalance)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/50 pt-3 text-[10px]">
+                    <div><span className="block uppercase tracking-wider text-muted-foreground">Saldo inicial</span><span className={cn("font-mono", row.openingBalance >= 0 ? "text-emerald-600" : "text-red-600")}>{formatCurrency(row.openingBalance)}</span></div>
+                    <div className="text-right"><span className="block uppercase tracking-wider text-muted-foreground">Cambio período</span><span className={cn("font-mono font-bold", row.periodChange >= 0 ? "text-emerald-600" : "text-red-600")}>{row.periodChange >= 0 ? '+' : ''}{formatCurrency(row.periodChange)}</span></div>
+                  </div>
+                  <p className="mt-2 text-right text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Saldo final</p>
+                </div>
+              ))}
+            </div>
+            </>
           )}
         </CardContent>
         {data && data.rows.length > 0 && (

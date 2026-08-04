@@ -55,8 +55,8 @@ export function FinanceReceivablesView() {
   const topDebtors = Object.entries(pending.reduce((acc: Record<string, number>, inv: any) => { const name = inv.client?.name || inv.customerName || inv.customer?.name || 'Cliente'; acc[name] = (acc[name] || 0) + Number(inv.balanceDue || inv.total || 0); return acc }, {})).sort(([, a], [, b]) => b - a).slice(0, 5).map(([name, amount]) => ({ name, amount }))
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 mb-2">
+    <div className="min-w-0 space-y-6">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <AlertTriangle className="size-5 text-primary" />
         <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Cuentas por Cobrar</h3>
         <Badge variant="outline" className="text-xs">{pending.length} facturas pendientes</Badge>
@@ -144,7 +144,8 @@ export function FinanceReceivablesView() {
           ) : pending.length === 0 ? (
             <div className="text-center py-8 text-sm text-muted-foreground"><CheckCircle2 className="size-8 mx-auto mb-2 text-emerald-500/50" /><p>No hay facturas pendientes de cobro.</p></div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="space-y-3">
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-xs">
                 <thead><tr className="border-b border-border text-muted-foreground">
                   <th className="text-left py-2 font-bold uppercase tracking-wider">Cliente</th>
@@ -175,6 +176,30 @@ export function FinanceReceivablesView() {
                   })}
                 </tbody>
               </table>
+            </div>
+            <div className="space-y-2 md:hidden">
+              {pending.map((inv: any) => {
+                const due = inv.dueDate ? new Date(inv.dueDate) : null
+                const daysOverdue = due ? Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)) : 0
+                return (
+                  <div key={inv.id} className="min-w-0 rounded-xl border border-border/40 bg-muted/20 p-3">
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="break-words text-xs font-bold text-foreground">{inv.client?.name || inv.customerName || inv.customer?.name || '—'}</p>
+                        <p className="mt-1 text-[10px] font-mono text-primary">{inv.number || inv.code || '—'}</p>
+                      </div>
+                      {daysOverdue > 0 ? <Badge variant="destructive" className="shrink-0 text-[9px]">{daysOverdue}d vencido</Badge> : <Badge variant="secondary" className="shrink-0 text-[9px]">Al día</Badge>}
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/30 pt-3 text-[10px]">
+                      <div><span className="block text-muted-foreground">Emisión</span><span>{inv.date ? new Date(inv.date).toLocaleDateString('es-NI') : '—'}</span></div>
+                      <div><span className="block text-muted-foreground">Vencimiento</span><span>{due ? due.toLocaleDateString('es-NI') : '—'}</span></div>
+                      <div><span className="block text-muted-foreground">Monto</span><span className="font-mono">{fmt(Number(inv.total || 0))}</span></div>
+                      <div><span className="block text-muted-foreground">Saldo</span><span className="font-black">{fmt(Number(inv.balanceDue || inv.total || 0))}</span></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
             </div>
           )}
         </CardContent>

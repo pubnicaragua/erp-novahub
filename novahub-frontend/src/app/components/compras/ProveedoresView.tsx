@@ -260,7 +260,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}
@@ -389,7 +389,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                   Total: <b>{importResult.total}</b> · Creados: <b className="text-emerald-500">{importResult.created}</b> · Omitidos: <b className="text-amber-500">{importResult.skipped}</b>
                 </p>
                 {importResult.errors.length > 0 && (
-                  <div className="mt-2 text-xs text-amber-600 space-y-1">
+                  <div className="mt-2 space-y-1 text-xs text-amber-500">
                     <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
                     {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
                   </div>

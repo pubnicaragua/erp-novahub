@@ -36,6 +36,7 @@ import {
 } from './ui/popover';
 import { useAuth, type Module } from '../contexts/AuthContext';
 import { useNotifications } from '../hooks/useNotifications';
+import { navigateToNotification } from '../utils/notificationNavigation';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { ScrollArea } from './ui/scroll-area';
@@ -84,7 +85,7 @@ function getSavedDarkMode() {
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
   const { user, logout } = useAuth();
   const hasPosAccess = user?.enabledModules?.some(m => m === 'RETAIL_POS' || m === 'SALES_POS') ?? false;
-  const { unreadCount, markAllAsRead, notifications } = useNotifications();
+  const { unreadCount, markAsRead, notifications } = useNotifications();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ label: string; description: string; module: string; subModule: string; group: string }[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -213,7 +214,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     };
   }, []);
 
-  const toggleTheme = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const toggleTheme = (event?: React.MouseEvent<HTMLElement>) => {
     const root = document.documentElement;
     const transitionDocument = document as ThemeTransitionDocument;
     // La clase del DOM es la fuente de verdad; así cada clic funciona aunque
@@ -249,9 +250,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       return;
     }
 
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const x = bounds.left + bounds.width / 2;
-    const y = bounds.top + bounds.height / 2;
+    const bounds = event?.currentTarget.getBoundingClientRect();
+    const x = bounds ? bounds.left + bounds.width / 2 : window.innerWidth / 2;
+    const y = bounds ? bounds.top + bounds.height / 2 : window.innerHeight / 2;
     const radius = Math.hypot(
       Math.max(x, window.innerWidth - x),
       Math.max(y, window.innerHeight - y),
@@ -294,7 +295,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   return (
     <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <TrialCountdownBanner />
-      <header className="flex h-16 items-center gap-4 border-b border-border bg-background/95 px-4 lg:px-6" >
+      <header className="flex h-16 min-w-0 items-center gap-2 border-b border-border bg-background/95 px-3 sm:gap-3 sm:px-4 lg:gap-4 lg:px-6" >
       {/* Menu Toggle (Mobile) */}
       <Button
         variant="ghost"
@@ -318,7 +319,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       </Button>
 
       {/* Search */}
-      <div className="flex-1 flex items-center gap-4">
+      <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-4">
         {/* Tenancy Indicator */}
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/30 border border-border/50">
           <Building2 className="size-3.5 text-primary" />
@@ -326,7 +327,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           {getRoleBadge(user?.role || '')}
         </div>
 
-        <div className="relative max-w-sm w-full" ref={searchRef}>
+        <div className="relative min-w-0 w-12 shrink-0 transition-[width] duration-200 focus-within:w-48 sm:w-[min(32vw,20rem)] sm:focus-within:w-[min(32vw,20rem)] lg:w-full lg:max-w-sm" ref={searchRef}>
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
@@ -348,7 +349,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                 }, 100);
               }
             }}
-            className="pl-9 pr-4 h-9 bg-muted/20 border-border/40 focus:bg-background"
+            aria-label="Buscar módulos, clientes o facturas"
+            title="Buscar módulos, clientes o facturas"
+            className="h-9 w-full min-w-0 border-border/40 bg-muted/20 pl-9 pr-2 text-xs placeholder:text-transparent focus:bg-background sm:pr-4 sm:placeholder:text-muted-foreground"
           />
           {searchResults.length > 0 && (
             <div className="absolute top-full mt-1 left-0 right-0 bg-popover border border-border rounded-xl shadow-xl z-50 py-2 max-h-80 overflow-y-auto">
@@ -382,7 +385,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         </div>
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-4 ml-auto shrink-0">
+      <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3 lg:gap-4">
         {hasPosAccess && (
           <Button
             variant="outline"
@@ -407,7 +410,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           variant="outline" 
           size="sm" 
           onClick={toggleCurrency} 
-          className="h-9 gap-2 px-3 border-border bg-card hover:bg-muted disabled:opacity-60 disabled:cursor-not-allowed"
+          className="hidden h-9 gap-2 border-border bg-card px-3 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60 lg:flex"
           title={currencyInteractionEnabled ? 'Cambiar Moneda' : 'Cambio de moneda bloqueado por configuración'}
           disabled={!currencyInteractionEnabled}
         >
@@ -419,7 +422,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           variant="ghost"
           size="icon"
           onClick={toggleTheme}
-          className="h-9 w-9"
+          className="hidden h-9 w-9 lg:inline-flex"
           aria-label={isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
           title={isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
         >
@@ -427,7 +430,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         </Button>
 
         {/* Notifications */}
-        <DropdownMenu onOpenChange={(open) => { if (!open && unreadCount > 0) markAllAsRead() }}>
+        <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
               <Bell className="size-5" />
@@ -451,15 +454,8 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                     key={n.id} 
                     className="flex flex-col items-start gap-1 p-3 cursor-pointer border-b border-border/50 last:border-0" 
                     onClick={() => {
-                      if (n.message?.startsWith('TAREA:')) {
-                        onNavigate('actividades');
-                        window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'actividades', subModule: 'tareas' }}));
-                      } else if (n.message?.startsWith('RECORDATORIO:')) {
-                        onNavigate('actividades');
-                        window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'actividades', subModule: 'recordatorios' }}));
-                      } else {
-                        onNavigate('notificaciones');
-                      }
+                      void markAsRead(n.id);
+                      navigateToNotification(n);
                     }}
                   >
                     <div className="flex items-center gap-2">
@@ -505,7 +501,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               </div>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuContent align="end" className="w-64 max-w-[calc(100vw-1rem)] sm:w-56">
             <DropdownMenuLabel>
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium">{user?.name}</p>
@@ -525,6 +521,23 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               <Lock className="mr-2 size-4 text-primary" />
               <span>Cambiar Contraseña</span>
             </DropdownMenuItem>
+            <div className="lg:hidden">
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!currencyInteractionEnabled}
+                onClick={toggleCurrency}
+                className="gap-2"
+              >
+                {currency === 'USD' ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
+                <span>Moneda: {currency}</span>
+                <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cambiar</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={toggleTheme} className="gap-2">
+                {isDark ? <Sun className="size-4 text-amber-500" /> : <Moon className="size-4 text-primary" />}
+                <span>{isDark ? 'Tema claro' : 'Tema oscuro'}</span>
+                <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cambiar</span>
+              </DropdownMenuItem>
+            </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400 focus:bg-red-500/10 transition-colors">
               <LogOut className="mr-2 size-4 text-rose-500" />

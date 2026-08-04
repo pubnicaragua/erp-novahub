@@ -89,7 +89,7 @@ export function ActivosFijosView() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase italic">
@@ -168,7 +168,7 @@ export function ActivosFijosView() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
@@ -203,8 +203,8 @@ export function ActivosFijosView() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg font-bold flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-lg font-bold">
+            <div className="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
               <span>Activos Fijos Registrados</span>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -212,7 +212,7 @@ export function ActivosFijosView() {
                   placeholder="Buscar..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 h-8 w-[200px] text-xs"
+                  className="h-8 w-full pl-9 text-xs sm:w-[200px]"
                 />
               </div>
             </div>
@@ -233,6 +233,8 @@ export function ActivosFijosView() {
               <p className="text-xs mt-1">Registra un nuevo activo para comenzar</p>
             </div>
           ) : (
+            <div className="space-y-2">
+            <div className="hidden overflow-x-auto md:block">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent border-border/50">
@@ -257,6 +259,16 @@ export function ActivosFijosView() {
                 ))}
               </TableBody>
             </Table>
+            </div>
+            <div className="space-y-2 p-3 md:hidden">
+              {filtered.map((asset) => (
+                <div key={asset.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
+                  <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-mono text-muted-foreground">{asset.accountCode}</p><p className="break-words text-xs font-bold">{asset.accountName}</p></div><Badge variant="secondary" className="shrink-0 text-[10px]">{asset.transactions}</Badge></div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Costo adquisición</span><span className="font-mono">{formatCurrency(asset.acquisitionCost)}</span></div><div><span className="block text-muted-foreground">Saldo actual</span><span className="font-bold text-emerald-600">{formatCurrency(asset.currentBalance)}</span></div></div>
+                </div>
+              ))}
+            </div>
+            </div>
           )}
         </CardContent>
         {filtered.length > 0 && (

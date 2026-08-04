@@ -74,7 +74,7 @@ export function FinanceCashView() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardContent className="p-4">
@@ -157,7 +157,8 @@ export function FinanceCashView() {
               <p className="text-xs mt-1">Configure cuentas de tipo CASH o BANK en el Plan de Cuentas (Contabilidad).</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="space-y-3">
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-xs">
                 <thead><tr className="border-b border-border text-muted-foreground">
                   <th className="text-left py-2 font-bold uppercase tracking-wider">Cuenta</th>
@@ -176,6 +177,20 @@ export function FinanceCashView() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="space-y-2 md:hidden">
+              {bankAccounts.map((acc: any) => (
+                <div key={acc.id} className="min-w-0 rounded-xl border border-border/40 bg-muted/20 p-3">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words text-xs font-bold font-mono text-foreground">{acc.code} - {acc.name}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">{subtypeLabel(acc.subtype || acc.type)} · {acc.currency || 'NIO'}</p>
+                    </div>
+                    <p className="shrink-0 text-right text-sm font-black tabular-nums text-foreground">{fmt(Number(acc.balance || 0))}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
             </div>
           )}
         </CardContent>

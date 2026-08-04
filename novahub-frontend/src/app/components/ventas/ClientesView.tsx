@@ -75,11 +75,14 @@ const customerToDraft = (customer: Customer): CustomerDraft => ({
 
 const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="customers-title"]', title: 'Directorio de Clientes', description: 'Aquí administras los clientes, sus datos fiscales, ubicación, crédito, estado y lista de precios asignada.', placement: 'bottom' },
+  { target: '[data-tour="sales-list-kpis"]', title: 'KPIs de clientes', description: 'Total Clientes, Particulares y Empresas son filtros rápidos. Saldo deudor es un indicador monetario para priorizar la cobranza; la tarjeta activa se refleja en la lista.', placement: 'bottom' },
+  { target: '[data-tour="sales-list-actions"]', title: 'Búsqueda y filtros', description: 'Busca por nombre, identificación o contacto y combina el texto con Activos, Inactivos o Todos. Cambiar el filtro reinicia la paginación.', placement: 'bottom' },
   { target: '[data-tour="customers-columns"]', title: 'Configurar columnas', description: 'Elige qué campos se muestran en la tabla. La vista se ajusta automáticamente a las columnas seleccionadas.', placement: 'bottom' },
   { target: '[data-tour="customers-layout"]', title: 'Lista o tarjetas', description: 'Cambia entre una tabla para revisar muchos registros y tarjetas para consultar cada cliente de forma más visual.', placement: 'bottom' },
   { target: '[data-tour="customers-import"]', title: 'Importar clientes', description: 'Descarga la plantilla, completa los datos sin código de cliente y carga el archivo. La numeración la genera automáticamente el sistema.', tip: 'La importación de clientes puede repetirse. Primero se prepara el archivo y luego puedes abrir una previsualización editable.', placement: 'bottom' },
   { target: '[data-tour="customers-new"]', title: 'Crear clientes', description: 'Agrega uno o varios clientes desde el formulario. Para empresas el RUC es obligatorio; la cédula y el RUC pueden registrarse juntos.', placement: 'bottom' },
   { target: '[data-tour="customers-table"]', title: 'Consultar y gestionar', description: 'Abre el detalle desde Ver, edita los campos permitidos y cambia el estado con confirmación. Los clientes inactivos no se pueden usar en nuevas operaciones.', placement: 'top' },
+  { target: '[data-tour="sales-list-pagination"]', title: 'Paginación', description: 'Elige 50, 100 o 200 clientes por página. El rango muestra qué registros estás viendo del total y las flechas permiten ir al inicio, anterior, siguiente o final.', placement: 'top' },
 ];
 
 export function ClientesView({ data, loading, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ClientesViewProps) {
@@ -534,7 +537,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* KPIs Section */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title="Total Clientes" value={data.length} icon={Users} color="text-primary" bg="bg-primary/10" kind="filter" active={customerTypeFilter === 'ALL' && statusFilter === 'ALL'} onClick={() => { setCustomerTypeFilter('ALL'); setStatusFilter('ALL'); }} />
         <SalesKpiCard title="Particulares" value={data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length} icon={Users} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
         <SalesKpiCard title="Empresas" value={data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
@@ -543,7 +546,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
 
       {/* Main Content */}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2" data-tour="sales-list-actions">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="customers-title">Directorio de Clientes</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión integral Excel-like sin interrupciones.</p>
@@ -728,7 +731,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,1400px)] !flex-col overflow-hidden rounded-3xl p-0">
           <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
             <DialogTitle className="text-xl font-black uppercase tracking-tight">Nuevo cliente</DialogTitle>
-            <DialogDescription>Completa los datos del cliente. Puedes agregar varios a una lista temporal y guardarlos en una sola acción.</DialogDescription>
+          <DialogDescription>Completa los datos del cliente y usa “Agregar a la lista” para preparar varios registros antes de guardarlos juntos.</DialogDescription>
           </DialogHeader>
           <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
             <div className="min-w-0 space-y-6">
@@ -762,16 +765,20 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 </div>
               </section>
             </div>
-            <aside className="min-w-0 rounded-2xl border border-border/50 bg-muted/10 p-4">
-              <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-black uppercase tracking-widest">Clientes en espera</h3><p className="mt-1 text-xs text-muted-foreground">Agrega registros aquí y guárdalos juntos.</p></div><Badge variant="secondary" className="shrink-0">{pendingCustomers.length}</Badge></div>
-              {pendingCustomers.length === 0 ? (
-                <div className="mt-5 rounded-xl border border-dashed border-border/60 p-5 text-center text-xs text-muted-foreground">Aún no hay clientes agregados. Completa el formulario y usa “Agregar a la lista”.</div>
-              ) : (
+            {pendingCustomers.length > 0 && (
+              <aside className="min-w-0 rounded-2xl border border-border/50 bg-muted/10 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-widest">Clientes en lista de ingreso múltiple</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">Registros preparados para guardarse juntos.</p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0">{pendingCustomers.length}</Badge>
+                </div>
                 <div className="mt-4 max-h-[42vh] space-y-2 overflow-y-auto pr-1">
                   {pendingCustomers.map((customer, index) => <div key={customer.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/50 bg-background/50 p-3"><div className="min-w-0"><p className="truncate text-sm font-bold">{index + 1}. {customer.name}</p><p className="mt-1 truncate text-[11px] text-muted-foreground">{customer.taxId || customer.ruc || 'Sin identificación'} · {priceLists.find((list) => list.id === customer.priceListId)?.name || 'Sin lista asignada'}</p></div><Button variant="ghost" size="icon" title="Quitar de la lista" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:text-destructive" onClick={() => setPendingCustomers((current) => current.filter((item) => item.id !== customer.id))}><CircleX className="size-4" /></Button></div>)}
                 </div>
-              )}
-            </aside>
+              </aside>
+            )}
           </div>
           <DialogFooter className="flex-col gap-2 border-t border-border/40 px-5 py-4 sm:flex-row sm:flex-wrap sm:justify-between sm:px-7">
             <Button variant="outline" onClick={() => setCreateOpen(false)} className="w-full rounded-xl sm:w-auto">Cerrar</Button>

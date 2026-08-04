@@ -30,6 +30,7 @@ import { Textarea } from '../ui/textarea';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../hooks/useNotifications';
 
 interface MensajesViewProps {
   data: Message[];
@@ -75,6 +76,7 @@ const ParticipantAvatar = ({ participant, system = false }: { participant?: Mess
 
 export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRefresh }) => {
   const { canPerform } = useAuth();
+  const { refresh: refreshInbox } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<MessageFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -123,7 +125,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
     let active = true;
     setMarkingReadId(visibleThread.id);
     void messagesService.markRead(visibleThread.id)
-      .then(() => onRefresh())
+      .then(async () => { await refreshInbox(); await onRefresh(); })
       .catch((e: any) => {
         if (active) toast.error(e?.response?.data?.message || 'No pudimos marcar la conversación como leída');
       })
@@ -166,6 +168,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
     setMarkingReadId(thread.id);
     try {
       await messagesService.markRead(thread.id);
+      await refreshInbox();
       await refresh();
     } catch {
       toast.error('No pudimos marcar la conversación como leída');

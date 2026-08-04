@@ -261,7 +261,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title={`Total Recaudado (${displayCurrency})`} value={formatConvertedAmount(totalCollectedInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
         <SalesKpiCard title="Pagos" value={data.length} icon={CheckCircle2} color="text-blue-500" bg="bg-blue-500/10" />
         <SalesKpiCard title="Con Factura" value={data.filter(p => p.invoice?.number).length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />

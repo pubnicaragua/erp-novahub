@@ -1,9 +1,11 @@
 import { useState, useMemo } from 'react';
+import { keepPreviousData } from '@tanstack/react-query';
 import {
-  Plus, Search, Upload, FileDown, Pencil, Trash2,
+  Plus, Search, Upload, FileDown, Pencil,
   ChevronRight, ChevronDown, FolderTree,
   RefreshCw, X, Loader2, FileSpreadsheet, ChevronsDownUp, ChevronsUpDown,
-  AlertTriangle, Info
+  Info, Activity, ArrowDownLeft, ArrowUpRight,
+  ChevronsLeft, ChevronsRight, Settings2, Check, Ban
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -28,6 +30,7 @@ import { downloadCsv, downloadXlsx, templateRows } from '../../utils/chartOfAcco
 import { useAuth } from '../../contexts/AuthContext';
 import { AccountImportPreview } from './AccountImportPreview';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface AccountNode {
   id: string;
@@ -46,6 +49,38 @@ interface AccountNode {
   children: AccountNode[];
   level: number;
   _count?: { children: number; transactions: number };
+}
+
+interface AccountTransaction {
+  id: string;
+  accountId: string;
+  date: string;
+  description?: string | null;
+  reference?: string | null;
+  debit: number | string;
+  credit: number | string;
+  createdAt?: string;
+}
+
+const ACCOUNT_COLUMN_DEFS = [
+  { key: 'code', label: 'Código', width: 'minmax(48px,.7fr)' },
+  { key: 'name', label: 'Nombre', width: 'minmax(90px,1.45fr)' },
+  { key: 'type', label: 'Tipo', width: 'minmax(54px,.75fr)' },
+  { key: 'subtype', label: 'Subtipo', width: 'minmax(78px,1fr)' },
+  { key: 'detailType', label: 'Tipo detalle', width: 'minmax(78px,1fr)' },
+  { key: 'manual', label: 'Manual', width: 'minmax(58px,.75fr)' },
+  { key: 'balance', label: 'Saldo', width: 'minmax(82px,1fr)' },
+  { key: 'currency', label: 'Mon', width: 'minmax(36px,.45fr)' },
+  { key: 'status', label: 'Estado', width: 'minmax(55px,.75fr)' },
+] as const;
+type AccountColumnKey = (typeof ACCOUNT_COLUMN_DEFS)[number]['key'];
+const DEFAULT_ACCOUNT_COLUMN_KEYS: AccountColumnKey[] = ACCOUNT_COLUMN_DEFS.map((column) => column.key);
+
+function accountGridTemplate(visibleKeys: AccountColumnKey[]) {
+  const columns = ACCOUNT_COLUMN_DEFS
+    .filter((column) => visibleKeys.includes(column.key))
+    .map((column) => column.width);
+  return ['56px', ...columns, '64px'].join(' ');
 }
 
 const ACCOUNT_TYPES: { value: AccountType; label: string; color: string }[] = [
@@ -128,6 +163,24 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAccount, setSelectedAccount] = useState<AccountNode | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [transactionsPage, setTransactionsPage] = useState(1);
+  const [transactionsPageSize, setTransactionsPageSize] = useState(50);
+  const [selectedTransaction, setSelectedTransaction] = useState<AccountTransaction | null>(null);
+  const [visibleAccountColumnKeys, setVisibleAccountColumnKeys] = useState<AccountColumnKey[]>(DEFAULT_ACCOUNT_COLUMN_KEYS);
+  const [columnConfigOpen, setColumnConfigOpen] = useState(false);
+
+  const accountTransactionsQuery = useAccountingQuery<any>(
+    ['account-transactions', selectedAccount?.id ?? null, transactionsPage, transactionsPageSize],
+    async (signal) => selectedAccount
+      ? contabilidadService.getAccountTransactions(selectedAccount.id, { page: transactionsPage, pageSize: transactionsPageSize }, signal)
+      : { data: [], meta: { total: 0, page: 1, pageSize: transactionsPageSize, totalPages: 1 } },
+    {
+      enabled: Boolean(selectedAccount),
+      placeholderData: keepPreviousData,
+      staleTime: 30_000,
+      refetchInterval: selectedAccount ? 30_000 : false,
+    },
+  );
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountNode | null>(null);
@@ -140,8 +193,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   });
   const [saving, setSaving] = useState(false);
 
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [pendingStatusAccount, setPendingStatusAccount] = useState<AccountNode | null>(null);
+  const [statusChanging, setStatusChanging] = useState(false);
 
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -182,6 +235,42 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       return buildTree(nodes);
   }, [accountsQuery.data]);
   const fetchAccounts = (_refresh = false) => accountsQuery.refetch();
+  const accountGridColumns = useMemo(() => accountGridTemplate(visibleAccountColumnKeys), [visibleAccountColumnKeys]);
+
+  const selectAccount = (account: AccountNode) => {
+    setSelectedAccount(account);
+    setSelectedTransaction(null);
+    setTransactionsPage(1);
+  };
+
+  const toggleAccountStatus = async () => {
+    if (!pendingStatusAccount) return;
+    const account = pendingStatusAccount;
+    const nextIsActive = !account.isActive;
+    setStatusChanging(true);
+    try {
+      await contabilidadService.updateAccount(account.id, { isActive: nextIsActive });
+      setSelectedAccount((current) => current?.id === account.id ? { ...current, isActive: nextIsActive } : current);
+      setPendingStatusAccount(null);
+      await fetchAccounts(true);
+      toast.success(nextIsActive ? 'Cuenta habilitada' : 'Cuenta inhabilitada');
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo actualizar el estado de la cuenta');
+    } finally {
+      setStatusChanging(false);
+    }
+  };
+
+  const accountTransactionsResponse = accountTransactionsQuery.data;
+  const accountTransactions: AccountTransaction[] = Array.isArray(accountTransactionsResponse)
+    ? accountTransactionsResponse
+    : Array.isArray(accountTransactionsResponse?.data) ? accountTransactionsResponse.data : [];
+  const accountTransactionsMeta = accountTransactionsResponse?.meta ?? {
+    total: selectedAccount?._count?.transactions ?? 0,
+    page: transactionsPage,
+    pageSize: transactionsPageSize,
+    totalPages: Math.max(1, Math.ceil((selectedAccount?._count?.transactions ?? 0) / transactionsPageSize)),
+  };
 
   const flatList = useMemo(() => flattenTree(accounts), [accounts]);
 
@@ -292,22 +381,6 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       toast.error(e?.message || 'Error al guardar cuenta');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deleteConfirmId) return;
-    setDeleting(true);
-    try {
-      await contabilidadService.deleteAccount(deleteConfirmId);
-      toast.success('Cuenta eliminada');
-      setDeleteConfirmId(null);
-      if (selectedAccount?.id === deleteConfirmId) setSelectedAccount(null);
-      fetchAccounts(true);
-    } catch (e: any) {
-      toast.error(e?.message || 'Error al eliminar cuenta');
-    } finally {
-      setDeleting(false);
     }
   };
 
@@ -442,60 +515,100 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       <div key={account.id}>
         <div
           className={cn(
-            'flex items-center gap-2 px-3 py-2 cursor-pointer rounded-md transition-colors hover:bg-muted/50',
+            'flex items-start gap-2 px-3 py-2.5 cursor-pointer rounded-md transition-colors hover:bg-muted/50 sm:hidden',
             isSelected && 'bg-muted ring-1 ring-border',
             !account.isActive && 'opacity-60'
           )}
-          style={{ paddingLeft: `${account.level * 24 + 8}px` }}
-          onClick={() => setSelectedAccount(account)}
+          style={{ paddingLeft: `${Math.min(account.level * 12 + 8, 32)}px` }}
+          onClick={() => selectAccount(account)}
         >
           <button
             onClick={(e) => { e.stopPropagation(); toggleExpand(account.id); }}
             className={cn(
-              'flex items-center justify-center w-5 h-5 rounded',
+              'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded',
               hasChildren ? 'visible hover:bg-muted' : 'invisible'
             )}
+            aria-label={isExpanded ? `Contraer ${account.name}` : `Expandir ${account.name}`}
           >
-            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
           </button>
 
-          <span className="font-mono text-xs text-muted-foreground min-w-[90px]">{account.code}</span>
-          <span className={cn('flex-1 text-sm truncate', !account.isActive && 'line-through')}>{account.name}</span>
-          <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0 font-medium', TYPE_COLOR_MAP[account.type])}>
-            {getTypeLabel(account.type)}
-          </Badge>
-          <span className="text-[10px] text-muted-foreground min-w-[110px] truncate" title={getSubtypeLabel(account.subtype)}>
-            {getSubtypeLabel(account.subtype)}
-          </span>
-          <span className="text-[10px] text-muted-foreground min-w-[110px] truncate" title={getDetailTypeLabel(account.detailType)}>
-            {getDetailTypeLabel(account.detailType)}
-          </span>
-          <Badge variant={account.allowManualEntry ? 'outline' : 'secondary'} className="text-[10px] min-w-[70px] justify-center">
-            {account.allowManualEntry ? 'Manual' : 'No manual'}
-          </Badge>
-          <span className="text-sm font-medium tabular-nums min-w-[100px] text-right">
-            {formatConvertedAmount(account.balance, account.currency)}
-          </span>
-          <Badge variant="outline" className="text-[10px] text-muted-foreground min-w-[40px] justify-center">
-            {account.currency}
-          </Badge>
-          <Badge variant={account.isActive ? 'default' : 'secondary'} className="text-[10px] min-w-[50px] justify-center">
-            {account.isActive ? 'Activo' : 'Inactivo'}
-          </Badge>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{account.code}</span>
+              <Badge variant="outline" className={cn('shrink-0 px-1.5 py-0 text-[9px] font-medium', TYPE_COLOR_MAP[account.type])}>
+                {getTypeLabel(account.type)}
+              </Badge>
+            </div>
+            <p className={cn('mt-0.5 truncate text-sm font-medium', !account.isActive && 'line-through')} title={account.name}>
+              {account.name}
+            </p>
+            <p className="mt-1 truncate text-[10px] text-muted-foreground">
+              {getSubtypeLabel(account.subtype)} · {getDetailTypeLabel(account.detailType)} · {account.currency}
+            </p>
+          </div>
 
-          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <span className="max-w-[96px] truncate text-right text-xs font-semibold tabular-nums">
+              {formatConvertedAmount(account.balance, account.currency)}
+            </span>
+            <Badge variant={account.isActive ? 'default' : 'secondary'} className="px-1.5 py-0 text-[9px]">
+              {account.isActive ? 'Activo' : 'Inactivo'}
+            </Badge>
+            <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+              {canPerform('ACCOUNTING_CHARTS', 'edit') && (
+                <>
+                  <Button variant="ghost" size="icon" className="size-7" onClick={() => openEditDialog(account)} title="Editar">
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost" size="icon" className="size-7"
+                    onClick={() => setPendingStatusAccount(account)}
+                    title={account.isActive ? 'Inhabilitar cuenta' : 'Habilitar cuenta'}
+                  >
+                    <Ban className="size-3.5" />
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            'hidden min-w-0 items-center gap-0 px-3 py-2 transition-colors hover:bg-muted/50 sm:grid',
+            isSelected && 'bg-muted ring-1 ring-border',
+            !account.isActive && 'opacity-60'
+          )}
+          style={{ gridTemplateColumns: accountGridColumns }}
+          onClick={() => selectAccount(account)}
+        >
+          <div className="flex min-w-0 items-center" style={{ paddingLeft: `${Math.min(account.level * 16, 32)}px` }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleExpand(account.id); }}
+              className={cn('flex size-5 shrink-0 items-center justify-center rounded', hasChildren ? 'visible hover:bg-muted' : 'invisible')}
+              aria-label={isExpanded ? `Contraer ${account.name}` : `Expandir ${account.name}`}
+            >
+              {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+            </button>
+          </div>
+          {visibleAccountColumnKeys.includes('code') && <span className="min-w-0 truncate px-2 font-mono text-xs text-muted-foreground">{account.code}</span>}
+          {visibleAccountColumnKeys.includes('name') && <span className={cn('min-w-0 truncate px-2 text-sm', !account.isActive && 'line-through')}>{account.name}</span>}
+          {visibleAccountColumnKeys.includes('type') && <Badge variant="outline" className={cn('mx-2 max-w-full justify-center truncate px-1.5 py-0 text-[10px] font-medium', TYPE_COLOR_MAP[account.type])}>{getTypeLabel(account.type)}</Badge>}
+          {visibleAccountColumnKeys.includes('subtype') && <span className="min-w-0 truncate px-2 text-[10px] text-muted-foreground" title={getSubtypeLabel(account.subtype)}>{getSubtypeLabel(account.subtype)}</span>}
+          {visibleAccountColumnKeys.includes('detailType') && <span className="min-w-0 truncate px-2 text-[10px] text-muted-foreground" title={getDetailTypeLabel(account.detailType)}>{getDetailTypeLabel(account.detailType)}</span>}
+          {visibleAccountColumnKeys.includes('manual') && <Badge variant={account.allowManualEntry ? 'outline' : 'secondary'} className="mx-2 max-w-full justify-center truncate text-[10px]">{account.allowManualEntry ? 'Manual' : 'No manual'}</Badge>}
+          {visibleAccountColumnKeys.includes('balance') && <span className="min-w-0 truncate px-2 text-right text-sm font-medium tabular-nums">{formatConvertedAmount(account.balance, account.currency)}</span>}
+          {visibleAccountColumnKeys.includes('currency') && <Badge variant="outline" className="mx-2 max-w-full justify-center truncate text-[10px] text-muted-foreground">{account.currency}</Badge>}
+          {visibleAccountColumnKeys.includes('status') && <Badge variant={account.isActive ? 'default' : 'secondary'} className="mx-2 max-w-full justify-center truncate text-[10px]">{account.isActive ? 'Activo' : 'Inactivo'}</Badge>}
+          <div className="flex shrink-0 items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
             {canPerform('ACCOUNTING_CHARTS', 'edit') && (
               <>
-                <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => openEditDialog(account)} title="Editar">
-                  <Pencil className="w-3.5 h-3.5" />
+                <Button variant="ghost" size="icon" className="size-7" onClick={() => openEditDialog(account)} title="Editar cuenta" aria-label="Editar cuenta">
+                  <Pencil className="size-3.5" />
                 </Button>
-                <Button
-                  variant="ghost" size="icon" className="w-7 h-7 text-destructive hover:text-destructive"
-                  onClick={() => setDeleteConfirmId(account.id)}
-                  title="Eliminar"
-                  disabled={hasChildren || (account._count?.transactions ?? 0) > 0}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
+                <Button variant="ghost" size="icon" className="size-7" onClick={() => setPendingStatusAccount(account)} title={account.isActive ? 'Inhabilitar cuenta' : 'Habilitar cuenta'} aria-label={account.isActive ? 'Inhabilitar cuenta' : 'Habilitar cuenta'}>
+                  <Ban className="size-3.5" />
                 </Button>
               </>
             )}
@@ -523,16 +636,16 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Plan de Cuentas</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Catálogo de cuentas contables del sistema
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <Button variant="outline" size="sm" onClick={handleExport}>
             <FileDown className="w-4 h-4 mr-1" /> Exportar
           </Button>
@@ -550,8 +663,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       </div>
 
       {/* Filtros */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
+        <div className="relative min-w-0 max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por código o nombre..."
@@ -569,9 +682,12 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       </div>
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className={cn(
+        'grid min-w-0 grid-cols-1 gap-6',
+        selectedAccount ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'
+      )}>
         {/* Tree Table */}
-        <div className="xl:col-span-2">
+        <div className="min-w-0">
           <Card>
             <CardHeader className="py-3 px-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -580,6 +696,9 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                   <CardTitle className="text-sm font-medium">Jerarquía de Cuentas</CardTitle>
                 </div>
                 <div className="flex items-center gap-1">
+                  <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setColumnConfigOpen(true)} title="Elegir columnas visibles">
+                    <Settings2 className="size-3.5" /> <span className="hidden sm:inline">Columnas</span><span className="text-muted-foreground">{visibleAccountColumnKeys.length}</span>
+                  </Button>
                   <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={collapseAll} title="Contraer todas las cuentas y grupos">
                     <ChevronsDownUp className="size-3.5" /> Contraer todo
                   </Button>
@@ -605,22 +724,21 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                   )}
                 </div>
               ) : (
-                <div className="divide-y divide-border">
-                  {/* Header row */}
-                  <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground bg-muted/30">
-                    <span className="w-5" />
-                    <span className="min-w-[90px]">Código</span>
-                    <span className="flex-1">Nombre</span>
-                    <span className="min-w-[80px]">Tipo</span>
-                    <span className="min-w-[110px]">Subtipo</span>
-                    <span className="min-w-[110px]">Tipo detalle</span>
-                    <span className="min-w-[70px] text-center">Manual</span>
-                    <span className="min-w-[100px] text-right">Saldo</span>
-                    <span className="min-w-[40px] text-center">Mon</span>
-                    <span className="min-w-[50px] text-center">Estado</span>
-                    <span className="w-[60px]" />
-                  </div>
-                  <div className="max-h-[600px] overflow-y-auto">
+                <div className="max-h-[600px] overflow-x-hidden overflow-y-auto">
+                  <div className="divide-y divide-border">
+                    {/* Header row */}
+                    <div className="hidden min-w-0 items-center gap-0 bg-muted/30 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground sm:grid" style={{ gridTemplateColumns: accountGridColumns }}>
+                      <span className="px-2" aria-hidden="true" />
+                      {ACCOUNT_COLUMN_DEFS.filter((column) => visibleAccountColumnKeys.includes(column.key)).map((column) => (
+                        <span key={column.key} className={cn('min-w-0 truncate px-2', column.key === 'balance' && 'text-right', (column.key === 'manual' || column.key === 'currency' || column.key === 'status') && 'text-center')}>
+                          {column.label}
+                        </span>
+                      ))}
+                      <span className="px-2 text-right">Acciones</span>
+                    </div>
+                    <div className="border-b border-border bg-muted/30 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground sm:hidden">
+                      Cuentas contables
+                    </div>
                     {accounts.map(acc => renderTreeRow(acc))}
                   </div>
                 </div>
@@ -630,8 +748,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         </div>
 
         {/* Detail Panel */}
-        <div className="xl:col-span-1">
-          <Card>
+        {selectedAccount && <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start">
+          <Card className="overflow-hidden">
             <CardHeader className="py-3 px-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -639,103 +757,285 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                   <CardTitle className="text-sm font-medium">Detalle de Cuenta</CardTitle>
                 </div>
                 {selectedAccount && (
-                  <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => setSelectedAccount(null)}>
+                  <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => { setSelectedAccount(null); setSelectedTransaction(null); }}>
                     <X className="w-3.5 h-3.5" />
                   </Button>
                 )}
               </div>
             </CardHeader>
             <Separator />
-            {selectedAccount ? (
-              <CardContent className="p-4 space-y-4">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Código</p>
-                  <p className="text-sm font-mono font-medium">{selectedAccount.code}</p>
+            <CardContent className="max-h-[calc(100vh-6rem)] space-y-5 overflow-y-auto p-4 sm:p-5">
+                <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Cuenta seleccionada · {selectedAccount.code}</p>
+                      <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={selectedAccount.name}>{selectedAccount.name}</h3>
+                    </div>
+                    <Badge variant={selectedAccount.isActive ? 'default' : 'secondary'} className="shrink-0">
+                      {selectedAccount.isActive ? 'Activo' : 'Inactivo'}
+                    </Badge>
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Saldo actual</p>
+                      <p className="mt-1 text-2xl font-black tabular-nums tracking-tight">{formatConvertedAmount(selectedAccount.balance, selectedAccount.currency)}</p>
+                    </div>
+                    <Badge variant="outline" className={cn('shrink-0', TYPE_COLOR_MAP[selectedAccount.type])}>
+                      {getTypeLabel(selectedAccount.type)}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Nombre</p>
-                  <p className="text-sm font-medium">{selectedAccount.name}</p>
+
+                <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-4 2xl:grid-cols-3">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Subtipo</p>
+                    <p className="truncate text-sm font-semibold" title={getSubtypeLabel(selectedAccount.subtype)}>{getSubtypeLabel(selectedAccount.subtype)}</p>
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tipo de detalle</p>
+                    <p className="truncate text-sm font-semibold" title={getDetailTypeLabel(selectedAccount.detailType)}>{getDetailTypeLabel(selectedAccount.detailType)}</p>
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Moneda</p>
+                    <p className="text-sm font-semibold">{selectedAccount.currency}</p>
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Captura manual</p>
+                    <Badge variant={selectedAccount.allowManualEntry ? 'default' : 'secondary'} className="max-w-full truncate">
+                      {selectedAccount.allowManualEntry ? 'Permitida' : 'No permitida'}
+                    </Badge>
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Hijos</p>
+                    <p className="text-sm font-semibold tabular-nums">{selectedAccount._count?.children ?? selectedAccount.children.length}</p>
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Movimientos</p>
+                    <p className="text-sm font-semibold tabular-nums">{accountTransactionsMeta.total ?? selectedAccount._count?.transactions ?? 0}</p>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Tipo</p>
-                  <Badge variant="outline" className={cn(TYPE_COLOR_MAP[selectedAccount.type])}>
-                    {getTypeLabel(selectedAccount.type)}
-                  </Badge>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Subtipo</p>
-                  <p className="text-sm">{getSubtypeLabel(selectedAccount.subtype)}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Tipo de detalle</p>
-                  <p className="text-sm">{getDetailTypeLabel(selectedAccount.detailType)}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Moneda</p>
-                  <p className="text-sm">{selectedAccount.currency}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Estado</p>
-                  <Badge variant={selectedAccount.isActive ? 'default' : 'secondary'}>
-                    {selectedAccount.isActive ? 'Activo' : 'Inactivo'}
-                  </Badge>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Captura manual</p>
-                  <Badge variant={selectedAccount.allowManualEntry ? 'default' : 'secondary'}>
-                    {selectedAccount.allowManualEntry ? 'Permitida' : 'No permitida'}
-                  </Badge>
-                </div>
+
                 {selectedAccount.notes && (
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Notas</p>
-                    <p className="text-sm whitespace-pre-wrap">{selectedAccount.notes}</p>
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Notas</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm">{selectedAccount.notes}</p>
                   </div>
                 )}
-                <Separator />
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Saldo Actual</p>
-                  <p className="text-2xl font-bold tabular-nums">
-                    {formatConvertedAmount(selectedAccount.balance, selectedAccount.currency)}
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg bg-muted/50 p-3 text-center">
-                    <p className="text-xs text-muted-foreground">Hijos</p>
-                    <p className="text-lg font-bold">{selectedAccount._count?.children ?? selectedAccount.children.length}</p>
-                  </div>
-                  <div className="rounded-lg bg-muted/50 p-3 text-center">
-                    <p className="text-xs text-muted-foreground">Transacciones</p>
-                    <p className="text-lg font-bold">{selectedAccount._count?.transactions ?? 0}</p>
-                  </div>
-                </div>
-                <div className="flex gap-2 pt-2">
+
+                <div className="flex flex-wrap gap-2">
                   {canPerform('ACCOUNTING_CHARTS', 'edit') && (
                     <>
                       <Button variant="outline" size="sm" className="flex-1" onClick={() => openEditDialog(selectedAccount)}>
-                        <Pencil className="w-3.5 h-3.5 mr-1" /> Editar
+                        <Pencil className="mr-1 size-3.5" /> Editar
                       </Button>
                       <Button
-                        variant="outline" size="sm" className="flex-1 text-destructive"
-                        onClick={() => setDeleteConfirmId(selectedAccount.id)}
-                        disabled={selectedAccount.children.length > 0 || (selectedAccount._count?.transactions ?? 0) > 0}
+                        variant="outline" size="sm" className="flex-1"
+                        onClick={() => setPendingStatusAccount(selectedAccount)}
                       >
-                        <Trash2 className="w-3.5 h-3.5 mr-1" /> Eliminar
+                        <Ban className="mr-1 size-3.5" /> {selectedAccount.isActive ? 'Inhabilitar' : 'Habilitar'}
                       </Button>
                     </>
                   )}
                 </div>
-              </CardContent>
-            ) : (
-              <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <Info className="w-10 h-10 mb-2 opacity-40" />
-                <p className="text-sm">Selecciona una cuenta</p>
-                <p className="text-xs">para ver sus detalles</p>
-              </CardContent>
-            )}
+
+                <Separator />
+
+                <section aria-labelledby="account-transactions-title" className="min-w-0">
+                  <div className="mb-3 flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Activity className="size-4 text-primary" />
+                        <h3 id="account-transactions-title" className="truncate text-sm font-black uppercase tracking-tight">Transacciones de la cuenta</h3>
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Últimos movimientos registrados, actualizados automáticamente.</p>
+                    </div>
+                    {accountTransactionsQuery.isFetching && <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Actualizando transacciones" />}
+                  </div>
+
+                  {accountTransactionsQuery.isLoading ? (
+                    <div className="flex items-center justify-center rounded-xl border border-dashed border-border/60 py-10">
+                      <Loader2 className="size-5 animate-spin text-primary" />
+                    </div>
+                  ) : accountTransactions.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border/60 px-4 py-8 text-center">
+                      <Activity className="mx-auto size-8 text-muted-foreground/40" />
+                      <p className="mt-2 text-sm font-semibold">Sin transacciones</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Esta cuenta todavía no tiene movimientos.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-xl border border-border/60">
+                      <div className="divide-y divide-border/60">
+                        {accountTransactions.map((transaction) => {
+                          const debit = Number(transaction.debit ?? 0);
+                          const credit = Number(transaction.credit ?? 0);
+                          return (
+                            <div
+                              key={transaction.id}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Ver detalles de la transacción ${transaction.reference || transaction.id}`}
+                              onClick={() => setSelectedTransaction(transaction)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  setSelectedTransaction(transaction);
+                                }
+                              }}
+                              className="grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-3 py-3 transition-colors hover:bg-muted/30 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                            >
+                              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted/60">
+                                {debit > 0 ? <ArrowDownLeft className="size-3.5 text-emerald-600" /> : <ArrowUpRight className="size-3.5 text-rose-500" />}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-semibold" title={transaction.description || 'Sin descripción'}>{transaction.description || 'Sin descripción'}</p>
+                                <p className="mt-1 truncate text-[10px] text-muted-foreground">
+                                  {new Date(transaction.date).toLocaleDateString('es-NI')} · {transaction.reference || 'Sin referencia'}
+                                </p>
+                              </div>
+                              <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">
+                                {debit > 0 && <p className="text-emerald-600">+{formatConvertedAmount(debit, selectedAccount.currency)}</p>}
+                                {credit > 0 && <p className="text-rose-500">-{formatConvertedAmount(credit, selectedAccount.currency)}</p>}
+                                {debit === 0 && credit === 0 && <p className="text-muted-foreground">—</p>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex flex-col gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2">
+                      <span>Mostrar</span>
+                      <select
+                        value={transactionsPageSize}
+                        onChange={(event) => { setTransactionsPageSize(Number(event.target.value)); setTransactionsPage(1); }}
+                        className="h-8 rounded-lg border border-border/50 bg-background px-2 font-bold text-foreground outline-none"
+                        aria-label="Transacciones por página"
+                      >
+                        {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
+                      </select>
+                      <span>por página · {accountTransactionsMeta.total ?? 0} total</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-1 sm:justify-end">
+                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage(1)} disabled={transactionsPage <= 1} aria-label="Primera página de transacciones"><ChevronsLeft className="size-3.5" /></Button>
+                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage((page) => Math.max(1, page - 1))} disabled={transactionsPage <= 1} aria-label="Página anterior de transacciones"><ChevronRight className="size-3.5 rotate-180" /></Button>
+                      <span className="min-w-20 text-center font-bold text-foreground">Pág. {transactionsPage} / {Math.max(1, accountTransactionsMeta.totalPages ?? 1)}</span>
+                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage((page) => Math.min(accountTransactionsMeta.totalPages ?? 1, page + 1))} disabled={transactionsPage >= (accountTransactionsMeta.totalPages ?? 1)} aria-label="Página siguiente de transacciones"><ChevronRight className="size-3.5" /></Button>
+                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage(accountTransactionsMeta.totalPages ?? 1)} disabled={transactionsPage >= (accountTransactionsMeta.totalPages ?? 1)} aria-label="Última página de transacciones"><ChevronsRight className="size-3.5" /></Button>
+                    </div>
+                  </div>
+                </section>
+            </CardContent>
           </Card>
-        </div>
+        </div>}
       </div>
+
+      <Dialog open={selectedTransaction !== null} onOpenChange={(open) => { if (!open) setSelectedTransaction(null); }}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 pr-8">
+              <Activity className="size-5 text-primary" />
+              Detalle de transacción
+            </DialogTitle>
+            <DialogDescription>
+              Información general del movimiento registrado en la cuenta seleccionada.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedTransaction && (() => {
+            const debit = Number(selectedTransaction.debit ?? 0);
+            const credit = Number(selectedTransaction.credit ?? 0);
+            const movement = debit - credit;
+
+            return (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">Movimiento seleccionado</p>
+                  <p className="mt-2 break-words text-base font-black text-foreground">{selectedTransaction.description || 'Sin descripción'}</p>
+                  <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">ID: {selectedTransaction.id}</p>
+                </div>
+
+                <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Fecha</p>
+                    <p className="mt-1 text-sm font-semibold">{new Date(selectedTransaction.date).toLocaleString('es-NI', { dateStyle: 'long', timeStyle: 'short' })}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Referencia</p>
+                    <p className="mt-1 break-words text-sm font-semibold">{selectedTransaction.reference || 'Sin referencia'}</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Débito</p>
+                    <p className="mt-1 break-words font-mono text-sm font-bold text-emerald-600">{formatConvertedAmount(debit, selectedAccount?.currency ?? 'NIO')}</p>
+                  </div>
+                  <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Crédito</p>
+                    <p className="mt-1 break-words font-mono text-sm font-bold text-rose-500">{formatConvertedAmount(credit, selectedAccount?.currency ?? 'NIO')}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Movimiento neto</p>
+                    <p className={cn('mt-1 break-words font-mono text-sm font-bold', movement >= 0 ? 'text-emerald-600' : 'text-rose-500')}>
+                      {movement >= 0 ? '+' : '-'}{formatConvertedAmount(Math.abs(movement), selectedAccount?.currency ?? 'NIO')}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border/60 px-4 py-3 text-xs text-muted-foreground">
+                  Cuenta: <span className="font-semibold text-foreground">{selectedAccount?.code} · {selectedAccount?.name}</span>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
+            <DialogDescription>Selecciona las columnas que quieres mantener visibles en la jerarquía de cuentas.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {ACCOUNT_COLUMN_DEFS.map((column) => {
+              const active = visibleAccountColumnKeys.includes(column.key);
+              return (
+                <button
+                  key={column.key}
+                  type="button"
+                  onClick={() => setVisibleAccountColumnKeys((current) => active
+                    ? (current.length > 1 ? current.filter((key) => key !== column.key) : current)
+                    : [...current, column.key])}
+                  className={cn('flex min-h-11 items-center justify-between rounded-xl border px-3 text-left text-xs font-bold transition-colors', active ? 'border-primary bg-primary/10 text-foreground' : 'border-border/60 bg-muted/10 text-muted-foreground hover:border-primary/50')}
+                >
+                  <span>{column.label}</span>
+                  {active && <Check className="size-4 text-primary" />}
+                </button>
+              );
+            })}
+          </div>
+          <DialogFooter className="flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setVisibleAccountColumnKeys(DEFAULT_ACCOUNT_COLUMN_KEYS)}>Mostrar todas</Button>
+            <Button onClick={() => setColumnConfigOpen(false)}>Aplicar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={pendingStatusAccount !== null}
+        onOpenChange={(open) => { if (!open && !statusChanging) setPendingStatusAccount(null); }}
+        title={pendingStatusAccount?.isActive ? '¿Inhabilitar cuenta?' : '¿Habilitar cuenta?'}
+        description={pendingStatusAccount
+          ? `${pendingStatusAccount.code} · ${pendingStatusAccount.name}. ${pendingStatusAccount.isActive ? 'La cuenta no estará disponible para nuevos movimientos, pero conservará su historial.' : 'La cuenta volverá a estar disponible para nuevos movimientos.'}`
+          : ''}
+        confirmLabel={pendingStatusAccount?.isActive ? 'Inhabilitar cuenta' : 'Habilitar cuenta'}
+        variant={pendingStatusAccount?.isActive ? 'warning' : 'default'}
+        loading={statusChanging}
+        onConfirm={toggleAccountStatus}
+      />
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -747,7 +1047,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="code">Código</Label>
                 <Input
@@ -781,7 +1081,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                 placeholder="Caja General"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="parentId">Cuenta Padre</Label>
                 <Select
@@ -816,7 +1116,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="subtype">Subtipo</Label>
                 <Select value={formData.subtype} onValueChange={(value: AccountSubtype) => setFormData(previous => ({ ...previous, subtype: value }))}>
@@ -866,32 +1166,6 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
             <Button onClick={handleSave} disabled={saving}>
               {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
               {editingAccount ? 'Guardar Cambios' : 'Crear Cuenta'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirm */}
-      <Dialog open={!!deleteConfirmId} onOpenChange={(o) => !o && setDeleteConfirmId(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-destructive" />
-              Confirmar Eliminación
-            </DialogTitle>
-            <DialogDescription>
-              ¿Estás seguro de eliminar esta cuenta? Esta acción no se puede deshacer.
-              {deleteConfirmId && (() => {
-                const acc = flatList.find(a => a.id === deleteConfirmId);
-                return acc ? ` Cuenta: ${acc.code} - ${acc.name}.` : '';
-              })()}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirmId(null)} disabled={deleting}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              {deleting && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
-              Eliminar
             </Button>
           </DialogFooter>
         </DialogContent>

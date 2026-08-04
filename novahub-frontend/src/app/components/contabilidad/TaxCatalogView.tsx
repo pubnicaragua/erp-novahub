@@ -84,13 +84,13 @@ export function TaxCatalogView() {
   return (
     <Card>
       <CardHeader className="pb-3 px-5 pt-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <ShieldAlert className="size-4 text-primary" />
             <CardTitle className="text-sm font-black uppercase tracking-tight">Catálogo Tributario</CardTitle>
             <Badge variant="outline" className="text-[10px]">{entries.length}</Badge>
           </div>
-          <div className="flex gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <Button variant="outline" size="sm" onClick={handleSeed}>
               <Loader2 className="size-3.5 mr-1" /> Sembrar datos por defecto
             </Button>
@@ -103,23 +103,23 @@ export function TaxCatalogView() {
         </p>
 
         {/* New entry form */}
-        <div className="grid grid-cols-12 gap-2 items-end p-3 bg-muted/20 rounded-xl">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 gap-3 items-end rounded-xl bg-muted/20 p-3 sm:grid-cols-12 sm:gap-2">
+          <div className="sm:col-span-2">
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Nombre</label>
             <Input size={1} value={newEntry.name} onChange={e => setNewEntry(prev => ({ ...prev, name: e.target.value }))} placeholder="Ej: IR Bienes 2%" />
           </div>
-          <div className="col-span-1">
+          <div className="sm:col-span-1">
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Código</label>
             <Input size={1} value={newEntry.code} onChange={e => setNewEntry(prev => ({ ...prev, code: e.target.value }))} placeholder="IR_BIENES_2" />
           </div>
-          <div className="col-span-1">
+          <div className="sm:col-span-1">
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tipo</label>
             <select value={newEntry.type} onChange={e => setNewEntry(prev => ({ ...prev, type: e.target.value }))} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
               <option value="TAX">Impuesto</option>
               <option value="WITHHOLDING">Retención</option>
             </select>
           </div>
-          <div className="col-span-1">
+          <div className="sm:col-span-1">
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Categoría</label>
             <select value={newEntry.category} onChange={e => setNewEntry(prev => ({ ...prev, category: e.target.value }))} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
               <option value="IVA">IVA</option>
@@ -128,11 +128,11 @@ export function TaxCatalogView() {
               <option value="OTHER">Otro</option>
             </select>
           </div>
-          <div className="col-span-1">
+          <div className="sm:col-span-1">
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tasa %</label>
             <Input type="number" value={newEntry.rate} onChange={e => setNewEntry(prev => ({ ...prev, rate: Number(e.target.value) }))} />
           </div>
-          <div className="col-span-1">
+          <div className="sm:col-span-1">
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Base cálculo</label>
             <select value={newEntry.baseCalculation} onChange={e => setNewEntry(prev => ({ ...prev, baseCalculation: e.target.value }))} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
               <option value="LINE_TOTAL">Línea</option>
@@ -141,7 +141,7 @@ export function TaxCatalogView() {
               <option value="GROSS">Bruto</option>
             </select>
           </div>
-          <div className="col-span-1">
+          <div className="sm:col-span-1">
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Aplica a</label>
             <select value={newEntry.appliesTo} onChange={e => setNewEntry(prev => ({ ...prev, appliesTo: e.target.value }))} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
               <option value="ALL">Todos</option>
@@ -150,11 +150,11 @@ export function TaxCatalogView() {
               <option value="BOTH">Ambos</option>
             </select>
           </div>
-          <div className="col-span-1 flex items-center gap-1 pt-5">
+          <div className="flex items-center gap-1 pt-1 sm:col-span-1 sm:pt-5">
             <Switch checked={newEntry.requiresAuth} onCheckedChange={v => setNewEntry(prev => ({ ...prev, requiresAuth: v }))} />
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Auth</label>
           </div>
-          <div className="col-span-1">
+          <div className="sm:col-span-1">
             <Button size="sm" onClick={handleCreate}><Plus className="size-3.5 mr-1" />Agregar</Button>
           </div>
         </div>
@@ -163,7 +163,8 @@ export function TaxCatalogView() {
         {loading ? (
           <div className="flex items-center justify-center py-8"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="space-y-2">
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b text-muted-foreground">
@@ -210,6 +211,15 @@ export function TaxCatalogView() {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="space-y-2 md:hidden">
+            {entries.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">Sin entradas.</p> : entries.map(entry => (
+              <div key={entry.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
+                <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words text-xs font-bold">{entry.name}</p><p className="mt-1 break-all text-[10px] font-mono text-muted-foreground">{entry.code}</p></div><Badge variant={entry.type === 'TAX' ? 'default' : 'secondary'} className="shrink-0 text-[9px]">{entry.type === 'TAX' ? 'Impuesto' : 'Retención'}</Badge></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Categoría</span><span>{entry.category}</span></div><div><span className="block text-muted-foreground">Tasa</span><span className="font-mono">{Number(entry.rate).toFixed(1)}%</span></div><div><span className="block text-muted-foreground">Aplica a</span><span>{entry.appliesTo}</span></div><div><span className="block text-muted-foreground">Estado</span><span>{entry.isActive ? 'Activo' : 'Inactivo'}</span></div><div className="col-span-2 flex justify-end gap-1"><Button variant="ghost" size="icon" className="size-7" onClick={() => setEditingId(entry.id || null)}>✎</Button><Button variant="ghost" size="icon" className="size-7 text-destructive" onClick={() => entry.id && handleDelete(entry.id)}><Trash2 className="size-3.5" /></Button></div></div>
+              </div>
+            ))}
+          </div>
           </div>
         )}
       </CardContent>

@@ -25,8 +25,8 @@ export function FinanceGeneralBalanceView({ incomes, expenses, accounts }: Props
   const difference = totalAssets - totalLiabilitiesEquity
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="min-w-0 space-y-6">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <Landmark className="size-5 text-primary" />
         <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Balance General</h3>
         <Badge variant="outline" className="text-xs">Al {new Date().toLocaleDateString('es-NI')}</Badge>
@@ -79,9 +79,9 @@ export function FinanceGeneralBalanceView({ incomes, expenses, accounts }: Props
               <p className="text-center py-6 text-xs text-muted-foreground">Sin cuentas de activo configuradas</p>
             ) : (
               assetAccounts.map((acc: any) => (
-                <div key={acc.id} className="flex justify-between py-1.5 border-b border-border/20 text-xs">
-                  <span className="font-mono text-foreground">{acc.code} - {acc.name}</span>
-                  <span className="font-black text-emerald-500">{fmt(Number(acc.balance || 0))}</span>
+                <div key={acc.id} className="flex flex-wrap items-start justify-between gap-2 border-b border-border/20 py-1.5 text-xs">
+                  <span className="min-w-0 break-words font-mono text-foreground">{acc.code} - {acc.name}</span>
+                  <span className="shrink-0 text-right font-black text-emerald-500">{fmt(Number(acc.balance || 0))}</span>
                 </div>
               ))
             )}
@@ -96,9 +96,9 @@ export function FinanceGeneralBalanceView({ incomes, expenses, accounts }: Props
               <p className="text-center py-6 text-xs text-muted-foreground">Sin cuentas de pasivo/patrimonio configuradas</p>
             ) : (
               [...liabilityAccounts, ...equityAccounts].map((acc: any) => (
-                <div key={acc.id} className="flex justify-between py-1.5 border-b border-border/20 text-xs">
-                  <span className="font-mono text-foreground">{acc.code} - {acc.name}</span>
-                  <span className="font-black text-foreground">{fmt(Number(acc.balance || 0))}</span>
+                <div key={acc.id} className="flex flex-wrap items-start justify-between gap-2 border-b border-border/20 py-1.5 text-xs">
+                  <span className="min-w-0 break-words font-mono text-foreground">{acc.code} - {acc.name}</span>
+                  <span className="shrink-0 text-right font-black text-foreground">{fmt(Number(acc.balance || 0))}</span>
                 </div>
               ))
             )}

@@ -42,6 +42,16 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function findVisibleTarget(selector: string) {
+  if (!selector) return null;
+  const candidates = Array.from(document.querySelectorAll<HTMLElement>(selector));
+  return candidates.find((candidate) => {
+    const rect = candidate.getBoundingClientRect();
+    const style = window.getComputedStyle(candidate);
+    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+  }) || candidates[0] || null;
+}
+
 export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiado', allowTargetInteraction = false }: GuidedTourProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [highlight, setHighlight] = useState<HighlightRect | null>(null);
@@ -53,7 +63,7 @@ export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiad
 
   const updateHighlight = useCallback(() => {
     if (!currentStep) return;
-    const element = document.querySelector<HTMLElement>(currentStep.target);
+    const element = findVisibleTarget(currentStep.target);
     if (!element) {
       setHighlight(null);
       return;
@@ -69,7 +79,7 @@ export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiad
   }, [currentStep]);
 
   useEffect(() => {
-    const element = document.querySelector<HTMLElement>(currentStep?.target || '');
+    const element = findVisibleTarget(currentStep?.target || '');
     element?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
     const timer = window.setTimeout(updateHighlight, 320);
     const frame = window.requestAnimationFrame(updateHighlight);

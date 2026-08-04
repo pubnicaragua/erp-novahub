@@ -904,7 +904,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title="Órdenes Abiertas" value={data.filter(o => (o.status||'').toUpperCase() === 'CONFIRMED').length} icon={Package} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'CONFIRMED'} onClick={() => setStatusFilter(statusFilter === 'CONFIRMED' ? 'ALL' : 'CONFIRMED')} />
         <SalesKpiCard title={`Monto Confirmado (${displayCurrency})`} value={formatConvertedAmount(confirmedAmountInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
         <SalesKpiCard title="En Proceso" value={data.filter(o => (o.status||'').toUpperCase() === 'IN_PROGRESS').length} icon={Clock} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'IN_PROGRESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROGRESS' ? 'ALL' : 'IN_PROGRESS')} />

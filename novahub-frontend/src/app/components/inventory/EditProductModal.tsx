@@ -261,7 +261,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
             )}
           </div>
           
-          <div className="md:col-span-3 grid grid-cols-2 gap-4">
+          <div className="md:col-span-3 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="col-span-1">
               <label className="text-[10px] uppercase font-bold text-muted-foreground">Código *</label>
               <Input 
@@ -282,7 +282,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
               </Select>
             </div>
 
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <label className="text-[10px] uppercase font-bold text-muted-foreground">Nombre *</label>
               <Input 
                 value={draft.name} 
@@ -361,7 +361,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
             )}
 
             {isService && (
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén Vinculado *</label>
                 <Select value={draft.initialAllocations?.[0]?.warehouseId || ''} onValueChange={v => updateAllocation(draft.initialAllocations?.[0]?.id, { warehouseId: v })}>
                   <SelectTrigger className="h-9 text-xs mt-1"><SelectValue placeholder="Seleccionar almacén..." /></SelectTrigger>

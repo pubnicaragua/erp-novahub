@@ -118,7 +118,7 @@ export function PeriodosView() {
     p.year === currentYear && p.month === currentMonth;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
         <div>
           <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Períodos Contables</h2>
@@ -138,6 +138,7 @@ export function PeriodosView() {
 
       <Card className="rounded-2xl border-border/50">
         <CardContent className="p-0">
+          <div className="hidden overflow-x-auto md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -206,6 +207,15 @@ export function PeriodosView() {
               ))}
             </TableBody>
           </Table>
+          </div>
+          <div className="space-y-2 p-3 md:hidden">
+            {loading ? <p className="py-8 text-center text-xs text-muted-foreground">Cargando...</p> : periods.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No hay períodos registrados</p> : periods.map((p) => (
+              <div key={p.id} className={cn('min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3', isCurrentPeriod(p) && 'border-primary/30 bg-primary/[0.03]')}>
+                <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words text-xs font-black">{p.name}</p><p className="mt-1 text-[10px] text-muted-foreground">{months.find((m) => m.value === String(p.month))?.label || p.month} {p.year}</p></div><Badge variant="outline" className={cn('shrink-0 text-[9px] font-black uppercase tracking-widest', statusStyles[p.status || 'OPEN'])}>{statusLabels[p.status || 'OPEN']}</Badge></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Inicio</span><span>{p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A'}</span></div><div><span className="block text-muted-foreground">Fin</span><span>{p.endDate ? new Date(p.endDate).toLocaleDateString() : 'N/A'}</span></div><div className="col-span-2 flex justify-end gap-1"><span className="sr-only">Acciones</span>{p.status === 'OPEN' && canPerform('ACCOUNTING_PERIODS', 'edit') && <Button variant="ghost" size="icon" className="size-7" onClick={() => setCloseConfirmId(p.id)}><Lock className="size-4" /></Button>}{p.status === 'CLOSED' && canPerform('ACCOUNTING_PERIODS', 'edit') && <Button variant="ghost" size="icon" className="size-7" onClick={() => setReopenConfirmId(p.id)}><Unlock className="size-4" /></Button>}</div></div>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -215,7 +225,7 @@ export function PeriodosView() {
             <DialogTitle className="text-lg font-black uppercase tracking-tight">Nuevo Período Contable</DialogTitle>
             <DialogDescription className="text-xs">Crea un nuevo período para el registro contable</DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
+          <div className="grid grid-cols-1 gap-4 py-4 sm:grid-cols-2">
             <div className="col-span-2 space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ej: Julio 2026" className="h-9 text-xs" />

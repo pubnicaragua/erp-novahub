@@ -1097,6 +1097,8 @@ export interface Notification {
   type: 'info' | 'success' | 'warning' | 'error';
   timestamp: string;
   read: boolean;
+  link?: string | null;
+  metadata?: unknown;
 }
 
 export interface Transfer {
@@ -1135,7 +1137,7 @@ export interface LegalInvoice { id: string; number: string; type: string; amount
 export interface Report { id: string; title: string; type: string; generatedDate: string; format: string; size: number; createdBy: string; }
 export interface File { id: string; name: string; type: string; size: number; uploadDate: string; uploadedBy: string; category: string; url: string; }
 
-export interface Alert { id: string; title: string; content: string; type: string; severity?: string; isRead: boolean; createdAt: string; }
+export interface Alert { id: string; title: string; content: string; type: string; severity?: string; isRead: boolean; createdAt: string; link?: string | null; metadata?: unknown; }
 export interface MessageParticipant {
   id: string;
   name: string;
@@ -1166,7 +1168,7 @@ export interface Message {
   canReply: boolean;
   messages: ChatMessage[];
 }
-export interface PushNotification { id: string; title: string; content: string; type: string; sent?: boolean; isRead: boolean; createdAt: string; deviceId?: string; }
+export interface PushNotification { id: string; title: string; content: string; type: string; sent?: boolean; isRead: boolean; createdAt: string; deviceId?: string; link?: string | null; metadata?: unknown; }
 
 // ============================================================
 // SOLICITUDES DE COMPRA

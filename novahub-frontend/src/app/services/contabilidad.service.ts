@@ -12,6 +12,8 @@ export const contabilidadService = {
   exportAccounts: () => api.get<string[][]>('/accounting/accounts/export'),
   getDefaultAccountsByIndustry: (industry: string) => api.get<any[]>(`/accounting/accounts/defaults/${industry}`),
   getAccountBalance: (id: string, dateFrom?: string, dateTo?: string, signal?: AbortSignal) => api.get<any>(`/accounting/accounts/${id}/balance`, { params: { dateFrom, dateTo }, signal }),
+  getAccountTransactions: (accountId: string, params?: { page?: number; pageSize?: number; search?: string; dateFrom?: string; dateTo?: string }, signal?: AbortSignal) =>
+    api.get<any>('/financials/transactions', { params: { accountId, ...params }, signal }),
 
   // Asientos Contables
   getJournals: (params?: { status?: string; dateFrom?: string; dateTo?: string; accountId?: string; referenceType?: string; referenceId?: string; search?: string; costCenterId?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>

@@ -25,24 +25,24 @@ import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: 'bg-zinc-100 text-zinc-700 border-zinc-200',
-  SUBMITTED: 'bg-blue-100 text-blue-700 border-blue-200',
-  RECEIVED: 'bg-purple-100 text-purple-700 border-purple-200',
-  IN_REVIEW: 'bg-amber-100 text-amber-700 border-amber-200',
-  IN_QUOTATION: 'bg-indigo-100 text-indigo-700 border-indigo-200',
-  PENDING_APPROVAL: 'bg-orange-100 text-orange-700 border-orange-200',
-  APPROVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  REJECTED: 'bg-red-100 text-red-700 border-red-200',
-  RETURNED_FOR_CORRECTION: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-  CONVERTED_TO_ORDER: 'bg-teal-100 text-teal-700 border-teal-200',
-  CLOSED: 'bg-slate-100 text-slate-700 border-slate-200',
-  CANCELLED: 'bg-gray-100 text-gray-400 border-gray-200',
+  DRAFT: 'bg-muted/50 text-muted-foreground border-border/50',
+  SUBMITTED: 'bg-primary/10 text-primary border-primary/20',
+  RECEIVED: 'bg-primary/10 text-primary border-primary/20',
+  IN_REVIEW: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+  IN_QUOTATION: 'bg-primary/10 text-primary border-primary/20',
+  PENDING_APPROVAL: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+  APPROVED: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+  REJECTED: 'bg-red-500/10 text-red-500 border-red-500/20',
+  RETURNED_FOR_CORRECTION: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
+  CONVERTED_TO_ORDER: 'bg-primary/10 text-primary border-primary/20',
+  CLOSED: 'bg-muted/50 text-muted-foreground border-border/50',
+  CANCELLED: 'bg-muted/50 text-muted-foreground border-border/50',
 };
 
 const PRIORITY_STYLES: Record<string, string> = {
-  NORMAL: 'bg-blue-100 text-blue-700',
-  URGENT: 'bg-amber-100 text-amber-700',
-  CRITICAL: 'bg-red-100 text-red-700',
+  NORMAL: 'bg-primary/10 text-primary',
+  URGENT: 'bg-amber-500/10 text-amber-500',
+  CRITICAL: 'bg-red-500/10 text-red-500',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -259,7 +259,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {requestKpis.map((k) => (
           <PurchaseKpiCard
             key={k.title}
@@ -299,7 +299,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           <Input placeholder="Buscar por número, solicitante, proveedor, bodega..." value={search} onChange={e => { setSearch(e.target.value); onSearchChange?.(e.target.value); }} className="pl-9" />
         </div>
         {pagination && (
-          <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground" data-tour="purchases-list-pagination">
             <span>Mostrando {filtered.length} de {pagination.total} solicitudes</span>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="icon" className="size-8" onClick={() => pagination.onPageChange(pagination.page - 1)} disabled={pagination.page <= 1}><ChevronLeft className="size-4" /></Button>
@@ -352,7 +352,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                           {STATUS_LABELS[req.status] || req.status.replace(/_/g, ' ')}
                         </Badge>
                         {mgmt && mgmt.status === 'PENDING_APPROVAL' && (
-                          <Badge className="ml-1 text-[8px] bg-orange-100 text-orange-700 border-orange-200">Gestión</Badge>
+                          <Badge className="ml-1 border-orange-500/20 bg-orange-500/10 text-[8px] text-orange-500">Gestión</Badge>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -379,13 +379,13 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                               <Button variant="ghost" size="sm" className="h-7 px-2 text-emerald-600 hover:text-emerald-700" onClick={() => handleApproveManagement(mgmt)} disabled={actionLoading === mgmt.id}>
                                 <CheckCircle className="size-3.5" />
                               </Button>
-                              <Button variant="ghost" size="sm" className="h-7 px-2 text-red-600 hover:text-red-700" onClick={() => handleRejectManagement(mgmt)} disabled={actionLoading === mgmt.id}>
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-red-500 hover:text-red-400" onClick={() => handleRejectManagement(mgmt)} disabled={actionLoading === mgmt.id}>
                                 <X className="size-3.5" />
                               </Button>
                             </>
                           )}
                           {mgmt?.status === 'APPROVED' && (
-                            <Button variant="ghost" size="sm" className="h-7 px-2 text-teal-600" onClick={() => handleConvertToOrder(mgmt)} disabled={actionLoading === mgmt.id}>
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-primary" onClick={() => handleConvertToOrder(mgmt)} disabled={actionLoading === mgmt.id}>
                               <ArrowUpRight className="size-3.5" />
                             </Button>
                           )}
@@ -494,7 +494,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                     {mgmt.internalNotes && <p className="text-sm text-muted-foreground mt-2">Notas internas: {mgmt.internalNotes}</p>}
                     {mgmt.notes && <p className="text-sm text-muted-foreground">Notas: {mgmt.notes}</p>}
                     {mgmt.approvedBy && <p className="text-sm text-muted-foreground mt-2">Aprobado por: {mgmt.approvedBy.name} {mgmt.approvedAt ? `el ${new Date(mgmt.approvedAt).toLocaleDateString()}` : ''}</p>}
-                    {mgmt.rejectionReason && <p className="text-sm text-red-600 mt-2">Motivo de rechazo: {mgmt.rejectionReason}</p>}
+                    {mgmt.rejectionReason && <p className="mt-2 text-sm text-red-500">Motivo de rechazo: {mgmt.rejectionReason}</p>}
                   </div>
                 )}
 
@@ -627,7 +627,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                               onChange={(e) => updateItem(idx, { observations: e.target.value })} />
                           </td>
                           <td className="p-2">
-                            <button onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700 p-1">
+                            <button onClick={() => removeItem(idx)} className="p-1 text-red-500 hover:text-red-400">
                               <X className="size-3.5" />
                             </button>
                           </td>

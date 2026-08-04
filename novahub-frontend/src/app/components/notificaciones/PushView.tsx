@@ -9,7 +9,9 @@ import { Plus, Search, Send, Smartphone, Wifi, CheckCircle2 } from 'lucide-react
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../hooks/useNotifications';
 import { pushNotificationsService } from '../../services/notificaciones.service';
+import { navigateToNotification } from '../../utils/notificationNavigation';
 import { format } from 'date-fns';
 
 interface PushViewProps {
@@ -20,6 +22,7 @@ interface PushViewProps {
 
 export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) => {
   const { canPerform } = useAuth();
+  const { markAsRead } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -46,6 +49,16 @@ export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) 
       toast.success('Notificación creada'); onRefresh();
     } catch (e: any) { toast.error(errMsg(e, 'Error al crear')); }
     finally { setCreating(false); }
+  };
+
+  const handleNotificationClick = async (notification: PushNotification) => {
+    try {
+      if (!notification.isRead) await markAsRead(notification.id);
+      navigateToNotification(notification);
+      await onRefresh();
+    } catch (e: any) {
+      toast.error(errMsg(e, 'No se pudo marcar la notificación como leída'));
+    }
   };
 
   const kpis = [
@@ -80,7 +93,7 @@ export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) 
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={canPerform('NOTIFICATIONS_PUSH', 'edit') ? handleUpdate : undefined} isLoading={loading} onRowDelete={canPerform('NOTIFICATIONS_PUSH', 'delete') ? async (id) => { try { await pushNotificationsService.delete(id as string); toast.success('Notificación eliminada'); onRefresh(); } catch (e: any) { toast.error(errMsg(e, 'Error al eliminar')); } } : undefined} />
+        <EditableDataTable data={filtered} columns={columns} onRowClick={handleNotificationClick} onRowUpdate={canPerform('NOTIFICATIONS_PUSH', 'edit') ? handleUpdate : undefined} isLoading={loading} onRowDelete={canPerform('NOTIFICATIONS_PUSH', 'delete') ? async (id) => { try { await pushNotificationsService.delete(id as string); toast.success('Notificación eliminada'); onRefresh(); } catch (e: any) { toast.error(errMsg(e, 'Error al eliminar')); } } : undefined} />
       </Card>
     </div>
   );

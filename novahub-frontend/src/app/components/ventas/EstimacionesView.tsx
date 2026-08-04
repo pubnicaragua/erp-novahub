@@ -508,6 +508,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       void handleUpdate(localDoc!.id, { accountId } as any);
                     }}
                     label="Cuenta contable de ingresos"
+                    incomeOnly
                     required
                   />
                   <p className="mt-1 text-[10px] text-muted-foreground">Necesaria para enviar este borrador a orden de venta o emitirlo como factura.</p>
@@ -777,7 +778,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, displayCurrency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />
         <SalesKpiCard title="Tasa Conversión" value={`${((data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (data.length || 1)) * 100).toFixed(0)}%`} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
         <SalesKpiCard title="Enviadas" value={data.filter(e => (e.status||'').toUpperCase() === 'SENT').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'SENT'} onClick={() => setStatusFilter(statusFilter === 'SENT' ? 'ALL' : 'SENT')} />

@@ -140,8 +140,8 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   };
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+    <div className="min-w-0 space-y-6">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard icon={Landmark} label="Saldo Disponible" value={fmt(bankBalance)} onClick={() => onNavigate?.('caja-bancos')} />
         <KpiCard icon={TrendingUp} label="Ingresos Cobrados" value={fmt(totalIncome)} onClick={() => onNavigate?.('ingresos')} />
         <KpiCard icon={TrendingDown} label="Pagos Realizados" value={fmt(totalExpense)} onClick={() => onNavigate?.('gastos')} />

@@ -79,6 +79,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const [debouncedSearchState, setDebouncedSearchState] = useState<Record<string, string>>({});
   const [dateFilters, setDateFilters] = useState<Record<string, { dateFrom: string; dateTo: string }>>({});
   const tabsRef = useRef<HTMLDivElement>(null);
+  const previousActiveSectionRef = useRef(activeSection);
 
   // Sync section with Sidebar prop
   useEffect(() => {
@@ -89,6 +90,13 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
       }
     }
   }, [activeSubModule]);
+
+  useEffect(() => {
+    if (previousActiveSectionRef.current === 'facturas' && activeSection !== 'facturas') {
+      setInvoiceDraft(null);
+    }
+    previousActiveSectionRef.current = activeSection;
+  }, [activeSection]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -303,11 +311,13 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
       ...(order.accountId ? { accountId: order.accountId } : {}),
       ...(order.sellerEmployeeId ? { sellerEmployeeId: order.sellerEmployeeId } : {}),
     });
-    setInvoiceDraft(null);
+    // La conversión devuelve la factura, pero la lista paginada puede seguir
+    // teniendo una versión anterior en caché. Leerla por ID garantiza que el
+    // detalle se abra con todas sus líneas, incluyendo productos y servicios.
+    const invoiceWithItems = await invoicesService.getById(invoice.id).catch(() => invoice);
+    setInvoiceDraft(invoiceWithItems);
     await fetchData();
-    // Esperar a que la lista se invalide antes de abrir el detalle evita
-    // montar una versión cacheada de una factura legacy sin sus líneas.
-    setTargetInvoiceId(invoice.id);
+    setTargetInvoiceId(null);
     setActiveSection('facturas');
     onSubModuleChange?.('facturas');
   };

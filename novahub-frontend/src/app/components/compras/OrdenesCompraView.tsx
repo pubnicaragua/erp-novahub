@@ -96,7 +96,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
             <Badge variant="outline">{rows.length} artículos</Badge>
             <Badge variant="outline" className="border-primary/40 text-primary">Se agregarán a la orden actual</Badge>
             <Badge variant="outline" className="text-emerald-600">{validRows} válidos</Badge>
-            {issueRows > 0 && <Badge variant="outline" className="text-amber-600">{issueRows} con incidencias</Badge>}
+            {issueRows > 0 && <Badge variant="outline" className="text-amber-500">{issueRows} con incidencias</Badge>}
           </div>
         </div>
 
@@ -142,7 +142,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                   <TableCell className="p-1"><Input type="number" min={0} step="any" value={row.taxRate} onChange={(event) => onRowUpdate(index, 'taxRate', event.target.value)} className="h-8 text-right text-xs" disabled={row.taxType !== 'GRAVADO'} /></TableCell>
                   <TableCell className="p-1"><Input value={row.withholdingType} onChange={(event) => onRowUpdate(index, 'withholdingType', event.target.value)} className="h-8 text-xs" /></TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} step="any" value={row.withholdingRate} onChange={(event) => onRowUpdate(index, 'withholdingRate', event.target.value)} className="h-8 text-right text-xs" disabled={String(row.withholdingType).toUpperCase() === 'NONE'} /></TableCell>
-                  <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-red-600' : row._hasWarning ? 'text-amber-600' : 'text-emerald-600'}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</span></TableCell>
+                  <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-red-500' : row._hasWarning ? 'text-amber-500' : 'text-emerald-500'}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</span></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -882,7 +882,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 {!isNew && (
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Número</p>
@@ -1334,7 +1334,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.filter ? 'filter' : 'indicator'} active={k.filter ? statusFilter === k.filter : false} onClick={k.filter ? () => { const next = statusFilter === k.filter ? 'ALL' : k.filter; setStatusFilter(next); onStatusChange?.(next); } : undefined} />
         ))}
@@ -1485,7 +1485,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
               <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-amber-500">{importResults?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Filas omitidas</p></div>
               <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-rose-500">{importResults?.failed || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Órdenes con error</p></div>
             </div>
-            {!!importResults?.errors.length && <div className="max-h-40 overflow-y-auto rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-rose-600">{importResults.errors.map((error, index) => <p key={`${error}-${index}`}>{error}</p>)}</div>}
+            {!!importResults?.errors.length && <div className="max-h-40 overflow-y-auto rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-rose-500">{importResults.errors.map((error, index) => <p key={`${error}-${index}`}>{error}</p>)}</div>}
             <DialogFooter><Button className="w-full" onClick={() => setImportResults(null)}>Continuar a órdenes de compra</Button></DialogFooter>
           </DialogContent>
         </Dialog>

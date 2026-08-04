@@ -182,7 +182,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           <Card className="rounded-2xl border-border/50 col-span-2">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Reglas de Generación</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Nombre Descriptivo</p>
                   <Input 
@@ -390,7 +390,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}

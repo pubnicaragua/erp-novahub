@@ -437,7 +437,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de transacción</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-3">
              {!isNew && canPerform('PURCHASES_EXPENSES', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
@@ -470,7 +470,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Gasto</p>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Descripción / Concepto</p>
                     <Input 
@@ -626,7 +626,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-border/50">
+          <Card className="w-full min-w-0 rounded-2xl border-border/50">
             <CardContent className="p-6 flex flex-col justify-center h-full space-y-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Valor del Gasto</p>
               <div className="space-y-4">
@@ -691,7 +691,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => {
           const isActive =
             (k.key === 'pending' && activeKpiFilter.type === 'pending') ||
@@ -727,35 +727,46 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Egresos operativos y administrativos</p></div>
-          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
-            <PurchaseViewTutorial view="expenses" />
-        <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/60 p-1">
-          <Button variant={datePreset === 'month' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('month')}>Último mes</Button>
-          <Button variant={datePreset === 'year' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('year')}>Último año</Button>
-        </div>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant={datePreset === 'specific' ? 'default' : 'outline'} className="h-10 rounded-xl text-[10px] font-black uppercase tracking-widest gap-2">
-                  <CalendarIcon className="size-4" />
-                  {datePreset === 'specific' && specificDate ? specificDate.toLocaleDateString() : 'Fecha específica'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  mode="single"
-                  selected={specificDate}
-                  onSelect={(date) => {
-                    setSpecificDate(date);
-                    if (date) setDatePreset('specific');
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+          <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
+            <PurchaseViewTutorial view="expenses" className="w-full justify-center sm:w-auto" />
+            <div className="flex min-w-0 w-full items-center gap-0 rounded-xl border border-border/50 bg-background/60 p-1">
+              <Button variant={datePreset === 'month' ? 'default' : 'ghost'} size="sm" className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('month')}>Último mes</Button>
+              <Button variant={datePreset === 'year' ? 'default' : 'ghost'} size="sm" className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('year')}>Último año</Button>
+            </div>
+            <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant={datePreset === 'specific' ? 'default' : 'outline'} className="h-10 w-full min-w-0 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+                    <CalendarIcon className="size-4" />
+                    {datePreset === 'specific' && specificDate ? specificDate.toLocaleDateString() : 'Fecha específica'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="single"
+                    selected={specificDate}
+                    onSelect={(date) => {
+                      setSpecificDate(date);
+                      if (date) setDatePreset('specific');
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            {canPerform('PURCHASES_EXPENSES', 'create') && (
+              <Button
+                variant="outline"
+                onClick={() => { setImportOpen(true); setImportResult(null); }}
+                className="h-10 min-w-0 w-full gap-2 rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto"
+              >
+                <Upload className="size-4" /> Importar
+              </Button>
+            )}
             {datePreset !== 'all' && (
               <Button
                 variant="outline"
-                className="h-10 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                className="col-span-2 h-10 min-w-0 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:col-span-1 sm:w-auto"
                 onClick={() => {
                   setDatePreset('all');
                   setSpecificDate(undefined);
@@ -772,7 +783,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                   setSelectedCategory(category);
                   setActiveKpiFilter({ type: 'category', category });
                 }}
-                className="h-10 rounded-xl border border-input bg-background px-3 text-xs font-bold uppercase"
+                className="col-span-2 h-10 min-w-0 w-full rounded-xl border border-input bg-background px-3 text-xs font-bold uppercase sm:col-span-1 sm:w-auto"
               >
                 {uniqueCategories.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
@@ -782,24 +793,15 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
             {activeKpiFilter.type !== 'none' && (
               <Button
                 variant="outline"
-                className="h-10 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                className="col-span-2 h-10 min-w-0 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:col-span-1 sm:w-auto"
                 onClick={() => setActiveKpiFilter({ type: 'none' })}
               >
                 Limpiar filtro
               </Button>
             )}
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
+            <div className="relative min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full min-w-0 rounded-xl border-border/50 bg-background/50 pl-9 text-xs sm:w-56" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_EXPENSES', 'create') && (
-              <Button
-                variant="outline"
-                onClick={() => { setImportOpen(true); setImportResult(null); }}
-                className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
-              >
-                <Upload className="size-4" /> Importar
-              </Button>
-            )}
-            {canPerform('PURCHASES_EXPENSES', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Gasto</Button>
+              <Button onClick={() => setEditingId('NEW')} className="col-span-1 h-10 min-w-0 w-full gap-2 rounded-xl bg-primary px-3 text-[10px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90 sm:col-span-1 sm:w-auto"><Plus className="size-4" /> Registrar Gasto</Button>
             )}
           </div>
         </div>
@@ -872,7 +874,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                     Total: <b>{importResult.total}</b> · Creados: <b className="text-emerald-500">{importResult.created}</b> · Omitidos: <b className="text-amber-500">{importResult.skipped}</b>
                   </p>
                   {importResult.errors.length > 0 && (
-                    <div className="mt-2 text-xs text-amber-600 space-y-1">
+                    <div className="mt-2 space-y-1 text-xs text-amber-500">
                       <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
                       {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
                     </div>

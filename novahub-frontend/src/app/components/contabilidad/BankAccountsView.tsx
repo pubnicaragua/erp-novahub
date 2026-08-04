@@ -78,7 +78,7 @@ export function BankAccountsView() {
   return (
     <Card>
       <CardHeader className="pb-3 px-5 pt-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Landmark className="size-4 text-primary" />
             <CardTitle className="text-sm font-black uppercase tracking-tight">Cuentas Bancarias</CardTitle>
@@ -89,7 +89,8 @@ export function BankAccountsView() {
         </div>
       </CardHeader>
       <CardContent className="px-5 pb-4">
-        <div className="overflow-x-auto rounded-xl border border-border/30">
+        <div className="space-y-2">
+        <div className="hidden overflow-x-auto rounded-xl border border-border/30 md:block">
           <Table>
             <TableHeader className="bg-muted/30">
               <TableRow>
@@ -122,6 +123,27 @@ export function BankAccountsView() {
             </TableBody>
           </Table>
         </div>
+        <div className="space-y-2 md:hidden">
+          {accounts.map(a => (
+            <div key={a.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="break-words text-xs font-bold">{a.bankName}</p>
+                  <p className="mt-1 break-all text-[10px] font-mono text-muted-foreground">{a.accountNumber}</p>
+                </div>
+                <Badge variant={a.isActive ? 'default' : 'secondary'} className="shrink-0 text-[9px]">{a.isActive ? 'Activo' : 'Inactivo'}</Badge>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/20 pt-2 text-[10px] text-muted-foreground">
+                <span>{ACCOUNT_TYPES.find(t => t.value === a.accountType)?.label || a.accountType} · {a.currency}</span>
+                <span className="shrink-0">
+                  <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(a)}><Edit2 className="size-3.5" /></Button>
+                  <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+        </div>
       </CardContent>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
@@ -131,7 +153,7 @@ export function BankAccountsView() {
             <DialogDescription>Registra una cuenta bancaria de la empresa.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold">Banco</label>
                 <Input value={form.bankName} onChange={e => setForm({...form, bankName: e.target.value})} placeholder="BAC, Lafise, etc." />
@@ -141,7 +163,7 @@ export function BankAccountsView() {
                 <Input value={form.accountNumber} onChange={e => setForm({...form, accountNumber: e.target.value})} placeholder="000-000-000" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold">Tipo</label>
                 <Select value={form.accountType} onValueChange={v => setForm({...form, accountType: v})}>

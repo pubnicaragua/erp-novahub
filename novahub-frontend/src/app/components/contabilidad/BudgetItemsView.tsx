@@ -107,9 +107,9 @@ export function BudgetItemsView() {
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="size-8 animate-spin text-primary" /></div>;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+    <div className="min-w-0 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Wallet className="size-5 text-primary" />
           <h2 className="text-xl font-black uppercase tracking-tight">Partidas Presupuestarias</h2>
           <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-black">{items.length}</Badge>
@@ -121,13 +121,13 @@ export function BudgetItemsView() {
 
       <Separator />
 
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
+        <div className="relative col-span-2 min-w-0 flex-1 sm:max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 rounded-xl text-sm" />
         </div>
         <Select value={filterPeriod} onValueChange={v => setFilterPeriod(v)}>
-          <SelectTrigger className="w-36 rounded-xl text-xs font-bold">
+          <SelectTrigger className="w-full rounded-xl text-xs font-bold sm:w-36">
             <SelectValue placeholder="Período" />
           </SelectTrigger>
           <SelectContent>
@@ -158,8 +158,9 @@ export function BudgetItemsView() {
         </Card>
       </div>
 
-      <Card className="border-border/50 shadow-sm rounded-2xl overflow-hidden">
+      <Card className="overflow-hidden rounded-2xl border-border/50 shadow-sm">
         <CardContent className="p-0">
+          <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border/40 bg-muted/20">
@@ -213,6 +214,16 @@ export function BudgetItemsView() {
               })}
             </tbody>
           </table>
+          </div>
+          <div className="space-y-2 p-3 md:hidden">
+            {filtered.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Sin partidas presupuestarias</p> : filtered.map(item => {
+              const assigned = Number(item.assignedAmount); const executed = Number(item.executedAmount); const available = assigned - executed;
+              return <div key={item.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
+                <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-mono font-bold text-muted-foreground">{item.code}</p><p className="break-words text-xs font-semibold">{item.name}</p><p className="break-words text-[10px] text-muted-foreground">{item.account?.code} - {item.account?.name}</p></div><Badge className="shrink-0 text-[9px]">{item.status === 'ACTIVE' ? 'Activo' : item.status === 'SUSPENDED' ? 'Suspendido' : 'Cerrado'}</Badge></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Asignado</span><span className="font-bold">{format(assigned)}</span></div><div><span className="block text-muted-foreground">Ejecutado</span><span>{format(executed)}</span></div><div><span className="block text-muted-foreground">Disponible</span><span className={cn('font-bold', available >= 0 ? 'text-emerald-500' : 'text-red-500')}>{format(available)}</span></div><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(item)}><Pencil className="size-3.5" /></Button><Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(item.id)}><Trash2 className="size-3.5" /></Button></div></div>
+              </div>
+            })}
+          </div>
         </CardContent>
       </Card>
 
@@ -225,7 +236,7 @@ export function BudgetItemsView() {
             <DialogDescription className="text-xs">Define una partida presupuestaria vinculada a una cuenta contable.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-xs font-bold">Código *</Label>
                 <Input value={form.code} onChange={e => setForm(p => ({ ...p, code: e.target.value }))} placeholder="Ej: PRE-001" className="rounded-xl text-sm" />
@@ -246,7 +257,7 @@ export function BudgetItemsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-xs font-bold">Monto Asignado</Label>
                 <Input type="number" step="0.01" value={form.assignedAmount} onChange={e => setForm(p => ({ ...p, assignedAmount: Number(e.target.value) }))} className="rounded-xl text-sm" />

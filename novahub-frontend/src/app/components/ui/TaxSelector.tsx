@@ -37,7 +37,7 @@ export function TaxTypeSelect({ value, onChange, type, disabled }: TaxSelectorPr
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-xs file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
     >
       {type === 'TAX' && <option value="">Seleccionar IVA</option>}
       {type === 'WITHHOLDING' && <option value="NONE">Sin retención</option>}
@@ -94,8 +94,8 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
   const calcWhAmount = (base: number) => base * effectiveWhRate / 100
 
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-4 gap-2">
+    <div className="min-w-0 space-y-2">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
         <div>
           <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tipo IVA</Label>
           <TaxTypeSelect
@@ -120,6 +120,7 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
               <Input
                 type="number"
                 value={item.taxBase || 0}
+                className="h-9 min-w-0 px-2 text-xs"
                 onChange={(e) => {
                   const base = Number(e.target.value)
                   onItemChange('taxBase', base)
@@ -135,6 +136,7 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
               <Input
                 type="number"
                 value={effectiveTaxRate}
+                className="h-9 min-w-0 px-2 text-xs"
                 onChange={(e) => {
                   const rate = Number(e.target.value)
                   onItemChange('taxRate', rate)
@@ -151,7 +153,7 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
           </>
         )}
       </div>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
         <div>
           <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Retención</Label>
           <TaxTypeSelect
@@ -178,6 +180,7 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
               <Input
                 type="number"
                 value={item.withholdingBase || 0}
+                className="h-9 min-w-0 px-2 text-xs"
                 onChange={(e) => {
                   const base = Number(e.target.value)
                   onItemChange('withholdingBase', base)
@@ -192,6 +195,7 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
               <Input
                 type="number"
                 value={effectiveWhRate}
+                className="h-9 min-w-0 px-2 text-xs"
                 onChange={(e) => onItemChange('withholdingRate', Number(e.target.value))}
               />
             </div>
