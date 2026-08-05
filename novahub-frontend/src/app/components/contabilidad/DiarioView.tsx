@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, FileText, Eye, Send, XCircle, Trash2, Search, RotateCcw } from 'lucide-react';
+import { Plus, FileText, Send, Ban, Trash2, Search, RotateCcw, X, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -60,6 +60,11 @@ const REFERENCE_TYPES = [
   { label: 'Otro', value: 'OTHER' },
 ];
 
+function referenceTypeLabel(value?: string) {
+  if (!value) return '—';
+  return REFERENCE_TYPES.find((r) => r.value === value)?.label || value;
+}
+
 type JournalLineInput = {
   id: string;
   accountId: string;
@@ -87,7 +92,7 @@ export function DiarioView() {
   const [filterSearch, setFilterSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [journalPage, setJournalPage] = useState(1);
-  const journalPageSize = 50;
+  const journalPageSize = 10000;
 
   const [createOpen, setCreateOpen] = useState(false);
   const [viewJournalId, setViewJournalId] = useState<string | null>(null);
@@ -124,8 +129,10 @@ export function DiarioView() {
     { enabled: Boolean(viewJournalId), staleTime: 5 * 60_000 },
   );
   const journals = accountingList(journalsQuery.data) as JournalEntry[];
-  const journalMeta = journalsQuery.data?.meta as { total: number; page: number; pageSize: number; totalPages: number } | undefined;
   const viewJournal = journalDetailQuery.data || null;
+  const journalGridCols = viewJournal
+    ? '48px 1fr 1.15fr 0.85fr 1.35fr 1.35fr 1fr 1.35fr 84px'
+    : '48px 1fr 2.2fr 0.85fr 1fr 1fr 1fr 1.35fr 84px';
   const loading = journalsQuery.isLoading || journalsQuery.isFetching;
   const accounts = useMemo(() => {
     const flatten = (items: ChartAccount[]): ChartAccount[] => items.flatMap(account => [account, ...flatten(account.children ?? [])]);
@@ -237,21 +244,12 @@ export function DiarioView() {
     const statusKey = journal.status?.toLowerCase();
     return (
       <div className="flex items-center justify-end gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7"
-          onClick={() => handleView(journal)}
-          title="Ver detalle"
-        >
-          <Eye className="size-3.5" />
-        </Button>
         {statusKey === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
           <Button
             variant="ghost"
             size="icon"
             className="size-7 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-600"
-            onClick={() => handlePost(journal)}
+            onClick={(e) => { e.stopPropagation(); handlePost(journal); }}
             title="Contabilizar"
           >
             <Send className="size-3.5" />
@@ -261,11 +259,11 @@ export function DiarioView() {
           <Button
             variant="ghost"
             size="icon"
-            className="size-7 text-destructive hover:text-destructive"
-            onClick={() => handleVoid(journal)}
+            className="size-7 text-white hover:text-white"
+            onClick={(e) => { e.stopPropagation(); handleVoid(journal); }}
             title="Anular"
           >
-            <XCircle className="size-3.5" />
+            <Ban className="size-3.5" />
           </Button>
         )}
       </div>
@@ -583,6 +581,9 @@ export function DiarioView() {
         </CardContent>
       </Card>
 
+      <div className={cn('grid min-w-0 grid-cols-1 gap-6', viewJournal ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1')}>
+      <div className="min-w-0">
+
       {/* Journal List */}
       <Card>
         <CardContent className="p-0">
@@ -598,66 +599,51 @@ export function DiarioView() {
             </div>
           ) : (
             <>
-              <div className="hidden overflow-x-auto sm:block">
-              <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[80px]">#</TableHead>
-                  <TableHead className="w-[110px]">Fecha</TableHead>
-                  <TableHead>Descripción</TableHead>
-                  <TableHead className="w-[100px]">Estado</TableHead>
-                  <TableHead className="w-[120px] text-right">Débitos</TableHead>
-                  <TableHead className="w-[120px] text-right">Créditos</TableHead>
-                  <TableHead className="w-[110px]">Ref. Tipo</TableHead>
-                  <TableHead className="w-[130px]">Ref. ID</TableHead>
-                  <TableHead className="w-[120px] text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+              <div className="hidden max-h-[600px] overflow-y-auto sm:block">
+                <div className="min-w-0 divide-y divide-border/60">
+                <div className="hidden min-w-0 items-center gap-0 bg-muted/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 sm:grid" style={{ gridTemplateColumns: journalGridCols }}>
+                  <span className="px-1">#</span>
+                  <span className="px-1">Fecha</span>
+                  <span className="min-w-0 truncate px-1">Descripción</span>
+                  <span className="px-1">Estado</span>
+                  <span className="px-1 text-center">Debe</span>
+                  <span className="px-1 text-center">Haber</span>
+                  <span className="min-w-0 truncate px-1">Ref. Tipo</span>
+                  <span className="min-w-0 truncate px-1">Ref. ID</span>
+                  <span className="px-1 text-right">Acciones</span>
+                </div>
                 {journals.map((j) => {
-                  const totalDeb = j.lines?.reduce((s, l) => s + l.debit, 0) || 0;
-                  const totalCred = j.lines?.reduce((s, l) => s + l.credit, 0) || 0;
+                  const totalDeb = j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0;
+                  const totalCred = j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0;
                   const statusKey = j.status?.toLowerCase();
                   return (
-                    <TableRow key={j.id}>
-                      <TableCell className="font-mono text-xs font-bold">{j.number}</TableCell>
-                      <TableCell className="text-xs">{new Date(j.date).toLocaleDateString('es-NI')}</TableCell>
-                      <TableCell className="text-xs max-w-[260px] truncate">{j.description}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={STATUS_COLORS[statusKey] || 'outline'}
-                          className="text-[10px] font-black uppercase tracking-wider"
-                        >
+                    <div key={j.id} className="grid min-w-0 cursor-pointer items-center gap-0 px-3 py-2 transition-colors hover:bg-muted/40" style={{ gridTemplateColumns: journalGridCols }} onClick={() => handleView(j)}>
+                      <span className="truncate px-1 font-mono text-xs font-bold">{j.number}</span>
+                      <span className="truncate px-1 text-xs">{new Date(j.date).toLocaleDateString('es-NI')}</span>
+                      <span className="min-w-0 truncate px-1 text-xs" title={j.description}>{j.description}</span>
+                      <span className="px-1">
+                        <Badge variant={STATUS_COLORS[statusKey] || 'outline'} className="text-[10px] font-black uppercase tracking-wider">
                           {journalStatusLabel(j.status)}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-xs">
-                        {formatCurrency(totalDeb)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-xs">
-                        {formatCurrency(totalCred)}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {(j as any).referenceType || '-'}
-                      </TableCell>
-                      <TableCell className="text-xs font-mono max-w-[130px] truncate" title={j.referenceId || ''}>
-                        {j.referenceId || '-'}
-                      </TableCell>
-                      <TableCell>{renderJournalActions(j)}</TableCell>
-                    </TableRow>
+                      </span>
+                      <span className="truncate px-1 text-right text-xs tabular-nums">{formatCurrency(totalDeb)}</span>
+                      <span className="truncate px-1 text-right text-xs tabular-nums">{formatCurrency(totalCred)}</span>
+                      <span className="min-w-0 truncate px-1 text-xs text-muted-foreground" title={referenceTypeLabel((j as any).referenceType)}>{referenceTypeLabel((j as any).referenceType) || '-'}</span>
+                      <span className="min-w-0 truncate px-1 font-mono text-xs" title={j.referenceId || ''}>{j.referenceId || '-'}</span>
+                      <span className="flex justify-end px-1">{renderJournalActions(j)}</span>
+                    </div>
                   );
                 })}
-              </TableBody>
-              </Table>
+                </div>
               </div>
-              <div className="space-y-3 p-3 sm:hidden">
+              <div className="max-h-[600px] space-y-3 overflow-y-auto p-3 sm:hidden">
                 {journals.map((j) => {
-                  const totalDeb = j.lines?.reduce((s, l) => s + l.debit, 0) || 0;
-                  const totalCred = j.lines?.reduce((s, l) => s + l.credit, 0) || 0;
+                  const totalDeb = j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0;
+                  const totalCred = j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0;
                   const statusKey = j.status?.toLowerCase();
                   const referenceType = (j as any).referenceType;
                   return (
-                    <div key={j.id} className="rounded-xl border border-border/70 bg-card/60 p-3 shadow-sm transition-colors hover:border-primary/40">
+                    <div key={j.id} className="cursor-pointer rounded-xl border border-border/70 bg-card/60 p-3 shadow-sm transition-colors hover:border-primary/40" onClick={() => handleView(j)}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex min-w-0 items-center gap-2">
@@ -689,7 +675,7 @@ export function DiarioView() {
                       </div>
 
                       <div className="mt-3 flex min-w-0 flex-wrap gap-x-3 gap-y-1 border-t border-border/50 pt-2 text-[10px] text-muted-foreground">
-                        {referenceType && <span className="truncate"><strong className="text-foreground/80">Ref.:</strong> {referenceType}</span>}
+                        {referenceType && <span className="truncate"><strong className="text-foreground/80">Ref.:</strong> {referenceTypeLabel(referenceType)}</span>}
                         {j.referenceId && <span className="truncate font-mono"><strong className="font-sans text-foreground/80">ID:</strong> {j.referenceId}</span>}
                         {!referenceType && !j.referenceId && <span>Sin referencia asociada</span>}
                       </div>
@@ -700,136 +686,165 @@ export function DiarioView() {
             </>
           )}
         </CardContent>
-        {journalMeta && journalMeta.totalPages > 1 && (
-          <div className="flex flex-col gap-3 border-t px-3 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-4">
-            <span>Mostrando {journals.length} de {journalMeta.total} asientos</span>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" disabled={journalPage <= 1 || loading} onClick={() => setJournalPage((page) => page - 1)}>Anterior</Button>
-              <span>Página {journalMeta.page} de {journalMeta.totalPages}</span>
-              <Button variant="outline" size="sm" disabled={journalPage >= journalMeta.totalPages || loading} onClick={() => setJournalPage((page) => page + 1)}>Siguiente</Button>
-            </div>
-          </div>
-        )}
       </Card>
 
-      {/* View Detail Dialog */}
-      <Dialog open={!!viewJournalId} onOpenChange={(open) => { if (!open) setViewJournalId(null); }}>
-        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              Asiento #{(viewJournal as any)?.number}
-            </DialogTitle>
-            <DialogDescription>
-              Detalle completo del asiento contable
-            </DialogDescription>
-          </DialogHeader>
+      </div>
 
-          {journalDetailQuery.isLoading ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">Cargando detalle...</div>
-          ) : viewJournal ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
-                <div>
-                  <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block">Fecha</span>
-                  <span className="font-medium">{new Date(viewJournal.date).toLocaleDateString('es-NI')}</span>
+      {/* Detail Panel */}
+      {viewJournal && (
+        <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">
+          <Card className="overflow-hidden">
+            <CardHeader className="py-3 px-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Detalle del Asiento</CardTitle>
                 </div>
-                <div>
-                  <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block">Estado</span>
-                  <Badge
-                    variant={STATUS_COLORS[viewJournal.status?.toLowerCase()] || 'outline'}
-                    className="text-[10px] font-black uppercase tracking-wider"
-                  >
-                    {(viewJournal.status as string)?.toLowerCase() === 'draft' ? 'Borrador' : (viewJournal.status as string)?.toLowerCase() === 'posted' ? 'Contabilizado' : (viewJournal.status as string)?.toLowerCase() === 'voided' ? 'Anulado' : viewJournal.status}
-                  </Badge>
+                {viewJournal && (
+                  <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => setViewJournalId(null)}>
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <Separator />
+            <CardContent className="space-y-5 p-4 sm:p-5">
+              {journalDetailQuery.isLoading ? (
+                <div className="flex items-center justify-center rounded-xl border border-dashed border-border/60 py-16">
+                  <div className="size-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
                 </div>
-                {(viewJournal as any).referenceType && (
-                  <div>
-                    <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block">Ref. Tipo</span>
-                    <span className="font-medium">{(viewJournal as any).referenceType}</span>
+              ) : (
+                <>
+                  <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Asiento contable · #{viewJournal.number}</p>
+                        <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={viewJournal.description}>{viewJournal.description}</h3>
+                      </div>
+                      <Badge variant={STATUS_COLORS[viewJournal.status?.toLowerCase()] || 'outline'} className="shrink-0">
+                        {journalStatusLabel(viewJournal.status)}
+                      </Badge>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Importe total</p>
+                        <p className="mt-1 text-2xl font-black tabular-nums tracking-tight">
+                          {formatCurrency(viewJournal.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0)}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="shrink-0">
+                        {new Date(viewJournal.date).toLocaleDateString('es-NI')}
+                      </Badge>
+                    </div>
                   </div>
-                )}
-                {(viewJournal as any).referenceId && (
-                  <div>
-                    <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block">Ref. ID</span>
-                    <span className="font-mono text-xs">{(viewJournal as any).referenceId}</span>
+
+                  <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-4 2xl:grid-cols-3">
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Fecha</p>
+                      <p className="text-sm font-semibold">{new Date(viewJournal.date).toLocaleDateString('es-NI')}</p>
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Estado</p>
+                      <Badge variant={STATUS_COLORS[viewJournal.status?.toLowerCase()] || 'outline'} className="shrink-0">
+                        {journalStatusLabel(viewJournal.status)}
+                      </Badge>
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ref. Tipo</p>
+                      <p className="truncate text-sm font-semibold">{referenceTypeLabel((viewJournal as any).referenceType)}</p>
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ref. ID</p>
+                      <p className="truncate font-mono text-xs font-bold">{(viewJournal as any).referenceId || '—'}</p>
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Centro de Costo</p>
+                      <p className="truncate text-sm font-semibold">{(viewJournal as any).costCenterId || '—'}</p>
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Líneas</p>
+                      <p className="text-sm font-semibold tabular-nums">{viewJournal.lines?.length ?? 0}</p>
+                    </div>
                   </div>
-                )}
-                {(viewJournal as any).costCenterId && (
-                  <div>
-                    <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block">Centro Costo</span>
-                    <span className="font-medium">{(viewJournal as any).costCenterId}</span>
+
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Descripción</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm">{viewJournal.description}</p>
                   </div>
-                )}
-              </div>
 
-              <div>
-                <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-1">Descripción</span>
-                <p className="text-sm bg-muted/30 rounded-md p-3">{viewJournal.description}</p>
-              </div>
+                  <div className="flex flex-wrap gap-2">
+                    {viewJournal.status?.toLowerCase() === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
+                      <Button className="flex-1" size="sm" onClick={() => { void handlePost(viewJournal); }}>
+                        <Send className="mr-1 size-3.5" /> Contabilizar
+                      </Button>
+                    )}
+                    {viewJournal.status?.toLowerCase() === 'posted' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => { void handleVoid(viewJournal); }}>
+                        <Ban className="mr-1 size-3.5" /> Anular
+                      </Button>
+                    )}
+                  </div>
 
-              <Separator />
+                  <Separator />
 
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                  Líneas del Asiento
-                </h4>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Cuenta</TableHead>
-                      <TableHead className="text-right w-[100px]">Débito</TableHead>
-                      <TableHead className="text-right w-[100px]">Crédito</TableHead>
-                      <TableHead>Descripción</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {viewJournal.lines?.map((line) => (
-                      <TableRow key={line.id}>
-                        <TableCell className="text-xs">
-                          {line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums text-xs font-medium">
-                          {line.debit > 0 ? formatCurrency(line.debit) : '-'}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums text-xs font-medium">
-                          {line.credit > 0 ? formatCurrency(line.credit) : '-'}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {line.description || '-'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {/* Totals row */}
-                    <TableRow className="font-bold border-t-2">
-                      <TableCell className="text-xs uppercase tracking-wider">Totales</TableCell>
-                      <TableCell className="text-right tabular-nums text-xs">
-                        {formatCurrency(viewJournal.lines?.reduce((s, l) => s + l.debit, 0) || 0)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-xs">
-                        {formatCurrency(viewJournal.lines?.reduce((s, l) => s + l.credit, 0) || 0)}
-                      </TableCell>
-                      <TableCell />
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
+                  <section className="min-w-0">
+                    <div className="mb-3 flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <ArrowDownLeft className="size-4 text-primary" />
+                          <h3 className="truncate text-sm font-black uppercase tracking-tight">Líneas del Asiento</h3>
+                        </div>
+                        <p className="mt-1 text-[11px] text-muted-foreground">Movimientos de débito y crédito del asiento.</p>
+                      </div>
+                    </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t text-[10px] text-muted-foreground">
-                <span>Creado: {new Date(viewJournal.createdAt).toLocaleString('es-NI')}</span>
-                {viewJournal.updatedAt !== viewJournal.createdAt && (
-                  <span>| Actualizado: {new Date(viewJournal.updatedAt).toLocaleString('es-NI')}</span>
-                )}
-              </div>
-            </div>
-          ) : null}
+                    {!viewJournal.lines || viewJournal.lines.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-border/60 px-4 py-8 text-center">
+                        <p className="text-sm font-semibold">Sin líneas</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Este asiento no tiene movimientos.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-hidden rounded-xl border border-border/60">
+                        <div className="divide-y divide-border/60">
+                          {viewJournal.lines.map((line) => (
+                            <div key={line.id} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-3 py-3">
+                              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted/60">
+                                {line.debit > 0 ? <ArrowDownLeft className="size-3.5 text-emerald-600" /> : <ArrowUpRight className="size-3.5 text-rose-500" />}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-semibold" title={line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}>
+                                  {line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}
+                                </p>
+                                {line.description && <p className="mt-1 truncate text-[10px] text-muted-foreground" title={line.description}>{line.description}</p>}
+                              </div>
+                              <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">
+                                {line.debit > 0 && <p className="text-emerald-600">Débito {formatCurrency(line.debit)}</p>}
+                                {line.credit > 0 && <p className="text-rose-500">Crédito {formatCurrency(line.credit)}</p>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-muted/30 px-3 py-2.5 font-mono text-[11px] font-black tabular-nums">
+                          <span className="uppercase tracking-wider text-muted-foreground">Totales</span>
+                          <span className="text-right"><span className="text-emerald-600">D {formatCurrency(viewJournal.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0)}</span> · <span className="text-rose-500">C {formatCurrency(viewJournal.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0)}</span></span>
+                        </div>
+                      </div>
+                    )}
+                  </section>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setViewJournalId(null)}>
-              Cerrar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                  <div className="flex items-center justify-end gap-2 border-t border-border/40 pt-3 text-[10px] text-muted-foreground">
+                    <span>Creado: {new Date(viewJournal.createdAt).toLocaleString('es-NI')}</span>
+                    {viewJournal.updatedAt !== viewJournal.createdAt && (
+                      <span>| Actualizado: {new Date(viewJournal.updatedAt).toLocaleString('es-NI')}</span>
+                    )}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      </div>
     </div>
   );
 }

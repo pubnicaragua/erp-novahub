@@ -142,14 +142,14 @@ export function LibroMayorView() {
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow className="hover:bg-transparent border-border/50">
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Fecha</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Código</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Descripción</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Referencia</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground text-right">Débito</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground text-right">Crédito</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground text-right">Saldo</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Código</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Cuenta</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Descripción</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Referencia</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Débito</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Crédito</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Saldo</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
