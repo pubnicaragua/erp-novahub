@@ -780,7 +780,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                           <span className="text-xs">Aplicar</span>
                         </span>
                       </label>
-                      <label className="flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
+                      <label className="relative flex-1">
+                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Desc.</span>
                         <Input
                           type="number"
                           min="0"
@@ -793,7 +794,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                             setLocalDoc({ ...localDoc, ...next } as any);
                             void handleUpdate(localDoc!.id, next as any);
                           }}
-                          className="h-8 w-full rounded-md bg-muted/30 text-right text-xs"
+                          className="h-8 w-full rounded-md bg-muted/30 pl-12 text-right text-xs"
                         />
                       </label>
                     </div>

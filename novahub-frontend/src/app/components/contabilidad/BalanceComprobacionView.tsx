@@ -21,6 +21,8 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
 
 const ACCOUNT_TYPE_ORDER = ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'];
 
+const accountTypeLabel = (tipo: string) => ACCOUNT_TYPE_LABELS[tipo] || tipo;
+
 interface TrialBalanceRow {
   accountId: string;
   codigo: string;
@@ -107,7 +109,7 @@ export function BalanceComprobacionView() {
           html += `<tr>
             <td>${r.codigo}</td>
             <td>${r.cuenta}</td>
-            <td>${r.tipo}</td>
+            <td>${accountTypeLabel(r.tipo)}</td>
             <td class="text-right">${fmt(r.debitos)}</td>
             <td class="text-right">${fmt(r.creditos)}</td>
             <td class="text-right ${saldoClass}">${fmt(r.saldo)}</td>
@@ -194,12 +196,12 @@ export function BalanceComprobacionView() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent border-border/50">
-                  <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Código</TableHead>
-                  <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta</TableHead>
-                  <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Tipo</TableHead>
-                  <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground text-right">Débitos</TableHead>
-                  <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground text-right">Créditos</TableHead>
-                  <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground text-right">Saldo</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Código</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Cuenta</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Tipo</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Débitos</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Créditos</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Saldo</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -217,13 +219,13 @@ export function BalanceComprobacionView() {
                   ...group.rows.map((row, ri) => (
                     <TableRow key={`row-${gi}-${ri}`} className="hover:bg-muted/30 border-border/30">
                       <TableCell className="font-mono text-xs">{row.codigo}</TableCell>
-                      <TableCell className="font-medium">{row.cuenta}</TableCell>
+                      <TableCell className="font-medium text-xs">{row.cuenta}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wider">{row.tipo}</Badge>
+                        <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wider">{accountTypeLabel(row.tipo)}</Badge>
                       </TableCell>
-                      <TableCell className={cn("text-right font-mono text-sm", row.debitos > 0 && "text-emerald-600")}>{fmt(row.debitos)}</TableCell>
-                      <TableCell className={cn("text-right font-mono text-sm", row.creditos > 0 && "text-emerald-600")}>{fmt(row.creditos)}</TableCell>
-                      <TableCell className={cn("text-right font-mono text-sm font-bold", row.saldo >= 0 ? "text-emerald-600" : "text-red-600")}>
+                      <TableCell className={cn("text-right font-mono text-xs", row.debitos > 0 && "text-emerald-600")}>{fmt(row.debitos)}</TableCell>
+                      <TableCell className={cn("text-right font-mono text-xs", row.creditos > 0 && "text-emerald-600")}>{fmt(row.creditos)}</TableCell>
+                      <TableCell className={cn("text-right font-mono text-xs font-bold", row.saldo >= 0 ? "text-emerald-600" : "text-red-600")}>
                         {fmt(row.saldo)}
                       </TableCell>
                     </TableRow>
@@ -250,7 +252,7 @@ export function BalanceComprobacionView() {
                           <p className="font-mono text-[10px] text-muted-foreground">{row.codigo}</p>
                           <p className="mt-0.5 truncate text-sm font-bold" title={row.cuenta}>{row.cuenta}</p>
                         </div>
-                        <Badge variant="outline" className="shrink-0 text-[9px] font-bold uppercase tracking-wider">{row.tipo}</Badge>
+                        <Badge variant="outline" className="shrink-0 text-[9px] font-bold uppercase tracking-wider">{accountTypeLabel(row.tipo)}</Badge>
                       </div>
                       <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/50 pt-3">
                         <div className="min-w-0">

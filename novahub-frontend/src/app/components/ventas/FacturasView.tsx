@@ -984,14 +984,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           <span className="text-xs">Aplicar</span>
                         </span>
                       </label>
-                      <label className="flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
+                      <label className="relative flex-1">
+                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Desc.</span>
                         <Input type="number" min="0" max="100" value={item.discount || ''} onChange={(event) => {
                           const nextItems = [...(localDoc.items || [])];
                           nextItems[idx] = { ...nextItems[idx], discount: Number(event.target.value) || 0 };
                           const recalculated = recalcTotals(nextItems, 0, 0);
                           setLocalDoc({ ...localDoc, ...recalculated });
                           if (!isCreating) void handleUpdate(localDoc!.id, recalculated as any);
-                         }} className="h-8 w-full rounded-md bg-muted/30 text-right text-xs" disabled={isInvoiceLocked} />
+                         }} className="h-8 w-full rounded-md bg-muted/30 pl-12 text-right text-xs" disabled={isInvoiceLocked} />
                       </label>
                     </div>
                   )}

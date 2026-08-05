@@ -15,7 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner';
 import { purchaseRequestsService, purchaseManagementService } from '../../services/compras.service';
 import { inventoryService } from '../../services/inventario.service';
-import type { PurchaseRequest, PurchaseManagement, Warehouse } from '../../types';
+import { employeesService } from '../../services/rh.service';
+import type { PurchaseRequest, PurchaseManagement, Warehouse, Employee, PaginatedResponse } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -163,14 +164,16 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   const statusOptions = Object.keys(STATUS_STYLES);
   const requestKpis = [
     { title: 'Solicitudes', value: data.length, icon: ClipboardList, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Pendientes', value: data.filter(r => r.status === 'PENDING_APPROVAL').length, icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-500/10', kind: 'filter' as const, filter: 'PENDING_APPROVAL' },
     { title: 'En Revisión', value: data.filter(r => r.status === 'IN_REVIEW').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10', kind: 'filter' as const, filter: 'IN_REVIEW' },
-    { title: 'Por Aprobar', value: data.filter(r => r.status === 'PENDING_APPROVAL').length, icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-500/10', kind: 'filter' as const, filter: 'PENDING_APPROVAL' },
     { title: 'Aprobadas', value: data.filter(r => r.status === 'APPROVED').length, icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'APPROVED' },
+    { title: 'Rechazadas', value: data.filter(r => r.status === 'REJECTED').length, icon: X, color: 'text-rose-500', bg: 'bg-rose-500/10', kind: 'filter' as const, filter: 'REJECTED' },
   ];
 
   // ─── Nueva Solicitud ──────────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [productSearch, setProductSearch] = useState('');
   const [createForm, setCreateForm] = useState({
@@ -179,6 +182,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     warehouseId: '',
     requiredDate: '',
     notes: '',
+    requestedById: '',
   });
   const [createItems, setCreateItems] = useState<Array<{
     productId: string; productName: string; description: string; quantity: number; observations: string;
@@ -187,6 +191,15 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   const [creating, setCreating] = useState(false);
 
   useEffect(() => { setWarehouses(warehouseCatalog); }, [warehouseCatalog]);
+
+  useEffect(() => {
+    employeesService.getAll({ page: 1, pageSize: 200 }).then((res: any) => {
+      const list = Array.isArray(res) ? res : (res as PaginatedResponse<Employee>)?.data || [];
+      setEmployees(list);
+      const linked = list.find((e: Employee) => e.userId === user?.id);
+      if (linked) setCreateForm(prev => ({ ...prev, requestedById: linked.id }));
+    }).catch(() => setEmployees([]));
+  }, [user?.id]);
 
   const searchProducts = async (q: string, signal?: AbortSignal) => {
     if (!q || q.length < 2) { setProducts([]); return; }
@@ -224,6 +237,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   const handleCreate = async () => {
     if (createItems.length === 0) { toast.error('Agrega al menos un artículo'); return; }
     if (!createForm.warehouseId) { toast.error('Selecciona una bodega'); return; }
+    if (!createForm.requestedById) { toast.error('Selecciona el solicitante'); return; }
     setCreating(true);
     try {
       const payload = {
@@ -232,7 +246,8 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         warehouseId: createForm.warehouseId,
         requiredDate: createForm.requiredDate || undefined,
         notes: createForm.notes || undefined,
-        requestedById: user?.id,
+        requestedById: createForm.requestedById,
+        userId: user?.id,
         items: createItems.map(item => ({
           productId: item.productId, description: item.description,
           quantity: item.quantity, observations: item.observations || undefined,
@@ -243,7 +258,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       await purchaseRequestsService.create(payload as any);
       toast.success('Solicitud de compra creada');
       setCreateOpen(false);
-      setCreateForm({ priority: 'NORMAL', justification: '', warehouseId: '', requiredDate: '', notes: '' });
+      setCreateForm({ priority: 'NORMAL', justification: '', warehouseId: '', requiredDate: '', notes: '', requestedById: '' });
       setCreateItems([]);
       onRefresh();
     } catch (e: any) {
@@ -259,7 +274,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4" data-tour="purchases-list-kpis">
         {requestKpis.map((k) => (
           <PurchaseKpiCard
             key={k.title}
@@ -554,6 +569,17 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           </DialogHeader>
           <div className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold">Solicitante *</label>
+                <Select value={createForm.requestedById} onValueChange={(v) => setCreateForm(prev => ({ ...prev, requestedById: v }))}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} <span className="font-mono text-muted-foreground">({emp.code || emp.email})</span></SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold">Prioridad</label>
                 <Select value={createForm.priority} onValueChange={(v) => setCreateForm(prev => ({ ...prev, priority: v }))}>

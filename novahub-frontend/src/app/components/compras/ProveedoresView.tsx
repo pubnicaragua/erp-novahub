@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, FileDown, Info, Ban } from 'lucide-react';
+import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, FileDown, Info, Ban, Pencil } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { suppliersService } from '../../services/compras.service';
-import type { Supplier } from '../../types';
+import type { Supplier, EntityStatus } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
@@ -21,19 +21,38 @@ import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
+const emptyDraft = () => ({
+  code: '',
+  name: '',
+  contactName: '',
+  email: '',
+  phone: '',
+  address: '',
+  city: '',
+  country: '',
+  status: 'ACTIVE' as EntityStatus,
+});
+
+const isSupplierInactive = (s: Supplier) => s.isActive === false || String((s as any).status || '').toUpperCase() === 'INACTIVE';
+
 export function ProveedoresView({ data, loading, onRefresh, pagination, onSearchChange }: ProveedoresViewProps) {
   const { canPerform } = useAuth();
   const { baseCurrency, valuationModeSuffix, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [balanceOrder, setBalanceOrder] = useState<'all' | 'highest' | 'lowest'>('all');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingToggle, setPendingToggle] = useState<Supplier | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState<Supplier | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [draft, setDraft] = useState(emptyDraft());
+  const [saving, setSaving] = useState(false);
 
   const filtered = data.filter(s => {
     const isActive = s.isActive !== false && String((s as any).status || '').toUpperCase() !== 'INACTIVE';
@@ -245,11 +264,70 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     }
   };
 
-  const handleAdd = async () => {
+  const handleAdd = () => {
+    setDraft(emptyDraft());
+    setEditingSupplier(null);
+    setCreateOpen(true);
+  };
+
+  const handleOpenEdit = (row: Supplier) => {
+    setEditingSupplier(row);
+    setDraft({
+      code: row.code || '',
+      name: row.name || '',
+      contactName: row.contactName || '',
+      email: row.email || '',
+      phone: row.phone || '',
+      address: row.address || '',
+      city: row.city || '',
+      country: row.country || '',
+      status: String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+    });
+    setEditOpen(true);
+  };
+
+  const buildPayload = () => {
+    const payload: any = {
+      name: draft.name,
+      contactName: draft.contactName || undefined,
+      email: draft.email || undefined,
+      phone: draft.phone || undefined,
+      address: draft.address || undefined,
+      city: draft.city || undefined,
+      country: draft.country || undefined,
+      status: draft.status,
+    };
+    if (!editingSupplier) payload.code = draft.code || undefined;
+    return payload;
+  };
+
+  const handleSave = async () => {
+    if (!draft.name.trim()) {
+      toast.error('El nombre del proveedor es obligatorio');
+      return;
+    }
+    if (draft.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email)) {
+      toast.error('Correo electrónico inválido. Ingresa un email con formato válido (ej: proveedor@correo.com)');
+      return;
+    }
+    setSaving(true);
     try {
-      await suppliersService.create({ name: 'Nuevo Proveedor' });
-      toast.success('Proveedor creado'); onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear proveedor'); }
+      if (editingSupplier) {
+        await suppliersService.update(editingSupplier.id, buildPayload());
+      } else {
+        await suppliersService.create(buildPayload());
+      }
+      toast.success(editingSupplier ? 'Proveedor actualizado' : 'Proveedor creado');
+      setCreateOpen(false);
+      setEditOpen(false);
+      setEditingSupplier(null);
+      onRefresh();
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || e?.message || 'Error al guardar proveedor';
+      toast.error(msg.toLowerCase().includes('email') || msg.toLowerCase().includes('correo') ? 'Correo electrónico inválido. Verifica el formato del email ingresado.' : msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const kpis = [
@@ -310,7 +388,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           bulkActions={(ids) => (
             <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider"
               onClick={async () => {
-                await Promise.all(ids.map(id => handleUpdate(id, { isActive: false } as any)));
+                await Promise.all(ids.map(id => handleUpdate(id, { isActive: false, status: 'INACTIVE' } as any)));
                 toast.success(`${ids.length} proveedor(es) desactivado(s)`);
                 onRefresh();
               }}
@@ -321,8 +399,11 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           actions={(row) => (
             <div className="flex gap-1">
               <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierForHistory(row)}><Eye className="size-4" /></Button>
-              {row.isActive !== false && canPerform('proveedores', 'delete') && (
-                <Button title="Desactivar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
+              {canPerform('proveedores', 'edit') && (
+                <Button title="Editar proveedor" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEdit(row)}><Pencil className="size-4" /></Button>
+              )}
+              {canPerform('proveedores', 'delete') && (
+                <Button title={isSupplierInactive(row) ? 'Activar proveedor' : 'Desactivar proveedor'} variant="ghost" size="icon" className={`size-8 rounded-lg ${isSupplierInactive(row) ? 'hover:bg-emerald-500/10 hover:text-emerald-500' : 'hover:bg-rose-500/10 hover:text-rose-500'}`} onClick={() => setPendingToggle(row)}>{isSupplierInactive(row) ? <CheckCircle2 className="size-4" /> : <Ban className="size-4" />}</Button>
               )}
             </div>
           )}
@@ -330,25 +411,28 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       </div>
 
       <ConfirmDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-        title="¿Desactivar proveedor?"
-        description="El proveedor quedará inactivo y no aparecerá en selecciones futuras."
-        confirmLabel="Desactivar"
-        variant="destructive"
+        open={pendingToggle !== null}
+        onOpenChange={(open) => { if (!open) setPendingToggle(null); }}
+        title={pendingToggle && isSupplierInactive(pendingToggle) ? '¿Activar proveedor?' : '¿Desactivar proveedor?'}
+        description={pendingToggle && isSupplierInactive(pendingToggle)
+          ? 'El proveedor volverá a estar disponible en las operaciones.'
+          : 'El proveedor quedará inactivo y no aparecerá en selecciones futuras.'}
+        confirmLabel={pendingToggle && isSupplierInactive(pendingToggle) ? 'Activar' : 'Desactivar'}
+        variant={pendingToggle && isSupplierInactive(pendingToggle) ? 'default' : 'destructive'}
         loading={deleteLoading}
         onConfirm={async () => {
-          if (!pendingDeleteId) return;
+          if (!pendingToggle) return;
+          const activating = isSupplierInactive(pendingToggle);
           try {
             setDeleteLoading(true);
-            await suppliersService.update(pendingDeleteId, { isActive: false } as any);
-            toast.success('Proveedor desactivado correctamente');
+            await suppliersService.update(pendingToggle.id, { isActive: !activating, status: activating ? 'ACTIVE' : 'INACTIVE' } as any);
+            toast.success(activating ? 'Proveedor activado correctamente' : 'Proveedor desactivado correctamente');
             onRefresh();
           } catch (error: any) {
-            toast.error(`Error al desactivar proveedor: ${error?.response?.data?.message || error?.message || ''}`);
+            toast.error(`Error al ${activating ? 'activar' : 'desactivar'} proveedor: ${error?.response?.data?.message || error?.message || ''}`);
           } finally {
             setDeleteLoading(false);
-            setPendingDeleteId(null);
+            setPendingToggle(null);
           }
         }}
       />
@@ -403,6 +487,74 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             <Button onClick={handleImportSuppliers} disabled={importing || !importFile} className="gap-2">
               <Upload className="size-4" /> {importing ? 'Importando...' : 'Importar proveedores'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !saving) setCreateOpen(false); }}>
+        <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,720px)] !flex-col overflow-hidden rounded-3xl p-0">
+          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
+            <DialogTitle className="text-xl font-black uppercase tracking-tight">Nuevo proveedor</DialogTitle>
+            <DialogDescription>Completa los datos del proveedor y sus condiciones de contacto. El código es opcional.</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
+            <section className="space-y-3">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">Si no ingresas un código, el sistema lo asignará automáticamente.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</label><Input value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} placeholder="PRV-000001" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nombre del proveedor" className="h-11 rounded-xl" autoFocus /></div>
+              </div>
+            </section>
+            <section className="space-y-3 border-t border-border/40 pt-5">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Contacto</h3><p className="text-xs text-muted-foreground">Mantén actualizados los datos de contacto del proveedor.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Persona de contacto</label><Input value={draft.contactName} onChange={(e) => setDraft({ ...draft, contactName: e.target.value })} placeholder="Maria Lopez" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Email</label><Input type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder="proveedor@correo.com" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Teléfono</label><Input value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} placeholder="8888-1111" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ciudad</label><Input value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} placeholder="Managua" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</label><Input value={draft.country} onChange={(e) => setDraft({ ...draft, country: e.target.value })} placeholder="Nicaragua" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5 sm:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dirección</label><Input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Calle, número y referencias" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as EntityStatus })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></div>
+              </div>
+            </section>
+          </div>
+          <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7">
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={saving} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
+            <Button onClick={handleSave} disabled={saving} className="w-full rounded-xl font-bold sm:w-auto">{saving ? 'Guardando...' : 'Guardar proveedor'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={(open) => { if (!open && !saving) { setEditOpen(false); setEditingSupplier(null); } }}>
+        <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,720px)] !flex-col overflow-hidden rounded-3xl p-0">
+          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
+            <DialogTitle className="text-xl font-black uppercase tracking-tight">Editar proveedor</DialogTitle>
+            <DialogDescription>Actualiza la información del proveedor.</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
+            <section className="space-y-3">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">El código del proveedor no se puede modificar.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</label><div className="flex h-11 items-center rounded-xl border border-input bg-muted/30 px-3 text-sm text-muted-foreground">{draft.code || '—'}</div></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nombre del proveedor" className="h-11 rounded-xl" autoFocus /></div>
+              </div>
+            </section>
+            <section className="space-y-3 border-t border-border/40 pt-5">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Contacto</h3><p className="text-xs text-muted-foreground">Mantén actualizados los datos de contacto del proveedor.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Persona de contacto</label><Input value={draft.contactName} onChange={(e) => setDraft({ ...draft, contactName: e.target.value })} placeholder="Maria Lopez" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Email</label><Input type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder="proveedor@correo.com" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Teléfono</label><Input value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} placeholder="8888-1111" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ciudad</label><Input value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} placeholder="Managua" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</label><Input value={draft.country} onChange={(e) => setDraft({ ...draft, country: e.target.value })} placeholder="Nicaragua" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5 sm:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dirección</label><Input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Calle, número y referencias" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as EntityStatus })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></div>
+              </div>
+            </section>
+          </div>
+          <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7">
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
+            <Button onClick={handleSave} disabled={saving} className="w-full rounded-xl font-bold sm:w-auto">{saving ? 'Guardando...' : 'Guardar cambios'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
