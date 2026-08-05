@@ -22,6 +22,7 @@ import {
   PieChart, Pie, Cell, LabelList
 } from 'recharts';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 interface FinanceBalanceViewProps {
   incomes: any[];
@@ -33,7 +34,7 @@ interface FinanceBalanceViewProps {
 type ViewType = 'general' | 'solo-ingresos' | 'solo-gastos' | 'recurrentes';
 
 export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurringExpenses }: FinanceBalanceViewProps) {
-  const { displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { user } = useAuth();
   const { themeConfig } = useTheme();
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
@@ -56,7 +57,12 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
   const fRecInc = useMemo(() => filterByDate(recurringIncomes), [recurringIncomes, dateRange]);
   const fRecExp = useMemo(() => filterByDate(recurringExpenses), [recurringExpenses, dateRange]);
 
-  const cv = (item: any) => convertAmount(Number(item.amount) || 0, item.currency, item.exchangeRate);
+  const cv = (item: any) => {
+    const amount = Number(item.amount ?? item.baseAmount ?? 0);
+    return valuationMode === 'CURRENT'
+      ? convertCurrentAmount(amount, item.currency)
+      : convertAmount(amount, item.currency, item.exchangeRate);
+  };
 
   const totalIncome = fIncomes.reduce((a: number, i: any) => a + cv(i), 0);
   const totalExpense = fExpenses.reduce((a: number, e: any) => a + cv(e), 0);
@@ -339,7 +345,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
     }
   };
 
-  const fmtNum = (n: number) => `${sym}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtNum = (n: number) => formatCurrentAmount(n, displayCurrency);
 
   const exportPDF = async () => {
     try {
@@ -1050,7 +1056,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         {showBalanceKPI && (
           <Card className={cn(balance >= 0 ? 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/5' : 'border-rose-500/20 bg-gradient-to-br from-rose-500/5', 'to-transparent relative overflow-hidden')}>
             <div className="absolute top-2 right-2 opacity-10"><Scale className="size-12" /></div>
-            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Wallet className="size-4" />Balance Neto</CardTitle></CardHeader>
+            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Wallet className="size-4" />Balance Neto{valuationModeSuffix}</CardTitle></CardHeader>
             <CardContent>
               <p className={`text-2xl font-black ${balance>=0?'text-emerald-500':'text-rose-500'}`}>{sym}{balance.toLocaleString(undefined,{maximumFractionDigits:2})}</p>
               <p className="text-[10px] text-muted-foreground mt-1">Margen: {margin}%</p>
@@ -1171,7 +1177,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
                       <p className="text-sm font-bold break-words">{inc.source || inc.notes || 'Ingreso'}</p>
                       <p className="text-[10px] text-muted-foreground break-words">{inc.category || 'Sin categoría'} · {new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI')}</p>
                     </div>
-                    <span className="text-sm font-black text-emerald-500 shrink-0 ml-3 mt-0.5">+{formatConvertedAmount(Number(inc.amount)||0, inc.currency, inc.exchangeRate)}</span>
+                    <CurrencyValuationAmount amount={Number(inc.amount) || 0} sourceCurrency={inc.currency} sourceExchangeRate={inc.exchangeRate} className="text-sm font-black text-emerald-500 shrink-0 ml-3 mt-0.5" />
                   </div>
                 ))}
               </CardContent>
@@ -1187,7 +1193,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
                       <p className="text-sm font-bold break-words">{exp.description || 'Gasto'}</p>
                       <p className="text-[10px] text-muted-foreground break-words">{exp.source ? `${exp.source} · ` : ''}{exp.category || 'Sin categoría'} · {new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI')}</p>
                     </div>
-                    <span className="text-sm font-black text-rose-500 shrink-0 ml-3 mt-0.5">-{formatConvertedAmount(Number(exp.amount)||0, exp.currency, exp.exchangeRate)}</span>
+                    <CurrencyValuationAmount amount={Number(exp.amount) || 0} sourceCurrency={exp.currency} sourceExchangeRate={exp.exchangeRate} className="text-sm font-black text-rose-500 shrink-0 ml-3 mt-0.5" />
                   </div>
                 ))}
               </CardContent>

@@ -28,6 +28,7 @@ import { inventoryService } from '../services/inventario.service';
 import { motion } from 'motion/react';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { BranchScopeFilter } from './ui/BranchScopeFilter';
+import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import type { SalesPageSize, SalesPaginationControls } from '../types';
 
 const INVENTORY_SECTIONS = [
@@ -284,6 +285,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           </Button>
         </div>
       </div>
+
+      <CurrencyValuationBanner />
 
       {/* Branch Scope Filter */}
         <div className="flex min-w-0 flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">

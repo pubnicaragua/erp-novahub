@@ -28,6 +28,7 @@ import { exportToCsv } from '../../utils/exportUtils';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 interface Props {
   data: PurchaseOrder[];
@@ -184,7 +185,7 @@ const statusOpts = [
 
 export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice, supplierInvoices = [], supplierCatalog = [], productCatalog = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -504,10 +505,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'total',    header: 'Total',     width: '130px',
       render: (val, row) => (
-        <span className="font-black tabular-nums text-foreground">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-
-        </span>
+        <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-foreground" />
       ) },
     { key: 'status',   header: 'Estado',    width: '120px', editable: canPerform('PURCHASES_ORDERS', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
@@ -1315,8 +1313,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     );
   }
 
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate || globalRate);
   const totalAmountInDisplayCurrency = data.reduce(
-    (acc, order) => acc + convertAmount(order.total || 0, order.currency, order.exchangeRate),
+    (acc, order) => acc + toDisplayAmount(Number((order as any).total ?? (order as any).baseTotal ?? 0), order.currency, order.exchangeRate),
     0,
   );
   const kpis = [
@@ -1324,8 +1325,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     { title: 'Por Aprobar',     value: data.filter(o => (o.status||'').toUpperCase() === 'PENDING').length,                 icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10',    filter: 'PENDING' },
     { title: 'Aprobadas',       value: data.filter(o => (o.status||'').toUpperCase() === 'APPROVED').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10',  filter: 'APPROVED' },
     {
-      title: `Monto Total (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${totalAmountInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      title: `Monto Total (${displayCurrency}${valuationModeSuffix})`,
+      value: formatCurrentAmount(totalAmountInDisplayCurrency, displayCurrency),
       icon: TrendingDown,
       color: 'text-rose-500',
       bg: 'bg-rose-500/10',

@@ -12,6 +12,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 interface FixedAsset {
@@ -30,16 +31,13 @@ interface NewAssetForm {
   description: string;
 }
 
-function formatCurrency(n: number): string {
-  return new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-}
-
 function emptyForm(): NewAssetForm {
   return { accountCode: '', accountName: '', acquisitionCost: 0, description: '' };
 }
 
 export function ActivosFijosView() {
   const { canPerform } = useAuth();
+  const { baseCurrency, formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
@@ -59,6 +57,7 @@ export function ActivosFijosView() {
 
   const totalAcquisition = filtered.reduce((s, a) => s + a.acquisitionCost, 0);
   const totalCurrent = filtered.reduce((s, a) => s + a.currentBalance, 0);
+  const formatCurrency = (value: number) => formatConvertedAmount(value, baseCurrency);
 
   function handleFormChange(field: keyof NewAssetForm, value: string | number) {
     setForm((prev) => ({ ...prev, [field]: value }));

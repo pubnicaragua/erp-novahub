@@ -134,9 +134,11 @@ const TH = 'px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wide
 const TD = 'px-3 py-2 text-xs whitespace-nowrap';
 
 export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, formatConvertedAmount } = useCurrency();
+  const { displayCurrency, baseCurrency, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource } = useCurrency();
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
+    formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'inventory'], async (signal) => {
     const filters = { page: 1, pageSize: 5000, report: true } as const;
@@ -848,7 +850,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           <CardContent>
             <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(valuation.totalValue, 'NIO')}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              {fmtQty(valuation.totalUnits)} unidades · {valuation.productsWithStock} productos con existencia
+              {fmtQty(valuation.totalUnits)} unidades · {valuation.productsWithStock} productos con existencia{valuationModeSuffix ? ` · Vista ${valuationModeLabel.toLowerCase()}` : ''}
             </p>
             {valuation.status === 'PARTIAL' && (
               <p className="text-[10px] font-bold text-amber-500 mt-1">

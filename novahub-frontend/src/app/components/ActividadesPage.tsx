@@ -13,6 +13,7 @@ import { BitacoraView } from './actividades/BitacoraView';
 import { tasksService, eventsService, remindersService, activityLogsService } from '../services/actividades.service';
 import { useAuth } from '../contexts/AuthContext';
 import { asList, useTenantQuery } from '../hooks/useTenantQuery';
+import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 
 interface ActividadesPageProps {
   activeSubModule?: string;
@@ -103,6 +104,8 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
               </div>
             </div>
           </div>
+
+          <CurrencyValuationBanner className="mb-6" />
 
           <Tabs value={activeTab} className="w-full" onValueChange={(val) => {
             setActiveTab(val);

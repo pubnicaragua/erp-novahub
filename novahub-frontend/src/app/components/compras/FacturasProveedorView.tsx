@@ -49,7 +49,20 @@ const statusOpts = [
 
 export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], accountCatalog = [], purchaseReceiptCatalog = [], pagination, onSearchChange, onStatusChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const {
+    exchangeRate: globalRate,
+    displayCurrency,
+    baseCurrency,
+    valuationMode,
+    valuationModeLabel,
+    valuationModeSuffix,
+    showValuationLegend,
+    formatConvertedAmount,
+    formatHistoricalAmount,
+    formatCurrentAmount,
+    convertAmount,
+    convertCurrentAmount,
+  } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
@@ -300,12 +313,30 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     { key: 'dueDate',  header: 'Vencimiento', width: '110px',
       render: (val) => { const isLate = new Date(val).getTime() < Date.now(); return <span className={cn("text-xs", isLate && "text-rose-500 font-bold")}>{val ? new Date(val).toLocaleDateString() : '-'}</span>; } },
     { key: 'total',    header: 'Total',       width: '130px',
-      render: (val, row) => (
-        <span className="font-black tabular-nums text-rose-500">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-
-        </span>
-      ) },
+      render: (val, row) => {
+        const amount = Number(val || 0);
+        const sourceCurrency = String(row.currency || baseCurrency).toUpperCase();
+        const difference = sourceCurrency === baseCurrency || sourceCurrency === displayCurrency
+          ? 0
+          : convertCurrentAmount(amount, row.currency) - convertAmount(amount, row.currency, row.exchangeRate || globalRate);
+        return (
+          <div className="min-w-0">
+            <span className="font-black tabular-nums text-rose-500">
+              {valuationMode === 'CURRENT'
+                ? formatCurrentAmount(amount, row.currency)
+                : formatHistoricalAmount(amount, row.currency, row.exchangeRate)}
+            </span>
+            {showValuationLegend && <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+              {valuationModeLabel}
+              {valuationMode === 'CURRENT' && Math.abs(difference) >= 0.005 && (
+                <span className={cn('ml-1', difference > 0 ? 'text-orange-500' : 'text-emerald-500')}>
+                  · Δ {formatCurrentAmount(difference, displayCurrency)}
+                </span>
+              )}
+            </div>}
+          </div>
+        );
+      } },
     { key: 'status',   header: 'Estado',      width: '110px', editable: canPerform('PURCHASES_INVOICES', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
@@ -815,20 +846,10 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                       />
                     </div>
                     <div className="col-span-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Cuenta Contable</p>
-                      <select
-                        disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
-                        value={item.accountId || ''}
-                        onChange={(e) => handleItemChange(idx, 'accountId', e.target.value)}
-                        className="h-8 w-full rounded-md border border-input bg-background px-1 text-[10px] font-bold"
-                      >
-                        <option value="">Seleccionar...</option>
-                        {accounts
-                          .filter((a: any) => (a.isActive ?? true) !== false)
-                          .map((a: any) => (
-                            <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
-                          ))}
-                      </select>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Cuentas contables</p>
+                      <div className="flex h-8 items-center rounded-md border border-primary/20 bg-primary/5 px-2 text-[10px] font-bold text-primary">
+                        Inventario, IVA y CxP se toman de la configuración global
+                      </div>
                     </div>
                     <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Total</p>
@@ -926,13 +947,19 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   const pendingTotalInDisplayCurrency = data
     .filter(invoice => ['PENDING', 'PARTIAL'].includes((invoice.status || '').toUpperCase()))
-    .reduce((acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate), 0);
+    .reduce((acc, invoice) => {
+      const amount = Number(invoice.total ?? invoice.baseTotal ?? 0);
+      const converted = valuationMode === 'CURRENT'
+        ? convertCurrentAmount(amount, invoice.currency)
+        : convertAmount(amount, invoice.currency, invoice.exchangeRate || globalRate);
+      return acc + converted;
+    }, 0);
 
   const kpis = [
      { title: 'Facturas',        value: data.length,                   icon: FileStack, color: 'text-blue-500',   bg: 'bg-blue-500/10',    filter: 'ALL'       },
      {
-       title: `Por Pagar (${displayCurrency})`,
-       value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${pendingTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+       title: `Por Pagar (${displayCurrency}${valuationModeSuffix})`,
+       value: formatCurrentAmount(pendingTotalInDisplayCurrency, displayCurrency),
        icon: Clock,
        color: 'text-amber-500',
        bg: 'bg-amber-500/10',
@@ -951,7 +978,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Facturas de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Cuentas por pagar</p></div>
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Facturas de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">{showValuationLegend ? `Cuentas por pagar · Vista ${valuationModeLabel.toLowerCase()} al tipo de cambio ${globalRate.toFixed(4)}.` : 'Cuentas por pagar.'}</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="invoices" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>

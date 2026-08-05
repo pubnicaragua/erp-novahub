@@ -16,7 +16,11 @@ import {
   Building2,
   Euro,
   CircleDollarSign,
-  ShoppingCart
+  ShoppingCart,
+  ChevronDown,
+  Check,
+  Clock3,
+  TrendingUp
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -25,6 +29,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuCheckboxItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -112,6 +117,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     { label: 'Plan de Cuentas', description: 'Catálogo de cuentas contables', module: 'contabilidad', subModule: 'cuentas', keywords: ['cuenta', 'contable', 'plan', 'catalogo'], group: 'Contabilidad' },
     { label: 'Asientos Contables', description: 'Diario y asientos contables', module: 'contabilidad', subModule: 'asientos', keywords: ['asiento', 'diario', 'contable'], group: 'Contabilidad' },
     { label: 'Balance General', description: 'Reporte de balance general', module: 'contabilidad', subModule: 'balance-general', keywords: ['balance', 'activo', 'pasivo'], group: 'Contabilidad' },
+    { label: 'Diferencias Cambiarias', description: 'Valoración histórica y actual de saldos en moneda extranjera', module: 'contabilidad', subModule: 'diferencias-cambiarias', keywords: ['moneda', 'cambio', 'tasa', 'ganancia', 'perdida', 'revaluacion'], group: 'Contabilidad' },
     { label: 'Estado de Resultados', description: 'Pérdidas y ganancias', module: 'contabilidad', subModule: 'estado-resultados', keywords: ['resultado', 'ganancia', 'perdida'], group: 'Contabilidad' },
     { label: 'Conciliación Bancaria', description: 'Conciliación de cuentas bancarias', module: 'contabilidad', subModule: 'conciliacion', keywords: ['conciliacion', 'banco'], group: 'Contabilidad' },
     { label: 'Reportes Fiscales', description: 'IVA, IR, INSS, INATEC', module: 'contabilidad', subModule: 'reportes-fiscales', keywords: ['fiscal', 'iva', 'ir', 'inss', 'dgi'], group: 'Contabilidad' },
@@ -281,7 +287,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     }
   };
 
-  const { currency, toggleCurrency, currencyInteractionEnabled } = useCurrency();
+  const { currency, toggleCurrency, currencyInteractionEnabled, valuationMode, setValuationMode, valuationModeLabel, showValuationLegend, setShowValuationLegend } = useCurrency();
 
   const getRoleBadge = (role: string) => {
     switch (role?.toLowerCase()) {
@@ -405,18 +411,64 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           </Button>
         )}
 
-        {/* Currency Switcher */}
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={toggleCurrency} 
-          className="hidden h-9 gap-2 border-border bg-card px-3 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60 lg:flex"
-          title={currencyInteractionEnabled ? 'Cambiar Moneda' : 'Cambio de moneda bloqueado por configuración'}
-          disabled={!currencyInteractionEnabled}
-        >
-          {currency === 'USD' ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
-          <span className="text-xs font-bold">{currency}</span>
-        </Button>
+        {/* Currency and valuation view */}
+        <div className="hidden items-center gap-0.5 rounded-xl border border-border bg-card p-0.5 lg:flex" title="Moneda y modo de valoración">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleCurrency}
+            className="h-8 gap-2 rounded-lg px-2.5 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+            title={currencyInteractionEnabled ? 'Cambiar moneda de visualización' : 'Cambio de moneda bloqueado por configuración'}
+            disabled={!currencyInteractionEnabled}
+          >
+            {currency === 'USD' ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
+            <span className="text-xs font-bold">{currency}</span>
+            {showValuationLegend && <span className="hidden text-[9px] font-black uppercase tracking-wider text-muted-foreground xl:inline">{valuationModeLabel}</span>}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-muted" aria-label="Cambiar modo de valoración" title="Cambiar modo de valoración">
+                <ChevronDown className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80 rounded-xl border-border/60 p-2">
+              <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                Vista de importes
+              </DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setValuationMode('HISTORICAL')} className="items-start gap-3 rounded-lg p-3">
+                <Clock3 className="mt-0.5 size-4 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wide">
+                    Histórico
+                    {valuationMode === 'HISTORICAL' && <Check className="size-3.5 text-emerald-500" />}
+                  </span>
+                  <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">Usa la tasa guardada en cada transacción. Recomendado para revisar documentos.</span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setValuationMode('CURRENT')} className="items-start gap-3 rounded-lg p-3">
+                <TrendingUp className="mt-0.5 size-4 shrink-0 text-amber-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wide">
+                    Actual
+                    {valuationMode === 'CURRENT' && <Check className="size-3.5 text-emerald-500" />}
+                  </span>
+                  <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">Convierte saldos en moneda extranjera con la tasa vigente. No modifica la transacción.</span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="my-1.5" />
+              <DropdownMenuCheckboxItem
+                checked={showValuationLegend}
+                onCheckedChange={setShowValuationLegend}
+                className="items-start gap-3 rounded-lg p-3 pl-8"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-black uppercase tracking-wide">Mostrar detalle</span>
+                  <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">Muestra Histórico/Actual y la diferencia cambiaria en los importes.</span>
+                </span>
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
         <Button
           variant="ghost"
@@ -530,6 +582,22 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               >
                 {currency === 'USD' ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
                 <span>Moneda: {currency}</span>
+                <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cambiar</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setValuationMode(valuationMode === 'CURRENT' ? 'HISTORICAL' : 'CURRENT')}
+                className="gap-2"
+              >
+                {valuationMode === 'CURRENT' ? <TrendingUp className="size-4 text-amber-500" /> : <Clock3 className="size-4 text-primary" />}
+                <span>Vista: {valuationModeLabel}</span>
+                <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cambiar</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setShowValuationLegend(!showValuationLegend)}
+                className="gap-2"
+              >
+                <span className="size-4 rounded-full border border-current text-center text-[9px] font-black leading-[14px]">{showValuationLegend ? '✓' : ''}</span>
+                <span>Detalle cambiario: {showValuationLegend ? 'Visible' : 'Oculto'}</span>
                 <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cambiar</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={toggleTheme} className="gap-2">

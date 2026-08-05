@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
-  Zap, Building2, CircleHelp, Globe, User as UserIcon, LayoutGrid, Check, Clock, Plus, ShieldCheck, DollarSign, MessageSquare, Users, Edit2, Trash2, KeyRound, X, Mail, Shield, MapPin, Store, Info, Crown
+  Zap, Building2, CircleHelp, Globe, User as UserIcon, LayoutGrid, Check, Clock, Plus, ShieldCheck, DollarSign, MessageSquare, Users, Edit2, Trash2, KeyRound, X, Mail, Shield, MapPin, Store, Info, Crown, Link2, UserRoundCheck
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -14,10 +14,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { TeamAccessPanel } from './TeamAccessPanel';
+import { DepartmentsView } from './DepartmentsView';
 import { SucursalesView } from '../inventory/SucursalesView';
 import { DominiosView } from './DominiosView';
 import { TrialCountdownBanner } from '../auth/TrialCountdownBanner';
 import { tenantsService } from '../../services/tenants.service';
+import { hrService } from '../../services/hr.service';
 import { usersService } from '../../services/users.service';
 import { inventoryService } from '../../services/inventario.service';
 import { brandingService } from '../../services/branding.service';
@@ -59,12 +61,15 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
   const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
-  const [isDepartmentDialogOpen, setIsDepartmentDialogOpen] = useState(false);
+  const [showDepartmentsView, setShowDepartmentsView] = useState(false);
   const [showTeamTutorial, setShowTeamTutorial] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [linkingUser, setLinkingUser] = useState<any>(null);
+  const [linkingEmployeeId, setLinkingEmployeeId] = useState('');
   const [selectedModule, setSelectedModule] = useState<any>(null);
   const [notes, setNotes] = useState('');
   const [users, setUsers] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [companyName, setCompanyName] = useState('');
@@ -87,13 +92,14 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     ['my-company-detail', tenant?.id || 'none'],
     async (signal) => {
       if (!tenant?.id) return null;
-      const [usersRes, warehouseRes, branding, industriesRes] = await Promise.all([
+      const [usersRes, warehouseRes, branding, industriesRes, employeesRes] = await Promise.all([
         tenantsService.getUsers(tenant.id, signal),
         inventoryService.getWarehouses(signal),
         brandingService.getCurrent(signal),
         api.get<any[]>(`/tenants/${tenant.id}/industries`, { signal }),
+        hrService.getEmployees({ status: 'ACTIVE', pageSize: 500 }, signal),
       ]);
-      return { users: asList(usersRes), warehouses: asList(warehouseRes), branding, industries: asList(industriesRes) };
+      return { users: asList(usersRes), warehouses: asList(warehouseRes), branding, industries: asList(industriesRes), employees: asList(employeesRes) };
     },
     { enabled: Boolean(tenant?.id), onError: (error) => toast.error(error.message || 'Error cargando Mi Empresa') },
   );
@@ -106,6 +112,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     setCompanyIndustry(tenantData?.branding?.industry || tenant.industry || 'OTHER');
     if (!tenantData) return;
     setUsers(tenantData.users);
+    setEmployees(tenantData.employees || []);
     setWarehouses(tenantData.warehouses);
     setIndustryOptions(tenantData.industries);
   }, [tenant, tenantData, tenantDataLoading]);
@@ -234,6 +241,29 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       toast.error(error.response?.data?.message || 'Error al cambiar la contraseña');
     } finally {
       setUpdatingPassword(false);
+    }
+  };
+
+  const handleLinkEmployee = async () => {
+    if (!linkingUser?.id || !linkingEmployeeId) return;
+    try {
+      await tenantsService.linkUserToEmployee(tenant.id, linkingUser.id, linkingEmployeeId);
+      toast.success('Usuario vinculado al empleado');
+      setLinkingUser(null);
+      setLinkingEmployeeId('');
+      await fetchUsers();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'No se pudo vincular el empleado');
+    }
+  };
+
+  const handleUnlinkEmployee = async (user: any) => {
+    try {
+      await tenantsService.unlinkUserFromEmployee(tenant.id, user.id);
+      toast.success('Vínculo con empleado eliminado');
+      await fetchUsers();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'No se pudo quitar el vínculo');
     }
   };
 
@@ -589,12 +619,13 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         </TabsContent>
 
          <TabsContent value="team" className="space-y-4">
+          {showDepartmentsView ? <DepartmentsView tenantId={tenant.id} users={users} employees={employees} onBack={() => setShowDepartmentsView(false)} onDataChange={async () => { await refetchTenantData(); }} onLinkUserToEmployee={(user) => { setLinkingUser(user); setLinkingEmployeeId(''); }} /> : <>
            <div className="flex justify-end">
             <div className="flex items-center gap-2">
               <Button data-tour="team-tutorial" variant="outline" className="gap-2 font-bold" onClick={() => setShowTeamTutorial(true)}>
                 <CircleHelp className="size-4" /> Tutorial
               </Button>
-              <Button data-tour="team-departments" variant="outline" className="gap-2 font-bold" onClick={() => setIsDepartmentDialogOpen(true)}>
+              <Button data-tour="team-departments" variant="outline" className="gap-2 font-bold" onClick={() => setShowDepartmentsView(true)}>
               <Building2 className="size-4" /> Departamentos
               </Button>
             </div>
@@ -626,7 +657,8 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                         {isCurrentUser && <Badge className="bg-primary text-primary-foreground text-[9px] uppercase">Tu usuario</Badge>}
                       </div>
                       <p className="flex items-center gap-1 truncate text-xs text-muted-foreground"><Mail className="size-3" /> {u.email}</p>
-                      <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-primary/80">{u.department?.name || 'Sin departamento'}</p>
+                      <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-primary/80">{u.departments?.map((department: any) => department.name).join(' · ') || u.department?.name || 'Sin departamento'}</p>
+                      {u.employee && <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-emerald-600"><UserRoundCheck className="size-3" /> Empleado: {u.employee.firstName} {u.employee.lastName}</p>}
                     </div>
                   </div>
                   <Badge variant="outline" className={cn('shrink-0 text-[10px] font-black uppercase tracking-widest', u.isActive ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20')}>
@@ -659,6 +691,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                   </div>}
 
                   {u.role?.toUpperCase() !== 'ADMIN' && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-orange-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
+                  {u.employee ? <Button variant="outline" size="sm" className="h-8 gap-1.5 border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-500/10" onClick={() => void handleUnlinkEmployee(u)} title="Desvincular empleado"><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" className="h-8 gap-1.5 border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title="Vincular empleado"><Link2 className="size-3" /> Vincular empleado</Button>}
                   <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/10 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary" onClick={() => handleViewPerms(u)}><Shield className="size-3" /> Permisos</Button>
                   <Button variant="ghost" size="sm" disabled={isCurrentUser} className={cn('h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest', isCurrentUser ? 'cursor-not-allowed text-muted-foreground/50' : u.isActive ? 'hover:bg-rose-500/10 hover:text-rose-500' : 'hover:bg-emerald-500/10 hover:text-emerald-500')} onClick={() => !isCurrentUser && toggleUserStatus(u.id, u.isActive)} title={isCurrentUser ? 'No puedes suspenderte a ti mismo' : u.isActive ? 'Suspender usuario' : 'Activar usuario'}>
                     {u.isActive ? <><X className="size-3" /> {isCurrentUser ? 'Tu usuario' : 'Suspender'}</> : <><Check className="size-3" /> Activar</>}
@@ -670,8 +703,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               </CardContent>
             </Card>
 
-            <TeamAccessPanel tenantId={tenant.id} tenantName={tenant.name} users={users} departmentDialogOpen={isDepartmentDialogOpen} onDepartmentDialogChange={setIsDepartmentDialogOpen} onRolesChange={onRefresh} onUsersChange={fetchUsers} />
+            <TeamAccessPanel tenantId={tenant.id} tenantName={tenant.name} users={users} onRolesChange={onRefresh} />
           </div>
+          </>}
          </TabsContent>
          <TabsContent value="sucursales" className="space-y-6">
            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
@@ -695,7 +729,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               Permisos de {selectedUser?.name}
             </DialogTitle>
             <DialogDescription>
-              Detalle de accesos basados en el tipo ({selectedUser?.role === 'ADMIN' ? 'Administrador' : 'Colaborador'}) {selectedUser?.customRole && `y Rol Personalizado (${selectedUser.customRole.name})`}.
+              Accesos efectivos por el rol directo del usuario. {selectedUser?.employee ? `Empleado vinculado: ${selectedUser.employee.firstName} ${selectedUser.employee.lastName}.` : 'No hay empleado vinculado.'}
             </DialogDescription>
           </DialogHeader>
           
@@ -713,12 +747,15 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 </thead>
                 <tbody className="divide-y divide-border">
                   {(() => {
-                    // Buscar permisos: primero del customRole embebido, luego cruzar con customRoles prop
-                    let rolePermissions = normalizePermissions(selectedUser?.customRole?.permissions);
-                    if (rolePermissions.length === 0 && selectedUser?.customRoleId) {
-                      const fullRole = customRoles.find(r => r.id === selectedUser.customRoleId);
-                      rolePermissions = normalizePermissions(fullRole?.permissions);
-                    }
+                    const directRole = selectedUser?.customRole || customRoles.find(r => r.id === selectedUser?.customRoleId);
+                    const roleSources = [directRole].filter(Boolean);
+                    const permissionMap = new Map<string, any>();
+                    roleSources.flatMap((role: any) => normalizePermissions(role.permissions)).forEach((permission: any) => {
+                      const current = permissionMap.get(permission.module) || { module: permission.module };
+                      ['read', 'write', 'create', 'edit', 'delete'].forEach((action) => { current[action] = !!current[action] || !!permission[action]; });
+                      permissionMap.set(permission.module, current);
+                    });
+                    const rolePermissions = [...permissionMap.values()];
                     
                     if (rolePermissions.length === 0) {
                       return (
@@ -726,7 +763,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                           <td colSpan={5} className="p-8 text-center text-muted-foreground italic">
                             {selectedUser?.role?.toUpperCase() === 'ADMIN' 
                               ? 'Este usuario es Administrador y tiene acceso total a todos los módulos.'
-                              : 'Este usuario no tiene un Rol Personalizado asignado. Asígnale uno desde "Mi Equipo" para configurar sus accesos.'}
+                            : 'Este usuario no tiene permisos efectivos. Asígnale un rol directo.'}
                           </td>
                         </tr>
                       );
@@ -837,6 +874,10 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 </p>
               )}
             </div>
+            <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+              <Info className="mt-0.5 size-4 shrink-0 text-primary" />
+              <p><strong className="text-foreground">Recomendación:</strong> si esta persona debe estar relacionada con Recursos Humanos, nómina, ventas o comisiones, vincúlala a un empleado después de crear el usuario. El vínculo es opcional.</p>
+            </div>
             <div className="space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Contraseña Temporal *</Label>
               <Input
@@ -858,6 +899,29 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
             >
               {uploading ? 'Creando...' : 'Crear Acceso'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!linkingUser} onOpenChange={(open) => { if (!open) { setLinkingUser(null); setLinkingEmployeeId(''); } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Link2 className="size-5 text-primary" /> Vincular empleado</DialogTitle>
+            <DialogDescription>Relaciona el usuario {linkingUser?.name} con su registro laboral. Sus departamentos y datos de nómina seguirán gestionándose desde Recursos Humanos.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empleado disponible</Label>
+            <Select value={linkingEmployeeId} onValueChange={setLinkingEmployeeId}>
+              <SelectTrigger className="h-11"><SelectValue placeholder="Selecciona un empleado" /></SelectTrigger>
+              <SelectContent>
+                {employees.filter((employee: any) => !employee.user).map((employee: any) => <SelectItem key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName} · {employee.employeeNumber}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {!employees.some((employee: any) => !employee.user) && <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">No hay empleados activos disponibles para vincular.</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkingUser(null)}>Cancelar</Button>
+            <Button onClick={() => void handleLinkEmployee()} disabled={!linkingEmployeeId}>Vincular empleado</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

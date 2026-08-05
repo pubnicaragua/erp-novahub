@@ -55,7 +55,7 @@ const actionIconClass = 'size-4 text-muted-foreground';
 export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: EstimacionesViewProps) {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SENT' | 'APPROVED'>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
@@ -406,7 +406,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   ];
 
   const quotedTotalInDisplayCurrency = data.reduce(
-    (acc, estimate) => acc + convertAmount(estimate.total || 0, estimate.currency, estimate.exchangeRate),
+    (acc, estimate) => acc + ((estimate as any).baseTotal !== null && (estimate as any).baseTotal !== undefined
+      ? Number((estimate as any).baseTotal)
+      : toBaseAmount(estimate.total || 0, estimate.currency, estimate.exchangeRate || globalRate)),
     0,
   );
 
@@ -779,7 +781,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, displayCurrency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />
+        <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, baseCurrency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />
         <SalesKpiCard title="Tasa Conversión" value={`${((data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (data.length || 1)) * 100).toFixed(0)}%`} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
         <SalesKpiCard title="Enviadas" value={data.filter(e => (e.status||'').toUpperCase() === 'SENT').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'SENT'} onClick={() => setStatusFilter(statusFilter === 'SENT' ? 'ALL' : 'SENT')} />
         <SalesKpiCard title="Aprobadas" value={data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-purple-500" bg="bg-purple-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />

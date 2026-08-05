@@ -362,7 +362,7 @@ export function ConciliacionView() {
               <Select value={form.accountId} onValueChange={(v) => setForm({ ...form, accountId: v })}>
                 <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
                 <SelectContent>
-                  {accounts.map((a) => (
+                  {accounts.filter((a) => a.isActive !== false && a.acceptsPostings !== false).map((a) => (
                     <SelectItem key={a.id} value={a.id} className="text-xs">{a.code} - {a.name}</SelectItem>
                   ))}
                 </SelectContent>

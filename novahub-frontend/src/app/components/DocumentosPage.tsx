@@ -11,6 +11,7 @@ import { NovaCloudPlanesView } from './documentos/NovaCloudPlanesView';
 import { contractsService, legalInvoicesService, reportsService, filesService } from '../services/documentos.service';
 import { useAuth } from '../contexts/AuthContext';
 import { asList, useTenantQuery } from '../hooks/useTenantQuery';
+import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 
 interface DocumentosPageProps {
   activeSubModule?: string;
@@ -65,6 +66,8 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
               </div>
             </div>
           </div>
+
+          <CurrencyValuationBanner className="mb-6" />
 
           <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
           <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>

@@ -19,12 +19,14 @@ import { FinancePayablesView } from './finanzas/FinancePayablesView';
 import { FinanceCalendarView } from './finanzas/FinanceCalendarView';
 import { FinanceGeneralBalanceView } from './finanzas/FinanceGeneralBalanceView';
 import { accountsService, incomeService, expensesService, recurringExpensesService, recurringIncomesService } from '../services/finanzas.service';
+import { contabilidadService } from '../services/contabilidad.service';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranchScope } from '../hooks/useBranchScope';
 import { BranchScopeFilter } from './ui/BranchScopeFilter';
+import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
@@ -50,7 +52,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
-  const { displayCurrency, exchangeRate: globalRate, convertAmount } = useCurrency();
+  const { displayCurrency, exchangeRate: globalRate, valuationMode, valuationModeLabel, showValuationLegend, convertAmount, convertCurrentAmount, formatCurrentAmount } = useCurrency();
 
   const hasAccess = (moduleId: string) => {
     if (!user?.enabledModules) return true;
@@ -155,6 +157,15 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
     refetchOnWindowFocus: false,
     retry: 1,
   });
+  const accountingMappingsQuery = useQuery({
+    queryKey: ['finance', 'accounting-mappings', tenantKey],
+    queryFn: ({ signal }) => contabilidadService.getSuggestedAccounts(signal),
+    enabled: activeDataTabs.accounts,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
 
   const incomes = normalizeListResponse(incomesQuery.data);
   const expenses = normalizeListResponse(expensesQuery.data);
@@ -186,7 +197,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
   const getAccountType = (account: any) => String(account?.type || '').toUpperCase();
 
   const findAccountByPreferredTypes = (preferredTypes: string[]) => {
-    const activeAccounts = accounts.filter((acc) => acc?.isActive !== false);
+    const activeAccounts = accounts.filter((acc) => acc?.isActive !== false && acc?.acceptsPostings !== false);
     return (
       activeAccounts.find((acc) => preferredTypes.includes(getAccountType(acc))) ||
       activeAccounts.find((acc) => getAccountType(acc) === 'ASSET') ||
@@ -198,7 +209,13 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
 
   const ensureDefaultAccount = async (accountKind: 'INCOME' | 'EXPENSE') => {
     const preferredTypes = accountKind === 'INCOME' ? ['INCOME', 'REVENUE'] : ['EXPENSE'];
-    const existing = findAccountByPreferredTypes(preferredTypes);
+    const configuredModule = accountKind === 'INCOME' ? 'financialIncome' : 'financialExpense';
+    const configuredField = accountKind === 'INCOME' ? 'income' : 'expense';
+    const configuredCode = accountingMappingsQuery.data?.mappings?.[configuredModule]?.[configuredField]?.code;
+    const configured = configuredCode
+      ? accounts.find((acc) => acc.code === configuredCode && acc.isActive !== false && acc.acceptsPostings !== false)
+      : undefined;
+    const existing = configured || findAccountByPreferredTypes(preferredTypes);
     if (existing) return existing;
 
     const suffix = Date.now().toString().slice(-6);
@@ -350,8 +367,11 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
     } catch (error) { toast.error('Error al crear gasto'); }
   };
 
-  const totalIncome = fIncomes.reduce((acc, i) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0);
-  const totalExpense = fExpenses.reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate || globalRate);
+  const totalIncome = fIncomes.reduce((acc, i) => acc + toDisplayAmount(Number(i.amount || i.baseAmount || 0), i.currency, i.exchangeRate), 0);
+  const totalExpense = fExpenses.reduce((acc, e) => acc + toDisplayAmount(Number(e.amount || e.baseAmount || 0), e.currency, e.exchangeRate), 0);
 
   const tabTriggerClass = "flex min-w-10 shrink-0 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all sm:min-w-0 sm:justify-start sm:px-4";
 
@@ -381,7 +401,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
             </h1>
             <div className="flex items-center gap-2 mt-2">
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                {totalIncome.toLocaleString()} ingresos · {totalExpense.toLocaleString()} gastos
+                {formatCurrentAmount(totalIncome, displayCurrency)} ingresos · {formatCurrentAmount(totalExpense, displayCurrency)} gastos{showValuationLegend ? ` · ${valuationModeLabel}` : ''}
               </Badge>
               {isRestricted && (
                 <Badge variant="outline" className="border-amber-500/30 text-amber-600 bg-amber-500/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
@@ -392,6 +412,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
           </div>
         </div>
       </div>
+
+      <CurrencyValuationBanner />
 
       {/* Filter bar */}
       <div className="grid min-w-0 grid-cols-2 gap-2 rounded-xl border border-border/40 bg-card/50 p-3 sm:flex sm:flex-wrap sm:items-center">

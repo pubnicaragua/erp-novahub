@@ -16,7 +16,7 @@ import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
-import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesIrSelector } from './SalesIrSelector';
@@ -46,7 +46,7 @@ const statusOptions = [
 ];
 
 export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: DevolucionesViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
@@ -86,7 +86,6 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
       total: 0,
       currency: displayCurrency,
       exchangeRate: globalRate,
-      accountId: '',
     });
   };
 
@@ -97,7 +96,6 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
     if (!localDoc.invoiceId) { toast.error('Selecciona la factura de origen'); return; }
     if (!localDoc.reason.trim()) { toast.error('Ingresa la razón de la devolución'); return; }
-    if (!localDoc.accountId) { toast.error('Selecciona la cuenta contable de la devolución'); return; }
     const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
     if (priceMessage) { toast.error(priceMessage); return; }
     const saveToastId = toast.loading(isCreating ? 'Creando devolución...' : 'Guardando cambios...');
@@ -121,7 +119,6 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           currency: localDoc.currency || displayCurrency,
           exchangeRate: localDoc.exchangeRate || globalRate,
           priceListId: localDoc.priceListId || undefined,
-          accountId: localDoc.accountId,
         } as any);
         toast.success('Devolución registrada', { id: saveToastId });
       } else {
@@ -181,7 +178,9 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   ];
 
   const totalReturnedInDisplayCurrency = data.reduce(
-    (acc, salesReturn) => acc + convertAmount(salesReturn.total || 0, (salesReturn as any).currency, (salesReturn as any).exchangeRate),
+    (acc, salesReturn) => acc + ((salesReturn as any).baseTotal !== null && (salesReturn as any).baseTotal !== undefined
+      ? Number((salesReturn as any).baseTotal)
+      : toBaseAmount(salesReturn.total || 0, (salesReturn as any).currency, (salesReturn as any).exchangeRate || globalRate)),
     0,
   );
 
@@ -218,6 +217,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
+              <SalesAccountingLegend flow="return" />
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
@@ -243,13 +243,6 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                 {!isCreating && <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span></div>}
               </div>
-              <AccountingAccountSelect
-                value={localDoc?.accountId || ''}
-                onChange={(accountId) => setLocalDoc({ ...localDoc, accountId })}
-                assetOnly
-                label="Cuenta contable de la devolución"
-                required
-              />
               <div><p className="text-[10px] text-muted-foreground mb-1">Razón de la Devolución</p>
                 <textarea value={localDoc?.reason || ''} onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })}
                   className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm resize-none" placeholder="Describe el motivo de la devolución..." /></div>
@@ -313,7 +306,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title="Total Devuelto" value={formatConvertedAmount(totalReturnedInDisplayCurrency, displayCurrency)} icon={FileOutput} color="text-rose-500" bg="bg-rose-500/10" />
+        <SalesKpiCard title="Total Devuelto" value={formatConvertedAmount(totalReturnedInDisplayCurrency, baseCurrency)} icon={FileOutput} color="text-rose-500" bg="bg-rose-500/10" />
         <SalesKpiCard title="Pendientes" value={data.filter(r => (r.status||'').toUpperCase() === 'PENDING').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'PENDING'} onClick={() => setStatusFilter(statusFilter === 'PENDING' ? 'ALL' : 'PENDING')} />
         <SalesKpiCard title="Aprobadas" value={data.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
         <SalesKpiCard title="Rechazadas" value={data.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length} icon={XCircle} color="text-muted-foreground" bg="bg-muted/10" active={statusFilter === 'REJECTED'} onClick={() => setStatusFilter(statusFilter === 'REJECTED' ? 'ALL' : 'REJECTED')} />

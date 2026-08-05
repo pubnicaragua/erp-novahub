@@ -24,6 +24,7 @@ import { generateExpensePDF } from '../../utils/pdfGenerator';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 type KpiFilter = { type: 'none' } | { type: 'pending' } | { type: 'category'; category: string };
@@ -41,7 +42,7 @@ const statusOpts = [
 
 export function GastosView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
   useEffect(() => { setExpenseCategories(expenseCategoryCatalog); }, [expenseCategoryCatalog]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -338,10 +339,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
       render: (val) => <span className="text-xs font-black text-muted-foreground">{val || '-'}</span> },
     { key: 'amount',      header: 'Monto',     width: '130px',
       render: (val, row) => (
-        <span className="font-black tabular-nums text-rose-500">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-
-        </span>
+        <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-rose-500" />
       ) },
     { key: 'status',      header: 'Estado',    width: '120px', editable: canPerform('PURCHASES_EXPENSES', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
@@ -558,18 +556,10 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                     </select>
                   </div>
                   <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Cuenta Contable (Gasto)</p>
-                    <select
-                      disabled={!canMutate}
-                      value={localDoc.accountId || ''}
-                      onChange={(e) => setLocalDoc({ ...localDoc, accountId: e.target.value })}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold"
-                    >
-                      <option value="">Seleccionar cuenta GL...</option>
-                      {accounts.map((a: any) => (
-                        <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
-                      ))}
-                    </select>
+                    <p className="text-[10px] text-muted-foreground mb-1">Cuenta contable</p>
+                    <div className="flex h-8 items-center rounded-md border border-primary/20 bg-primary/5 px-2 text-[10px] font-bold text-primary">
+                      Se aplica la cuenta global de Gastos configurada en Contabilidad
+                    </div>
                   </div>
                   {String(localDoc.category || '').toUpperCase() === 'OTRO' && (
                     <div className="col-span-2">
@@ -671,16 +661,19 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
     );
   }
 
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate || globalRate);
   const monthlyTotalInDisplayCurrency = data
     .filter(g => new Date(g.date).getMonth() === new Date().getMonth())
-    .reduce((acc, g) => acc + convertAmount(g.amount || 0, g.currency, g.exchangeRate), 0);
+    .reduce((acc, g) => acc + toDisplayAmount(Number(g.amount ?? g.baseAmount ?? 0), g.currency, g.exchangeRate), 0);
 
   const kpis = [
     { key: 'all', title: 'Gastos Operativos',  value: data.length,                                                                         icon: Wallet,       color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
     {
       key: 'month',
-      title: `Total del Mes (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${monthlyTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      title: `Total del Mes (${displayCurrency}${valuationModeSuffix})`,
+      value: formatCurrentAmount(monthlyTotalInDisplayCurrency, displayCurrency),
       icon: TrendingDown,
       color: 'text-rose-500',
       bg: 'bg-rose-500/10',

@@ -207,6 +207,9 @@ export interface RecentTransaction {
   register: { code: string; name: string } | null;
   customer: string;
   total: number;
+  sourceTotal?: number;
+  currency?: 'NIO' | 'USD';
+  exchangeRate?: number;
   taxAmount: number;
   status: string;
   hasIVA: boolean;
@@ -344,6 +347,6 @@ export const cajaService = {
     return res?.data !== undefined ? res.data : res;
   },
 
-  getDashboard: (period?: string, registerId?: string, startDate?: string, endDate?: string, signal?: AbortSignal) =>
-    api.get<DashboardData>('/caja/dashboard', { params: { period, registerId, startDate, endDate }, signal }),
+  getDashboard: (period?: string, registerId?: string, startDate?: string, endDate?: string, signal?: AbortSignal, valuationMode?: 'HISTORICAL' | 'CURRENT') =>
+    api.get<DashboardData>('/caja/dashboard', { params: { period, registerId, startDate, endDate, valuationMode }, signal }),
 };

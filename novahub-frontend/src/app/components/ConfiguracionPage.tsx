@@ -452,6 +452,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [exchangeRateAuto, setExchangeRateAuto] = useState(true);
   const [manualRate, setManualRate] = useState('36.50');
   const [currentBackendRate, setCurrentBackendRate] = useState<number | null>(null);
+  const [baseCurrencySetting, setBaseCurrencySetting] = useState<'NIO' | 'USD'>('NIO');
   const [displayCurrencySetting, setDisplayCurrencySetting] = useState<'NIO' | 'USD'>('NIO');
   const [allowCurrencySwitch, setAllowCurrencySwitch] = useState(true);
   const [isSavingCurrency, setIsSavingCurrency] = useState(false);
@@ -635,16 +636,19 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       const resp = await api.post<{
         rate: number;
         auto: boolean;
+        baseCurrency?: 'NIO' | 'USD';
         displayCurrency?: 'NIO' | 'USD';
         allowCurrencySwitch?: boolean;
       }>('/tools/exchange-rate', {
         auto: exchangeRateAuto,
         rate: exchangeRateAuto ? undefined : parseFloat(manualRate),
+        baseCurrency: baseCurrencySetting,
         displayCurrency: displayCurrencySetting,
         allowCurrencySwitch,
       });
       if (resp) {
-        setCurrentBackendRate(resp.rate);
+      setCurrentBackendRate(resp.rate);
+        setBaseCurrencySetting(resp.baseCurrency === 'USD' ? 'USD' : 'NIO');
         setDisplayCurrencySetting(resp.displayCurrency === 'USD' ? 'USD' : 'NIO');
         setAllowCurrencySwitch(resp.allowCurrencySwitch !== false);
         await refreshCurrencyContext();
@@ -723,6 +727,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     if (currency) {
       setExchangeRateAuto(currency.auto !== false);
       setCurrentBackendRate(currency.rate ?? null);
+      setBaseCurrencySetting(currency.baseCurrency === 'USD' ? 'USD' : 'NIO');
       if (currency.auto === false && currency.rate !== undefined) setManualRate(String(currency.rate));
       setDisplayCurrencySetting(currency.displayCurrency === 'USD' ? 'USD' : (currency.baseCurrency === 'USD' ? 'USD' : 'NIO'));
       setAllowCurrencySwitch(currency.allowCurrencySwitch !== false);
@@ -1736,10 +1741,21 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   <div className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/30">
                     <div>
                       <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Moneda Base Contable</p>
-                      <p className="text-sm font-bold">Córdoba Nicaragüense (NIO)</p>
+                      <p className="text-sm font-bold">{baseCurrencySetting === 'USD' ? 'Dólar estadounidense (USD)' : 'Córdoba Nicaragüense (NIO)'}</p>
                     </div>
-                    <Badge variant="outline" className="text-[9px] font-black uppercase">Fijo</Badge>
+                    <select
+                      value={baseCurrencySetting}
+                      onChange={(e) => setBaseCurrencySetting(e.target.value === 'USD' ? 'USD' : 'NIO')}
+                      className="h-9 rounded-lg border border-input bg-background px-2 text-xs font-black uppercase tracking-widest"
+                      aria-label="Moneda base contable de la empresa"
+                    >
+                      <option value="NIO">NIO</option>
+                      <option value="USD">USD</option>
+                    </select>
                   </div>
+                  <p className="text-[10px] font-semibold text-amber-600">
+                    La moneda base pertenece a esta empresa. Después de registrar movimientos contables no debe cambiarse sin una migración controlada.
+                  </p>
 
                   <div className="p-4 rounded-xl border border-border/30 bg-background/70 space-y-4">
                     <div className="flex items-center justify-between gap-4">

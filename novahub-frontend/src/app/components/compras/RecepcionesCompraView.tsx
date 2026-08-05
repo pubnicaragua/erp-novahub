@@ -22,6 +22,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; onConvertToInvoice?: (draft: any) => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -41,7 +42,7 @@ const incidenciaIcons: Record<string, any> = {
 
 export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], warehouseCatalog = [], orderCatalog = [], onConvertToInvoice, pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency } = useCurrency();
+  const { formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'RECEIVED' | 'WITH_INCIDENTS'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -354,7 +355,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                   <p className="text-[10px] text-muted-foreground mb-1">Orden de Compra</p>
                   <Combobox 
                     disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
-                    options={currentAvailableOrders.map(c => ({ label: `${c.number} (Total: ${c.total})`, value: c.id }))}
+                    options={currentAvailableOrders.map(c => ({ label: `${c.number} (Total: ${formatConvertedAmount(Number(c.total || 0), c.currency, c.exchangeRate)})`, value: c.id }))}
                     value={localDoc.purchaseOrderId || ''}
                     onChange={(val) => {
                        const ord = currentAvailableOrders.find(x => x.id === val);
@@ -547,19 +548,9 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
                     <p className="mr-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Cuenta Contable</p>
-                    <select
-                      disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
-                      value={item.accountId || ''}
-                      onChange={(e) => handleItemChange(idx, 'accountId', e.target.value)}
-                      className="h-8 w-full max-w-full rounded-md border border-input bg-background px-2 text-[10px] font-bold sm:w-auto sm:max-w-[250px]"
-                    >
-                      <option value="">Seleccionar...</option>
-                      {accounts
-                        .filter((a: any) => (a.isActive ?? true) !== false)
-                        .map((a: any) => (
-                          <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
-                        ))}
-                    </select>
+                    <span className="rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-[10px] font-bold text-primary">
+                      Inventario + Inventario en Tránsito · configuración global
+                    </span>
                     <div className="flex items-center gap-2 ml-2">
                       <TaxTypeSelect
                         type="WITHHOLDING"
@@ -574,9 +565,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                           }
                         }}
                       />
-                      <span className="text-xs font-black tabular-nums">
-                        {localDoc.currency === 'USD' ? '$' : 'C$'} {Number((item.unitPrice||0) * (item.quantityReceived||0)).toLocaleString()}
-                      </span>
+                      <CurrencyValuationAmount amount={Number((item.unitPrice || 0) * (item.quantityReceived || 0))} sourceCurrency={(localDoc as any).currency} sourceExchangeRate={(localDoc as any).exchangeRate} className="text-xs font-black" />
                     </div>
                   </div>
                 </div>

@@ -15,11 +15,11 @@ import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceToolti
 const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#3b82f6']
 
 export function FinancePayablesView() {
-  const { displayCurrency } = useCurrency()
+  const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency()
   const { user } = useAuth()
   const tenantKey = user?.clientTenantId || user?.tenantId || 'current'
   const sym = displayCurrency === 'USD' ? '$' : 'C$'
-  const fmt = (n: number) => sym + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const fmt = (n: number) => formatCurrentAmount(n, displayCurrency)
   const fmtShort = (n: number) => {
     if (Math.abs(n) >= 1_000_000) return sym + (n / 1_000_000).toFixed(1) + 'M'
     if (Math.abs(n) >= 1_000) return sym + (n / 1_000).toFixed(1) + 'K'
@@ -41,31 +41,38 @@ export function FinancePayablesView() {
   const loading = invoicesQuery.isLoading
 
   const pending = invoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' })
-  const totalPending = pending.reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0)
+  const balanceOf = (inv: any) => {
+    const amount = Number(inv.balance ?? inv.balanceDue ?? (Number(inv.total || 0) - Number(inv.amountPaid || 0)))
+    return valuationMode === 'CURRENT' ? convertCurrentAmount(amount, inv.currency) : convertAmount(amount, inv.currency, inv.exchangeRate)
+  }
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate)
+  const totalPending = pending.reduce((a: number, inv: any) => a + balanceOf(inv), 0)
   const overdue = pending.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; return due && due < new Date() })
-  const totalOverdue = overdue.reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0)
+  const totalOverdue = overdue.reduce((a: number, inv: any) => a + balanceOf(inv), 0)
   const notDue = totalPending - totalOverdue
 
   const agingData = ['0-30', '31-60', '61-90', '+90'].map(label => {
     const [min, max] = label === '+90' ? [91, Infinity] : label.split('-').map(Number)
-    const total = overdue.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= min && days <= max }).reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0)
+    const total = overdue.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= min && days <= max }).reduce((a: number, inv: any) => a + balanceOf(inv), 0)
     return { label, amount: total }
   })
 
-  const topCreditors = Object.entries(pending.reduce((acc: Record<string, number>, inv: any) => { const name = inv.supplier?.name || inv.supplierName || inv.supplier?.businessName || 'Proveedor'; acc[name] = (acc[name] || 0) + Number(inv.balanceDue || inv.total || 0); return acc }, {})).sort(([, a], [, b]) => b - a).slice(0, 5).map(([name, amount]) => ({ name, amount }))
+  const topCreditors = Object.entries(pending.reduce((acc: Record<string, number>, inv: any) => { const name = inv.supplier?.name || inv.supplierName || inv.supplier?.businessName || 'Proveedor'; acc[name] = (acc[name] || 0) + balanceOf(inv); return acc }, {})).sort(([, a], [, b]) => b - a).slice(0, 5).map(([name, amount]) => ({ name, amount }))
 
   return (
     <div className="min-w-0 space-y-6">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <AlertTriangle className="size-5 text-primary" />
-        <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Cuentas por Pagar</h3>
+        <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Cuentas por Pagar{valuationModeSuffix}</h3>
         <Badge variant="outline" className="text-xs">{pending.length} facturas pendientes</Badge>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardContent className="p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total por Pagar</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total por Pagar{valuationModeSuffix}</p>
             <p className="text-2xl font-black tabular-nums text-amber-500">{fmt(totalPending)}</p>
           </CardContent>
         </Card>
@@ -165,9 +172,9 @@ export function FinancePayablesView() {
                         <td className="py-2 font-medium text-foreground">{inv.supplier?.name || inv.supplierName || inv.supplier?.businessName || '—'}</td>
                         <td className="py-2 font-mono text-primary">{inv.number || inv.code || '—'}</td>
                         <td className="py-2 text-muted-foreground">{due ? due.toLocaleDateString('es-NI') : '—'}</td>
-                        <td className="py-2 text-right font-mono text-foreground">{fmt(Number(inv.total || 0))}</td>
-                        <td className="py-2 text-right font-mono text-amber-500">{fmt(Number(inv.withholdingTotal || 0))}</td>
-                        <td className="py-2 text-right font-black text-foreground">{fmt(Number(inv.balanceDue || inv.total || 0))}</td>
+                        <td className="py-2 text-right font-mono text-foreground">{fmt(toDisplayAmount(Number(inv.total || 0), inv.currency, inv.exchangeRate))}</td>
+                        <td className="py-2 text-right font-mono text-amber-500">{fmt(toDisplayAmount(Number(inv.withholdingTotal || 0), inv.currency, inv.exchangeRate))}</td>
+                        <td className="py-2 text-right font-black text-foreground">{fmt(balanceOf(inv))}</td>
                         <td className="py-2 text-center">
                           {daysOverdue > 0 ? <Badge variant="destructive" className="text-[9px]">{daysOverdue}d vencido</Badge> : <Badge variant="secondary" className="text-[9px]">Al día</Badge>}
                         </td>
@@ -192,9 +199,9 @@ export function FinancePayablesView() {
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/30 pt-3 text-[10px]">
                       <div><span className="block text-muted-foreground">Vencimiento</span><span>{due ? due.toLocaleDateString('es-NI') : '—'}</span></div>
-                      <div><span className="block text-muted-foreground">Total</span><span className="font-mono">{fmt(Number(inv.total || 0))}</span></div>
-                      <div><span className="block text-muted-foreground">Retenciones</span><span className="font-mono text-amber-500">{fmt(Number(inv.withholdingTotal || 0))}</span></div>
-                      <div><span className="block text-muted-foreground">Saldo</span><span className="font-black">{fmt(Number(inv.balanceDue || inv.total || 0))}</span></div>
+                      <div><span className="block text-muted-foreground">Total</span><span className="font-mono">{fmt(toDisplayAmount(Number(inv.total || 0), inv.currency, inv.exchangeRate))}</span></div>
+                      <div><span className="block text-muted-foreground">Retenciones</span><span className="font-mono text-amber-500">{fmt(toDisplayAmount(Number(inv.withholdingTotal || 0), inv.currency, inv.exchangeRate))}</span></div>
+                      <div><span className="block text-muted-foreground">Saldo</span><span className="font-black">{fmt(balanceOf(inv))}</span></div>
                     </div>
                   </div>
                 )

@@ -13,6 +13,7 @@ import { suppliersService } from '../services/compras.service';
 import type { Supplier, EntityStatus } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
+import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 
 export function ProveedoresPage() {
   const { canPerform } = useAuth();
@@ -85,6 +86,7 @@ export function ProveedoresPage() {
 
   return (
     <div className="space-y-6 p-4 md:p-6">
+      <CurrencyValuationBanner />
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-card p-4 rounded-xl border shadow-sm">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-blue-500/10 rounded-lg">

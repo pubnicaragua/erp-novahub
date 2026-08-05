@@ -11,6 +11,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { type Module, useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { CurrencyValuationAmount, CurrencyValuationBanner } from './ui/CurrencyValuation';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from './ui/table';
@@ -72,7 +73,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const [skipSetup, setSkipSetup] = useState(() => localStorage.getItem('erp-skip-setup') === 'true');
   const [dataLoadError, setDataLoadError] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const { formatConvertedAmount } = useCurrency();
+  const { formatConvertedAmount, valuationMode, valuationModeSuffix } = useCurrency();
   const { user } = useAuth();
 
   const fmt = (amount: number) => formatConvertedAmount(amount);
@@ -142,7 +143,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     let current: any | null = null;
     try {
       current = normalizeDashboardResponse(await withTimeout(
-        cajaService.getDashboard(effectivePeriod, undefined, params.startDate, params.endDate, dashboardController.signal),
+        cajaService.getDashboard(effectivePeriod, undefined, params.startDate, params.endDate, dashboardController.signal, valuationMode),
         12000,
         () => dashboardController.abort(),
       ));
@@ -167,7 +168,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     // del período actual para no duplicar la carga pesada del endpoint inicial.
     try {
       const previous = normalizeDashboardResponse(await withTimeout(
-        cajaService.getDashboard('last-month' as any, undefined, undefined, undefined, dashboardController.signal),
+        cajaService.getDashboard('last-month' as any, undefined, undefined, undefined, dashboardController.signal, valuationMode),
         12000,
         () => dashboardController.abort(),
       ));
@@ -175,7 +176,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     } catch {
       // Los KPIs actuales no dependen de esta consulta secundaria.
     }
-  }, [period, dateFrom, dateTo, user?.enabledModules]);
+  }, [period, dateFrom, dateTo, user?.enabledModules, valuationMode]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -369,7 +370,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
 
   const kpiData = kpis ? [
     {
-      label: 'Ingresos Totales',
+      label: `Ingresos Totales${valuationModeSuffix}`,
       value: fmt(kpis.totalRevenue || 0),
       extra: null,
       icon: DollarSign,
@@ -378,7 +379,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       iconBg: 'bg-emerald-500/10',
     },
     {
-      label: 'Gastos Totales',
+      label: `Gastos Totales${valuationModeSuffix}`,
       value: fmt(kpis.totalExpenses || 0),
       extra: prevKpis && pctChange(kpis.totalExpenses, prevKpis.expenses) !== null
         ? { text: `${pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 ? '↑' : '↓'} ${Math.abs(pctChange(kpis.totalExpenses, prevKpis.expenses)!).toFixed(1)}% vs anterior`, up: pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 }
@@ -440,6 +441,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
 
   return (
     <div className="space-y-6 p-4 md:p-6 pb-16">
+      <CurrencyValuationBanner />
       {/* Hero */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-2 relative">
         <div className="absolute -left-10 -top-10 size-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
@@ -711,7 +713,14 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                           <TableCell className="font-black pl-5 text-xs group-hover:text-primary transition-colors">{tx.number || `FAC-${String(i + 1).padStart(3, '0')}`}</TableCell>
                           <TableCell className="text-xs font-bold flex items-center gap-1.5 py-2.5"><Store className="size-3 text-muted-foreground/40" />{tx.register?.name || '—'}</TableCell>
                           <TableCell className="text-xs font-bold text-foreground/70">{tx.customer || 'Cliente General'}</TableCell>
-                          <TableCell className="font-black text-right text-xs tabular-nums">{fmt(tx.total || 0)}</TableCell>
+                          <TableCell className="text-right text-xs tabular-nums">
+                            <CurrencyValuationAmount
+                              amount={Number(tx.sourceTotal ?? tx.total ?? 0)}
+                              sourceCurrency={tx.currency}
+                              sourceExchangeRate={tx.exchangeRate}
+                              className="font-black"
+                            />
+                          </TableCell>
                           <TableCell className="text-center pr-5">
                             {tx.hasIVA ? (
                               <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-black px-2 py-0.5">15%</Badge>

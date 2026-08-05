@@ -79,10 +79,12 @@ const DARK_TOOLTIP = {
 } as const;
 
 export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, formatConvertedAmount, convertAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { user } = useAuth();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
+    formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
   const [raw, setRaw] = useState<FinancialData | null>(null);
   const [profitLoss, setProfitLoss] = useState<any>(null);
@@ -97,7 +99,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   const [registers, setRegisters] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [journalsPending, setJournalsPending] = useState(0);
-  const { data: financeData, isLoading: loading } = useTenantQuery(['reports', 'finance', dateRange], async (signal) => {
+  const { data: financeData, isLoading: loading } = useTenantQuery(['reports', 'finance', dateRange, baseCurrency, valuationMode], async (signal) => {
     const { start, prevStart, prevEnd } = getRangeDates(dateRange);
     const now = new Date();
     const filters = { page: 1, pageSize: 5000, report: true } as const;
@@ -118,11 +120,38 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
     const flatten = (nodes: any[]) => { for (const n of nodes) { flatAccounts.push(n); if (n.children) flatten(n.children); } };
     flatten(asList(accR));
     const journals = asList(jR);
+    const sourceRate = (record: any) => {
+      const sourceCurrency = String(record.currency || baseCurrency).toUpperCase();
+      if (sourceCurrency === 'USD') return valuationMode === 'CURRENT' ? exchangeRate : Number(record.exchangeRate || exchangeRate);
+      return 1;
+    };
+    const asBaseAmountRecord = (record: any) => {
+      const currency = String(record.currency || baseCurrency).toUpperCase();
+      const amount = Number(record.amount ?? record.baseAmount ?? 0);
+      return { ...record, amount, baseAmount: record.baseAmount, currency, exchangeRate: sourceRate(record) };
+    };
+    const asBaseTotalRecord = (record: any) => {
+      const currency = String(record.currency || baseCurrency).toUpperCase();
+      const total = Number(record.total ?? record.baseTotal ?? 0);
+      const amountPaid = Number(record.amountPaid ?? 0);
+      const balance = Number(record.balance ?? record.balanceDue ?? Math.max(0, total - amountPaid));
+      return {
+        ...record,
+        total,
+        amountPaid,
+        balance,
+        currency,
+        exchangeRate: sourceRate(record),
+      };
+    };
     return {
       raw: {
-        salesInvoices: asList(invR), salesPayments: asList(payR), salesReturns: [], salesCreditNotes: [],
-        purchaseBills: asList(bilR), purchasePayments: asList(ppayR), purchaseCredits: [],
-        incomes: asList(incR), expenses: asList(expR), recurringIncomes: asList(rincR), recurringExpenses: asList(rexpR), orders: [],
+        salesInvoices: asList(invR).map(asBaseTotalRecord),
+        salesPayments: asList(payR).map(asBaseAmountRecord), salesReturns: [], salesCreditNotes: [],
+        purchaseBills: asList(bilR).map(asBaseTotalRecord),
+        purchasePayments: asList(ppayR).map(asBaseAmountRecord), purchaseCredits: [],
+        incomes: asList(incR).map(asBaseAmountRecord), expenses: asList(expR).map(asBaseAmountRecord),
+        recurringIncomes: asList(rincR).map(asBaseAmountRecord), recurringExpenses: asList(rexpR).map(asBaseAmountRecord), orders: [],
       } as FinancialData,
       profitLoss: plR, profitLossPrev: plPrevR, balanceSheet: bsR, balanceSheetStart: bsStartR,
       trialRows: Array.isArray(tbR) ? tbR : (tbR?.rows || []), budgetItems: asList(bdR), budgetAccounts: flatAccounts,
@@ -145,7 +174,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   const fmtShort = (v: number) => {
     const num = Number(v);
     if (!Number.isFinite(num)) return `${currencySymbol}0`;
-    const converted = convertAmount(num, 'NIO');
+    const converted = toBaseAmount(num, baseCurrency);
     if (!Number.isFinite(converted)) return `${currencySymbol}0`;
     const abs = Math.abs(converted);
     if (abs >= 1_000_000) return `${currencySymbol}${(converted / 1_000_000).toLocaleString('es-NI', { maximumFractionDigits: 1 })} millones`;
@@ -186,7 +215,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   const serie = useMemo(() => {
     if (!raw) return { mode: 'month' as const, points: [] as ReturnType<typeof buildFinSerie>['points'] };
     return buildFinSerie(raw, currentStart, endNow, durationDays, exchangeRate);
-  }, [raw, currentStart, endNow, durationDays, exchangeRate]);
+  }, [raw, currentStart, endNow, durationDays, exchangeRate, valuationMode]);
 
   const flow = useMemo(() => {
     if (!raw) return { ingresos: 0, pagos: 0, ingresosMov: 0, pagosMov: 0, flujoNeto: 0 };
@@ -685,7 +714,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(flow.ingresos, 'NIO')}</p>
+            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(flow.ingresos, 'NIO')}</p>{valuationModeSuffix && <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{valuationModeLabel}</span>}
             <p className="text-[10px] text-muted-foreground mt-0.5">{flow.ingresosMov} movimientos · {ingTrend.text}</p>
             <p className="text-[9px] text-muted-foreground/60 mt-1 flex items-center gap-1" title="Cobros de clientes, otros ingresos cobrados e ingresos recurrentes ejecutados. Excluye facturas pendientes, transferencias internas y anulados.">
               <Info className="size-3 shrink-0" /> Dinero realmente cobrado

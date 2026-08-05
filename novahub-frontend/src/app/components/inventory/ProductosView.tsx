@@ -26,6 +26,7 @@ import { EditProductModal } from './EditProductModal';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import type { SalesPaginationControls } from '../../types';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -1866,7 +1867,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                   <div className="mt-3 grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-3 xl:grid-cols-4">
                     {isServiceView && <div>
                       <span className="text-muted-foreground">{isServiceView ? 'Precio' : 'Precio venta'}</span>
-                      <p className="font-bold tabular-nums">{formatAmount(product.salePrice || 0, baseCurrency)}</p>
+                      <CurrencyValuationAmount amount={Number(product.salePrice || 0)} sourceCurrency={product.priceCurrency || baseCurrency} sourceExchangeRate={product.priceExchangeRate} className="font-bold" />
                     </div>}
                     {!isServiceView && <div>
                       <span className="text-muted-foreground">Existencias</span>
@@ -1876,7 +1877,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                       <div className="min-w-0"><span className="text-muted-foreground">U. medida</span><p className="truncate font-medium">{product.unit || 'unidad'}</p></div>
                       <div><span className="text-muted-foreground">Mínimo</span><p className="font-bold tabular-nums">{product.minStock || 0}</p></div>
                       <div><span className="text-muted-foreground">Máximo</span><p className="font-bold tabular-nums">{maxStock}</p></div>
-                      <div><span className="text-muted-foreground">Precio costo</span><p className="font-medium tabular-nums">{formatAmount(costPrice, baseCurrency)}</p></div>
+                      <div><span className="text-muted-foreground">Precio costo</span><CurrencyValuationAmount amount={costPrice} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></div>
                     </>}
                   </div>
                   {!isServiceView && <div className="mt-3 flex items-center gap-2 text-[10px] text-muted-foreground">
@@ -2071,8 +2072,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     {!isServiceView && <TableCell className={`text-right font-medium tabular-nums ${getStockAlertColor(product)}`}>
                       {product.stock || 0}
                     </TableCell>}
-                    {isServiceView && <TableCell className="text-right font-medium tabular-nums">{formatAmount(product.salePrice || 0, baseCurrency)}</TableCell>}
-                     {!isServiceView && <TableCell className="text-right text-muted-foreground tabular-nums">{formatAmount(product.costPrice || 0, baseCurrency)}</TableCell>}
+                    {isServiceView && <TableCell className="text-right"><CurrencyValuationAmount amount={Number(product.salePrice || 0)} sourceCurrency={product.priceCurrency || baseCurrency} sourceExchangeRate={product.priceExchangeRate} className="font-medium" /></TableCell>}
+                     {!isServiceView && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}
                      <TableCell className="text-right">
                        <div className="flex items-center justify-end gap-1 transition-opacity">
                          {canPerform('INVENTORY_PRODUCTS', 'edit') && (

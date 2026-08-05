@@ -10,19 +10,15 @@ import { Input } from '../ui/input';
 import { toast } from 'sonner';
 import { cajaService, type DashboardData } from '../../services/caja.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatSalesAmount } from '../../utils/salesPriceList';
 
 export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onNavigateToFacturacion?: () => void, registerId?: string }) {
-  const { displayCurrency, exchangeRate: globalRate } = useCurrency();
+  const { baseCurrency, formatConvertedAmount } = useCurrency();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const formatCurrency = useCallback((value: number) => {
-    const isUSD = displayCurrency === 'USD';
-    const symbol = isUSD ? '$' : 'C$';
-    const converted = isUSD ? value / globalRate : value;
-    return `${symbol} ${formatSalesAmount(converted)}`;
-  }, [displayCurrency, globalRate]);
+    return formatConvertedAmount(value, baseCurrency);
+  }, [formatConvertedAmount, baseCurrency]);
   const getTodayDateString = () => {
     const today = new Date();
     // Ajustar a la zona horaria local de forma sencilla
@@ -106,7 +102,7 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
                 <span className="mb-1 inline-flex w-fit items-center rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Indicador</span>
                 <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Ingresos Totales</p>
                 <p className="text-2xl font-black mt-1">{formatCurrency(kpis.totalRevenue)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">≈ {displayCurrency === 'USD' ? 'C$' : '$'} {(displayCurrency === 'USD' ? kpis.totalRevenue : kpis.totalRevenue / globalRate).toLocaleString('en-US', { maximumFractionDigits: 0 })} {displayCurrency === 'USD' ? 'NIO' : 'USD'}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Consolidado en moneda funcional ({baseCurrency})</p>
               </div>
               <div className="p-2 bg-cyan-500/10 rounded-xl ring-1 ring-cyan-500/15">
                 <TrendingUp className="size-5 text-cyan-600" />

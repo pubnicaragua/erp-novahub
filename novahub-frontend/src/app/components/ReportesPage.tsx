@@ -16,6 +16,7 @@ import { InventoryReportTab } from './reportes/InventoryReportTab';
 import { HRReportTab } from './reportes/HRReportTab';
 import { SubscriptionsReportTab } from './reportes/SubscriptionsReportTab';
 import type { ReportExportRef } from './reportes/types';
+import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 
 interface ReportesPageProps {
   activeSubModule?: string;
@@ -119,6 +120,8 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
           </Button>
         </div>
       </div>
+
+      <CurrencyValuationBanner />
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>

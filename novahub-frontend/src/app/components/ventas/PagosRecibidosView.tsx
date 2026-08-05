@@ -43,7 +43,7 @@ const methodOptions = [
 ];
 
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: PagosRecibidosViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [invoiceFilter, setInvoiceFilter] = useState<'ALL' | 'WITH_INVOICE'>('ALL');
@@ -163,7 +163,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const mainMethod = mainMethodMap[rawMainMethod] || rawMainMethod;
 
   const totalCollectedInDisplayCurrency = data.reduce(
-    (acc, payment) => acc + convertAmount(payment.amount || 0, payment.currency, payment.exchangeRate),
+    (acc, payment) => acc + (payment.baseAmount !== null && payment.baseAmount !== undefined
+      ? Number(payment.baseAmount)
+      : toBaseAmount(payment.amount || 0, payment.currency, payment.exchangeRate || globalRate)),
     0,
   );
 
@@ -262,7 +264,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title={`Total Recaudado (${displayCurrency})`} value={formatConvertedAmount(totalCollectedInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
+        <SalesKpiCard title={`Total Recaudado (${displayCurrency})`} value={formatConvertedAmount(totalCollectedInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
         <SalesKpiCard title="Pagos" value={data.length} icon={CheckCircle2} color="text-blue-500" bg="bg-blue-500/10" />
         <SalesKpiCard title="Con Factura" value={data.filter(p => p.invoice?.number).length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
         <SalesKpiCard title="Método Principal" value={mainMethod} icon={Wallet} color="text-purple-500" bg="bg-purple-500/10" />

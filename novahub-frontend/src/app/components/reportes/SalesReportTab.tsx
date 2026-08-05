@@ -184,9 +184,11 @@ const DARK_TOOLTIP = {
 } as const;
 
 export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, formatConvertedAmount, convertAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
+    formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'sales'], async (signal) => {
     const filters = { page: 1, pageSize: 5000, report: true } as const;
@@ -209,7 +211,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
   const fmtShort = (v: number) => {
     const num = Number(v);
     if (!Number.isFinite(num)) return `${currencySymbol}0`;
-    const converted = convertAmount(num, 'NIO');
+    const converted = toBaseAmount(num, baseCurrency);
     if (!Number.isFinite(converted)) return `${currencySymbol}0`;
     const abs = Math.abs(converted);
     if (abs >= 1_000_000) return `${currencySymbol}${(converted / 1_000_000).toLocaleString('es-NI', { maximumFractionDigits: 1 })} millones`;
@@ -273,9 +275,10 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     return !!d && d.getTime() >= cPrevStart.getTime() && d.getTime() <= cPrevEnd.getTime();
   }) : [], [payments, cPrevStart, cPrevEnd]);
 
-  const toNio = (inv: any) => inv.currency === 'USD' ? Number(inv.total || 0) * (inv.exchangeRate || exchangeRate) : Number(inv.total || 0);
+  const sourceRate = (rate?: number) => valuationMode === 'CURRENT' ? exchangeRate : (rate || exchangeRate);
+  const toNio = (inv: any) => toNioAmt(Number(inv.total ?? inv.baseTotal ?? 0), inv.currency, inv.exchangeRate);
   const toNioAmt = (amt: number | null | undefined, currency: string | undefined, rate: number | undefined) =>
-    currency === 'USD' ? Number(amt || 0) * (rate || exchangeRate) : Number(amt || 0);
+    toBaseAmount(Number(amt || 0), currency, sourceRate(rate));
 
   const { ventasBrutas, descuentos, devoluciones, notasCredito, ajustes, ventasNetas, facturasValidas } = useMemo(() => {
     let brutas = 0;
@@ -289,17 +292,17 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     const totalFacturado = fInv.reduce((a, i) => a + toNio(i), 0);
     const netas = Math.max(0, totalFacturado - dev - nc);
     return { ventasBrutas: brutas, descuentos: desc, devoluciones: dev, notasCredito: nc, ajustes: desc + dev + nc, ventasNetas: netas, facturasValidas: fInv.length };
-  }, [fInv, fRet, fCN, exchangeRate]);
+  }, [fInv, fRet, fCN, exchangeRate, baseCurrency]);
 
   const { pVentasNetas } = useMemo(() => {
     const pDev = pRet.reduce((a, r) => a + toNioAmt(r.total, r.currency, r.exchangeRate), 0);
     const pNC = pCN.reduce((a, c) => a + toNioAmt(c.total, c.currency, c.exchangeRate), 0);
     const pNetas = Math.max(0, pInv.reduce((a, i) => a + toNio(i), 0) - pDev - pNC);
     return { pVentasNetas: pNetas };
-  }, [pInv, pRet, pCN, exchangeRate]);
+  }, [pInv, pRet, pCN, exchangeRate, baseCurrency]);
 
-  const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + toNioAmt(p.amount, p.currency, p.exchangeRate), 0), [fPay, exchangeRate]);
-  const prevTotalPaid = useMemo(() => pPay.reduce((acc, p) => acc + toNioAmt(p.amount, p.currency, p.exchangeRate), 0), [pPay, exchangeRate]);
+  const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + toNioAmt(Number(p.amount ?? p.baseAmount ?? 0), p.currency, p.exchangeRate), 0), [fPay, exchangeRate, baseCurrency, valuationMode]);
+  const prevTotalPaid = useMemo(() => pPay.reduce((acc, p) => acc + toNioAmt(Number(p.amount ?? p.baseAmount ?? 0), p.currency, p.exchangeRate), 0), [pPay, exchangeRate, baseCurrency, valuationMode]);
 
   const invoiceDateById = useMemo(() => {
     const map = new Map<string, Date>();
@@ -507,7 +510,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
       (inv.items || []).forEach((item: any) => {
         const cat = item.product?.category?.name || item.category || 'Sin categoría';
         const val = inv.currency === 'USD'
-          ? Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0) * (inv.exchangeRate || exchangeRate)
+          ? Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0) * sourceRate(inv.exchangeRate)
           : Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0);
         if (!catMap[cat]) catMap[cat] = { value: 0, unidades: 0, productos: new Set() };
         catMap[cat].value += val;
@@ -587,8 +590,8 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const q = Number(item.quantity || 0);
         const unitPrice = Number(item.unitPrice || 0);
         const unitCost = Number(item.costPrice || item.product?.costPrice || 0);
-        const rev = inv.currency === 'USD' ? unitPrice * q * (inv.exchangeRate || exchangeRate) : unitPrice * q;
-        const cost = inv.currency === 'USD' ? unitCost * q * (inv.exchangeRate || exchangeRate) : unitCost * q;
+        const rev = inv.currency === 'USD' ? unitPrice * q * sourceRate(inv.exchangeRate) : unitPrice * q;
+        const cost = inv.currency === 'USD' ? unitCost * q * sourceRate(inv.exchangeRate) : unitCost * q;
         const row = map.get(name) || { name, qty: 0, revenue: 0, profit: 0, margin: null, priceAvg: 0, trendPct: null };
         row.qty += q;
         row.revenue += rev;
@@ -601,7 +604,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
       (inv.items || []).forEach((item: any) => {
         const name = item.product?.name || item.description || 'Producto';
         const q = Number(item.quantity || 0);
-        const rev = inv.currency === 'USD' ? Number(item.unitPrice || 0) * q * (inv.exchangeRate || exchangeRate) : Number(item.unitPrice || 0) * q;
+        const rev = inv.currency === 'USD' ? Number(item.unitPrice || 0) * q * sourceRate(inv.exchangeRate) : Number(item.unitPrice || 0) * q;
         prevMap.set(name, (prevMap.get(name) || 0) + rev);
       });
     });
@@ -629,7 +632,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const row = map.get(name) || { name, qty: 0, revenue: 0 };
         row.qty += Number(item.quantity || 0);
         row.revenue += inv.currency === 'USD'
-          ? Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0) * (inv.exchangeRate || exchangeRate)
+          ? Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0) * sourceRate(inv.exchangeRate)
           : Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0);
         map.set(name, row);
       });
@@ -647,7 +650,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const row = map.get(name) || { name, qty: 0, revenue: 0 };
         row.qty += Number(item.quantity || 0);
         row.revenue += inv.currency === 'USD'
-          ? Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0) * (inv.exchangeRate || exchangeRate)
+          ? Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0) * sourceRate(inv.exchangeRate)
           : Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0);
         map.set(name, row);
       });
@@ -934,7 +937,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           </CardHeader>
           <CardContent>
             <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(ventasNetas, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{facturasValidas} facturas válidas · {netTrend.text}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{facturasValidas} facturas válidas · {netTrend.text}{valuationModeSuffix ? ` · Vista ${valuationModeLabel.toLowerCase()}` : ''}</p>
             <p className="text-[9px] text-muted-foreground/60 mt-1 flex items-center gap-1" title={`Ventas brutas: ${formatConvertedAmount(ventasBrutas, 'NIO')} · Descuentos: -${formatConvertedAmount(descuentos, 'NIO')} · Devoluciones: -${formatConvertedAmount(devoluciones, 'NIO')} · Notas de crédito: -${formatConvertedAmount(notasCredito, 'NIO')} · Ventas netas: ${formatConvertedAmount(ventasNetas, 'NIO')} · Comparado: ${prevLabel}`}>
               <Info className="size-3 shrink-0" /> Conciliación: brutas − ajustes
             </p>
@@ -1679,7 +1682,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
                 const name = item.product?.name || item.description || 'Producto';
                 const row = prodMap.get(name) || { name, qty: 0, revenue: 0 };
                 row.qty += Number(item.quantity || 0);
-                row.revenue += inv.currency === 'USD' ? Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0) * (inv.exchangeRate || exchangeRate) : Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0);
+                row.revenue += inv.currency === 'USD' ? Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0) * sourceRate(inv.exchangeRate) : Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0);
                 prodMap.set(name, row);
               });
             });

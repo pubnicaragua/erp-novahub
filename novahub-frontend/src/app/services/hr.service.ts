@@ -24,6 +24,8 @@ export const hrService = {
   getEmployeeHistory: (id: string, signal?: AbortSignal) => api.get(`/hr/employees/${id}/history`, withSignal(undefined, signal)),
   createEmployee: (data: any) => api.post('/hr/employees', data),
   updateEmployee: (id: string, data: any) => api.patch(`/hr/employees/${id}`, data),
+  updateEmployeeDepartments: (id: string, departmentIds: string[], primaryDepartmentId?: string | null) =>
+    api.put(`/hr/employees/${id}/departments`, { departmentIds, primaryDepartmentId }),
   deleteEmployee: (id: string) => api.delete(`/hr/employees/${id}`),
   bulkImportEmployees: (employees: any[]) => api.post('/hr/employees/bulk-import', { employees }),
   exportEmployees: (signal?: AbortSignal) => api.get('/hr/employees/export', withSignal(undefined, signal)),

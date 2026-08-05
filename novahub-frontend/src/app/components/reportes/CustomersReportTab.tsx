@@ -64,9 +64,11 @@ function getRangeDates(range: string) {
 }
 
 export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, formatConvertedAmount, convertAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
+    formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
   
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'customers'], async (signal) => {
     const filters = { page: 1, pageSize: 5000, report: true } as const;
@@ -84,7 +86,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const fmtShort = (v: number) => {
     const num = Number(v);
     if (!Number.isFinite(num)) return 'C$0';
-    const converted = convertAmount(v, 'NIO');
+    const converted = toBaseAmount(v, baseCurrency);
     if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted/1000000).toFixed(1)}M`;
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -112,9 +114,12 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     return d && d >= currentStart;
   }), [customers, currentStart]);
 
-  const totalSold = useMemo(() => fInv.reduce((acc, i) => acc + (i.currency === 'USD' ? Number(i.total || 0) * (i.exchangeRate || exchangeRate) : Number(i.total || 0)), 0), [fInv, exchangeRate]);
-  const prevTotalSold = useMemo(() => pInv.reduce((acc, i) => acc + (i.currency === 'USD' ? Number(i.total || 0) * (i.exchangeRate || exchangeRate) : Number(i.total || 0)), 0), [pInv, exchangeRate]);
-  const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + (p.currency === 'USD' ? Number(p.amount || 0) * (p.exchangeRate || exchangeRate) : Number(p.amount || 0)), 0), [fPay, exchangeRate]);
+  const sourceRate = (rate?: number) => valuationMode === 'CURRENT' ? exchangeRate : (rate || exchangeRate);
+  const documentTotal = (i: any) => toBaseAmount(Number(i.total ?? i.baseTotal ?? 0), i.currency, sourceRate(i.exchangeRate));
+  const paymentAmount = (p: any) => toBaseAmount(Number(p.amount ?? p.baseAmount ?? 0), p.currency, sourceRate(p.exchangeRate));
+  const totalSold = useMemo(() => fInv.reduce((acc, i) => acc + documentTotal(i), 0), [fInv, exchangeRate, baseCurrency, valuationMode]);
+  const prevTotalSold = useMemo(() => pInv.reduce((acc, i) => acc + documentTotal(i), 0), [pInv, exchangeRate, baseCurrency, valuationMode]);
+  const totalPaid = useMemo(() => fPay.reduce((acc, p) => acc + paymentAmount(p), 0), [fPay, exchangeRate, baseCurrency, valuationMode]);
   
   const payRatio = totalSold > 0 ? (totalPaid / totalSold) * 100 : 0;
   
@@ -122,7 +127,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const avgLTV = useMemo(() => {
     if (customers.length === 0) return 0;
     const validInvoices = invoices.filter(i => i.status !== 'CANCELLED' && i.status !== 'DRAFT');
-    const totalValid = validInvoices.reduce((acc, i) => acc + (i.currency === 'USD' ? Number(i.total || 0) * (i.exchangeRate || exchangeRate) : Number(i.total || 0)), 0);
+    const totalValid = validInvoices.reduce((acc, i) => acc + documentTotal(i), 0);
     return totalValid / customers.length;
   }, [invoices, customers, exchangeRate]);
 
@@ -136,7 +141,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     const map: Record<string, number> = {};
     fInv.forEach(inv => {
       const name = inv.customer?.name || inv.customerName || 'Consumidor Final';
-      const val = inv.currency === 'USD' ? Number(inv.total || 0) * (inv.exchangeRate || exchangeRate) : Number(inv.total || 0);
+      const val = documentTotal(inv);
       map[name] = (map[name] || 0) + val;
     });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 5);
@@ -148,7 +153,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       if (Array.isArray(inv.items)) {
         inv.items.forEach((item: any) => {
           const name = item.product?.name || item.description || 'Producto';
-          const val = inv.currency === 'USD' ? Number(item.total || 0) * (inv.exchangeRate || exchangeRate) : Number(item.total || 0);
+          const val = toBaseAmount(Number(item.total || 0), inv.currency, sourceRate(inv.exchangeRate));
           if (!map[name]) map[name] = { qty: 0, total: 0 };
           map[name].qty += Number(item.quantity || 1);
           map[name].total += val;
@@ -161,10 +166,11 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const topByBalance = useMemo(() => {
     return Object.entries(invoices.filter(i => i.status !== 'PAID' && i.status !== 'CANCELLED').reduce((acc: Record<string, number>, inv: any) => {
       const n = inv.customer?.name || inv.customerName || 'Cliente';
-      acc[n] = (acc[n] || 0) + Number(inv.balanceDue || inv.total || 0);
+      const balance = inv.balance ?? inv.balanceDue ?? (Number(inv.total || 0) - Number(inv.amountPaid || 0));
+      acc[n] = (acc[n] || 0) + toBaseAmount(Number(balance || 0), inv.currency, sourceRate(inv.exchangeRate));
       return acc;
     }, {})).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 5);
-  }, [invoices]);
+  }, [invoices, exchangeRate, baseCurrency]);
 
   // ── Charts ──
   const monthlyData = useMemo(() => {
@@ -176,7 +182,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       const mSales = fInv.filter(inv => {
         const d = new Date(inv.date || inv.createdAt);
         return d.getMonth() === monthIdx;
-      }).reduce((acc: number, i: any) => acc + (i.currency === 'USD' ? Number(i.total || 0) * (i.exchangeRate || exchangeRate) : Number(i.total || 0)), 0);
+      }).reduce((acc: number, i: any) => acc + documentTotal(i), 0);
       
       data.push({
         mes: MONTH_NAMES[monthIdx],
@@ -429,7 +435,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-black text-blue-500">{formatConvertedAmount(totalSold, 'NIO')}</p>
+            <p className="text-xl font-black text-blue-500">{formatConvertedAmount(totalSold, 'NIO')}</p>{valuationModeSuffix && <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{valuationModeLabel}</span>}
             <p className="text-[10px] text-muted-foreground mt-0.5">{customers.length} clientes totales</p>
           </CardContent>
         </Card>

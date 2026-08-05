@@ -17,6 +17,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 interface Props { data: RecurringExpense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -37,7 +38,7 @@ interface PropsWithCatalog extends Props { accountCatalog?: Account[]; }
 
 export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], pagination, onSearchChange }: PropsWithCatalog) {
   const { canPerform } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -87,9 +88,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
 
     { key: 'amount',      header: 'Monto',       width: '130px',
       render: (val, row) => (
-        <span className="font-black tabular-nums text-rose-500">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-        </span>
+        <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-rose-500" />
       ) },
     { key: 'frequency',   header: 'Frecuencia',  width: '120px', editable: canPerform('PURCHASES_EXPENSES_REC', 'edit'), type: 'select', options: freqOpts,
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{freqMap[(val||'').toLowerCase()]||val}</Badge> },
@@ -124,7 +123,6 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
   const handleSaveDoc = async () => {
     if (!localDoc?.description) return toast.error('La descripción es obligatoria');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
-    if (!localDoc?.accountId) return toast.error('Debe seleccionar una cuenta contable');
     
     // Clean data
     const cleanedDoc = {
@@ -210,14 +208,10 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <p className="text-[10px] text-muted-foreground mb-1 font-black uppercase text-primary">Cuenta Contable (Egreso)</p>
-                  <Combobox 
-                    disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
-                    options={accounts.filter(a => a.type?.toLowerCase() === 'expense' || a.type?.toLowerCase() === 'asset').map(a => ({ label: `${a.code} - ${a.name}`, value: a.id, description: a.type }))}
-                    value={localDoc.accountId || ''}
-                    onChange={(val) => setLocalDoc({ ...localDoc, accountId: val })}
-                    placeholder="Seleccionar Cuenta de Gasto..."
-                  />
+                  <p className="text-[10px] text-muted-foreground mb-1 font-black uppercase text-primary">Cuenta contable</p>
+                  <div className="flex h-8 items-center rounded-md border border-primary/20 bg-primary/5 px-2 text-[10px] font-bold text-primary">
+                    Se aplica la cuenta global de Gastos configurada en Contabilidad
+                  </div>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha de Inicio</p>
@@ -320,15 +314,18 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
     );
   }
 
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate || globalRate);
   const monthly = data
     .filter(e => (e.frequency || '').toUpperCase() === 'MONTHLY')
-    .reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
+    .reduce((acc, e) => acc + toDisplayAmount(Number(e.amount ?? e.baseAmount ?? 0), e.currency, e.exchangeRate), 0);
   const kpis = [
     { title: 'Total Recurrentes', value: data.length,                                                            icon: CalendarClock, color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
     { title: 'Activos',           value: data.filter(e => (e.status||'').toUpperCase() === 'ACTIVE').length,     icon: RotateCcw,     color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
     {
-      title: `Est. Mensual (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${monthly.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      title: `Est. Mensual (${displayCurrency}${valuationModeSuffix})`,
+      value: formatCurrentAmount(monthly, displayCurrency),
       icon: TrendingDown,
       color: 'text-rose-500',
       bg: 'bg-rose-500/10', kind: 'indicator' as const,

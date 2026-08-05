@@ -22,7 +22,11 @@ export interface TenantUser {
   email: string;
   role: string;
   customRoleId?: string | null;
-  customRole?: { id: string; name: string; allowedModules: string[] } | null;
+  customRole?: { id: string; name: string; permissions?: any; allowedModules: string[] } | null;
+  departments?: Array<{ id: string; code?: string; name: string; isPrimary?: boolean }>;
+  departmentMemberships?: Array<{ id: string; isPrimary: boolean; department: { id: string; name: string } }>;
+  employeeDepartmentMemberships?: Array<{ isPrimary: boolean; department: { id: string; name: string } }>;
+  employee?: { id: string; employeeNumber: string; firstName: string; lastName: string; isSeller: boolean; employmentStatus: string } | null;
   isActive: boolean;
   avatar?: string | null;
   lastLoginAt?: string | null;
@@ -64,6 +68,12 @@ export const tenantsService = {
     isActive?: boolean;
     password?: string;
   }) => api.patch(`/tenants/${tenantId}/users/${userId}`, data),
+  updateUserDepartments: (tenantId: string, userId: string, departmentIds: string[], primaryDepartmentId?: string | null) =>
+    api.put(`/tenants/${tenantId}/users/${userId}/departments`, { departmentIds, primaryDepartmentId }),
+  linkUserToEmployee: (tenantId: string, userId: string, employeeId: string) =>
+    api.put(`/tenants/${tenantId}/users/${userId}/employee/${employeeId}`),
+  unlinkUserFromEmployee: (tenantId: string, userId: string) =>
+    api.delete(`/tenants/${tenantId}/users/${userId}/employee`),
   deleteUser: (tenantId: string, userId: string) => api.delete(`/tenants/${tenantId}/users/${userId}`),
 
   getUserAccess: (tenantId: string, userId: string) =>

@@ -208,9 +208,11 @@ function makeBuckets(start: Date, end: Date): EvoBucket[] {
 type ListRow = { label: string; sub?: string; right?: string; rightClass?: string; tag?: string };
 
 export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
+    formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'hr'], async (signal) => {
     const filters = { page: 1, pageSize: 5000, report: true } as const;
@@ -253,7 +255,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   const fmtShort = (v: number) => {
     const num = Number(v);
     if (!Number.isFinite(num)) return 'C$0';
-    const converted = convertAmount(num, 'NIO');
+    const converted = toBaseAmount(num, baseCurrency, 1);
     if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted / 1000000).toFixed(1)}M`;
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted / 1000).toFixed(1)}k`;
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -262,7 +264,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   const fmtMoney = (v: number) => {
     const num = Number(v);
     if (!Number.isFinite(num)) return `${currencySymbol}0.00`;
-    const converted = convertAmount(num, 'NIO');
+    const converted = toBaseAmount(num, baseCurrency, 1);
     const sign = converted < 0 ? '-' : '';
     return `${sign}${currencySymbol}${Math.abs(converted).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
@@ -387,23 +389,31 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   }, [fEmployees, dateRange, currentStart]);
 
   // ── Costo de nómina ──
+  const sourceRate = (rate?: number) => valuationMode === 'CURRENT' ? exchangeRate : (rate || exchangeRate);
+  const payrollBase = (p: any, field: string, baseField: string) =>
+    toBaseAmount(Number(p[field] ?? p[baseField] ?? 0), p.currency, sourceRate(p.exchangeRate));
+
   const employerCost = (p: any) => {
-    const total = Number(p.costoTotalEmpresa || 0);
-    if (total > 0) return total;
-    return Number(p.grossPay || 0) + Number(p.inssPatronal || 0) + Number(p.inatec || 0) + Number(p.trecenoMes || 0) + Number(p.vacacionesProv || 0) + Number(p.indemnizacion || 0);
+    if (p.costoTotalEmpresa !== null && p.costoTotalEmpresa !== undefined) return payrollBase(p, 'costoTotalEmpresa', 'costoTotalEmpresaBase');
+    return payrollBase(p, 'grossPay', 'grossPayBase')
+      + payrollBase(p, 'inssPatronal', 'inssPatronalBase')
+      + payrollBase(p, 'inatec', 'inatecBase')
+      + payrollBase(p, 'trecenoMes', 'trecenoMesBase')
+      + payrollBase(p, 'vacacionesProv', 'vacacionesProvBase')
+      + payrollBase(p, 'indemnizacion', 'indemnizacionBase');
   };
 
   const sumTotals = (list: any[]) => {
     let salario = 0, horasExtra = 0, comisiones = 0, cargas = 0, prestaciones = 0, deducciones = 0, neto = 0, total = 0;
     const emps = new Set<string>();
     for (const p of list) {
-      salario += Number(p.baseSalary || 0);
-      horasExtra += Number(p.overtime || 0);
-      comisiones += Number(p.commissionsSales || 0) + Number(p.bonuses || 0);
-      cargas += Number(p.inssPatronal || 0) + Number(p.inatec || 0);
-      prestaciones += Number(p.trecenoMes || 0) + Number(p.vacacionesProv || 0) + Number(p.indemnizacion || 0);
-      deducciones += Number(p.deductions || 0) + Number(p.ir || 0) + Number(p.inssLaboral || 0);
-      neto += Number(p.netPay || 0);
+      salario += payrollBase(p, 'baseSalary', 'baseSalaryBase');
+      horasExtra += payrollBase(p, 'overtime', 'overtimeBase');
+      comisiones += payrollBase(p, 'commissionsSales', 'commissionsSalesBase') + payrollBase(p, 'bonuses', 'bonusesBase');
+      cargas += payrollBase(p, 'inssPatronal', 'inssPatronalBase') + payrollBase(p, 'inatec', 'inatecBase');
+      prestaciones += payrollBase(p, 'trecenoMes', 'trecenoMesBase') + payrollBase(p, 'vacacionesProv', 'vacacionesProvBase') + payrollBase(p, 'indemnizacion', 'indemnizacionBase');
+      deducciones += payrollBase(p, 'deductions', 'deductionsBase') + payrollBase(p, 'ir', 'irBase') + payrollBase(p, 'inssLaboral', 'inssLaboralBase');
+      neto += payrollBase(p, 'netPay', 'netPayBase');
       total += employerCost(p);
       if (p.employeeId || p.employee?.id) emps.add(p.employeeId || p.employee.id);
     }
@@ -571,11 +581,11 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       });
       let salario = 0, horasExtra = 0, comisiones = 0, cargas = 0, prestaciones = 0, total = 0;
       for (const p of rows) {
-        salario += Number(p.baseSalary || 0);
-        horasExtra += Number(p.overtime || 0);
-        comisiones += Number(p.commissionsSales || 0) + Number(p.bonuses || 0);
-        cargas += Number(p.inssPatronal || 0) + Number(p.inatec || 0);
-        prestaciones += Number(p.trecenoMes || 0) + Number(p.vacacionesProv || 0) + Number(p.indemnizacion || 0);
+        salario += payrollBase(p, 'baseSalary', 'baseSalaryBase');
+        horasExtra += payrollBase(p, 'overtime', 'overtimeBase');
+        comisiones += payrollBase(p, 'commissionsSales', 'commissionsSalesBase') + payrollBase(p, 'bonuses', 'bonusesBase');
+        cargas += payrollBase(p, 'inssPatronal', 'inssPatronalBase') + payrollBase(p, 'inatec', 'inatecBase');
+        prestaciones += payrollBase(p, 'trecenoMes', 'trecenoMesBase') + payrollBase(p, 'vacacionesProv', 'vacacionesProvBase') + payrollBase(p, 'indemnizacion', 'indemnizacionBase');
         total += employerCost(p);
       }
       return { key: b.key, label: b.label, salario, variables: horasExtra + comisiones + prestaciones, cargas, total, prev: prevByKey.get(b.key) ?? null };
@@ -740,7 +750,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     const completed = allEnroll.filter((en: any) => en.status === 'COMPLETED').length;
     const rate = allEnroll.length > 0 ? (completed / allEnroll.length) * 100 : 0;
     const participantes = new Set(allEnroll.map((en: any) => en.employeeId || en.employee?.id).filter(Boolean)).size;
-    const costo = activas.reduce((a, t) => a + Number(t.cost || 0), 0);
+    const costo = activas.reduce((a, t) => a + toBaseAmount(Number(t.cost ?? t.baseCost ?? 0), t.currency, sourceRate(t.exchangeRate)), 0);
     const pendientesEnroll = allEnroll.filter((en: any) => en.status === 'SCHEDULED');
     const horas = activas.reduce((a, t) => {
       const s = toDate(t.startDate)?.getTime() || 0;
@@ -770,7 +780,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   // ── Beneficios ──
   const benStats = useMemo(() => {
     const beneficiados = new Set(fBenefits.flatMap(b => (b.employeeBenefits || []).map((eb: any) => eb.employeeId || eb.employee?.id)).filter(Boolean)).size;
-    const costo = fBenefits.reduce((a, b) => a + Number(b.cost || 0), 0);
+    const costo = fBenefits.reduce((a, b) => a + toBaseAmount(Number(b.cost ?? b.baseCost ?? 0), b.currency, sourceRate(b.exchangeRate)), 0);
     const sinAsignacion = fBenefits.filter(b => !b.employeeBenefits || b.employeeBenefits.length === 0);
     const byType = new Map<string, number>();
     for (const b of fBenefits) byType.set(b.type || 'Otro', (byType.get(b.type || 'Otro') || 0) + (b.employeeBenefits?.length || 0));
@@ -983,7 +993,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
 
         const kpis = [
           { label: 'ACTIVOS', value: activeEmployees.length.toString(), detail: `Plantilla: ${fEmployees.length}`, color: [59, 130, 246] },
-          { label: 'COSTO NÓMINA', value: formatConvertedAmount(payrollTotals.total, 'NIO'), detail: `Período anterior: ${formatConvertedAmount(prevPayrollTotals.total, 'NIO')}`, color: [16, 185, 129] },
+          { label: `COSTO NÓMINA · ${valuationModeLabel}`, value: formatConvertedAmount(payrollTotals.total, 'NIO'), detail: `Período anterior: ${formatConvertedAmount(prevPayrollTotals.total, 'NIO')}`, color: [16, 185, 129] },
           { label: 'COSTO / COLAB.', value: formatConvertedAmount(costoPorColaborador, 'NIO'), detail: 'Promedio del período', color: [59, 130, 246] },
           { label: 'ASISTENCIA', value: `${attendanceRate.toFixed(1)}%`, detail: estimated ? 'Estimada por permisos' : `${attStats.present} presentes`, color: [16, 185, 129] },
           { label: 'ROTACIÓN', value: `${tasaRotacion.toFixed(1)}%`, detail: `${bajasPeriodo.length} bajas · ${plantillaPromedio.toFixed(0)} prom.`, color: [245, 158, 11] },

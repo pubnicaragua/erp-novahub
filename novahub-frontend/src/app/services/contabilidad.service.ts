@@ -44,6 +44,22 @@ export const contabilidadService = {
   getCashFlow: (params: { dateFrom: string; dateTo: string }, signal?: AbortSignal) =>
     api.get<any>('/accounting/reports/cash-flow', { params, signal }),
 
+  // Diferencias cambiarias
+  getExchangeDifferencesPreview: (params?: { asOfDate?: string; rate?: number }, signal?: AbortSignal) =>
+    api.get<any>('/accounting/exchange-differences/preview', { params, signal }),
+  saveExchangeDifferencesRun: (data: { asOfDate?: string; rate?: number }) =>
+    api.post<any>('/accounting/exchange-differences/runs', data),
+  getExchangeDifferencesRuns: (limit = 20, signal?: AbortSignal) =>
+    api.get<any[]>('/accounting/exchange-differences/runs', { params: { limit }, signal }),
+  getExchangeDifferencesRun: (id: string, signal?: AbortSignal) =>
+    api.get<any>(`/accounting/exchange-differences/runs/${id}`, { signal }),
+  createExchangeDifferencesJournal: (id: string) =>
+    api.post<any>(`/accounting/exchange-differences/runs/${id}/journal`, {}),
+  postExchangeDifferencesRun: (id: string) =>
+    api.post<any>(`/accounting/exchange-differences/runs/${id}/post`, {}),
+  createExchangeDifferencesReversal: (id: string, date?: string) =>
+    api.post<any>(`/accounting/exchange-differences/runs/${id}/reversal`, date ? { date } : {}),
+
   // Conciliación Bancaria
   getReconciliations: (signal?: AbortSignal) => api.get<any[]>('/accounting/reconciliations', { signal }),
   getReconciliation: (id: string, signal?: AbortSignal) => api.get<any>(`/accounting/reconciliations/${id}`, { signal }),

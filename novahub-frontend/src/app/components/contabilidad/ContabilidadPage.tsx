@@ -4,6 +4,7 @@ import {
   DollarSign, Landmark, Calendar, FileBarChart,
   BookOpenCheck, Building2, FileSpreadsheet, HelpCircle,
   Database, GitBranch, ChevronDown, X, Settings2,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Badge } from '../ui/badge';
@@ -25,6 +26,8 @@ import { CambiosPatrimonioView } from './CambiosPatrimonioView';
 import { ConfiguracionContableView } from './ConfiguracionContableView';
 import { CategoriasGastosView } from './CategoriasGastosView';
 import { BudgetItemsView } from './BudgetItemsView';
+import { DiferenciasCambiariasView } from './DiferenciasCambiariasView';
+import { CurrencyValuationBanner } from '../ui/CurrencyValuation';
 
 const SECTIONS = [
   { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: BookOpen },
@@ -34,6 +37,7 @@ const SECTIONS = [
   { id: 'estado-resultados', label: 'Estado de Resultados', icon: TrendingUp },
   { id: 'balance-general', label: 'Balance General', icon: PieChart },
   { id: 'flujo-efectivo', label: 'Flujo de Efectivo', icon: DollarSign },
+  { id: 'diferencias-cambiarias', label: 'Diferencias Cambiarias', icon: ArrowLeftRight },
   { id: 'cambios-patrimonio', label: 'Cambios Patrimonio', icon: FileSpreadsheet },
   { id: 'activos-fijos', label: 'Activos Fijos', icon: Building2 },
   { id: 'conciliacion', label: 'Conciliación Bancaria', icon: Landmark },
@@ -214,6 +218,20 @@ const HELP_DATA: Record<string, {
       { q: '¿Puedo cambiar las cuentas de los asientos automáticos?', a: 'Sí. En la sección "Mapeo de Cuentas Contables" puedes editar los códigos de cuenta que el sistema usará para cada tipo de transacción.' },
     ],
   },
+  'diferencias-cambiarias': {
+    description: 'Previsualización de la valoración de cuentas por cobrar y cuentas por pagar en moneda extranjera. Compara el saldo histórico con el equivalente a la tasa de corte y separa ganancia o pérdida no realizada.',
+    model: 'Invoice / SupplierInvoice + ExchangeRateHistory → CurrencyRevaluation preview',
+    relationships: [
+      { parent: 'Invoice', child: 'CurrencyRevaluationItem', relation: 'saldo pendiente valorado como cuenta por cobrar' },
+      { parent: 'SupplierInvoice', child: 'CurrencyRevaluationItem', relation: 'saldo pendiente valorado como cuenta por pagar' },
+      { parent: 'ExchangeRateHistory', child: 'CurrencyRevaluation preview', relation: 'tasa histórica y tasa de corte' },
+    ],
+    faq: [
+      { q: '¿Esto modifica la factura o el pago?', a: 'No. La primera versión es únicamente una vista previa y conserva intactos los documentos originales.' },
+      { q: '¿Qué significa histórico y actual?', a: 'Histórico es el saldo convertido con la tasa guardada en el documento. Actual es el mismo saldo convertido con la tasa de corte seleccionada.' },
+      { q: '¿Cuándo se registra la diferencia?', a: 'Después de validar cuentas, periodo y saldos. El registro se implementará como asiento de revaluación separado, no como modificación de la factura.' },
+    ],
+  },
 };
 
 interface ContabilidadPageProps {
@@ -276,6 +294,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
               <span className="hidden sm:inline">¿Ayuda?</span>
             </Button>
           </div>
+          <CurrencyValuationBanner className="mb-6" />
 
           {/* Horizontal tab navigation */}
           <div className={cn(
@@ -321,6 +340,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   {activeSection === 'estado-resultados' && <EstadoResultadosView />}
                   {activeSection === 'balance-general' && <BalanceGeneralView />}
                   {activeSection === 'flujo-efectivo' && <FlujoEfectivoView />}
+                  {activeSection === 'diferencias-cambiarias' && <DiferenciasCambiariasView />}
                   {activeSection === 'cambios-patrimonio' && <CambiosPatrimonioView />}
                   {activeSection === 'activos-fijos' && <ActivosFijosView />}
                   {activeSection === 'conciliacion' && <ConciliacionView />}

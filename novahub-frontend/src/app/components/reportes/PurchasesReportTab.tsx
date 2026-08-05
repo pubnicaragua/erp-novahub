@@ -194,10 +194,12 @@ const DARK_TOOLTIP = {
 } as const;
 
 export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, formatConvertedAmount, convertAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const { user } = useAuth();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
+    formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
   const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'purchases'], async (signal) => {
     const filters = { page: 1, pageSize: 5000, report: true } as const;
@@ -228,7 +230,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const fmtShort = (v: number) => {
     const num = Number(v);
     if (!Number.isFinite(num)) return `${currencySymbol}0`;
-    const converted = convertAmount(num, 'NIO');
+    const converted = toBaseAmount(num, baseCurrency, 1);
     if (!Number.isFinite(converted)) return `${currencySymbol}0`;
     const abs = Math.abs(converted);
     if (abs >= 1_000_000) return `${currencySymbol}${(converted / 1_000_000).toLocaleString('es-NI', { maximumFractionDigits: 1 })} millones`;
@@ -288,9 +290,10 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const prevLabel = useMemo(() => fmtRange(cPrevStart, cPrevEnd), [cPrevStart, cPrevEnd]);
   const comparativoLabel = comparison === 'anterior' ? 'período anterior' : 'mismo período del año anterior';
 
-  const toNio = (inv: any) => inv.currency === 'USD' ? Number(inv.total || 0) * (inv.exchangeRate || exchangeRate) : Number(inv.total || 0);
+  const sourceRate = (rate?: number) => valuationMode === 'CURRENT' ? exchangeRate : (rate || exchangeRate);
+  const toNio = (inv: any) => toNioAmt(Number(inv.total ?? inv.baseTotal ?? 0), inv.currency, inv.exchangeRate);
   const toNioAmt = (amt: number | null | undefined, currency: string | undefined, rate: number | undefined) =>
-    currency === 'USD' ? Number(amt || 0) * (rate || exchangeRate) : Number(amt || 0);
+    toBaseAmount(Number(amt || 0), currency, sourceRate(rate));
 
   const fBillsAll = useMemo(() => bills.filter(b => isValidInvoiceStatus(b.status)), [bills]);
 
@@ -507,7 +510,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     const totalRecibidoNoFacturado = recibidoNoFacturado.reduce((acc, r) => {
       const ord = r.purchaseOrderId ? orders.find(o => o.id === r.purchaseOrderId) : null;
       const cur = ord?.currency || 'NIO';
-      const rate = ord?.exchangeRate || exchangeRate;
+      const rate = sourceRate(ord?.exchangeRate);
       const sum = (r.items || []).reduce((a: number, it: any) => a + Number(it.quantityReceived || 0) * Number(it.unitPrice || 0), 0);
       return acc + toNioAmt(sum, cur, rate);
     }, 0);
@@ -543,7 +546,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         row.incidents += 1;
         const ord = r.purchaseOrderId ? orders.find(o => o.id === r.purchaseOrderId) : null;
         const cur = ord?.currency || 'NIO';
-        const rate = ord?.exchangeRate || exchangeRate;
+        const rate = sourceRate(ord?.exchangeRate);
         const sum = (r.items || []).reduce((a: number, it: any) => a + Number(it.quantityOrdered || 0) * Number(it.unitPrice || 0), 0);
         montoComprometido += toNioAmt(sum, cur, rate);
       }
@@ -835,7 +838,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const q = Number(item.quantity || 0);
         const unit = Number(item.unitPrice || 0);
         const row = map.get(name) || { name, monto: 0, qty: 0, priceAvg: 0, prevPrice: null, priceTrend: null, proveedor: '', recepciones: 0, pct: 0 };
-        row.monto += inv.currency === 'USD' ? unit * q * (inv.exchangeRate || exchangeRate) : unit * q;
+        row.monto += inv.currency === 'USD' ? unit * q * sourceRate(inv.exchangeRate) : unit * q;
         row.qty += q;
         if (inv.supplier?.name && !row.proveedor) row.proveedor = inv.supplier.name;
         map.set(name, row);
@@ -848,7 +851,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const q = Number(item.quantity || 0);
         const unit = Number(item.unitPrice || 0);
         const row = prevMap.get(name) || { monto: 0, qty: 0 };
-        row.monto += inv.currency === 'USD' ? unit * q * (inv.exchangeRate || exchangeRate) : unit * q;
+        row.monto += inv.currency === 'USD' ? unit * q * sourceRate(inv.exchangeRate) : unit * q;
         row.qty += q;
         prevMap.set(name, row);
       });
@@ -1290,7 +1293,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           </CardHeader>
           <CardContent>
             <p className="text-xl font-black text-orange-500">{formatConvertedAmount(comprasNetas, 'NIO')}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{facturasValidas} facturas de proveedores · {netTrend.text}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{facturasValidas} facturas de proveedores · {netTrend.text}{valuationModeSuffix ? ` · Vista ${valuationModeLabel.toLowerCase()}` : ''}</p>
             <p className="text-[9px] text-muted-foreground/60 mt-1 flex items-center gap-1" title={`Comparado: ${prevLabel} · Descuentos no registrados a nivel de factura en este sistema.`}>
               <Info className="size-3 shrink-0" />
               {facturadoBruto > 0

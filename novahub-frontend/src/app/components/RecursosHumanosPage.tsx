@@ -29,6 +29,7 @@ import { EvaluacionesView } from './hr/EvaluacionesView';
 import { CapacitacionesView } from './hr/CapacitacionesView';
 import { BeneficiosView } from './hr/BeneficiosView';
 import { ConfigNominaView } from './hr/ConfigNominaView';
+import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 
 interface RecursosHumanosPageProps {
   activeSubModule?: string;
@@ -202,6 +203,8 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
         </div>
       </motion.div>
 
+      <CurrencyValuationBanner />
+
       {/* Main Navigation Tabs - Estilo Compras (Píldoras Flexibles y con Scroll) */}
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
         <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
@@ -270,6 +273,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
                   departments={data.departments}
                   positions={data.positions}
                   onRefresh={refreshData}
+                  isSidebarCollapsed={isSidebarCollapsed}
                 />
               </TabsContent>
 

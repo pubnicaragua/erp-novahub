@@ -40,6 +40,7 @@ import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceLis
 import { SalesIrSelector } from './SalesIrSelector';
 import { formatSalesAmount, getMissingSalesPriceMessage, getSalesUnitPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
 import { getPdfDesignSettings } from '../../utils/pdfGenerator';
+import { SalesAccountingLegend } from './SalesAccountingLegend';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -938,6 +939,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                 <h3 className="text-sm font-black uppercase tracking-tight mb-4 flex items-center gap-2">
                   <Receipt className="size-4 text-primary" /> Configuración de Emisión
                 </h3>
+                <SalesAccountingLegend flow="pos" paymentMethod={payments[0]?.method} cashAccount={selectedRegister?.account} />
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1.5" data-tour="pos-register">
                     <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Caja Operativa</Label>

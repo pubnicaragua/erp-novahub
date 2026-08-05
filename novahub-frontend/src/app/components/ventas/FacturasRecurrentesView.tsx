@@ -86,7 +86,7 @@ const calculateNextInvoiceDate = (frequency: string, startDate: string) => {
 };
 
 export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: FacturasRecurrentesViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE'>('ALL');
@@ -334,7 +334,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
 
   const activeRecurringInDisplayCurrency = data
     .filter(recurring => (recurring.status || '').toUpperCase() === 'ACTIVE')
-    .reduce((acc, recurring) => acc + convertAmount(recurring.total || 0, (recurring as any).currency, (recurring as any).exchangeRate), 0);
+    .reduce((acc, recurring) => acc + ((recurring as any).baseTotal !== null && (recurring as any).baseTotal !== undefined
+      ? Number((recurring as any).baseTotal)
+      : toBaseAmount(recurring.total || 0, (recurring as any).currency, (recurring as any).exchangeRate || globalRate)), 0);
   const sevenDaysAhead = new Date();
   sevenDaysAhead.setDate(sevenDaysAhead.getDate() + 7);
   const today = new Date();
@@ -617,10 +619,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title={`MRR Activo (${displayCurrency})`} value={formatConvertedAmount(activeRecurringInDisplayCurrency, displayCurrency)} icon={RotateCcw} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title={`MRR Activo (${displayCurrency})`} value={formatConvertedAmount(activeRecurringInDisplayCurrency, baseCurrency)} icon={RotateCcw} color="text-primary" bg="bg-primary/10" />
         <SalesKpiCard title="Próximas 7 días" value={upcomingIn7Days} icon={Calendar} color="text-blue-500" bg="bg-blue-500/10" />
         <SalesKpiCard title="Activas" value={data.filter(r => (r.status||'').toUpperCase() === 'ACTIVE').length} icon={Clock} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'ACTIVE'} onClick={() => setStatusFilter(statusFilter === 'ACTIVE' ? 'ALL' : 'ACTIVE')} />
-        <SalesKpiCard title={`ARR (${displayCurrency})`} value={formatConvertedAmount(annualRunRateInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-rose-500" bg="bg-rose-500/10" />
+        <SalesKpiCard title={`ARR (${displayCurrency})`} value={formatConvertedAmount(annualRunRateInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-rose-500" bg="bg-primary/10" />
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

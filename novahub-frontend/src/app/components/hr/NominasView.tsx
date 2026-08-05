@@ -16,7 +16,7 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
-  const { convertAmount, formatConvertedAmount, displayCurrency } = useCurrency();
+  const { displayCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { canPerform } = useAuth();
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -58,6 +58,14 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
     const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
     return matchesEmployee && matchesStatus;
   });
+
+  const payrollBase = (p: any, field: string, baseField: string) => {
+    const amount = Number(p[field] ?? p[baseField] ?? 0);
+    return valuationMode === 'CURRENT'
+      ? convertCurrentAmount(amount, p.currency || p.employee?.currency || 'USD')
+      : convertAmount(amount, p.currency || p.employee?.currency || 'USD', p.exchangeRate);
+  };
+  const payrollDisplay = (p: any, field: string, baseField: string) => formatCurrentAmount(payrollBase(p, field, baseField), displayCurrency);
 
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -147,13 +155,12 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
       doc.text(`Generado: ${new Date().toLocaleDateString()}`, 14, 22);
 
       const tableData = filteredPayrolls.map((p: any) => {
-        const currency = p.employee?.currency || p.currency || 'USD';
         return [
           `${p.employee?.firstName} ${p.employee?.lastName}`,
           `${new Date(p.periodStart).toLocaleDateString()} - ${new Date(p.periodEnd).toLocaleDateString()}`,
-          formatConvertedAmount(p.grossPay, currency),
-          formatConvertedAmount(p.netPay, currency),
-          formatConvertedAmount(p.costoTotalEmpresa || p.grossPay, currency),
+          payrollDisplay(p, 'grossPay', 'grossPayBase'),
+          payrollDisplay(p, 'netPay', 'netPayBase'),
+          payrollDisplay(p, 'costoTotalEmpresa', 'costoTotalEmpresaBase'),
           p.status === 'PAID' ? 'Pagado' : p.status === 'PENDING' ? 'Pendiente' : p.status
         ];
       });
@@ -171,9 +178,9 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
     }
   };
 
-  const totalGross = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.grossPay || 0), p.employee?.currency || p.currency || 'USD'), 0);
-  const totalNet = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.netPay || 0), p.employee?.currency || p.currency || 'USD'), 0);
-  const totalCostoEmpresa = filteredPayrolls.reduce((sum: number, p: any) => sum + convertAmount(Number(p.costoTotalEmpresa || 0), p.employee?.currency || p.currency || 'USD'), 0);
+  const totalGross = filteredPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'grossPay', 'grossPayBase'), 0);
+  const totalNet = filteredPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'netPay', 'netPayBase'), 0);
+  const totalCostoEmpresa = filteredPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), 0);
   const pendingCount = filteredPayrolls.filter((p: any) => p.status === 'PENDING').length;
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
@@ -200,7 +207,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Bruto (Costo Empresa)</p>
-              <h3 className="text-2xl font-black text-orange-600 dark:text-orange-400">{formatConvertedAmount(totalCostoEmpresa, displayCurrency)}</h3>
+              <h3 className="text-2xl font-black text-orange-600 dark:text-orange-400">{formatCurrentAmount(totalCostoEmpresa, displayCurrency)}</h3>{valuationModeSuffix && <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{valuationModeLabel}</span>}
             </div>
             <Building2 className="size-8 text-orange-500/40" />
           </div>
@@ -209,7 +216,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Neto (Recibido)</p>
-              <h3 className="text-2xl font-black text-blue-600 dark:text-blue-400">{formatConvertedAmount(totalNet, displayCurrency)}</h3>
+              <h3 className="text-2xl font-black text-blue-600 dark:text-blue-400">{formatCurrentAmount(totalNet, displayCurrency)}</h3>
             </div>
             <DollarSign className="size-8 text-blue-500/40" />
           </div>
@@ -218,7 +225,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Impuestos Empresa</p>
-              <h3 className="text-2xl font-black text-primary">{formatConvertedAmount(totalCostoEmpresa - totalGross, displayCurrency)}</h3>
+              <h3 className="text-2xl font-black text-primary">{formatCurrentAmount(totalCostoEmpresa - totalGross, displayCurrency)}</h3>
             </div>
             <DollarSign className="size-8 text-primary/40" />
           </div>
@@ -309,7 +316,6 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
             </thead>
             <tbody className="divide-y">
               {paginatedPayrolls.map((payroll: any) => {
-                const currency = payroll.employee?.currency || payroll.currency || 'USD';
                 return (
                   <React.Fragment key={payroll.id}>
                   <tr className="hover:bg-muted/50 cursor-pointer" onClick={() => setExpandedRow(expandedRow === payroll.id ? null : payroll.id)}>
@@ -332,13 +338,13 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
                       {new Date(payroll.periodStart).toLocaleDateString()} - {new Date(payroll.periodEnd).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-semibold">
-                      {formatConvertedAmount(payroll.grossPay, currency)}
+                      {payrollDisplay(payroll, 'grossPay', 'grossPayBase')}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-primary">
-                      {formatConvertedAmount(payroll.netPay, currency)}
+                      {payrollDisplay(payroll, 'netPay', 'netPayBase')}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-orange-600 dark:text-orange-400">
-                      {formatConvertedAmount(payroll.costoTotalEmpresa || payroll.grossPay, currency)}
+                      {payrollDisplay(payroll, 'costoTotalEmpresa', 'costoTotalEmpresaBase')}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-1 rounded-lg font-bold ${
@@ -392,34 +398,34 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
                           <div className="space-y-2">
                             <p className="font-black uppercase tracking-widest text-red-500 text-[10px]">Deducciones Empleado</p>
                             <div className="space-y-1">
-                              <div className="flex justify-between"><span className="text-muted-foreground">INSS Laboral ({payroll.snapshotInssLaboralPct || '—'}%)</span><span className="font-bold">-{formatConvertedAmount(payroll.inssLaboral || 0, currency)}</span></div>
-                              <div className="flex justify-between"><span className="text-muted-foreground">IR ({payroll.snapshotIrPct || '—'}%)</span><span className="font-bold">-{formatConvertedAmount(payroll.ir || 0, currency)}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">INSS Laboral ({payroll.snapshotInssLaboralPct || '—'}%)</span><span className="font-bold">-{payrollDisplay(payroll, 'inssLaboral', 'inssLaboralBase')}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">IR ({payroll.snapshotIrPct || '—'}%)</span><span className="font-bold">-{payrollDisplay(payroll, 'ir', 'irBase')}</span></div>
                             </div>
                           </div>
                           <div className="space-y-2">
                             <p className="font-black uppercase tracking-widest text-orange-500 text-[10px]">Aportes Patronales</p>
                             <div className="space-y-1">
-                              <div className="flex justify-between"><span className="text-muted-foreground">INSS Patronal ({payroll.snapshotInssPatronalPct || '—'}%)</span><span className="font-bold">+{formatConvertedAmount(payroll.inssPatronal || 0, currency)}</span></div>
-                              <div className="flex justify-between"><span className="text-muted-foreground">INATEC ({payroll.snapshotInatecPct || '—'}%)</span><span className="font-bold">+{formatConvertedAmount(payroll.inatec || 0, currency)}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">INSS Patronal ({payroll.snapshotInssPatronalPct || '—'}%)</span><span className="font-bold">+{payrollDisplay(payroll, 'inssPatronal', 'inssPatronalBase')}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">INATEC ({payroll.snapshotInatecPct || '—'}%)</span><span className="font-bold">+{payrollDisplay(payroll, 'inatec', 'inatecBase')}</span></div>
                             </div>
                           </div>
                           <div className="space-y-2">
                             <p className="font-black uppercase tracking-widest text-blue-500 text-[10px]">Provisiones</p>
                             <div className="space-y-1">
-                              <div className="flex justify-between"><span className="text-muted-foreground">Treceavo Mes ({payroll.snapshotTrecenoMesPct || '—'}%)</span><span className="font-bold">+{formatConvertedAmount(payroll.trecenoMes || 0, currency)}</span></div>
-                              <div className="flex justify-between"><span className="text-muted-foreground">Vacaciones ({payroll.snapshotVacacionesPct || '—'}%)</span><span className="font-bold">+{formatConvertedAmount(payroll.vacacionesProv || 0, currency)}</span></div>
-                              <div className="flex justify-between"><span className="text-muted-foreground">Indemnización ({payroll.snapshotIndemnizacionPct || '—'}%)</span><span className="font-bold">+{formatConvertedAmount(payroll.indemnizacion || 0, currency)}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Treceavo Mes ({payroll.snapshotTrecenoMesPct || '—'}%)</span><span className="font-bold">+{payrollDisplay(payroll, 'trecenoMes', 'trecenoMesBase')}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Vacaciones ({payroll.snapshotVacacionesPct || '—'}%)</span><span className="font-bold">+{payrollDisplay(payroll, 'vacacionesProv', 'vacacionesProvBase')}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Indemnización ({payroll.snapshotIndemnizacionPct || '—'}%)</span><span className="font-bold">+{payrollDisplay(payroll, 'indemnizacion', 'indemnizacionBase')}</span></div>
                             </div>
                           </div>
                           <div className="space-y-2">
                             <p className="font-black uppercase tracking-widest text-muted-foreground text-[10px]">Desglose</p>
                             <div className="space-y-1">
-                              <div className="flex justify-between"><span className="text-muted-foreground">Bonos</span><span className="font-bold text-green-600">+{formatConvertedAmount(payroll.bonuses || 0, currency)}</span></div>
-                              <div className="flex justify-between"><span className="text-muted-foreground">H. Extra</span><span className="font-bold text-blue-600">+{formatConvertedAmount(payroll.overtime || 0, currency)}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Bonos</span><span className="font-bold text-green-600">+{payrollDisplay(payroll, 'bonuses', 'bonusesBase')}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">H. Extra</span><span className="font-bold text-blue-600">+{payrollDisplay(payroll, 'overtime', 'overtimeBase')}</span></div>
                               {Number(payroll.commissionsSales || 0) > 0 && (
-                                <div className="flex justify-between"><span className="text-muted-foreground">Comisiones por Ventas</span><span className="font-bold text-emerald-600">+{formatConvertedAmount(payroll.commissionsSales, currency)}</span></div>
+                                <div className="flex justify-between"><span className="text-muted-foreground">Comisiones por Ventas</span><span className="font-bold text-emerald-600">+{payrollDisplay(payroll, 'commissionsSales', 'commissionsSalesBase')}</span></div>
                               )}
-                              <div className="flex justify-between"><span className="text-muted-foreground">Otras Deducc.</span><span className="font-bold text-red-600">-{formatConvertedAmount(payroll.deductions || 0, currency)}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Otras Deducc.</span><span className="font-bold text-red-600">-{payrollDisplay(payroll, 'deductions', 'deductionsBase')}</span></div>
                             </div>
                           </div>
                         </div>
@@ -436,7 +442,6 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
         {/* Mobile View */}
         <div className="block md:hidden space-y-4 p-4 bg-muted/10">
           {paginatedPayrolls.map((payroll: any) => {
-            const currency = payroll.employee?.currency || payroll.currency || 'USD';
             return (
               <div key={payroll.id} className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-card to-background p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4 border-b border-primary/10 pb-3">
@@ -466,15 +471,15 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
                   </div>
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Salario Bruto</span>
-                    <span className="font-semibold text-right">{formatConvertedAmount(payroll.grossPay, currency)}</span>
+                    <span className="font-semibold text-right">{payrollDisplay(payroll, 'grossPay', 'grossPayBase')}</span>
                   </div>
                   <div className="flex justify-between items-center text-xs bg-primary/5 p-2 rounded-lg border border-primary/10">
                     <span className="text-primary font-black uppercase text-[10px] tracking-widest">Neto a Pagar</span>
-                    <span className="font-black text-primary text-sm text-right">{formatConvertedAmount(payroll.netPay, currency)}</span>
+                    <span className="font-black text-primary text-sm text-right">{payrollDisplay(payroll, 'netPay', 'netPayBase')}</span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Costo Total</span>
-                    <span className="font-bold text-orange-600 dark:text-orange-400 text-right">{formatConvertedAmount(payroll.costoTotalEmpresa || payroll.grossPay, currency)}</span>
+                    <span className="font-bold text-orange-600 dark:text-orange-400 text-right">{payrollDisplay(payroll, 'costoTotalEmpresa', 'costoTotalEmpresaBase')}</span>
                   </div>
                 </div>
 
@@ -502,28 +507,28 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
                   <div className="mt-4 pt-4 border-t border-border/50 grid gap-x-4 gap-y-3 grid-cols-2 text-[10px]">
                     <div className="space-y-1.5">
                       <p className="font-black uppercase tracking-widest text-red-500 text-[9px]">Deducciones</p>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">INSS L.</span><span className="font-bold text-red-600 text-right">-{formatConvertedAmount(payroll.inssLaboral || 0, currency)}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">IR</span><span className="font-bold text-red-600 text-right">-{formatConvertedAmount(payroll.ir || 0, currency)}</span></div>
-                      {Number(payroll.deductions || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground mr-1">Otras</span><span className="font-bold text-red-600 text-right">-{formatConvertedAmount(payroll.deductions || 0, currency)}</span></div>}
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">INSS L.</span><span className="font-bold text-red-600 text-right">-{payrollDisplay(payroll, 'inssLaboral', 'inssLaboralBase')}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">IR</span><span className="font-bold text-red-600 text-right">-{payrollDisplay(payroll, 'ir', 'irBase')}</span></div>
+                      {Number(payroll.deductions || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground mr-1">Otras</span><span className="font-bold text-red-600 text-right">-{payrollDisplay(payroll, 'deductions', 'deductionsBase')}</span></div>}
                     </div>
                     <div className="space-y-1.5">
                       <p className="font-black uppercase tracking-widest text-green-600 text-[9px]">Ingresos</p>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Bonos</span><span className="font-bold text-green-600 text-right">+{formatConvertedAmount(payroll.bonuses || 0, currency)}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">H. Extra</span><span className="font-bold text-green-600 text-right">+{formatConvertedAmount(payroll.overtime || 0, currency)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Bonos</span><span className="font-bold text-green-600 text-right">+{payrollDisplay(payroll, 'bonuses', 'bonusesBase')}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">H. Extra</span><span className="font-bold text-green-600 text-right">+{payrollDisplay(payroll, 'overtime', 'overtimeBase')}</span></div>
                       {Number(payroll.commissionsSales || 0) > 0 && (
-                        <div className="flex justify-between"><span className="text-muted-foreground mr-1">Cmsns.</span><span className="font-bold text-emerald-600 text-right">+{formatConvertedAmount(payroll.commissionsSales, currency)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground mr-1">Cmsns.</span><span className="font-bold text-emerald-600 text-right">+{payrollDisplay(payroll, 'commissionsSales', 'commissionsSalesBase')}</span></div>
                       )}
                     </div>
                     <div className="space-y-1.5">
                       <p className="font-black uppercase tracking-widest text-orange-500 text-[9px]">Aportes</p>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">INSS P.</span><span className="font-bold text-right">+{formatConvertedAmount(payroll.inssPatronal || 0, currency)}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">INATEC</span><span className="font-bold text-right">+{formatConvertedAmount(payroll.inatec || 0, currency)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">INSS P.</span><span className="font-bold text-right">+{payrollDisplay(payroll, 'inssPatronal', 'inssPatronalBase')}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">INATEC</span><span className="font-bold text-right">+{payrollDisplay(payroll, 'inatec', 'inatecBase')}</span></div>
                     </div>
                     <div className="space-y-1.5">
                       <p className="font-black uppercase tracking-widest text-blue-500 text-[9px]">Provisiones</p>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Vacac.</span><span className="font-bold text-blue-600 text-right">+{formatConvertedAmount(payroll.vacacionesProv || 0, currency)}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Treaceavo</span><span className="font-bold text-blue-600 text-right">+{formatConvertedAmount(payroll.trecenoMes || 0, currency)}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Indem.</span><span className="font-bold text-blue-600 text-right">+{formatConvertedAmount(payroll.indemnizacion || 0, currency)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Vacac.</span><span className="font-bold text-blue-600 text-right">+{payrollDisplay(payroll, 'vacacionesProv', 'vacacionesProvBase')}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Treaceavo</span><span className="font-bold text-blue-600 text-right">+{payrollDisplay(payroll, 'trecenoMes', 'trecenoMesBase')}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground mr-1">Indem.</span><span className="font-bold text-blue-600 text-right">+{payrollDisplay(payroll, 'indemnizacion', 'indemnizacionBase')}</span></div>
                     </div>
                   </div>
                 )}

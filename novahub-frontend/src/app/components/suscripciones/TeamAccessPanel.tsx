@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Building2, Check, Edit2, Eye, Plus, ShieldCheck, Trash2, UserCog, Users, X } from 'lucide-react';
+import { Check, Edit2, Eye, Plus, ShieldCheck, Trash2, UserCog, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -8,9 +8,7 @@ import { Switch } from '../ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
-import { api } from '../../services/api';
 import { rolesService } from '../../services/roles.service';
-import { tenantsService } from '../../services/tenants.service';
 import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 
@@ -18,10 +16,7 @@ interface TeamAccessPanelProps {
   tenantId: string;
   tenantName: string;
   users: any[];
-  departmentDialogOpen: boolean;
-  onDepartmentDialogChange: (open: boolean) => void;
   onRolesChange?: () => void;
-  onUsersChange?: () => void;
 }
 
 const permissionActions = ['read', 'create', 'edit', 'delete'] as const;
@@ -54,10 +49,8 @@ function hydratePermissions(role: any) {
   });
 }
 
-export function TeamAccessPanel({ tenantId, tenantName, users, departmentDialogOpen, onDepartmentDialogChange, onRolesChange, onUsersChange }: TeamAccessPanelProps) {
-  const [departments, setDepartments] = useState<any[]>([]);
+export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange }: TeamAccessPanelProps) {
   const [roles, setRoles] = useState<any[]>([]);
-  const [newDepartment, setNewDepartment] = useState('');
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
   const [roleSaving, setRoleSaving] = useState(false);
   const [editingRole, setEditingRole] = useState<any | null>(null);
@@ -67,12 +60,8 @@ export function TeamAccessPanel({ tenantId, tenantName, users, departmentDialogO
   const { data: teamData, refetch: refetchTeam } = useTenantQuery(
     ['my-company-team-access', tenantId],
     async (signal) => {
-      const [departmentsResponse, rolesResponse] = await Promise.all([
-        api.get<any>('/hr/departments', { signal }),
-        rolesService.getAll({ clientTenantId: tenantId }, signal),
-      ]);
+      const rolesResponse = await rolesService.getAll({ clientTenantId: tenantId }, signal);
       return {
-        departments: asList(departmentsResponse),
         roles: asList(rolesResponse).filter((role: any) => !role.clientTenantId || role.clientTenantId === tenantId),
       };
     },
@@ -81,7 +70,6 @@ export function TeamAccessPanel({ tenantId, tenantName, users, departmentDialogO
 
   useEffect(() => {
     if (!teamData) return;
-    setDepartments(teamData.departments);
     setRoles(teamData.roles);
   }, [teamData]);
 
@@ -98,40 +86,6 @@ export function TeamAccessPanel({ tenantId, tenantName, users, departmentDialogO
     (groups[group] ||= []).push(module);
     return groups;
   }, {}), []);
-
-  const createDepartment = async () => {
-    const name = newDepartment.trim();
-    if (!name) return toast.error('Escribe el nombre del departamento');
-    try {
-      const code = `DEPT-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)}${Math.floor(Math.random() * 100)}`;
-      await api.post('/hr/departments', { name, code, tenantId });
-      setNewDepartment('');
-      toast.success('Departamento creado');
-      await load();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || 'Error al crear departamento');
-    }
-  };
-
-  const deleteDepartment = async (id: string) => {
-    try {
-      await api.delete(`/hr/departments/${id}`);
-      toast.success('Departamento eliminado');
-      await load();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || 'Error al eliminar departamento');
-    }
-  };
-
-  const assignUserDepartment = async (userId: string, departmentId: string) => {
-    try {
-      await tenantsService.updateUser(tenantId, userId, { departmentId: departmentId === 'none' ? null : departmentId } as any);
-      toast.success('Departamento asignado');
-      onUsersChange?.();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || 'Error al asignar departamento');
-    }
-  };
 
   const openCreateRole = () => {
     setEditingRole({ name: '', description: '', permissions: emptyPermissions() });
@@ -229,45 +183,6 @@ export function TeamAccessPanel({ tenantId, tenantName, users, departmentDialogO
             ))}
           </CardContent>
       </Card>
-
-      <Dialog open={departmentDialogOpen} onOpenChange={onDepartmentDialogChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Building2 className="size-5 text-primary" /> Departamentos</DialogTitle>
-            <DialogDescription>Crea departamentos y asigna cada usuario al área que le corresponde.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-5 py-2">
-            <div className="flex gap-2">
-              <Input value={newDepartment} onChange={(event) => setNewDepartment(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void createDepartment()} placeholder="Nuevo departamento..." className="h-10" />
-              <Button onClick={() => void createDepartment()} className="h-10 shrink-0 gap-2"><Plus className="size-4" /> Crear</Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {!departments.length && <p className="text-xs text-muted-foreground">Sin departamentos creados.</p>}
-              {departments.map((department: any) => <Badge key={department.id || department.name} variant="secondary" className="gap-1.5 py-1.5 pl-3 pr-1.5 text-xs">
-                {department.name}
-                <Button variant="ghost" size="icon" className="size-5 text-rose-500 hover:bg-rose-500/10" onClick={() => void deleteDepartment(department.id)} title="Eliminar departamento"><X className="size-3" /></Button>
-              </Badge>)}
-            </div>
-            <div className="space-y-2 rounded-xl border border-border/50 p-3">
-              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground"><Users className="size-3.5" /> Asignar usuarios</div>
-              {!users.length && <p className="py-4 text-center text-xs text-muted-foreground">Crea usuarios desde el panel izquierdo.</p>}
-              <div className="max-h-64 space-y-2 overflow-y-auto">
-                {users.map((user: any) => <div key={user.id} className="flex items-center justify-between gap-3 rounded-lg bg-muted/20 px-3 py-2">
-                  <div className="min-w-0"><p className="truncate text-xs font-bold">{user.name}</p><p className="truncate text-[10px] text-muted-foreground">{user.email}</p></div>
-                  <Select value={user.departmentId || 'none'} onValueChange={(value) => void assignUserDepartment(user.id, value)}>
-                    <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Sin departamento" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sin departamento</SelectItem>
-                      {departments.map((department: any) => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>)}
-              </div>
-            </div>
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => onDepartmentDialogChange(false)}>Cerrar</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={!!viewingRole} onOpenChange={(open) => !open && setViewingRole(null)}>
         <DialogContent className="flex h-[90vh] w-[96vw] max-w-6xl flex-col overflow-hidden p-0">

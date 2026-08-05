@@ -22,7 +22,7 @@ import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
-import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
@@ -59,7 +59,20 @@ const statusOptions = [
 ];
 
 export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: FacturasViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const {
+    exchangeRate: globalRate,
+    displayCurrency,
+    baseCurrency,
+    valuationMode,
+    valuationModeLabel,
+    valuationModeSuffix,
+    showValuationLegend,
+    formatConvertedAmount,
+    formatHistoricalAmount,
+    formatCurrentAmount,
+    convertAmount,
+    convertCurrentAmount,
+  } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState(sessionStorage.getItem('global-search-module') === 'facturas' ? (sessionStorage.removeItem('global-search-module') || sessionStorage.getItem('global-search-term') || '') : '');
@@ -171,7 +184,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const isExistingInvoice = Boolean(draftId);
     setIsCreating(!isExistingInvoice);
     setEditingId(isExistingInvoice ? draftId! : null);
-    const draftSnapshot = { paymentMethod: 'CASH', accountId: '', ...JSON.parse(JSON.stringify(invoiceDraft)) };
+    const draftSnapshot = { paymentMethod: 'CASH', ...JSON.parse(JSON.stringify(invoiceDraft)) };
     setLocalDoc(draftSnapshot);
     setPricingMode(inferPricingMode(draftSnapshot));
 
@@ -256,11 +269,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error('La factura no tiene saldo pendiente');
       return;
     }
-    if (invoiceStatus === 'DRAFT' && !invoice.accountId) {
-      toast.error('La factura necesita una cuenta contable de venta antes de cobrarla');
-      return;
-    }
-
     try {
       setPayingInvoiceId(invoice.id);
       if (invoiceStatus === 'DRAFT') {
@@ -319,7 +327,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       commissionType: 'PERCENTAGE',
       commissionRate: 0,
       commissionAmount: 0,
-      accountId: '',
       paymentMethod: 'CASH',
     });
     setLocalRates({ dRate: 0, tRate: 15 });
@@ -341,10 +348,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         toast.error(priceMessage);
         return;
       }
-    }
-    if (emitir && !localDoc.accountId) {
-      toast.error('Selecciona la cuenta contable de la venta antes de emitir');
-      return;
     }
     const serialRows = (localDoc.items || []).filter((item: any) => {
       const p = findProductForItem(item);
@@ -420,7 +423,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           total: Number(localDoc.total || 0),
           status: emitir ? 'PENDING' : 'DRAFT',
           paymentMethod: localDoc.paymentMethod || 'CASH',
-          accountId: localDoc.accountId || undefined,
           notes: finalNotes,
           salesOrderId: localDoc.salesOrderId || undefined,
           sellerEmployeeId: localDoc.sellerEmployeeId || undefined,
@@ -485,6 +487,18 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     return Math.max(0, Number(invoice.balance ?? invoice.total ?? 0));
   };
 
+  const formatInvoiceAmount = (amount: number, currency?: string, rate?: number) => (
+    valuationMode === 'CURRENT'
+      ? formatCurrentAmount(amount, currency)
+      : formatHistoricalAmount(amount, currency, rate)
+  );
+
+  const getInvoiceExchangeDifference = (amount: number, currency?: string, rate?: number) => {
+    const sourceCurrency = String(currency || baseCurrency).toUpperCase();
+    if (!amount || sourceCurrency === baseCurrency || sourceCurrency === displayCurrency) return 0;
+    return convertCurrentAmount(amount, currency) - convertAmount(amount, currency, rate || globalRate);
+  };
+
 
 
   const columns: ColumnDef<Invoice>[] = [
@@ -520,24 +534,52 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       key: 'total',
       header: 'Total Neto',
       width: '150px',
-      render: (val, row) => (
-        <span className="text-[13px] font-black tabular-nums text-foreground">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-        </span>
-      )
+      render: (val, row) => {
+        const amount = Number(val || 0);
+        const difference = getInvoiceExchangeDifference(amount, row.currency, row.exchangeRate);
+        return (
+          <div className="min-w-0">
+            <span className="text-[13px] font-black tabular-nums text-foreground">
+              {formatInvoiceAmount(amount, row.currency, row.exchangeRate)}
+            </span>
+            {showValuationLegend && <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+              {valuationModeLabel}
+              {valuationMode === 'CURRENT' && Math.abs(difference) >= 0.005 && (
+                <span className={cn('ml-1', difference > 0 ? 'text-orange-500' : 'text-emerald-500')}>
+                  · Δ {formatCurrentAmount(difference, displayCurrency)}
+                </span>
+              )}
+            </div>}
+          </div>
+        );
+      }
     },
     {
       key: 'balance',
       header: 'Saldo deudor',
       width: '150px',
-      render: (_val, row) => (
-        <span className={cn(
-          "text-[13px] font-black tabular-nums",
-          getInvoiceBalance(row) > 0 ? "text-orange-500" : "text-emerald-500"
-        )}>
-          {formatConvertedAmount(getInvoiceBalance(row), row.currency, row.exchangeRate)}
-        </span>
-      )
+      render: (_val, row) => {
+        const balance = getInvoiceBalance(row);
+        const difference = getInvoiceExchangeDifference(balance, row.currency, row.exchangeRate);
+        return (
+          <div className="min-w-0">
+            <span className={cn(
+              "text-[13px] font-black tabular-nums",
+              balance > 0 ? "text-orange-500" : "text-emerald-500"
+            )}>
+              {formatInvoiceAmount(balance, row.currency, row.exchangeRate)}
+            </span>
+            {showValuationLegend && <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+              {valuationModeLabel}
+              {valuationMode === 'CURRENT' && Math.abs(difference) >= 0.005 && (
+                <span className={cn('ml-1', difference > 0 ? 'text-orange-500' : 'text-emerald-500')}>
+                  · Δ {formatCurrentAmount(difference, displayCurrency)}
+                </span>
+              )}
+            </div>}
+          </div>
+        );
+      }
     },
     {
       key: 'status',
@@ -557,15 +599,21 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
   ];
 
+  const displayInvoiceAmount = (amount: number, currency?: string, rate?: number) => (
+    valuationMode === 'CURRENT'
+      ? convertCurrentAmount(amount, currency)
+      : convertAmount(amount, currency, rate || globalRate)
+  );
+
   const totalBilledInDisplayCurrency = data.reduce(
-    (acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate),
+    (acc, invoice) => acc + displayInvoiceAmount(Number(invoice.total ?? invoice.baseTotal ?? 0), invoice.currency, invoice.exchangeRate),
     0,
   );
   const accountsReceivableInDisplayCurrency = data
     .filter(invoice => ['PENDING', 'OVERDUE', 'PARTIAL'].includes((invoice.status || '').toUpperCase()))
-    .reduce((acc, invoice) => acc + convertAmount(getInvoiceBalance(invoice), invoice.currency, invoice.exchangeRate), 0);
+    .reduce((acc, invoice) => acc + displayInvoiceAmount(getInvoiceBalance(invoice), invoice.currency, invoice.exchangeRate), 0);
   const paidInDisplayCurrency = data.reduce(
-    (acc, invoice) => acc + convertAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate),
+    (acc, invoice) => acc + displayInvoiceAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate),
     0,
   );
 
@@ -610,6 +658,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           <Card className="rounded-2xl border-border/50">
             <CardContent className="min-w-0 p-4 space-y-3 sm:p-6">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
+              <SalesAccountingLegend
+                flow={isCashRegisterInvoice ? 'pos' : 'invoice'}
+                paymentMethod={localDoc?.paymentMethod}
+              />
               <div className="grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Número</p>
@@ -720,17 +772,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       <option value="CHECK">Cheque</option>
                     </select>
                   </div>
-                  <AccountingAccountSelect
-                    value={localDoc?.accountId || ''}
-                    onChange={(accountId) => {
-                      setLocalDoc({ ...localDoc, accountId });
-                      if (!isCreating) void handleUpdate(localDoc!.id, { accountId });
-                     }}
-                     label={isCashRegisterInvoice ? 'Cuenta contable de la caja' : 'Cuenta contable de la venta'}
-                     required
-                     disabled={isInvoiceLocked || isCashRegisterInvoice}
-                   />
-                   {isCashRegisterInvoice && <p className="mt-1 text-[10px] italic text-muted-foreground">Cuenta definida por la caja de facturación; no se puede cambiar.</p>}
               </div>
             </CardContent>
           </Card>
@@ -1023,17 +1064,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title={`Facturado Total (${displayCurrency})`} value={formatConvertedAmount(totalBilledInDisplayCurrency, displayCurrency)} icon={FileText} color="text-primary" bg="bg-primary/10" />
-        <SalesKpiCard title={`Por Cobrar (${displayCurrency})`} value={formatConvertedAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />
+        <SalesKpiCard title={`Facturado Total (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(totalBilledInDisplayCurrency, displayCurrency)} icon={FileText} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title={`Por Cobrar (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />
         <SalesKpiCard title="Vencidas" value={data.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length} icon={AlertCircle} color="text-rose-500" bg="bg-rose-500/10" active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(statusFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
-        <SalesKpiCard title={`Cobrado (${displayCurrency})`} value={formatConvertedAmount(paidInDisplayCurrency, displayCurrency)} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />
+        <SalesKpiCard title={`Cobrado (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(paidInDisplayCurrency, displayCurrency)} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />
       </div>
-
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Control de Facturación</h2>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de recaudos masivos sin fricción.</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/50 mt-1">{showValuationLegend ? `Gestión de recaudos masivos sin fricción · Vista ${valuationModeLabel.toLowerCase()} al tipo de cambio ${globalRate.toFixed(4)}.` : 'Gestión de recaudos masivos sin fricción.'}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="invoices" />

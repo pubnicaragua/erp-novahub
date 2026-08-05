@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { Card, CardContent } from '../ui/card';
 import { purchaseOrdersService, supplierInvoicesService, expensesService, recurringExpensesService, supplierPricesService } from '../../services/compras.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -257,8 +258,8 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                           <td className="px-4 py-3 font-mono text-xs">{it.docNumber}</td>
                           <td className="px-4 py-3">{it.description}</td>
                           <td className="px-4 py-3 text-center">{it.quantity}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{formatConvertedAmount(it.unitPrice, it.currency, it.exchangeRate)}</td>
-                          <td className="px-4 py-3 text-right font-medium tabular-nums">{formatConvertedAmount(it.total, it.currency, it.exchangeRate)}</td>
+                          <td className="px-4 py-3 text-right"><CurrencyValuationAmount amount={it.unitPrice} sourceCurrency={it.currency} sourceExchangeRate={it.exchangeRate} className="font-medium" /></td>
+                          <td className="px-4 py-3 text-right"><CurrencyValuationAmount amount={it.total} sourceCurrency={it.currency} sourceExchangeRate={it.exchangeRate} className="font-medium" /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -318,7 +319,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                       <tr key={p.id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs">{new Date(p.date).toLocaleDateString()}</td>
                         <td className="px-4 py-3">{p.description}</td>
-                        <td className="px-4 py-3 text-right font-medium tabular-nums">{formatConvertedAmount(p.unitPrice, p.currency)}</td>
+                        <td className="px-4 py-3 text-right"><CurrencyValuationAmount amount={p.unitPrice} sourceCurrency={p.currency} sourceExchangeRate={p.exchangeRate} className="font-medium" /></td>
                         <td className="px-4 py-3 text-center text-xs font-mono">{p.currency}</td>
                         <td className="px-4 py-3 text-center">
                           <button onClick={() => setDeletePriceId(p.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="size-3.5" /></button>

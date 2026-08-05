@@ -6,11 +6,12 @@ import { Textarea } from '../ui/textarea';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
 
 export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
-  const { displayCurrency, formatConvertedAmount } = useCurrency();
+  const { displayCurrency } = useCurrency();
   const [showNewForm, setShowNewForm] = useState(false);
   const [newTraining, setNewTraining] = useState({
     title: '',
@@ -298,7 +299,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 <div className="pt-3 border-t mt-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Costo</span>
-                    <span className="font-bold text-primary">{formatConvertedAmount(training.cost, training.currency || 'USD')}</span>
+                    <CurrencyValuationAmount amount={Number(training.cost ?? training.baseCost ?? 0)} sourceCurrency={training.currency || 'USD'} sourceExchangeRate={training.exchangeRate} className="font-bold text-primary" />
                   </div>
                 </div>
               )}

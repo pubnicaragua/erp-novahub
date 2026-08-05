@@ -18,6 +18,7 @@ import { generateExpensePDF } from '../../utils/pdfGenerator';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 interface Props {
   data: PaymentMade[];
@@ -41,7 +42,7 @@ const methodOpts = [
 
 export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -159,9 +160,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'amount',    header: 'Monto',      width: '130px',
       render: (val, row) => (
-        <span className="font-black tabular-nums text-emerald-500">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-        </span>
+        <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-emerald-500" />
       ) },
     { key: 'method',    header: 'Método',     width: '120px', editable: canPerform('PURCHASES_PAYMENTS', 'edit'), type: 'select', options: methodOpts,
       render: (val) => { const o = methodOpts.find(x => x.value === normalizeMethod(String(val || ''))); return <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{o?.label||val||'-'}</Badge>; } },
@@ -214,9 +213,23 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         })()
       : [...paymentsForInvoice, nextPaymentEntry as any];
 
-    const totalPaid = mergedPayments.reduce((acc, payment: any) => acc + Number(payment.amount || 0), 0);
+    const totalPaidBase = mergedPayments.reduce((acc, payment: any) => acc + (
+      payment.baseAmount !== null && payment.baseAmount !== undefined
+        ? Number(payment.baseAmount)
+        : toBaseAmount(Number(payment.amount || 0), payment.currency, payment.exchangeRate)
+    ), 0);
     const invoiceTotal = Number(invoice?.total || 0);
-    const nextAmountPaid = Math.min(invoiceTotal, totalPaid);
+    const invoiceCurrency = String(invoice?.currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
+    const invoiceRate = invoiceCurrency === baseCurrency ? 1 : Number(invoice?.exchangeRate || globalRate || 1);
+    const invoiceTotalBase = invoice?.baseTotal !== null && invoice?.baseTotal !== undefined
+      ? Number(invoice.baseTotal)
+      : toBaseAmount(invoiceTotal, invoiceCurrency, invoiceRate);
+    const appliedBase = Math.min(invoiceTotalBase, totalPaidBase);
+    const nextAmountPaid = invoiceCurrency === baseCurrency
+      ? appliedBase
+      : baseCurrency === 'NIO' && invoiceCurrency === 'USD'
+        ? appliedBase / invoiceRate
+        : appliedBase * invoiceRate;
     const nextBalance = Math.max(invoiceTotal - nextAmountPaid, 0);
     const nextStatus = nextAmountPaid <= 0 ? 'PENDING' : nextBalance <= 0 ? 'PAID' : 'PARTIAL';
 
@@ -243,7 +256,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         const rate = localDoc.exchangeRate || globalRate;
         payload.amount = nioAmount + (usdAmount * rate);
         payload.currency = 'NIO';
-        payload.baseAmount = payload.amount;
+        payload.baseAmount = toBaseAmount(payload.amount, 'NIO', rate);
         payload.notes = [(localDoc.notes || ''), `Pago mixto: C$${nioAmount.toFixed(2)} + $${usdAmount.toFixed(2)} (TC ${rate})`].filter(Boolean).join(' | ');
         delete payload.amountNio;
         delete payload.amountUsd;
@@ -532,16 +545,19 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     );
   }
 
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate || globalRate);
   const paidTotalInDisplayCurrency = data.reduce(
-    (acc, payment) => acc + convertAmount(payment.amount || 0, payment.currency, payment.exchangeRate),
+    (acc, payment) => acc + toDisplayAmount(Number(payment.amount ?? payment.baseAmount ?? 0), payment.currency, payment.exchangeRate),
     0,
   );
 
   const kpis = [
     { title: 'Transacciones',   value: data.length,                   icon: Hash,         color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
     {
-      title: `Pagos Realizados (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${paidTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      title: `Pagos Realizados (${displayCurrency}${valuationModeSuffix})`,
+      value: formatCurrentAmount(paidTotalInDisplayCurrency, displayCurrency),
       icon: TrendingDown,
       color: 'text-rose-500',
       bg: 'bg-rose-500/10',

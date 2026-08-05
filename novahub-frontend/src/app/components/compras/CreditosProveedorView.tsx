@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -29,7 +30,7 @@ const statusOpts = [
 
 export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform } = useAuth();
-  const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
+  const { displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, toBaseAmount, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, exchangeRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ISSUED'>('ALL');
   
@@ -78,7 +79,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     { key: 'date',     header: 'Fecha',      width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'total',    header: 'Total',      width: '120px',
-      render: (val, row) => <span className="font-black tabular-nums">{formatConvertedAmount(Number(val || 0), resolveSourceCurrency((row as any)?.currency), (row as any)?.exchangeRate)}</span> },
+      render: (val, row) => <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={resolveSourceCurrency((row as any)?.currency)} sourceExchangeRate={(row as any)?.exchangeRate} className="font-black" /> },
     { key: 'status',   header: 'Estado',     width: '110px', editable: canPerform('PURCHASES_RETURNS', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toLowerCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
@@ -95,13 +96,15 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     
     try {
       const creditCurrency = localDoc.currency || displayCurrency;
-      const creditRate = creditCurrency === 'NIO' ? 1 : (localDoc.exchangeRate || 1);
+      const creditRate = creditCurrency === baseCurrency
+        ? 1
+        : (Number(localDoc.exchangeRate || 0) > 1 ? Number(localDoc.exchangeRate) : exchangeRate);
       const finalDoc = {
           ...localDoc,
           total: recalculatedTotal,
           currency: creditCurrency,
           exchangeRate: creditRate,
-          baseTotal: creditCurrency === 'NIO' ? recalculatedTotal : recalculatedTotal * creditRate,
+          baseTotal: toBaseAmount(recalculatedTotal, creditCurrency, creditRate),
       };
       if (editingId === 'NEW') {
         await vendorCreditsService.create(finalDoc as any);
@@ -342,11 +345,14 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     );
   }
 
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate || exchangeRate);
   const disponible = data
     .filter(c => (c.status || '').toLowerCase() === 'issued')
-    .reduce((a, c) => a + convertAmount(Number(c.total || 0), resolveSourceCurrency((c as any)?.currency), (c as any)?.exchangeRate), 0);
+    .reduce((a, c) => a + toDisplayAmount(Number((c as any).total ?? (c as any).baseTotal ?? 0), resolveSourceCurrency((c as any)?.currency), (c as any)?.exchangeRate), 0);
   const kpis = [
-    { title: 'Crédito Disponible', value: formatConvertedAmount(disponible, displayCurrency), icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'indicator' as const },
+    { title: `Crédito Disponible (${displayCurrency}${valuationModeSuffix})`, value: formatCurrentAmount(disponible, displayCurrency), icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'indicator' as const },
     { title: 'Total Notas', value: data.length, icon: Hash, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
     { title: 'Emitidas', value: data.filter(c => (c.status||'').toLowerCase() === 'issued').length, icon: BadgeDollarSign, color: 'text-purple-500', bg: 'bg-purple-500/10', kind: 'filter' as const, filter: 'ISSUED' as const },
   ];

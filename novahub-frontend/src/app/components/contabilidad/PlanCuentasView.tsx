@@ -156,7 +156,7 @@ interface PlanCuentasViewProps {
 
 export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewProps) {
   const { canPerform } = useAuth();
-  const { formatConvertedAmount } = useCurrency();
+  const { baseCurrency, formatConvertedAmount } = useCurrency();
 
   const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
   const loading = accountsQuery.isLoading || accountsQuery.isFetching;
@@ -550,7 +550,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
           <div className="flex shrink-0 flex-col items-end gap-1">
             <span className="max-w-[96px] truncate text-right text-xs font-semibold tabular-nums">
-              {formatConvertedAmount(account.balance, account.currency)}
+              {formatConvertedAmount(account.balance, baseCurrency)}
             </span>
             <Badge variant={account.isActive ? 'default' : 'secondary'} className="px-1.5 py-0 text-[9px]">
               {account.isActive ? 'Activo' : 'Inactivo'}
@@ -598,7 +598,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
           {visibleAccountColumnKeys.includes('subtype') && <span className="min-w-0 truncate px-2 text-[10px] text-muted-foreground" title={getSubtypeLabel(account.subtype)}>{getSubtypeLabel(account.subtype)}</span>}
           {visibleAccountColumnKeys.includes('detailType') && <span className="min-w-0 truncate px-2 text-[10px] text-muted-foreground" title={getDetailTypeLabel(account.detailType)}>{getDetailTypeLabel(account.detailType)}</span>}
           {visibleAccountColumnKeys.includes('manual') && <Badge variant={account.allowManualEntry ? 'outline' : 'secondary'} className="mx-2 max-w-full justify-center truncate text-[10px]">{account.allowManualEntry ? 'Manual' : 'No manual'}</Badge>}
-          {visibleAccountColumnKeys.includes('balance') && <span className="min-w-0 truncate px-2 text-right text-sm font-medium tabular-nums">{formatConvertedAmount(account.balance, account.currency)}</span>}
+          {visibleAccountColumnKeys.includes('balance') && <span className="min-w-0 truncate px-2 text-right text-sm font-medium tabular-nums">{formatConvertedAmount(account.balance, baseCurrency)}</span>}
           {visibleAccountColumnKeys.includes('currency') && <Badge variant="outline" className="mx-2 max-w-full justify-center truncate text-[10px] text-muted-foreground">{account.currency}</Badge>}
           {visibleAccountColumnKeys.includes('status') && <Badge variant={account.isActive ? 'default' : 'secondary'} className="mx-2 max-w-full justify-center truncate text-[10px]">{account.isActive ? 'Activo' : 'Inactivo'}</Badge>}
           <div className="flex shrink-0 items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
@@ -778,7 +778,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                   <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Saldo actual</p>
-                      <p className="mt-1 text-2xl font-black tabular-nums tracking-tight">{formatConvertedAmount(selectedAccount.balance, selectedAccount.currency)}</p>
+                      <p className="mt-1 text-2xl font-black tabular-nums tracking-tight">{formatConvertedAmount(selectedAccount.balance, baseCurrency)}</p>
                     </div>
                     <Badge variant="outline" className={cn('shrink-0', TYPE_COLOR_MAP[selectedAccount.type])}>
                       {getTypeLabel(selectedAccount.type)}
@@ -893,8 +893,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                                 </p>
                               </div>
                               <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">
-                                {debit > 0 && <p className="text-emerald-600">+{formatConvertedAmount(debit, selectedAccount.currency)}</p>}
-                                {credit > 0 && <p className="text-rose-500">-{formatConvertedAmount(credit, selectedAccount.currency)}</p>}
+                                {debit > 0 && <p className="text-emerald-600">+{formatConvertedAmount(debit, baseCurrency)}</p>}
+                                {credit > 0 && <p className="text-rose-500">-{formatConvertedAmount(credit, baseCurrency)}</p>}
                                 {debit === 0 && credit === 0 && <p className="text-muted-foreground">—</p>}
                               </div>
                             </div>
@@ -970,16 +970,16 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
                     <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Débito</p>
-                    <p className="mt-1 break-words font-mono text-sm font-bold text-emerald-600">{formatConvertedAmount(debit, selectedAccount?.currency ?? 'NIO')}</p>
+                    <p className="mt-1 break-words font-mono text-sm font-bold text-emerald-600">{formatConvertedAmount(debit, baseCurrency)}</p>
                   </div>
                   <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
                     <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Crédito</p>
-                    <p className="mt-1 break-words font-mono text-sm font-bold text-rose-500">{formatConvertedAmount(credit, selectedAccount?.currency ?? 'NIO')}</p>
+                    <p className="mt-1 break-words font-mono text-sm font-bold text-rose-500">{formatConvertedAmount(credit, baseCurrency)}</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                     <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Movimiento neto</p>
                     <p className={cn('mt-1 break-words font-mono text-sm font-bold', movement >= 0 ? 'text-emerald-600' : 'text-rose-500')}>
-                      {movement >= 0 ? '+' : '-'}{formatConvertedAmount(Math.abs(movement), selectedAccount?.currency ?? 'NIO')}
+                      {movement >= 0 ? '+' : '-'}{formatConvertedAmount(Math.abs(movement), baseCurrency)}
                     </p>
                   </div>
                 </div>

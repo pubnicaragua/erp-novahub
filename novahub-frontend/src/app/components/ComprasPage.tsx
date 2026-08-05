@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranchScope } from '../hooks/useBranchScope';
 import { BranchScopeFilter } from './ui/BranchScopeFilter';
+import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import {
   suppliersService, expensesService, recurringExpensesService,
   purchaseOrdersService, purchaseReceiptsService,
@@ -401,6 +402,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
             </div>
             <BranchScopeFilter className="ml-auto" showLabel={false} />
           </div>
+          <CurrencyValuationBanner className="mb-5" />
 
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); }}>
         <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>

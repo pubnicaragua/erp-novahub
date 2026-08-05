@@ -87,6 +87,7 @@ type RelatedTransaction = {
   status?: string;
   amount?: number;
   currency?: string;
+  exchangeRate?: number;
   description?: string;
 };
 
@@ -160,7 +161,7 @@ export function CustomerDetailDrawer({
   onOpenChange,
   customerSnapshot,
 }: CustomerDetailDrawerProps) {
-  const { formatConvertedAmount } = useCurrency();
+  const { baseCurrency, formatConvertedAmount } = useCurrency();
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [detail, setDetail] = useState<Customer | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -394,8 +395,8 @@ export function CustomerDetailDrawer({
               {/* Tab General */}
               <TabsContent value="general" className="mt-0 space-y-6 outline-none">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <MetricCard label="Saldo Deudor" value={formatConvertedAmount(balance, 'NIO')} icon={DollarSign} accent={balance > 0 ? 'text-destructive' : 'text-primary'} loading={loading} />
-                  <MetricCard label="Límite Crédito" value={formatConvertedAmount(creditLimit, 'NIO')} icon={CreditCard} accent="text-primary" loading={loading} />
+                  <MetricCard label="Saldo Deudor" value={formatConvertedAmount(balance, baseCurrency)} icon={DollarSign} accent={balance > 0 ? 'text-destructive' : 'text-primary'} loading={loading} />
+                  <MetricCard label="Límite Crédito" value={formatConvertedAmount(creditLimit, baseCurrency)} icon={CreditCard} accent="text-primary" loading={loading} />
                   <MetricCard label="Tipo Cliente" value={typeInfo.label} icon={TypeIcon} accent="text-primary" loading={loading} />
                   <MetricCard label="Estado" value={statusInfo.label} icon={CheckCircle2} accent={String(customer?.status || '').toUpperCase() === 'ACTIVE' ? 'text-emerald-500' : 'text-primary'} loading={loading} />
                 </div>
@@ -434,8 +435,8 @@ export function CustomerDetailDrawer({
                     <InfoField label="Identificación Fiscal" value={customer?.taxId || 'No registrado'} icon={Hash} mono muted={!customer?.taxId} />
                     <InfoField label="Régimen Fiscal" value={customer?.fiscalRegime || 'No registrado'} icon={ShieldAlert} muted={!customer?.fiscalRegime} />
                     <InfoField label="Lista de Precios" value={customer?.priceList?.name || 'Sin lista asignada'} icon={Tag} muted={!customer?.priceList} />
-                    <InfoField label="Límite de Crédito Concedido" value={formatConvertedAmount(creditLimit, 'NIO')} icon={DollarSign} mono />
-                    <InfoField label="Saldo Deudor Actual" value={formatConvertedAmount(balance, 'NIO')} icon={DollarSign} mono />
+                    <InfoField label="Límite de Crédito Concedido" value={formatConvertedAmount(creditLimit, baseCurrency)} icon={DollarSign} mono />
+                    <InfoField label="Saldo Deudor Actual" value={formatConvertedAmount(balance, baseCurrency)} icon={DollarSign} mono />
                     <InfoField label="Código Interno" value={customer?.code || '—'} icon={Tag} mono />
                   </div>
 
@@ -487,7 +488,7 @@ export function CustomerDetailDrawer({
                                 {getInvoiceStatusInfo(inv.status).label}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-xs font-black text-right tabular-nums text-foreground">{formatConvertedAmount(inv.total, inv.currency || 'NIO')}</TableCell>
+                            <TableCell className="text-xs font-black text-right tabular-nums text-foreground">{formatConvertedAmount(inv.total, inv.currency || 'NIO', inv.exchangeRate)}</TableCell>
                             <TableCell className="text-right"><Button type="button" variant="ghost" size="sm" className="h-7 gap-1 rounded-lg px-2 text-[10px] font-bold text-muted-foreground" onClick={(event) => { event.stopPropagation(); setSelectedInvoiceId(inv.id); }}>Ver detalle <ChevronRight className="size-3" /></Button></TableCell>
                           </TableRow>
                         ))}
@@ -509,12 +510,12 @@ export function CustomerDetailDrawer({
                         <div className="mt-4 flex items-end justify-between gap-3 border-t border-border/40 pt-3">
                           <div className="space-y-1">
                             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total</p>
-                            <p className="text-[10px] font-bold text-muted-foreground">Pagado: {formatConvertedAmount(inv.amountPaid || 0, inv.currency || 'NIO')}</p>
+                            <p className="text-[10px] font-bold text-muted-foreground">Pagado: {formatConvertedAmount(inv.amountPaid || 0, inv.currency || 'NIO', inv.exchangeRate)}</p>
                           </div>
                           <div className="text-right">
-                            <p className="font-mono text-base font-black text-foreground">{formatConvertedAmount(inv.total, inv.currency || 'NIO')}</p>
+                            <p className="font-mono text-base font-black text-foreground">{formatConvertedAmount(inv.total, inv.currency || 'NIO', inv.exchangeRate)}</p>
                             <p className={`text-[10px] font-black ${Number(inv.balance || 0) > 0 ? 'text-destructive' : 'text-primary'}`}>
-                              {Number(inv.balance || 0) > 0 ? `Saldo: ${formatConvertedAmount(inv.balance, inv.currency || 'NIO')}` : 'Pagada'}
+                              {Number(inv.balance || 0) > 0 ? `Saldo: ${formatConvertedAmount(inv.balance, inv.currency || 'NIO', inv.exchangeRate)}` : 'Pagada'}
                             </p>
                           </div>
                         </div>
@@ -561,7 +562,7 @@ export function CustomerDetailDrawer({
                           </div>
                           <div className="shrink-0 text-right">
                             <p className="text-[10px] font-bold text-muted-foreground">{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '—'}</p>
-                            <p className="text-[10px] font-black text-foreground">{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO') : getTransactionStatus(transaction.status)}</p>
+                            <p className="text-[10px] font-black text-foreground">{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO', transaction.exchangeRate) : getTransactionStatus(transaction.status)}</p>
                           </div>
                         </div>
                       ))}
@@ -658,7 +659,7 @@ function EmptyState({ icon: Icon, title, description }: EmptyStateProps) {
 interface InvoiceInlineDetailProps {
   invoice: Invoice;
   onClose: () => void;
-  formatAmount: (amount: number, currency?: any) => string;
+  formatAmount: (amount: number, currency?: any, exchangeRate?: number) => string;
 }
 
 function InvoiceInlineDetail({ invoice, onClose, formatAmount }: InvoiceInlineDetailProps) {
@@ -681,8 +682,8 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount }: InvoiceInlineDe
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <InfoField label="Fecha de emisión" value={invoice.date ? format(new Date(invoice.date), 'dd/MM/yyyy') : '—'} icon={Calendar} />
         <InfoField label="Fecha de vencimiento" value={invoice.dueDate ? format(new Date(invoice.dueDate), 'dd/MM/yyyy') : '—'} icon={Clock} />
-        <InfoField label="Total" value={formatAmount(Number(invoice.total || 0), invoice.currency)} icon={DollarSign} mono />
-        <InfoField label="Saldo pendiente" value={formatAmount(Number(invoice.balance || 0), invoice.currency)} icon={CreditCard} mono />
+        <InfoField label="Total" value={formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate)} icon={DollarSign} mono />
+        <InfoField label="Saldo pendiente" value={formatAmount(Number(invoice.balance || 0), invoice.currency, invoice.exchangeRate)} icon={CreditCard} mono />
       </div>
 
       <div className="mt-5 overflow-hidden rounded-xl border border-border/50 bg-background/40">
@@ -700,8 +701,8 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount }: InvoiceInlineDe
               <TableRow key={item.id}>
                 <TableCell className="max-w-[16rem] text-xs font-bold">{item.description || 'Producto o servicio'}</TableCell>
                 <TableCell className="text-right text-xs text-muted-foreground">{Number(item.quantity || 0)}</TableCell>
-                <TableCell className="text-right text-xs text-muted-foreground">{formatAmount(Number(item.unitPrice || 0), invoice.currency)}</TableCell>
-                <TableCell className="text-right text-xs font-black">{formatAmount(Number(item.total || 0), invoice.currency)}</TableCell>
+                <TableCell className="text-right text-xs text-muted-foreground">{formatAmount(Number(item.unitPrice || 0), invoice.currency, invoice.exchangeRate)}</TableCell>
+                <TableCell className="text-right text-xs font-black">{formatAmount(Number(item.total || 0), invoice.currency, invoice.exchangeRate)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -709,10 +710,10 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount }: InvoiceInlineDe
       </div>
 
       <div className="mt-4 flex flex-col items-end gap-1 text-xs">
-        <p className="text-muted-foreground">Subtotal: <span className="font-bold text-foreground">{formatAmount(Number(invoice.subtotal || 0), invoice.currency)}</span></p>
-        <p className="text-muted-foreground">Impuestos: <span className="font-bold text-foreground">{formatAmount(Number(invoice.taxAmount || 0), invoice.currency)}</span></p>
-        <p className="text-muted-foreground">Pagado: <span className="font-bold text-foreground">{formatAmount(Number(invoice.amountPaid || 0), invoice.currency)}</span></p>
-        <p className="text-sm font-black">Total: <span className="text-primary">{formatAmount(Number(invoice.total || 0), invoice.currency)}</span></p>
+        <p className="text-muted-foreground">Subtotal: <span className="font-bold text-foreground">{formatAmount(Number(invoice.subtotal || 0), invoice.currency, invoice.exchangeRate)}</span></p>
+        <p className="text-muted-foreground">Impuestos: <span className="font-bold text-foreground">{formatAmount(Number(invoice.taxAmount || 0), invoice.currency, invoice.exchangeRate)}</span></p>
+        <p className="text-muted-foreground">Pagado: <span className="font-bold text-foreground">{formatAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate)}</span></p>
+        <p className="text-sm font-black">Total: <span className="text-primary">{formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate)}</span></p>
       </div>
       {invoice.notes && <p className="mt-4 rounded-xl border border-border/40 bg-muted/20 p-3 text-xs text-muted-foreground"><span className="font-bold text-foreground">Notas:</span> {invoice.notes}</p>}
     </Card>

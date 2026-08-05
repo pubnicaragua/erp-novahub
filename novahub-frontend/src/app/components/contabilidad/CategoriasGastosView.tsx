@@ -254,7 +254,7 @@ export function CategoriasGastosView() {
                   <SelectValue placeholder="Seleccionar cuenta" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.filter(a => a.isActive).map(a => (
+                  {accounts.filter(a => a.isActive !== false && a.acceptsPostings !== false).map(a => (
                     <SelectItem key={a.id} value={a.id} className="text-xs font-mono">
                       {a.code} - {a.name}
                     </SelectItem>

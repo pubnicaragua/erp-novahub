@@ -24,6 +24,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -421,7 +422,7 @@ export function FinanceTableView({
     const value = item[col.key];
     if (col.type === 'currency') {
       const n = Number(value || 0);
-      return <span className={n >= 0 ? "text-emerald-500" : "text-rose-500"}>{formatConvertedAmount(n, item.currency, item.exchangeRate)}</span>;
+      return <CurrencyValuationAmount amount={n} sourceCurrency={item.currency} sourceExchangeRate={item.exchangeRate} className={n >= 0 ? "text-emerald-500" : "text-rose-500"} />;
     }
     if (col.type === 'date' || col.type === 'datetime') {
       if (!value) return '-';

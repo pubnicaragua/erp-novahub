@@ -23,7 +23,7 @@ interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: 
 
 export function ProveedoresView({ data, loading, onRefresh, pagination, onSearchChange }: ProveedoresViewProps) {
   const { canPerform } = useAuth();
-  const { formatConvertedAmount } = useCurrency();
+  const { baseCurrency, valuationModeSuffix, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [balanceOrder, setBalanceOrder] = useState<'all' | 'highest' | 'lowest'>('all');
@@ -211,7 +211,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     { key: 'email',       header: 'Email',     editable: canPerform('proveedores', 'edit') },
     { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('proveedores', 'edit') },
     { key: 'balance', header: 'Saldo', width: '170px',
-      render: (val) => <span className="font-black text-rose-500 tabular-nums">{formatConvertedAmount(val || 0, 'NIO')}</span>
+      render: (val) => <span className="font-black text-rose-500 tabular-nums">{formatConvertedAmount(val || 0, baseCurrency)}</span>
     },
     { key: 'status', header: 'Estado', width: '120px', editable: canPerform('proveedores', 'edit'), type: 'select', options: statusOptions,
       render: (val) => {
@@ -255,7 +255,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const kpis = [
     { title: 'Total',     value: data.length,                                                                              icon: Truck,         color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
     { title: 'Activos',   value: data.filter(s => s.isActive !== false && String((s as any).status || '').toUpperCase() !== 'INACTIVE').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
-    { title: 'Saldo Total', value: formatConvertedAmount(data.reduce((a, s) => a + Number(s.balance||0), 0), 'NIO'),       icon: TrendingDown,  color: 'text-rose-500',    bg: 'bg-rose-500/10', kind: 'indicator' as const },
+    { title: `Saldo Total${valuationModeSuffix}`, value: formatConvertedAmount(data.reduce((a, s) => a + Number(s.balance||0), 0), baseCurrency),       icon: TrendingDown,  color: 'text-rose-500',    bg: 'bg-rose-500/10', kind: 'indicator' as const },
   ];
 
   return (

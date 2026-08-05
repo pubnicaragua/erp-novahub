@@ -58,6 +58,7 @@ import {
 } from '../ui/table';
 import { inventoryService } from '../../services/inventario.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ProductThumbnail } from '../ui/ProductImage';
 
 // ============================================================================
@@ -187,7 +188,7 @@ export function ProductDetailDrawer({
   movements = [],
   series = [],
 }: ProductDetailDrawerProps) {
-  const { formatAmount, currency, baseCurrency } = useCurrency();
+  const { baseCurrency } = useCurrency();
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [detail, setDetail] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
@@ -532,14 +533,14 @@ export function ProductDetailDrawer({
                     />
                     <MetricCard
                       label="Valor stock"
-                      value={isService ? '—' : formatAmount(stockValue, currency)}
+                      value={isService ? '—' : <CurrencyValuationAmount amount={stockValue} sourceCurrency={product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.priceExchangeRate} className="text-base" />}
                       icon={DollarSign}
                       accent="text-emerald-500"
                       loading={loading && !productSnapshot}
                     />
                     <MetricCard
                       label="Precio costo"
-                      value={formatAmount(costPrice, currency)}
+                      value={<CurrencyValuationAmount amount={costPrice} sourceCurrency={product?.costCurrency || product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.costExchangeRate || product?.priceExchangeRate} className="text-base" />}
                       icon={TrendingDown}
                       accent="text-rose-500"
                       loading={loading && !productSnapshot}
@@ -757,10 +758,7 @@ export function ProductDetailDrawer({
                                 <TableCell className="text-right text-xs">
                                   {move.unitCost !== undefined && move.unitCost !== null ? (
                                     <div className="flex flex-col">
-                                      <span>{move.currency || 'NIO'} {move.unitCost || 0}</span>
-                                      {move.baseCost && move.currency !== baseCurrency && (
-                                        <span className="text-[10px] text-muted-foreground">{baseCurrency} {move.baseCost}</span>
-                                      )}
+                                      <CurrencyValuationAmount amount={Number(move.unitCost || 0)} sourceCurrency={move.currency || 'NIO'} sourceExchangeRate={move.exchangeRate} className="font-medium" />
                                     </div>
                                   ) : (
                                     <span className="text-muted-foreground">-</span>
@@ -904,7 +902,7 @@ export function ProductDetailDrawer({
 
 interface MetricCardProps {
   label: string;
-  value: string;
+  value: React.ReactNode;
   icon: React.ComponentType<{ className?: string }>;
   accent?: string;
   loading?: boolean;
@@ -922,9 +920,9 @@ function MetricCard({ label, value, icon: Icon, accent = 'text-foreground', load
       {loading ? (
         <Skeleton className="h-5 w-3/4 mt-1" />
       ) : (
-        <p className={`text-base font-black tabular-nums ${accent} truncate`} title={value}>
+        <div className={`text-base font-black tabular-nums ${accent} min-w-0`}>
           {value}
-        </p>
+        </div>
       )}
     </Card>
   );

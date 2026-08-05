@@ -3,9 +3,9 @@ import {
   Settings2, Save, Building2, Upload, FileDown, RefreshCw,
   Loader2, CheckCircle2, Globe, DollarSign,
   FileSpreadsheet, Link2, BookOpen, Eye, X,
-  Plus, HelpCircle, Trash2,
+  Plus, Info, Trash2,
   FileText, Receipt, Package, Wallet,
-  Users, BarChart3, RotateCcw, Undo2, Network,
+  Users, BarChart3, RotateCcw, Undo2, Network, ArrowLeftRight,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Button } from '../ui/button'
@@ -14,8 +14,9 @@ import { Badge } from '../ui/badge'
 import { Switch } from '../ui/switch'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { toast } from 'sonner'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react'
 import { BankAccountsView } from './BankAccountsView'
 import { TaxCatalogView } from './TaxCatalogView'
 import { contabilidadService } from '../../services/contabilidad.service'
@@ -42,7 +43,14 @@ const INDUSTRIES = [
 
 const CURRENCIES = ['NIO', 'USD']
 
-type AccountInfo = { id: string; code: string; name: string; type: string }
+type AccountInfo = {
+  id: string
+  code: string
+  name: string
+  type: string
+  isActive?: boolean
+  acceptsPostings?: boolean
+}
 
 type ModuleField = {
   key: string
@@ -57,7 +65,7 @@ type ModuleField = {
 const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; description: string; fields: ModuleField[] }[] = [
   {
     id: 'invoice', label: 'Facturas de Venta', icon: FileText,
-    description: 'Cuando se crea una factura, el motor genera un asiento contable automático',
+    description: 'Cuando la factura queda pagada, se registra la venta con estas cuentas',
     fields: [
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'debit', description: 'Se debita el total de la factura', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
       { key: 'income', label: 'Ingresos', side: 'credit', description: 'Se acredita el subtotal (sin IVA)', defaultCode: '4000', defaultName: 'Ingresos Operativos', defaultType: 'INCOME' },
@@ -66,9 +74,13 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'payment', label: 'Cobros', icon: Receipt,
-    description: 'Cuando se recibe un pago, se genera el asiento de cobro',
+    description: 'Cuando la factura queda pagada, se registra el cobro según su forma de pago',
     fields: [
-      { key: 'cash', label: 'Caja / Bancos', side: 'debit', description: 'Se debita el monto recibido', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
+      { key: 'cash', label: 'Efectivo / Caja', side: 'debit', description: 'Se debita el efectivo recibido', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
+      { key: 'card', label: 'Tarjetas', side: 'debit', description: 'Se debita la cuenta configurada para tarjetas', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
+      { key: 'transfer', label: 'Transferencias', side: 'debit', description: 'Se debita la cuenta configurada para transferencias', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
+      { key: 'check', label: 'Cheques', side: 'debit', description: 'Se debita la cuenta configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
+      { key: 'other', label: 'Otros medios de cobro', side: 'debit', description: 'Se debita la cuenta para otros medios de cobro', defaultCode: '1090', defaultName: 'Otros Medios de Cobro', defaultType: 'ASSET' },
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita la cuenta por cobrar', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
     ],
   },
@@ -86,7 +98,19 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     description: 'Pago realizado → disminuye CxP y disminuye caja',
     fields: [
       { key: 'payable', label: 'Cuenta por Pagar', side: 'debit', description: 'Se debita la deuda (disminuye)', defaultCode: '2000', defaultName: 'Cuentas por Pagar', defaultType: 'LIABILITY' },
-      { key: 'cash', label: 'Caja / Bancos', side: 'credit', description: 'Se acredita la salida de efectivo', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
+      { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita la salida en efectivo', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
+      { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la salida por tarjeta', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
+      { key: 'transfer', label: 'Transferencias', side: 'credit', description: 'Se acredita la salida por transferencia', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
+      { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la salida por cheque', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
+      { key: 'other', label: 'Otros medios de pago', side: 'credit', description: 'Se acredita la salida por otro medio', defaultCode: '1090', defaultName: 'Otros Medios de Pago', defaultType: 'ASSET' },
+    ],
+  },
+  {
+    id: 'purchaseReceipt', label: 'Recepciones de Compra', icon: Package,
+    description: 'Recepción de mercancía → inventario + inventario en tránsito',
+    fields: [
+      { key: 'inventory', label: 'Inventario', side: 'debit', description: 'Se debita el inventario recibido', defaultCode: '1200', defaultName: 'Inventario', defaultType: 'ASSET' },
+      { key: 'inTransit', label: 'Inventario en Tránsito', side: 'credit', description: 'Se acredita el inventario en tránsito', defaultCode: '1205', defaultName: 'Inventario en Tránsito', defaultType: 'ASSET' },
     ],
   },
   {
@@ -131,7 +155,88 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita CxC', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
     ],
   },
+  {
+    id: 'hrExpense', label: 'Otros gastos de RRHH', icon: Users,
+    description: 'Capacitaciones y beneficios → cuenta de gasto configurada',
+    fields: [
+      { key: 'expense', label: 'Gastos de RRHH', side: 'debit', description: 'Se debita el gasto de la actividad de RRHH', defaultCode: '5000', defaultName: 'Gastos de RRHH', defaultType: 'EXPENSE' },
+    ],
+  },
+  {
+    id: 'financialIncome', label: 'Ingresos de Finanzas', icon: DollarSign,
+    description: 'Ingresos manuales y recurrentes → cuenta de ingreso configurada',
+    fields: [
+      { key: 'income', label: 'Cuenta de Ingresos', side: 'credit', description: 'Cuenta contable donde se clasifica el ingreso', defaultCode: '4000', defaultName: 'Ingresos Financieros', defaultType: 'INCOME' },
+    ],
+  },
+  {
+    id: 'financialExpense', label: 'Gastos de Finanzas', icon: Wallet,
+    description: 'Gastos manuales y recurrentes → cuenta de gasto configurada',
+    fields: [
+      { key: 'expense', label: 'Cuenta de Gastos', side: 'debit', description: 'Cuenta contable donde se clasifica el gasto', defaultCode: '5000', defaultName: 'Gastos Financieros', defaultType: 'EXPENSE' },
+    ],
+  },
+  {
+    id: 'cashRegister', label: 'Cierre de Caja', icon: Wallet,
+    description: 'Diferencias al cerrar caja → efectivo contado y diferencia de caja',
+    fields: [
+      { key: 'cash', label: 'Caja', side: 'debit', description: 'Se debita el efectivo contado en caja', defaultCode: '1000', defaultName: 'Caja', defaultType: 'ASSET' },
+      { key: 'difference', label: 'Diferencia de Caja', side: 'credit', description: 'Contrapartida de sobrantes o faltantes de caja', defaultCode: '5310', defaultName: 'Diferencias de Caja', defaultType: 'EXPENSE' },
+    ],
+  },
+  {
+    id: 'currencyRevaluation', label: 'Diferencias Cambiarias', icon: ArrowLeftRight,
+    description: 'Revaluación de saldos abiertos en moneda extranjera al cierre',
+    fields: [
+      { key: 'unrealizedGain', label: 'Ganancia cambiaria no realizada', side: 'credit', description: 'Se acredita cuando la revaluación incrementa el valor económico', defaultCode: '4200', defaultName: 'Ganancia Cambiaria No Realizada', defaultType: 'INCOME' },
+      { key: 'unrealizedLoss', label: 'Pérdida cambiaria no realizada', side: 'debit', description: 'Se debita cuando la revaluación reduce el valor económico', defaultCode: '5200', defaultName: 'Pérdida Cambiaria No Realizada', defaultType: 'EXPENSE' },
+    ],
+  },
 ]
+
+const SALES_MODULE_IDS = new Set(['invoice', 'payment', 'saleReturn', 'creditNote', 'cashRegister'])
+
+const ACCOUNTING_MODULE_GROUPS = [
+  {
+    id: 'purchases',
+    label: 'Cuentas contables de Compras',
+    description: 'Facturas de proveedor, recepciones, pagos y gastos.',
+    icon: Package,
+    moduleIds: ['supplierInvoice', 'purchaseReceipt', 'paymentMade', 'expense'],
+  },
+  {
+    id: 'hr',
+    label: 'Cuentas contables de Recursos Humanos',
+    description: 'Nómina, obligaciones laborales y gastos de RRHH.',
+    icon: Users,
+    moduleIds: ['payroll', 'hrExpense'],
+  },
+  {
+    id: 'finance',
+    label: 'Cuentas contables de Finanzas',
+    description: 'Clasificación contable de ingresos y gastos financieros.',
+    icon: DollarSign,
+    moduleIds: ['financialIncome', 'financialExpense'],
+  },
+  {
+    id: 'operations',
+    label: 'Cuentas contables de Inventario y operaciones',
+    description: 'Ajustes de inventario y diferencias cambiarias.',
+    icon: Link2,
+    moduleIds: ['inventoryAdjustment', 'cashRegister', 'currencyRevaluation'],
+  },
+  {
+    id: 'other',
+    label: 'Otras conexiones contables',
+    description: 'Conexiones personalizadas definidas para procesos particulares.',
+    icon: Network,
+    moduleIds: [],
+  },
+]
+
+const getDefaultAccountMappings = () => Object.fromEntries(
+  BUILTIN_MODULES.map(module => [module.id, Object.fromEntries(module.fields.map(field => [field.key, field.defaultCode]))]),
+)
 
 function AccountCodeInput({ code, field, allAccounts, onChange }: {
   code: string
@@ -140,35 +245,54 @@ function AccountCodeInput({ code, field, allAccounts, onChange }: {
   onChange: (val: string) => void
 }) {
   const account = allAccounts.find(a => a.code === code)
+  const accountUnavailable = Boolean(account && (account.isActive === false || account.acceptsPostings === false))
+  const accountOptions: Array<AccountInfo & { disabled?: boolean }> = [
+    ...allAccounts
+      .map(accountOption => ({
+        ...accountOption,
+        disabled: accountOption.isActive === false || accountOption.acceptsPostings === false,
+      }))
+      .sort((left, right) => Number(Boolean(left.disabled)) - Number(Boolean(right.disabled)) || left.code.localeCompare(right.code)),
+    ...(!account && code ? [{ id: `configured-${code}`, code, name: 'Cuenta configurada no encontrada', type: '', disabled: true }] : []),
+  ]
   return (
-    <div className="space-y-0.5">
-      <div className="flex items-center gap-1.5">
-        <span className={`text-[10px] font-bold ${field.side === 'debit' ? 'text-orange-600' : 'text-blue-600'}`}>
-          {field.side === 'debit' ? 'DÉBITO' : 'CRÉDITO'}
+    <div className="min-w-0 space-y-1.5 rounded-xl border border-border/40 bg-background/60 p-3">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${field.side === 'debit' ? 'bg-orange-500/10 text-orange-600' : 'bg-blue-500/10 text-blue-600'}`}>
+          {field.side === 'debit' ? 'Debe' : 'Haber'}
         </span>
-        <span className="text-[10px] font-medium text-muted-foreground">→</span>
-        <span className="text-[10px] font-medium">{field.label}</span>
+        <span className="min-w-0 truncate text-[11px] font-bold">{field.label}</span>
       </div>
-      <div className="flex items-center gap-1.5">
-        <span className="text-[9px] text-muted-foreground">Código:</span>
-        <Input
-          value={code}
-          onChange={e => onChange(e.target.value)}
-          className={`w-20 h-7 text-xs font-mono ${account ? 'border-emerald-500/30' : code ? 'border-red-500/30' : ''}`}
-        />
-        {account && (
-          <span className="text-[9px] text-emerald-600 font-medium truncate max-w-[140px]">
-            {account.name}
+      <Select value={code || ''} onValueChange={onChange}>
+        <SelectTrigger className="h-9 w-full min-w-0 text-xs">
+          <SelectValue placeholder={`Seleccionar ${field.label.toLowerCase()}`} />
+        </SelectTrigger>
+        <SelectContent className="max-h-72">
+          {accountOptions.map(accountOption => (
+            <SelectItem key={`${field.key}-${accountOption.id}`} value={accountOption.code} disabled={Boolean(accountOption.disabled) || accountOption.id.startsWith('configured-')}>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 font-mono">{accountOption.code}</span>
+                <span className="min-w-0 truncate">· {accountOption.name}</span>
+                <span className={`ml-auto shrink-0 text-[9px] font-bold ${accountOption.disabled ? 'text-red-500' : 'text-emerald-600'}`}>
+                  {accountOption.isActive === false ? 'Inactiva' : accountOption.acceptsPostings === false ? 'No contabilizable' : 'Activa'}
+                </span>
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        {account ? (
+          <span className={`min-w-0 truncate text-[10px] font-semibold ${accountUnavailable ? 'text-red-500' : 'text-emerald-600'}`}>
+            {account.code} · {account.name}{accountUnavailable ? ' · No seleccionable' : ''}
           </span>
-        )}
-        {!account && code && (
-          <span className="text-[9px] text-red-500">No existe — se creará automáticamente</span>
-        )}
-        {!code && (
-          <span className="text-[9px] text-muted-foreground">Usará default: {field.defaultCode}</span>
+        ) : code ? (
+          <span className="text-[10px] text-red-500">La cuenta no existe en el plan</span>
+        ) : (
+          <span className="text-[10px] text-muted-foreground">Predeterminada: {field.defaultCode}</span>
         )}
       </div>
-      <p className="text-[8px] text-muted-foreground leading-tight">{field.description}</p>
+      <p className="text-[9px] leading-tight text-muted-foreground">{field.description}</p>
     </div>
   )
 }
@@ -198,12 +322,26 @@ export function ConfiguracionContableView() {
   const connectionsLoading = connectionsQuery.isFetching
   const allAccounts = useMemo(() => {
     const flat: AccountInfo[] = []
-    const flatten = (items: any[]) => items.forEach(item => { flat.push({ id: item.id, code: item.code, name: item.name, type: item.type }); if (item.children) flatten(item.children) })
+    const flatten = (items: any[]) => items.forEach(item => {
+      flat.push({
+        id: item.id,
+        code: item.code,
+        name: item.name,
+        type: item.type,
+        isActive: item.isActive,
+        acceptsPostings: item.acceptsPostings,
+      })
+      if (item.children) flatten(item.children)
+    })
     flatten(accountsQuery.data || [])
     return flat
   }, [accountsQuery.data])
 
-  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set(['invoice', 'payment']))
+  const [accountMappingsExpanded, setAccountMappingsExpanded] = useState(false)
+  const [salesExpanded, setSalesExpanded] = useState(true)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    new Set(ACCOUNTING_MODULE_GROUPS.map(group => group.id)),
+  )
 
   useEffect(() => {
     const res = configQuery.data
@@ -213,7 +351,13 @@ export function ConfiguracionContableView() {
       setDefaultCurrency(cfg.defaultCurrency || 'NIO')
       setTaxRate(cfg.taxRate ?? 15)
       setIndustry(cfg.industry || 'RETAIL')
-      setAccountMappings(cfg.accountMappings || {})
+      const configuredMappings = cfg.accountMappings || {}
+      const defaultMappings = getDefaultAccountMappings()
+      const mergedMappings: Record<string, Record<string, string>> = { ...defaultMappings }
+      Object.entries(configuredMappings).forEach(([moduleId, mapping]) => {
+        mergedMappings[moduleId] = { ...(mergedMappings[moduleId] || {}), ...(mapping as Record<string, string>) }
+      })
+      setAccountMappings(mergedMappings)
       setCustomModules(cfg.customModules || [])
   }, [configQuery.data])
 
@@ -260,31 +404,12 @@ export function ConfiguracionContableView() {
     })
   }
 
-  const toggleExpand = (id: string) => {
-    setExpandedModules(prev => {
+  const toggleGroup = (id: string) => {
+    setExpandedGroups(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
       return next
     })
-  }
-
-  const addCustomModule = () => {
-    const id = `custom_${Date.now()}`
-    const newMod: ConnectionModule = {
-      id,
-      label: 'Nueva Conexión',
-      description: 'Conexión personalizada definida por el usuario',
-      fields: [
-        { key: 'debitAccount', label: 'Cuenta Débito', side: 'debit', description: 'Cuenta que se debitará', defaultCode: '1000', defaultName: 'Cuenta Débito', defaultType: 'ASSET' },
-        { key: 'creditAccount', label: 'Cuenta Crédito', side: 'credit', description: 'Cuenta que se acreditará', defaultCode: '2000', defaultName: 'Cuenta Crédito', defaultType: 'LIABILITY' },
-      ],
-    }
-    setCustomModules(prev => [...prev, newMod])
-    setAccountMappings(prev => ({
-      ...prev,
-      [id]: { debitAccount: '1000', creditAccount: '2000' },
-    }))
-    setExpandedModules(prev => new Set(prev).add(id))
   }
 
   const removeCustomModule = (id: string) => {
@@ -387,7 +512,112 @@ export function ConfiguracionContableView() {
     return [...builtins, ...customs]
   }, [customModules])
 
+  const salesModuleDefs = useMemo(() => allModuleDefs.filter(mod => SALES_MODULE_IDS.has(mod.id)), [allModuleDefs])
+  const otherModuleDefs = useMemo(() => allModuleDefs.filter(mod => !SALES_MODULE_IDS.has(mod.id)), [allModuleDefs])
+  const groupedOtherModules = useMemo(() => {
+    const assigned = new Set<string>()
+    const groups = ACCOUNTING_MODULE_GROUPS.map(group => {
+      const modules = otherModuleDefs.filter(mod => {
+        const included = group.moduleIds.includes(mod.id) || (group.id === 'other' && !ACCOUNTING_MODULE_GROUPS.some(item => item.moduleIds.includes(mod.id)))
+        if (included) assigned.add(mod.id)
+        return included
+      })
+      return { ...group, modules }
+    }).filter(group => group.modules.length > 0)
+
+    const unassigned = otherModuleDefs.filter(mod => !assigned.has(mod.id))
+    if (unassigned.length > 0) {
+      groups.push({ ...ACCOUNTING_MODULE_GROUPS[ACCOUNTING_MODULE_GROUPS.length - 1], modules: unassigned })
+    }
+    return groups
+  }, [otherModuleDefs])
+
+  const renderConnectionModule = (mod: (typeof allModuleDefs)[number]) => {
+    const modMapping = accountMappings[mod.id] || {}
+    const status = connections?.modules?.find((m: any) => m.id === mod.id)?.status ?? null
+    const listMod = connections?.modules?.find((m: any) => m.id === mod.id)
+    const Icon = mod.icon
+
+    return (
+      <div key={mod.id} className="min-w-0 rounded-2xl border border-border/40 bg-background/35 p-4">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <p className="truncate text-xs font-black uppercase tracking-tight">{mod.label}</p>
+              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{mod.description}</p>
+            </div>
+          </div>
+          {status === 'connected' ? (
+            <Badge className="shrink-0 bg-emerald-500/10 text-[9px] text-emerald-600">Conectado</Badge>
+          ) : status === 'partial' ? (
+            <Badge className="shrink-0 bg-amber-500/10 text-[9px] text-amber-600">Parcial</Badge>
+          ) : (
+            <Badge variant="outline" className="shrink-0 border-border/40 text-[9px] text-muted-foreground">
+              {status === null ? 'Sin probar' : 'Pendiente'}
+            </Badge>
+          )}
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          {mod.fields.map(field => (
+            <AccountCodeInput
+              key={field.key}
+              code={modMapping[field.key] || field.defaultCode}
+              field={field}
+              allAccounts={allAccounts}
+              onChange={value => updateMapping(mod.id, field.key, value)}
+            />
+          ))}
+        </div>
+        {listMod && (
+          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/10 pt-2">
+            {listMod.fields.map((field: any) => (
+              <span key={field.key} className="text-[9px] text-muted-foreground">
+                <span className={`mr-1 inline-block size-1.5 rounded-full ${field.status === 'ok' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                {field.label}: <span className="font-mono font-bold">{field.code}</span>
+                {field.reason && <span className="ml-1 text-red-500">({field.reason})</span>}
+              </span>
+            ))}
+          </div>
+        )}
+        {!mod.isBuiltin && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/10 pt-2">
+            <Button variant="ghost" size="sm" onClick={() => addCustomField(mod.id)}>
+              <Plus className="mr-1 size-3" /> Agregar Campo
+            </Button>
+            {mod.fields.map(field => (
+              <div key={field.key} className="flex items-center gap-1 rounded-lg bg-muted/10 px-2 py-1 text-[9px] text-muted-foreground">
+                <span className="font-medium">{field.label}</span>
+                <button
+                  type="button"
+                  aria-label={`Eliminar campo ${field.label}`}
+                  onClick={() => removeCustomField(mod.id, field.key)}
+                  className="hover:text-red-500"
+                >
+                  <X className="size-2.5" />
+                </button>
+              </div>
+            ))}
+            <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => removeCustomModule(mod.id)}>
+              <Trash2 className="mr-1 size-3" /> Eliminar conexión
+            </Button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const totalAccounts = useMemo(() => allAccounts.length, [allAccounts])
+  const [accountPage, setAccountPage] = useState(1)
+  const [accountPageSize, setAccountPageSize] = useState(50)
+  const accountTotalPages = Math.max(1, Math.ceil(totalAccounts / accountPageSize))
+  const currentAccountPage = Math.min(accountPage, accountTotalPages)
+  const paginatedAccounts = useMemo(() => {
+    const start = (currentAccountPage - 1) * accountPageSize
+    return allAccounts.slice(start, start + accountPageSize)
+  }, [allAccounts, currentAccountPage, accountPageSize])
+  const accountRangeStart = totalAccounts === 0 ? 0 : (currentAccountPage - 1) * accountPageSize + 1
+  const accountRangeEnd = Math.min(currentAccountPage * accountPageSize, totalAccounts)
   const okCount = connections?.modules?.filter((m: any) => m.status === 'connected')?.length ?? 0
   const totalMods = connections?.modules?.length ?? allModuleDefs.length
 
@@ -400,7 +630,7 @@ export function ConfiguracionContableView() {
   }
 
   return (
-    <div className="accounting-config-view min-w-0 max-w-5xl space-y-6">
+    <div className="accounting-config-view min-w-0 w-full max-w-none space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
@@ -413,6 +643,10 @@ export function ConfiguracionContableView() {
           </p>
         </div>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          <Button variant="ghost" size="sm" onClick={loadConnections} disabled={connectionsLoading} aria-label="Probar conexiones contables">
+            <RefreshCw className={`size-3.5 mr-1 ${connectionsLoading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Probar conexiones</span>
+          </Button>
           <Button variant="outline" size="sm" onClick={handleSeedConfig} disabled={seeding}>
             {seeding ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <RefreshCw className="size-3.5 mr-1" />}
             Restablecer
@@ -475,7 +709,7 @@ export function ConfiguracionContableView() {
           </div>
         </CardHeader>
         <CardContent className="px-5 pb-4 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
             <div className="space-y-2">
               <Label className="text-xs font-bold">Moneda por Defecto</Label>
               <Select value={defaultCurrency} onValueChange={setDefaultCurrency}>
@@ -500,192 +734,210 @@ export function ConfiguracionContableView() {
               />
               <p className="text-[9px] text-muted-foreground">Nicaragua: 15%</p>
             </div>
-            <div className="space-y-2">
-              <Label className="text-xs font-bold">Industria</Label>
-              <Select value={industry} onValueChange={setIndustry}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {INDUSTRIES.map(ind => (
-                    <SelectItem key={ind.value} value={ind.value}>{ind.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[9px] text-muted-foreground">Determina el catálogo de cuentas por defecto</p>
+            <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.04] px-3 py-2 md:min-w-[260px] md:justify-self-start">
+              <BookOpen className="size-4 shrink-0 text-primary" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-tight">Asientos automáticos</p>
+                <p className="text-[9px] leading-relaxed text-muted-foreground">Conecta los módulos con el Libro Diario, el Libro Mayor y el Plan de Cuentas.</p>
+              </div>
+              <span className="text-[9px] font-bold uppercase text-muted-foreground">{autoGenEnabled ? 'Activo' : 'Inactivo'}</span>
+              <Switch
+                checked={autoGenEnabled}
+                onCheckedChange={setAutoGenEnabled}
+                aria-label="Activar asientos contables automáticos"
+                className="scale-90"
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    aria-label="Información sobre los asientos automáticos"
+                  >
+                    <Info className="size-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs text-[10px] leading-relaxed">
+                  Los procesos que cumplan su condición contable generan asientos con las cuentas configuradas en cada módulo. Los movimientos alimentan el Libro Diario y el Libro Mayor, y después se reflejan en los reportes contables.
+                </TooltipContent>
+              </Tooltip>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/20 border border-border/30">
-            <HelpCircle className="size-4 text-primary shrink-0" />
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              <strong className="text-foreground">¿Cómo funciona?</strong> Cuando creas una factura, un cobro, un gasto, etc., el motor contable genera automáticamente un asiento en el Libro Diario usando las cuentas que definas abajo. Cada módulo tiene campos de <span className="text-orange-600 font-bold">DÉBITO</span> y <span className="text-blue-600 font-bold">CRÉDITO</span> — el código que ingreses es el número de cuenta del Plan de Cuentas. Si la cuenta no existe, se crea automáticamente.
-            </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Motor de Asientos */}
-      <Card>
-        <CardHeader className="pb-3 px-5 pt-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <BookOpen className="size-4 text-primary" />
-              <CardTitle className="text-sm font-black uppercase tracking-tight">Motor de Asientos Automáticos</CardTitle>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase text-muted-foreground">
-                {autoGenEnabled ? 'Activado' : 'Desactivado'}
-              </span>
-              <Switch checked={autoGenEnabled} onCheckedChange={setAutoGenEnabled} />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="px-5 pb-4">
-          <p className="text-xs text-muted-foreground mb-4">
-            Cuando está activo, cada transacción (factura, cobro, gasto, nómina, etc.) genera automáticamente su asiento contable en el Libro Diario y actualiza el Libro Mayor.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Conexiones entre Módulos y Cuentas Contables */}
-      <Card>
-        <CardHeader className="pb-3 px-5 pt-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Link2 className="size-4 text-primary" />
-              <CardTitle className="text-sm font-black uppercase tracking-tight">Conexiones entre Módulos y Cuentas Contables</CardTitle>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={loadConnections} disabled={connectionsLoading}>
-                <RefreshCw className={`size-3 ${connectionsLoading ? 'animate-spin' : ''} mr-1`} />
-                Probar Todo
+      {/* Configuración de cuentas para asientos contables */}
+      <Card id="configuracion-cuentas-asientos" className="border-primary/25 bg-gradient-to-br from-card via-card to-primary/[0.04] shadow-sm">
+        <CardHeader className="border-b border-border/30 px-5 pb-4 pt-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <button
+              type="button"
+              onClick={() => setAccountMappingsExpanded(value => !value)}
+              className="flex min-w-0 items-start gap-3 text-left"
+              aria-expanded={accountMappingsExpanded}
+              aria-controls="configuracion-cuentas-asientos-content"
+            >
+              <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><BookOpen className="size-5" /></div>
+              <div className="min-w-0">
+                <CardTitle className="text-sm font-black uppercase tracking-tight">Configuración de cuentas para asientos contables por módulos y vistas</CardTitle>
+                <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">
+                  Define las cuentas Debe y Haber que alimentan el Libro Diario, el Libro Mayor y los reportes contables del ERP.
+                </p>
+              </div>
+            </button>
+            <div className="flex items-center gap-2 self-end lg:self-start">
+              <Badge className="w-fit shrink-0 border-primary/20 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">
+                {allModuleDefs.length} módulos
+              </Badge>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0"
+                onClick={() => setAccountMappingsExpanded(value => !value)}
+                aria-label={accountMappingsExpanded ? 'Contraer configuración de cuentas' : 'Expandir configuración de cuentas'}
+                aria-expanded={accountMappingsExpanded}
+                aria-controls="configuracion-cuentas-asientos-content"
+              >
+                {accountMappingsExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
               </Button>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="px-5 pb-4 space-y-3">
-          <p className="text-xs text-muted-foreground mb-2">
-            Expande cada módulo para ver y editar las cuentas contables que usa. El estado indica si las cuentas existen en tu Plan de Cuentas.
-          </p>
-
-          {allModuleDefs.map(mod => {
+        {accountMappingsExpanded && <CardContent id="configuracion-cuentas-asientos-content" className="space-y-5 p-5">
+          {/* Cuentas contables de Ventas */}
+      <Card id="ventas-cuentas-contables" className="border-primary/25 bg-gradient-to-br from-card via-card to-primary/[0.04] shadow-sm">
+        <CardHeader className="border-b border-border/30 px-5 pb-4 pt-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <button
+              type="button"
+              onClick={() => setSalesExpanded(value => !value)}
+              className="flex min-w-0 items-start gap-3 text-left"
+              aria-expanded={salesExpanded}
+              aria-controls="ventas-cuentas-contables-content"
+            >
+              <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><Receipt className="size-5" /></div>
+              <div className="min-w-0">
+                <CardTitle className="text-sm font-black uppercase tracking-tight">Cuentas contables de Ventas</CardTitle>
+                <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">
+                  Configura las cuentas de facturas, cobros por forma de pago, devoluciones, notas de crédito y caja.
+                </p>
+              </div>
+            </button>
+            <div className="flex items-center gap-2 self-end lg:self-start">
+              <Badge className="w-fit shrink-0 border-primary/20 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">
+                {salesModuleDefs.length} {salesModuleDefs.length === 1 ? 'módulo' : 'módulos'}
+              </Badge>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0"
+                onClick={() => setSalesExpanded(value => !value)}
+                aria-label={salesExpanded ? 'Contraer cuentas de ventas' : 'Expandir cuentas de ventas'}
+                aria-expanded={salesExpanded}
+                aria-controls="ventas-cuentas-contables-content"
+              >
+                {salesExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        {salesExpanded && <CardContent id="ventas-cuentas-contables-content" className="grid grid-cols-1 gap-4 p-5 xl:grid-cols-2">
+          {salesModuleDefs.map(mod => {
             const modMapping = accountMappings[mod.id] || {}
             const status = connections?.modules?.find((m: any) => m.id === mod.id)?.status ?? null
-            const listMod = connections?.modules?.find((m: any) => m.id === mod.id)
             const Icon = mod.icon
-            const isExpanded = expandedModules.has(mod.id)
-
             return (
-              <div key={mod.id} className="rounded-xl border border-border/30 overflow-hidden">
-                {/* Header (clickable) */}
-                <button
-                  onClick={() => toggleExpand(mod.id)}
-                  className="w-full flex items-center justify-between p-3 hover:bg-muted/10 transition-colors text-left"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Icon className="size-4 text-muted-foreground" />
-                    <div>
-                      <span className="text-xs font-bold">{mod.label}</span>
-                      <p className="text-[9px] text-muted-foreground">{mod.description}</p>
+              <div key={mod.id} className="min-w-0 rounded-2xl border border-border/40 bg-background/35 p-4">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-black uppercase tracking-tight">{mod.label}</p>
+                      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{mod.description}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {/* Status */}
-                    {status === null ? (
-                      <Badge variant="outline" className="text-[9px] text-muted-foreground border-border/30">Sin probar</Badge>
-                    ) : status === 'connected' ? (
-                      <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[9px]">Conectado</Badge>
-                    ) : status === 'partial' ? (
-                      <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[9px]">Parcial</Badge>
-                    ) : (
-                      <Badge className="bg-red-500/10 text-red-600 border-red-500/20 text-[9px]">Desconectado</Badge>
-                    )}
-                    {/* Field summaries */}
-                    {!isExpanded && mod.fields.map(f => {
-                      const code = modMapping[f.key] || f.defaultCode
-                      const acct = allAccounts.find(a => a.code === code)
-                      return (
-                        <span key={f.key} className="hidden md:inline-flex items-center gap-1 text-[8px] text-muted-foreground bg-muted/20 px-1.5 py-0.5 rounded">
-                          <span className={`size-1.5 rounded-full ${acct ? 'bg-emerald-500' : 'bg-red-400'}`} />
-                          <span className="font-mono">{code}</span>
-                        </span>
-                      )
-                    })}
-                    {isExpanded ? <ChevronUp className="size-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="size-3.5 text-muted-foreground shrink-0" />}
-                  </div>
-                </button>
-
-                {/* Expanded content */}
-                {isExpanded && (
-                  <div className="px-3 pb-3 border-t border-border/20 pt-3 space-y-3">
-                    {/* Fields */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {mod.fields.map(f => (
-                        <AccountCodeInput
-                          key={f.key}
-                          code={modMapping[f.key] ?? ''}
-                          field={f}
-                          allAccounts={allAccounts}
-                          onChange={val => updateMapping(mod.id, f.key, val)}
-                        />
-                      ))}
-                    </div>
-
-                    {/* Custom module: add field button */}
-                    {!mod.isBuiltin && (
-                      <div className="flex items-center gap-2 pt-2 border-t border-border/10">
-                        <Button variant="ghost" size="sm" onClick={() => addCustomField(mod.id)}>
-                          <Plus className="size-3 mr-1" /> Agregar Campo
-                        </Button>
-                        {mod.fields.map(f => (
-                          <div key={f.key} className="flex items-center gap-1 text-[9px] text-muted-foreground bg-muted/10 px-2 py-1 rounded-lg">
-                            <span className="font-medium">{f.label}</span>
-                            <button onClick={() => removeCustomField(mod.id, f.key)} className="hover:text-red-500">
-                              <X className="size-2.5" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Connection status detail */}
-                    {listMod && (
-                      <div className="flex flex-wrap gap-2 pt-2 border-t border-border/10">
-                        {listMod.fields.map((f: any) => (
-                          <div key={f.key} className="flex items-center gap-1 text-[9px]">
-                            <span className={`size-1.5 rounded-full ${f.status === 'ok' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                            <span className="text-muted-foreground">{f.label}:</span>
-                            <span className="font-mono font-bold">{f.code}</span>
-                            {f.accountName && <span className="text-muted-foreground">({f.accountName})</span>}
-                            {!f.accountExists && <span className="text-red-500">creará</span>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Delete custom module */}
-                    {!mod.isBuiltin && (
-                      <div className="pt-2 border-t border-border/10 flex justify-end">
-                        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => removeCustomModule(mod.id)}>
-                          <Trash2 className="size-3 mr-1" /> Eliminar conexión
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  {status === 'connected' ? (
+                    <Badge className="shrink-0 bg-emerald-500/10 text-[9px] text-emerald-600">Conectado</Badge>
+                  ) : status === 'partial' ? (
+                    <Badge className="shrink-0 bg-amber-500/10 text-[9px] text-amber-600">Parcial</Badge>
+                  ) : (
+                    <Badge variant="outline" className="shrink-0 border-border/40 text-[9px] text-muted-foreground">Pendiente</Badge>
+                  )}
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {mod.fields.map(field => (
+                    <AccountCodeInput
+                      key={field.key}
+                      code={modMapping[field.key] || field.defaultCode}
+                      field={field}
+                      allAccounts={allAccounts}
+                      onChange={value => updateMapping(mod.id, field.key, value)}
+                    />
+                  ))}
+                </div>
               </div>
             )
           })}
+        </CardContent>}
+      </Card>
 
-          <Button variant="outline" size="sm" onClick={addCustomModule} className="w-full">
-            <Plus className="size-3.5 mr-1" /> Agregar Conexión Personalizada
-          </Button>
-        </CardContent>
+      {/* Otros módulos contables */}
+      <div className="space-y-5">
+        {groupedOtherModules.map(group => {
+          const GroupIcon = group.icon
+          const isExpanded = expandedGroups.has(group.id)
+          return (
+            <Card key={group.id} className="border-primary/20 bg-gradient-to-br from-card via-card to-primary/[0.025] shadow-sm">
+              <CardHeader className="border-b border-border/30 px-5 pb-4 pt-5">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.id)}
+                    className="flex min-w-0 items-start gap-3 text-left"
+                    aria-expanded={isExpanded}
+                    aria-controls={`${group.id}-cuentas-contables-content`}
+                  >
+                    <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><GroupIcon className="size-5" /></div>
+                    <div className="min-w-0">
+                      <CardTitle className="text-sm font-black uppercase tracking-tight">{group.label}</CardTitle>
+                      <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">{group.description}</p>
+                    </div>
+                  </button>
+                  <div className="flex items-center gap-2 self-end lg:self-start">
+                    <Badge className="w-fit shrink-0 border-primary/20 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">
+                      {group.modules.length} {group.modules.length === 1 ? 'módulo' : 'módulos'}
+                    </Badge>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 shrink-0"
+                      onClick={() => toggleGroup(group.id)}
+                      aria-label={isExpanded ? `Contraer ${group.label}` : `Expandir ${group.label}`}
+                      aria-expanded={isExpanded}
+                      aria-controls={`${group.id}-cuentas-contables-content`}
+                    >
+                      {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              {isExpanded && (
+                <CardContent id={`${group.id}-cuentas-contables-content`} className="grid grid-cols-1 gap-4 p-5 xl:grid-cols-2">
+                  {group.modules.map(renderConnectionModule)}
+                </CardContent>
+              )}
+            </Card>
+          )
+        })}
+      </div>
+        </CardContent>}
       </Card>
 
       {/* Catálogo por Defecto */}
-      <Card>
+      <Card className="min-w-0">
         <CardHeader className="pb-3 px-5 pt-4">
           <div className="flex items-center gap-2">
             <Building2 className="size-4 text-primary" />
@@ -771,7 +1023,7 @@ export function ConfiguracionContableView() {
       </Card>
 
       {/* Tipo detallados de Cuentas */}
-      <Card>
+      <Card className="min-w-0">
         <CardHeader className="pb-3 px-5 pt-4">
           <div className="flex items-center gap-2">
             <BookOpen className="size-4 text-primary" />
@@ -796,8 +1048,8 @@ export function ConfiguracionContableView() {
               <tbody>
                 {allAccounts.length === 0 ? (
                   <tr><td colSpan={4} className="text-center py-8 text-muted-foreground text-xs">No hay cuentas contables</td></tr>
-                ) : allAccounts.slice(0, 50).map((acc, i) => (
-                  <tr key={i} className="border-b border-border/10 hover:bg-muted/10">
+                ) : paginatedAccounts.map(acc => (
+                  <tr key={acc.id} className="border-b border-border/10 hover:bg-muted/10">
                     <td className="px-3 py-1.5">
                       <Badge variant="outline" className="text-[9px]">
                         {acc.subtype === 'MAIN_GROUP' ? 'Grupo principal' : acc.subtype === 'GROUP' ? 'Grupo' : acc.subtype === 'DETAIL_ACCOUNT' ? 'Cuenta de detalle' : 'Subcuenta'}
@@ -822,8 +1074,8 @@ export function ConfiguracionContableView() {
             <div className="space-y-2 p-2 sm:hidden">
               {allAccounts.length === 0 ? (
                 <p className="py-8 text-center text-xs text-muted-foreground">No hay cuentas contables</p>
-              ) : allAccounts.slice(0, 50).map((acc, i) => (
-                <div key={i} className="rounded-lg border border-border/50 bg-card/60 p-2.5">
+              ) : paginatedAccounts.map(acc => (
+                <div key={acc.id} className="rounded-lg border border-border/50 bg-card/60 p-2.5">
                   <div className="flex min-w-0 items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-xs font-bold" title={`${acc.code} - ${acc.name}`}>{acc.code} - {acc.name}</p>
@@ -838,11 +1090,65 @@ export function ConfiguracionContableView() {
                 </div>
               ))}
             </div>
-            {allAccounts.length > 50 && (
-              <p className="text-center text-[10px] text-muted-foreground py-2 border-t border-border/10">
-                Mostrando 50 de {allAccounts.length} cuentas
-              </p>
-            )}
+          </div>
+          <div className="mt-3 flex flex-col items-stretch justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground sm:flex-row sm:items-center" data-tour="account-detail-pagination">
+            <div className="flex items-center gap-2">
+              <span>Mostrar</span>
+              <select
+                value={accountPageSize}
+                onChange={event => {
+                  setAccountPageSize(Number(event.target.value))
+                  setAccountPage(1)
+                }}
+                className="h-8 rounded-lg border border-border/50 bg-background px-2 font-bold text-foreground outline-none"
+                aria-label="Registros por página"
+              >
+                {[50, 100, 200].map(size => <option key={size} value={size}>{size}</option>)}
+              </select>
+              <span>por página</span>
+              <span className="ml-2 rounded-lg border border-border/40 px-2 py-1">
+                {totalAccounts === 0 ? 0 : `${accountRangeStart}-${accountRangeEnd}`} de {totalAccounts}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-1 sm:justify-end">
+              <button
+                type="button"
+                className="rounded-lg border border-border/50 p-2 disabled:opacity-30"
+                onClick={() => setAccountPage(1)}
+                disabled={currentAccountPage <= 1}
+                aria-label="Primera página"
+              >
+                <ChevronsLeft className="size-4" />
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-border/50 p-2 disabled:opacity-30"
+                onClick={() => setAccountPage(page => Math.max(1, page - 1))}
+                disabled={currentAccountPage <= 1}
+                aria-label="Página anterior"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <span className="min-w-24 text-center font-bold text-foreground">Pág. {currentAccountPage} / {accountTotalPages}</span>
+              <button
+                type="button"
+                className="rounded-lg border border-border/50 p-2 disabled:opacity-30"
+                onClick={() => setAccountPage(page => Math.min(accountTotalPages, page + 1))}
+                disabled={currentAccountPage >= accountTotalPages}
+                aria-label="Página siguiente"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-border/50 p-2 disabled:opacity-30"
+                onClick={() => setAccountPage(accountTotalPages)}
+                disabled={currentAccountPage >= accountTotalPages}
+                aria-label="Última página"
+              >
+                <ChevronsRight className="size-4" />
+              </button>
+            </div>
           </div>
         </CardContent>
       </Card>

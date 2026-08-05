@@ -12,6 +12,7 @@ import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 interface FacturasLegalesViewProps {
   data: LegalInvoice[];
@@ -20,7 +21,7 @@ interface FacturasLegalesViewProps {
 }
 
 export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, loading, onRefresh }) => {
-  const { formatConvertedAmount, displayCurrency, baseCurrency, exchangeRate, convertAmount } = useCurrency();
+  const { formatConvertedAmount, displayCurrency, baseCurrency, exchangeRate, valuationModeSuffix, valuationMode, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const { canPerform } = useAuth();
 
@@ -34,7 +35,7 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
   const columns: ColumnDef<LegalInvoice>[] = [
     { key: 'number', header: 'Factura', width: '120px', editable: canPerform('DOCUMENTS_INVOICES', 'edit') },
     { key: 'type', header: 'Tipo', width: '20%', editable: canPerform('DOCUMENTS_INVOICES', 'edit') },
-    { key: 'amount', header: 'Monto', width: '120px', editable: canPerform('DOCUMENTS_INVOICES', 'edit'), type: 'number', render: (val: any, row: LegalInvoice) => val ? formatConvertedAmount(Number(val), row.currency || baseCurrency, row.exchangeRate) : '-' },
+    { key: 'amount', header: 'Monto', width: '120px', editable: canPerform('DOCUMENTS_INVOICES', 'edit'), type: 'number', render: (val: any, row: LegalInvoice) => val ? <CurrencyValuationAmount amount={Number(val)} sourceCurrency={row.currency || baseCurrency} sourceExchangeRate={row.exchangeRate} className="font-bold" /> : '-' },
     { key: 'issueDate', header: 'Emisión', width: '140px', editable: canPerform('DOCUMENTS_INVOICES', 'edit'), type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, yyyy') : '-' },
     { key: 'status', header: 'Estado', width: '120px', editable: canPerform('DOCUMENTS_INVOICES', 'edit'), type: 'select', options: statusOpts,
       render: (val: any) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
@@ -53,11 +54,13 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
   };
 
   const totalConverted = data.reduce(
-    (sum, invoice) => sum + convertAmount(Number(invoice.amount || 0), invoice.currency || baseCurrency, invoice.exchangeRate),
+    (sum, invoice) => sum + (valuationMode === 'CURRENT'
+      ? convertCurrentAmount(Number(invoice.amount || 0), invoice.currency || baseCurrency)
+      : convertAmount(Number(invoice.amount || 0), invoice.currency || baseCurrency, invoice.exchangeRate)),
     0,
   );
   const kpis = [
-    { title: `Total Emitido (${displayCurrency})`, value: formatConvertedAmount(totalConverted, displayCurrency), icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { title: `Total Emitido (${displayCurrency}${valuationModeSuffix})`, value: formatConvertedAmount(totalConverted, displayCurrency), icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-500/10' },
     { title: 'Facturas',        value: data.length,                                                                    icon: FileText,      color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
     { title: 'Pagadas',         value: data.filter(f => (f.status||'').toUpperCase() === 'PAID').length,               icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { title: 'Vencidas',        value: data.filter(f => (f.status||'').toUpperCase() === 'OVERDUE').length,            icon: AlertTriangle, color: 'text-rose-500',   bg: 'bg-rose-500/10'    },

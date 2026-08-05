@@ -20,6 +20,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 const PERIODS = [
   { label: 'Este Mes', value: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}` },
@@ -27,6 +28,7 @@ const PERIODS = [
 ];
 
 export function BudgetItemsView() {
+  const { baseCurrency, formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterPeriod, setFilterPeriod] = useState(PERIODS[0].value);
@@ -99,7 +101,7 @@ export function BudgetItemsView() {
   }
 
   function format(n: number) {
-    return new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+    return formatConvertedAmount(n, baseCurrency);
   }
 
   const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()) || i.code.toLowerCase().includes(search.toLowerCase()));
@@ -251,7 +253,7 @@ export function BudgetItemsView() {
               <Select value={form.accountId} onValueChange={v => setForm(p => ({ ...p, accountId: v }))}>
                 <SelectTrigger className="rounded-xl text-sm"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
                 <SelectContent>
-                  {accounts.filter(a => a.isActive).map(a => (
+                  {accounts.filter(a => a.isActive !== false && a.acceptsPostings !== false).map(a => (
                     <SelectItem key={a.id} value={a.id} className="text-xs font-mono">{a.code} - {a.name}</SelectItem>
                   ))}
                 </SelectContent>

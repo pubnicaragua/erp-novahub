@@ -17,6 +17,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -35,7 +36,7 @@ const statusOpts = [
 
 export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -86,9 +87,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
       render: (_, row) => <span className="font-bold text-sm">{(row as any).supplier?.name||'-'}</span> },
     { key: 'total' as any,       header: 'Monto Estimado',       width: '120px',
       render: (val, row) => (
-        <span className="font-black tabular-nums text-rose-500">
-          {formatConvertedAmount(Number(val || (row as any).amount || 0), row.currency, row.exchangeRate)}
-        </span>
+        <CurrencyValuationAmount amount={Number(val || (row as any).amount || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-rose-500" />
       ) },
     { key: 'frequency' as any,   header: 'Frecuencia',  width: '120px', editable: canPerform('PURCHASES_INVOICES_REC', 'edit'), type: 'select', options: freqOpts,
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-purple-500/10 text-purple-500 border-none">{freqMap[(val||'').toLowerCase()]||val||'-'}</Badge> },
@@ -369,18 +368,21 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
     );
   }
 
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate || globalRate);
   const monthly = data
     .filter(r => ((r as any).frequency || '').toLowerCase() === 'monthly')
     .reduce((acc, recurring) => {
       const sourceAmount = (recurring as any).total ?? (recurring as any).amount ?? 0;
-      return acc + convertAmount(sourceAmount, recurring.currency, recurring.exchangeRate);
+      return acc + toDisplayAmount(Number(sourceAmount), recurring.currency, recurring.exchangeRate);
     }, 0);
   const kpis = [
     { title: 'Activas',         value: data.filter(r => ((r as any).status||'').toUpperCase()==='ACTIVE').length,  icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
     { title: 'Total Recurrentes', value: data.length,                                                                icon: RotateCcw,     color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
     {
-      title: `Est. Mensual (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${monthly.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      title: `Est. Mensual (${displayCurrency}${valuationModeSuffix})`,
+      value: formatCurrentAmount(monthly, displayCurrency),
       icon: TrendingDown,
       color: 'text-rose-500',
       bg: 'bg-rose-500/10', kind: 'indicator' as const,

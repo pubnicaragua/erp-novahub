@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranchScope } from '../hooks/useBranchScope';
 import { BranchScopeFilter } from './ui/BranchScopeFilter';
+import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { ShoppingBag } from 'lucide-react';
@@ -233,7 +234,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   });
   const employeesQuery = useQuery({
     queryKey: ['sales', 'employees', tenantKey],
-    queryFn: () => hrService.getEmployees(),
+    queryFn: () => hrService.getEmployees({ status: 'ACTIVE', isSeller: true, pageSize: 500 }),
     enabled: ['ordenes-venta', 'facturas'].includes(activeSection),
     placeholderData: keepPreviousData,
   });
@@ -355,6 +356,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
             </div>
             <BranchScopeFilter className="ml-auto" showLabel={false} />
           </div>
+          <CurrencyValuationBanner className="mb-5" />
 
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
             <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
