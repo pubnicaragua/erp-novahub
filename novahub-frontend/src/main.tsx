@@ -21,7 +21,14 @@ Sentry.init({
     import.meta.env.VITE_SENTRY_DSN ||
     'https://e8777c5efd3a5c6531d70483c75a508b@o4511838597611520.ingest.us.sentry.io/4511838767939584',
   environment: import.meta.env.MODE || 'development',
-  integrations: [Sentry.browserTracingIntegration(), Sentry.replayIntegration()],
+  integrations: [
+    Sentry.browserTracingIntegration(),
+    Sentry.replayIntegration(),
+    // send console.log, console.warn, and console.error calls as logs to Sentry
+    Sentry.consoleLoggingIntegration({ levels: ['log', 'warn', 'error'] }),
+  ],
+  // Enable logs to be sent to Sentry
+  enableLogs: true,
   // Tracing
   tracesSampleRate: parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || '1.0'),
   // Set 'tracePropagationTargets' to control for which URLs distributed tracing should be enabled
