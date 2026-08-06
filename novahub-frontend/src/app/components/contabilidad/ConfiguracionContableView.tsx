@@ -618,6 +618,9 @@ export function ConfiguracionContableView() {
   }, [allAccounts, allModuleDefs])
 
   const salesModuleDefs = useMemo(() => allModuleDefs.filter(mod => SALES_MODULE_IDS.has(mod.id)), [allModuleDefs])
+  const invoiceSalesModule = salesModuleDefs.find(mod => mod.id === 'invoice')
+  const invoicePaymentModule = salesModuleDefs.find(mod => mod.id === 'payment')
+  const otherSalesModuleDefs = salesModuleDefs.filter(mod => !['invoice', 'payment'].includes(mod.id))
   const otherModuleDefs = useMemo(() => allModuleDefs.filter(mod => !SALES_MODULE_IDS.has(mod.id)), [allModuleDefs])
   const groupedOtherModules = useMemo(() => {
     const assigned = new Set<string>()
@@ -639,7 +642,6 @@ export function ConfiguracionContableView() {
 
   const renderConnectionModule = (mod: (typeof allModuleDefs)[number]) => {
     const modMapping = accountMappings[mod.id] || {}
-    const status = connections?.modules?.find((m: any) => m.id === mod.id)?.status ?? null
     const listMod = connections?.modules?.find((m: any) => m.id === mod.id)
     const Icon = mod.icon
 
@@ -653,15 +655,6 @@ export function ConfiguracionContableView() {
               <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{mod.description}</p>
             </div>
           </div>
-          {status === 'connected' ? (
-            <Badge className="shrink-0 bg-emerald-500/10 text-[9px] text-emerald-600">Conectado</Badge>
-          ) : status === 'partial' ? (
-            <Badge className="shrink-0 bg-amber-500/10 text-[9px] text-amber-600">Parcial</Badge>
-          ) : (
-            <Badge variant="outline" className="shrink-0 border-border/40 text-[9px] text-muted-foreground">
-              {status === null ? 'Sin probar' : 'Pendiente'}
-            </Badge>
-          )}
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           {mod.fields.map(field => (
@@ -709,6 +702,84 @@ export function ConfiguracionContableView() {
             </Button>
           </div>
         )}
+      </div>
+    )
+  }
+
+  const renderInvoiceSalesCard = (
+    invoiceModule: (typeof allModuleDefs)[number],
+    paymentModule: (typeof allModuleDefs)[number],
+  ) => {
+    const invoiceMapping = accountMappings[invoiceModule.id] || {}
+    const paymentMapping = accountMappings[paymentModule.id] || {}
+    const fields = [
+      ...invoiceModule.fields.map(field => ({ module: invoiceModule, mapping: invoiceMapping, field })),
+      ...paymentModule.fields.map(field => ({ module: paymentModule, mapping: paymentMapping, field })),
+    ]
+
+    return (
+      <div key="invoice-sales-cycle" className="min-w-0 rounded-2xl border border-primary/20 bg-primary/[0.025] p-4 xl:col-span-2">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <FileText className="mt-0.5 size-4 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-tight">Facturas de venta</p>
+              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                Un solo asiento para la factura pagada: ingreso, IVA y cuenta de cobro según la forma de pago.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+          {fields.map(({ module, mapping, field }) => {
+            const code = mapping[field.key] || field.defaultCode
+            return (
+              <AccountCodeInput
+                key={`${module.id}-${field.key}`}
+                code={code}
+                field={field}
+                account={accountsByCode.get(code)}
+                accountOptions={accountOptionsByType[field.defaultType] || []}
+                onChange={value => updateMapping(module.id, field.key, value)}
+              />
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  const renderSalesModuleCard = (mod: (typeof allModuleDefs)[number]) => {
+    const modMapping = accountMappings[mod.id] || {}
+    const Icon = mod.icon
+    const label = mod.id === 'payment' ? 'Cobros de facturas' : mod.label
+
+    return (
+      <div key={mod.id} className="min-w-0 rounded-2xl border border-border/40 bg-background/35 p-4">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <p className="truncate text-xs font-black uppercase tracking-tight">{label}</p>
+              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{mod.description}</p>
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          {mod.fields.map(field => {
+            const code = modMapping[field.key] || field.defaultCode
+            return (
+              <AccountCodeInput
+                key={field.key}
+                code={code}
+                field={field}
+                account={accountsByCode.get(code)}
+                accountOptions={accountOptionsByType[field.defaultType] || []}
+                onChange={value => updateMapping(mod.id, field.key, value)}
+              />
+            )
+          })}
+        </div>
       </div>
     )
   }
@@ -950,43 +1021,10 @@ export function ConfiguracionContableView() {
           </div>
         </CardHeader>
         {salesExpanded && <CardContent id="ventas-cuentas-contables-content" className="grid grid-cols-1 gap-4 p-5 xl:grid-cols-2">
-          {salesModuleDefs.map(mod => {
-            const modMapping = accountMappings[mod.id] || {}
-            const status = connections?.modules?.find((m: any) => m.id === mod.id)?.status ?? null
-            const Icon = mod.icon
-            return (
-              <div key={mod.id} className="min-w-0 rounded-2xl border border-border/40 bg-background/35 p-4">
-                <div className="flex min-w-0 items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-start gap-2.5">
-                    <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-black uppercase tracking-tight">{mod.label}</p>
-                      <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{mod.description}</p>
-                    </div>
-                  </div>
-                  {status === 'connected' ? (
-                    <Badge className="shrink-0 bg-emerald-500/10 text-[9px] text-emerald-600">Conectado</Badge>
-                  ) : status === 'partial' ? (
-                    <Badge className="shrink-0 bg-amber-500/10 text-[9px] text-amber-600">Parcial</Badge>
-                  ) : (
-                    <Badge variant="outline" className="shrink-0 border-border/40 text-[9px] text-muted-foreground">Pendiente</Badge>
-                  )}
-                </div>
-                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {mod.fields.map(field => (
-                    <AccountCodeInput
-                      key={field.key}
-                      code={modMapping[field.key] || field.defaultCode}
-                      field={field}
-                      account={accountsByCode.get(modMapping[field.key] || field.defaultCode)}
-                      accountOptions={accountOptionsByType[field.defaultType] || []}
-                      onChange={value => updateMapping(mod.id, field.key, value)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )
-          })}
+          {invoiceSalesModule && invoicePaymentModule && (
+            renderInvoiceSalesCard(invoiceSalesModule, invoicePaymentModule)
+          )}
+          {otherSalesModuleDefs.map(renderSalesModuleCard)}
         </CardContent>}
       </Card>
 
