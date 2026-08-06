@@ -905,7 +905,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
           <DialogHeader>
             <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
               <Users className="size-6 text-primary" />
-              Nuevo Miembro
+              Nuevo Usuario
             </DialogTitle>
             <DialogDescription>Asigna un nuevo integrante al equipo de {tenant.name}.</DialogDescription>
           </DialogHeader>
@@ -969,10 +969,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                   Deberás asignarle un rol personalizado después de crearlo desde "Mi Equipo".
                 </p>
               )}
-            </div>
-            <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
-              <Info className="mt-0.5 size-4 shrink-0 text-primary" />
-              <p><strong className="text-foreground">Recomendación:</strong> si esta persona debe estar relacionada con Recursos Humanos, nómina, ventas o comisiones, vincúlala a un empleado después de crear el usuario. El vínculo es opcional.</p>
             </div>
             <div className="space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Contraseña Temporal *</Label>

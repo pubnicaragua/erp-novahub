@@ -27,7 +27,9 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   const [filterStatus, setFilterStatus] = useState('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<any>({});
-  const [newRows, setNewRows] = useState<any[]>([]);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<any>({});
+  const [creatingNewEmployee, setCreatingNewEmployee] = useState(false);
 
   const [showNewDeptModal, setShowNewDeptModal] = useState(false);
   const [showNewPosModal, setShowNewPosModal] = useState(false);
@@ -103,8 +105,11 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
   const paginatedEmployees = filteredEmployees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [detailsEmployee, setDetailsEmployee] = useState<any | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const openDetails = (emp: any) => setDetailsEmployee(emp);
 
   const handleCreateDepartment = async () => {
     if (!newDeptName.trim()) { toast.error('Ingresa un nombre'); return; }
@@ -145,9 +150,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
   const handleEdit = (emp: any) => {
     setEditingId(emp.id);
     setEditData({ ...emp });
-    if (viewMode === 'cards') {
-      setIsEditModalOpen(true);
-    }
+    setIsEditModalOpen(true);
   };
 
   const handleCardEdit = (emp: any) => {
@@ -538,21 +541,14 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
     }
   };
 
-  const handleAddRow = () => {
-    const newRow = {
-      tempId: `new-${Date.now()}`,
-      employeeNumber: (() => {
-        const existing = employees.map((e: any) => {
-          const match = e.employeeNumber?.match(/\d+$/);
-          return match ? parseInt(match[0], 10) : 0;
-        });
-        const pending = newRows.map((r: any) => {
-          const match = r.employeeNumber?.match(/\d+$/);
-          return match ? parseInt(match[0], 10) : 0;
-        });
-        const maxNum = Math.max(0, ...existing, ...pending);
-        return `EMP${String(maxNum + 1).padStart(4, '0')}`;
-      })(),
+  const makeNewEmployeeForm = () => {
+    const existing = employees.map((e: any) => {
+      const match = e.employeeNumber?.match(/\d+$/);
+      return match ? parseInt(match[0], 10) : 0;
+    });
+    const maxNum = Math.max(0, ...existing);
+    return {
+      employeeNumber: `EMP${String(maxNum + 1).padStart(4, '0')}`,
       firstName: '',
       lastName: '',
       email: '',
@@ -568,49 +564,50 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       probationEndDate: '',
       employmentStatus: 'ACTIVE',
     };
-    setNewRows([...newRows, newRow]);
+  };
+
+  const openCreateModal = () => {
+    setCreateForm(makeNewEmployeeForm());
+    setCreateModalOpen(true);
+  };
+
+  const updateCreateForm = (field: string, value: any) => {
+    setCreateForm((current: any) => ({ ...current, [field]: value }));
   };
 
   useEffect(() => {
     if (pendingUserCreate.returnToUserModal) {
-      handleAddRow();
+      openCreateModal();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSaveNewRow = async (tempId: string) => {
-    const row = newRows.find(r => r.tempId === tempId);
-    if (!row) return;
-
-    // Validación básica de campos
+  const handleCreateEmployee = async () => {
+    const row = createForm;
     if (!row.employeeNumber?.trim()) {
       toast.error('El número de empleado es obligatorio');
       return;
     }
-
     if (!row.firstName?.trim() || !row.lastName?.trim()) {
       toast.error('El nombre y apellido son obligatorios');
       return;
     }
-
     if (!row.email?.trim()) {
       toast.error('El correo electrónico es obligatorio');
       return;
     }
-
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(row.email)) {
       toast.error('El formato del correo electrónico no es válido');
       return;
     }
-
     if (!row.departmentId || !row.positionId) {
       toast.error('Selecciona departamento y puesto');
       return;
     }
 
     try {
-      // Limpiar datos y asegurar tipos correctos
+      setCreatingNewEmployee(true);
       const employeeData = {
         employeeNumber: row.employeeNumber.trim(),
         firstName: row.firstName.trim(),
@@ -630,7 +627,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
 
       const createdResponse: any = await hrService.createEmployee(employeeData);
       toast.success('Empleado creado correctamente');
-      setNewRows(newRows.filter(r => r.tempId !== tempId));
+      setCreateModalOpen(false);
       onRefresh();
 
       if (pendingUserCreate.returnToUserModal) {
@@ -645,15 +642,9 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
     } catch (error: any) {
       const msg = error?.response?.data?.message || 'Error al crear empleado';
       toast.error(Array.isArray(msg) ? msg[0] : msg);
+    } finally {
+      setCreatingNewEmployee(false);
     }
-  };
-
-  const handleDeleteNewRow = (tempId: string) => {
-    setNewRows(newRows.filter(r => r.tempId !== tempId));
-  };
-
-  const updateNewRow = (tempId: string, field: string, value: any) => {
-    setNewRows(newRows.map(r => r.tempId === tempId ? { ...r, [field]: value } : r));
   };
 
   if (importPreviewOpen) {
@@ -721,7 +712,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
             {viewMode === 'table' ? <Grid className="size-4" /> : <List className="size-4" />}
           </Button>
           {canPerform('HR_EMPLOYEES', 'create') && (
-            <Button size="sm" onClick={handleAddRow} className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="empleados-add">
+            <Button size="sm" onClick={openCreateModal} className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="empleados-add">
               <Plus className="size-4 mr-2" />
               Agregar Empleado
             </Button>
@@ -757,158 +748,15 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {/* New Rows */}
-                {newRows.map((row) => (
-                  <tr key={row.tempId} className="bg-blue-50/50 hover:bg-blue-50 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 transition-colors">
-                    <td className="px-4 py-2">
-                      <Input
-                        value={row.employeeNumber}
-                        onChange={(e) => updateNewRow(row.tempId, 'employeeNumber', e.target.value)}
-                        className="h-8 text-sm"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex gap-1">
-                        <Input
-                          placeholder="Nombre"
-                          value={row.firstName}
-                          onChange={(e) => updateNewRow(row.tempId, 'firstName', e.target.value)}
-                          className="h-8 text-sm"
-                        />
-                        <Input
-                          placeholder="Apellido"
-                          value={row.lastName}
-                          onChange={(e) => updateNewRow(row.tempId, 'lastName', e.target.value)}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <Input
-                        type="email"
-                        placeholder="email@example.com"
-                        value={row.email}
-                        onChange={(e) => updateNewRow(row.tempId, 'email', e.target.value)}
-                        className="h-8 text-sm"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <Input
-                        placeholder="Teléfono"
-                        value={row.phone}
-                        onChange={(e) => updateNewRow(row.tempId, 'phone', e.target.value)}
-                        className="h-8 text-sm"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-1">
-                        <Select value={row.departmentId} onValueChange={(v) => updateNewRow(row.tempId, 'departmentId', v)}>
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {departments.map((dept: any) => (
-                              <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={() => setShowNewDeptModal(true)} title="Crear departamento">
-                          <Plus className="size-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-1">
-                        <Select value={row.positionId} onValueChange={(v) => updateNewRow(row.tempId, 'positionId', v)}>
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {positions.map((pos: any) => (
-                              <SelectItem key={pos.id} value={pos.id}>{pos.title}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={() => setShowNewPosModal(true)} title="Crear puesto">
-                          <Plus className="size-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex gap-1 items-center">
-                        <div className="relative flex-1">
-                          <span className="absolute left-2.5 top-1.5 text-xs text-muted-foreground font-medium">
-                            {row.currency === 'USD' ? '$' : 'C$'}
-                          </span>
-                          <Input
-                            type="number"
-                            value={row.salary}
-                            onChange={(e) => updateNewRow(row.tempId, 'salary', parseFloat(e.target.value))}
-                            className="h-8 text-sm pl-7 min-w-[100px]"
-                          />
-                        </div>
-                        <Select value={row.currency} onValueChange={(v) => updateNewRow(row.tempId, 'currency', v)}>
-                          <SelectTrigger className="h-8 w-16 text-[10px] font-bold">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="USD">USD</SelectItem>
-                            <SelectItem value="NIO">NIO</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded font-bold">Nuevo</span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="text-xs text-muted-foreground">—</span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => handleSaveNewRow(row.tempId)} className="h-7 px-2">
-                          <Save className="size-3" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleDeleteNewRow(row.tempId)} className="h-7 px-2">
-                          <X className="size-3" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-
                 {/* Existing Employees */}
                 {paginatedEmployees.map((emp: any) => (
                   <tr key={emp.id} className="hover:bg-muted/50">
                     <td className="px-4 py-2 text-sm">{emp.employeeNumber}</td>
                     <td className="px-4 py-2">
-                      {editingId === emp.id ? (
-                        <div className="flex gap-1">
-                          <Input
-                            value={editData.firstName}
-                            onChange={(e) => setEditData({ ...editData, firstName: e.target.value })}
-                            className="h-8 text-sm"
-                          />
-                          <Input
-                            value={editData.lastName}
-                            onChange={(e) => setEditData({ ...editData, lastName: e.target.value })}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                      ) : (
-                        <span className="text-sm font-medium">{emp.firstName} {emp.lastName}</span>
-                      )}
+                      <button type="button" onClick={() => openDetails(emp)} className="text-sm font-medium text-left hover:underline">{emp.firstName} {emp.lastName}</button>
                     </td>
                     <td className="px-4 py-2">
-                      {editingId === emp.id ? (
-                        <Input
-                          value={editData.email}
-                          onChange={(e) => setEditData({ ...editData, email: e.target.value })}
-                          className="h-8 text-sm"
-                        />
-                      ) : (
-                        <span className="text-sm text-muted-foreground">{emp.email}</span>
-                      )}
+                      <span className="text-sm text-muted-foreground">{emp.email}</span>
                     </td>
                     <td className="px-4 py-2">
                       <span className="text-sm text-muted-foreground">{emp.phone || '—'}</span>
@@ -925,35 +773,10 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                     </td>
                     <td className="px-4 py-2 text-sm">{emp.position?.title}</td>
                     <td className="px-4 py-2">
-                      {editingId === emp.id ? (
-                        <div className="flex gap-1 items-center">
-                          <div className="relative flex-1">
-                            <span className="absolute left-2 top-1.5 text-[10px] text-muted-foreground font-bold">
-                              {editData.currency === 'USD' ? '$' : 'C$'}
-                            </span>
-                            <Input
-                              type="number"
-                              value={editData.salary}
-                              onChange={(e) => setEditData({ ...editData, salary: parseFloat(e.target.value) })}
-                              className="h-8 text-sm pl-6 w-24"
-                            />
-                          </div>
-                          <Select value={editData.currency} onValueChange={(v) => setEditData({ ...editData, currency: v })}>
-                            <SelectTrigger className="h-8 w-16 text-[10px] font-bold">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="USD">USD</SelectItem>
-                              <SelectItem value="NIO">NIO</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col">
-                          <CurrencyValuationAmount amount={Number(emp.salary || 0)} sourceCurrency={emp.currency || 'USD'} sourceExchangeRate={emp.exchangeRate} className="text-sm font-bold text-primary" />
-                          <span className="text-[9px] text-muted-foreground uppercase font-black">Original: {emp.currency}</span>
-                        </div>
-                      )}
+                      <div className="flex flex-col">
+                        <CurrencyValuationAmount amount={Number(emp.salary || 0)} sourceCurrency={emp.currency || 'USD'} sourceExchangeRate={emp.exchangeRate} className="text-sm font-bold text-primary" />
+                        <span className="text-[9px] text-muted-foreground uppercase font-black">Original: {emp.currency}</span>
+                      </div>
                     </td>
                     <td className="px-4 py-2">
                       <span className={`text-[10px] px-2 py-1 rounded-lg font-black uppercase tracking-tighter ${
@@ -973,23 +796,12 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                     </td>
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
-                        {editingId === emp.id ? (
-                          <>
-                            <Button size="sm" variant="ghost" onClick={() => handleSave(emp.id)} className="h-7 px-2">
-                              <Save className="size-3" />
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="h-7 px-2">
-                              <X className="size-3" />
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            {canPerform('HR_EMPLOYEES', 'edit') && (
-                              <Button size="sm" variant="ghost" onClick={() => handleEdit(emp)} className="h-7 px-2">
-                                <Edit2 className="size-3" />
-                              </Button>
-                            )}
-                            {emp.approvalStatus === 'DRAFT' && (
+                        {canPerform('HR_EMPLOYEES', 'edit') && (
+                          <Button size="sm" variant="ghost" onClick={() => handleEdit(emp)} className="h-7 px-2">
+                            <Edit2 className="size-3" />
+                          </Button>
+                        )}
+                        {emp.approvalStatus === 'DRAFT' && (
                               <Button title="Enviar a aprobación" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={(e) => { e.stopPropagation(); handleSubmitApproval(emp.id); }}>
                                 <Send className="size-4" />
                               </Button>
@@ -1012,8 +824,6 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                                 <Ban className="size-3" />
                               </Button>
                             )}
-                          </>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -1029,7 +839,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
           {paginatedEmployees.map((emp: any) => (
             <div key={emp.id} className="border border-border/40 rounded-2xl p-5 bg-gradient-to-br from-card to-muted/20 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 relative overflow-hidden group">
               <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
+                <button type="button" onClick={() => openDetails(emp)} className="flex items-center gap-3 text-left hover:opacity-90">
                   <div className="size-12 rounded-full bg-primary flex items-center justify-center text-white font-bold text-lg">
                     {emp.firstName[0]}{emp.lastName[0]}
                   </div>
@@ -1037,7 +847,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                     <h3 className="font-semibold text-sm">{emp.firstName} {emp.lastName}</h3>
                     <p className="text-xs text-muted-foreground">{emp.employeeNumber}</p>
                   </div>
-                </div>
+                </button>
                 <span className={`text-xs px-2 py-1 rounded ${
                   emp.employmentStatus === 'ACTIVE' 
                     ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
@@ -1122,7 +932,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         </div>
       )}
 
-      {filteredEmployees.length === 0 && newRows.length === 0 && (
+      {filteredEmployees.length === 0 && (
         <div className="text-center py-12">
           <p className="text-muted-foreground">No se encontraron empleados</p>
         </div>
@@ -1191,6 +1001,129 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         </DialogContent>
       </Dialog>
 
+      {/* Modal: Crear Empleado */}
+      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Plus className="size-5 text-primary" /> Agregar Empleado</DialogTitle>
+            <DialogDescription>Registra un nuevo empleado con sus datos personales e información laboral.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Número de empleado</Label>
+                <Input value={createForm.employeeNumber || ''} onChange={(e) => updateCreateForm('employeeNumber', e.target.value)} className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombres</Label>
+                <Input value={createForm.firstName || ''} onChange={(e) => updateCreateForm('firstName', e.target.value)} placeholder="Nombre" className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Apellidos</Label>
+                <Input value={createForm.lastName || ''} onChange={(e) => updateCreateForm('lastName', e.target.value)} placeholder="Apellido" className="rounded-xl" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Correo electrónico</Label>
+                <Input type="email" value={createForm.email || ''} onChange={(e) => updateCreateForm('email', e.target.value)} placeholder="email@example.com" className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Teléfono</Label>
+                <Input value={createForm.phone || ''} onChange={(e) => updateCreateForm('phone', e.target.value)} placeholder="Teléfono" className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Fecha de contratación</Label>
+                <Input type="date" value={createForm.hireDate || ''} onChange={(e) => updateCreateForm('hireDate', e.target.value)} className="rounded-xl" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Departamento</Label>
+                <div className="flex items-center gap-1">
+                  <Select value={createForm.departmentId} onValueChange={(v) => updateCreateForm('departmentId', v)}>
+                    <SelectTrigger className="rounded-xl flex-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {departments.map((dept: any) => (
+                        <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="ghost" className="h-9 w-9 p-0 shrink-0" onClick={() => setShowNewDeptModal(true)} title="Crear departamento">
+                    <Plus className="size-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Puesto</Label>
+                <div className="flex items-center gap-1">
+                  <Select value={createForm.positionId} onValueChange={(v) => updateCreateForm('positionId', v)}>
+                    <SelectTrigger className="rounded-xl flex-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {createForm.departmentId
+                        ? positions.filter((pos: any) => pos.departmentId === createForm.departmentId).map((pos: any) => (
+                          <SelectItem key={pos.id} value={pos.id}>{pos.title}</SelectItem>
+                        ))
+                        : positions.map((pos: any) => <SelectItem key={pos.id} value={pos.id}>{pos.title}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="ghost" className="h-9 w-9 p-0 shrink-0" onClick={() => setShowNewPosModal(true)} title="Crear puesto">
+                    <Plus className="size-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Tipo de contrato</Label>
+                <Select value={createForm.contractType || 'FULL_TIME'} onValueChange={(v) => updateCreateForm('contractType', v)}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="FULL_TIME">Tiempo completo</SelectItem>
+                    <SelectItem value="PART_TIME">Medio tiempo</SelectItem>
+                    <SelectItem value="CONTRACTOR">Contratista</SelectItem>
+                    <SelectItem value="INTERN">Pasante</SelectItem>
+                    <SelectItem value="TEMPORARY">Temporal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Salario</Label>
+                <Input type="number" value={createForm.salary ?? 0} onChange={(e) => updateCreateForm('salary', parseFloat(e.target.value))} className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Moneda</Label>
+                <Select value={createForm.currency || 'NIO'} onValueChange={(v) => updateCreateForm('currency', v)}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NIO">NIO</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cédula / Identificación</Label>
+                <Input value={createForm.nationalId || ''} onChange={(e) => updateCreateForm('nationalId', e.target.value)} className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Número de seguro social</Label>
+                <Input value={createForm.socialSecurityNumber || ''} onChange={(e) => updateCreateForm('socialSecurityNumber', e.target.value)} className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Fin de prueba</Label>
+                <Input type="date" value={createForm.probationEndDate || ''} onChange={(e) => updateCreateForm('probationEndDate', e.target.value)} className="rounded-xl" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateModalOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCreateEmployee} disabled={creatingNewEmployee} className="bg-primary text-primary-foreground">{creatingNewEmployee ? 'Creando...' : 'Crear Empleado'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!departmentEditorEmployee} onOpenChange={(open) => { if (!open) setDepartmentEditorEmployee(null); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -1226,50 +1159,216 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         </DialogContent>
       </Dialog>
 
+      {/* Modal: Detalles de Empleado */}
+      <Dialog open={!!detailsEmployee} onOpenChange={(open) => { if (!open) setDetailsEmployee(null); }}>
+        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="border-b border-border/40 pb-4">
+            <div className="flex items-center gap-4">
+              <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary/70 text-white shadow-lg shadow-primary/20">
+                <span className="text-xl font-black">{detailsEmployee?.firstName?.[0] || '?'}{detailsEmployee?.lastName?.[0] || '?'}</span>
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-xl font-black uppercase tracking-tight leading-none">{detailsEmployee?.firstName} {detailsEmployee?.lastName}</DialogTitle>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground">{detailsEmployee?.employeeNumber}</span>
+                  <span className="h-3 w-px bg-border" />
+                  <span className="text-xs font-semibold text-primary">{detailsEmployee?.position?.title || 'Sin puesto'}</span>
+                  <span className="h-3 w-px bg-border" />
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${detailsEmployee?.employmentStatus === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
+                    <span className={`size-1.5 rounded-full ${detailsEmployee?.employmentStatus === 'ACTIVE' ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                    {detailsEmployee?.employmentStatus || '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <DialogDescription className="pt-3">Ficha resumen del empleado.</DialogDescription>
+          </DialogHeader>
+          {detailsEmployee && (
+            <div className="space-y-5 py-5">
+              <section>
+                <h4 className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" /> Datos personales</h4>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-border/50 bg-muted/10 p-3.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Nombres</p>
+                    <p className="mt-1 text-sm font-semibold">{detailsEmployee.firstName || '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-muted/10 p-3.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Apellidos</p>
+                    <p className="mt-1 text-sm font-semibold">{detailsEmployee.lastName || '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-muted/10 p-3.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Correo electrónico</p>
+                    <p className="mt-1 text-sm font-medium break-all">{detailsEmployee.email || '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-muted/10 p-3.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Teléfono</p>
+                    <p className="mt-1 text-sm font-medium">{detailsEmployee.phone || '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-muted/10 p-3.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cédula / Identificación</p>
+                    <p className="mt-1 text-sm font-medium">{detailsEmployee.nationalId || '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-muted/10 p-3.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Número de seguro social</p>
+                    <p className="mt-1 text-sm font-medium">{detailsEmployee.socialSecurityNumber || '—'}</p>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><span className="inline-block size-1.5 w-1.5 rounded-full bg-primary" /> Información laboral</h4>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-border/50 bg-muted/10 p-3.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Departamento</p>
+                    <p className="mt-1 text-sm font-semibold">{detailsEmployee.department?.name || '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-muted/10 p-3.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Puesto</p>
+                    <p className="mt-1 text-sm font-semibold">{detailsEmployee.position?.title || '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-muted/10 p-3.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tipo de contrato</p>
+                    <p className="mt-1 text-sm font-medium">{detailsEmployee.contractType || '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-muted/10 p-3.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Fecha de contratación</p>
+                    <p className="mt-1 text-sm font-medium">{detailsEmployee.hireDate ? new Date(detailsEmployee.hireDate).toLocaleDateString() : '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-muted/10 p-3.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Fin de periodo de prueba</p>
+                    <p className="mt-1 text-sm font-medium">{detailsEmployee.probationEndDate ? new Date(detailsEmployee.probationEndDate).toLocaleDateString() : '—'}</p>
+                  </div>
+                  <div className="rounded-xl border border-primary/10 bg-primary/5 p-3.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-primary/70">Salario</p>
+                    <p className="mt-1 text-sm font-black text-primary">{typeof detailsEmployee.salary === 'number' ? `${detailsEmployee.salary.toLocaleString()} ${detailsEmployee.currency || ''}` : `${detailsEmployee.salary ?? '—'} ${detailsEmployee.currency || ''}`}</p>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailsEmployee(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal: Editar Empleado (Cards View) */}
       <Dialog open={isEditModalOpen} onOpenChange={(open) => {
         setIsEditModalOpen(open);
         if (!open) setEditingId(null);
       }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Edit2 className="size-5 text-primary" /> Editar Empleado</DialogTitle>
             <DialogDescription>Modifica los datos del empleado. Los cambios se guardarán de inmediato.</DialogDescription>
           </DialogHeader>
           {editingId && (
             <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto px-1">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre</Label>
-                  <Input value={editData.firstName} onChange={e => setEditData({ ...editData, firstName: e.target.value })} className="rounded-xl" />
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Número de empleado</Label>
+                  <Input value={editData.employeeNumber || ''} onChange={(e) => setEditData({ ...editData, employeeNumber: e.target.value })} className="rounded-xl" />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Apellido</Label>
-                  <Input value={editData.lastName} onChange={e => setEditData({ ...editData, lastName: e.target.value })} className="rounded-xl" />
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombres</Label>
+                  <Input value={editData.firstName || ''} onChange={(e) => setEditData({ ...editData, firstName: e.target.value })} placeholder="Nombre" className="rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Apellidos</Label>
+                  <Input value={editData.lastName || ''} onChange={(e) => setEditData({ ...editData, lastName: e.target.value })} placeholder="Apellido" className="rounded-xl" />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Email</Label>
-                <Input value={editData.email} onChange={e => setEditData({ ...editData, email: e.target.value })} className="rounded-xl" />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Correo electrónico</Label>
+                  <Input type="email" value={editData.email || ''} onChange={(e) => setEditData({ ...editData, email: e.target.value })} placeholder="email@example.com" className="rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Teléfono</Label>
+                  <Input value={editData.phone || ''} onChange={(e) => setEditData({ ...editData, phone: e.target.value })} placeholder="Teléfono" className="rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Fecha de contratación</Label>
+                  <Input type="date" value={editData.hireDate ? new Date(editData.hireDate).toISOString().split('T')[0] : ''} onChange={(e) => setEditData({ ...editData, hireDate: e.target.value })} className="rounded-xl" />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Teléfono</Label>
-                <Input value={editData.phone || ''} onChange={e => setEditData({ ...editData, phone: e.target.value })} className="rounded-xl" />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Departamento</Label>
+                  <div className="flex items-center gap-1">
+                    <Select value={editData.departmentId || ''} onValueChange={(v) => setEditData({ ...editData, departmentId: v })}>
+                      <SelectTrigger className="rounded-xl flex-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {departments.map((dept: any) => (
+                          <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" variant="ghost" className="h-9 w-9 p-0 shrink-0" onClick={() => setShowNewDeptModal(true)} title="Crear departamento">
+                      <Plus className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Puesto</Label>
+                  <div className="flex items-center gap-1">
+                    <Select value={editData.positionId || ''} onValueChange={(v) => setEditData({ ...editData, positionId: v })}>
+                      <SelectTrigger className="rounded-xl flex-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {editData.departmentId
+                          ? positions.filter((pos: any) => pos.departmentId === editData.departmentId).map((pos: any) => (
+                            <SelectItem key={pos.id} value={pos.id}>{pos.title}</SelectItem>
+                          ))
+                          : positions.map((pos: any) => <SelectItem key={pos.id} value={pos.id}>{pos.title}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" variant="ghost" className="h-9 w-9 p-0 shrink-0" onClick={() => setShowNewPosModal(true)} title="Crear puesto">
+                      <Plus className="size-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Tipo de contrato</Label>
+                  <Select value={editData.contractType || 'FULL_TIME'} onValueChange={(v) => setEditData({ ...editData, contractType: v })}>
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FULL_TIME">Tiempo completo</SelectItem>
+                      <SelectItem value="PART_TIME">Medio tiempo</SelectItem>
+                      <SelectItem value="CONTRACTOR">Contratista</SelectItem>
+                      <SelectItem value="INTERN">Pasante</SelectItem>
+                      <SelectItem value="TEMPORARY">Temporal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Salario</Label>
-                  <Input type="number" value={editData.salary} onChange={e => setEditData({ ...editData, salary: parseFloat(e.target.value) })} className="rounded-xl" />
+                  <Input type="number" value={editData.salary ?? 0} onChange={(e) => setEditData({ ...editData, salary: parseFloat(e.target.value) })} className="rounded-xl" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Moneda</Label>
-                  <Select value={editData.currency} onValueChange={(v) => setEditData({ ...editData, currency: v })}>
-                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Moneda" /></SelectTrigger>
+                  <Select value={editData.currency || 'NIO'} onValueChange={(v) => setEditData({ ...editData, currency: v })}>
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="USD">USD</SelectItem>
                       <SelectItem value="NIO">NIO</SelectItem>
+                      <SelectItem value="USD">USD</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cédula / Identificación</Label>
+                  <Input value={editData.nationalId || ''} onChange={(e) => setEditData({ ...editData, nationalId: e.target.value })} className="rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Número de seguro social</Label>
+                  <Input value={editData.socialSecurityNumber || ''} onChange={(e) => setEditData({ ...editData, socialSecurityNumber: e.target.value })} className="rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Fin de prueba</Label>
+                  <Input type="date" value={editData.probationEndDate ? new Date(editData.probationEndDate).toISOString().split('T')[0] : ''} onChange={(e) => setEditData({ ...editData, probationEndDate: e.target.value })} className="rounded-xl" />
                 </div>
               </div>
             </div>
