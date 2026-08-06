@@ -1,12 +1,15 @@
-import { cn } from './ui/utils';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   DollarSign, TrendingUp, TrendingDown, BarChart3, 
-  CalendarClock, Landmark, RotateCcw, Wallet, CalendarDays, X,
+  CalendarClock, Landmark, RotateCcw, Wallet,
+  AlertTriangle, Calendar, CalendarDays, Filter, X,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { FinanceDashboardView } from './finanzas/FinanceDashboardView';
 import { FinanceTableView } from './finanzas/FinanceTableView';
 import { FinanceBalanceView } from './finanzas/FinanceBalanceView';
@@ -16,12 +19,14 @@ import { FinancePayablesView } from './finanzas/FinancePayablesView';
 import { FinanceCalendarView } from './finanzas/FinanceCalendarView';
 import { FinanceGeneralBalanceView } from './finanzas/FinanceGeneralBalanceView';
 import { accountsService, incomeService, expensesService, recurringExpensesService, recurringIncomesService } from '../services/finanzas.service';
+import { contabilidadService } from '../services/contabilidad.service';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranchScope } from '../hooks/useBranchScope';
 import { BranchScopeFilter } from './ui/BranchScopeFilter';
+import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
@@ -37,10 +42,17 @@ const PERIOD_PRESETS = [
   { label: 'Año', days: 365 },
 ];
 
-export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: FinanzasPageProps) {
+const normalizeListResponse = (response: any) => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  return [];
+};
+
+export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPageProps) {
   const { user, canPerform } = useAuth();
-  const { filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
-  const { exchangeRate: globalRate, convertAmount } = useCurrency();
+  const queryClient = useQueryClient();
+  const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
+  const { displayCurrency, exchangeRate: globalRate, valuationMode, valuationModeLabel, showValuationLegend, convertAmount, convertCurrentAmount, formatCurrentAmount } = useCurrency();
 
   const hasAccess = (moduleId: string) => {
     if (!user?.enabledModules) return true;
@@ -63,12 +75,6 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   };
   
   const [activeTab, setActiveTab] = useState(() => activeSubModule ? (subModuleToTab[activeSubModule] || 'resumen') : 'resumen');
-  const [incomes, setIncomes] = useState<any[]>([]);
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [recurringExpenses, setRecurringExpenses] = useState<any[]>([]);
-  const [recurringIncomes, setRecurringIncomes] = useState<any[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [activePreset, setActivePreset] = useState<string>('');
@@ -97,17 +103,89 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     });
   };
 
+  const tenantKey = user?.clientTenantId || user?.tenantId || 'current';
+  const financeParams = { page: 1, pageSize: 500, ...(dateFrom && { dateFrom }), ...(dateTo && { dateTo }) };
+  const activeDataTabs = {
+    income: ['resumen', 'ingresos', 'analisis', 'balance-general'].includes(activeTab),
+    expense: ['resumen', 'gastos', 'analisis', 'balance-general'].includes(activeTab),
+    recurringExpense: ['resumen', 'recurrentes', 'calendario', 'analisis'].includes(activeTab),
+    recurringIncome: ['resumen', 'recurrentes', 'calendario', 'analisis'].includes(activeTab),
+    accounts: ['resumen', 'ingresos', 'gastos', 'recurrentes', 'balance-general'].includes(activeTab),
+  };
+  const incomesQuery = useQuery({
+    queryKey: ['finance', 'income', tenantKey, dateFrom, dateTo],
+    queryFn: ({ signal }) => incomeService.getAll(financeParams, signal),
+    enabled: activeDataTabs.income,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const expensesQuery = useQuery({
+    queryKey: ['finance', 'expenses', tenantKey, dateFrom, dateTo],
+    queryFn: ({ signal }) => expensesService.getAll(financeParams, signal),
+    enabled: activeDataTabs.expense,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const recurringExpensesQuery = useQuery({
+    queryKey: ['finance', 'recurring-expenses', tenantKey, dateFrom, dateTo],
+    queryFn: ({ signal }) => recurringExpensesService.getAll(financeParams, signal),
+    enabled: activeDataTabs.recurringExpense,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const recurringIncomesQuery = useQuery({
+    queryKey: ['finance', 'recurring-incomes', tenantKey, dateFrom, dateTo],
+    queryFn: ({ signal }) => recurringIncomesService.getAll(financeParams, signal),
+    enabled: activeDataTabs.recurringIncome,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const accountsQuery = useQuery({
+    queryKey: ['finance', 'accounts', tenantKey],
+    queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal),
+    enabled: activeDataTabs.accounts,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const accountingMappingsQuery = useQuery({
+    queryKey: ['finance', 'accounting-mappings', tenantKey],
+    queryFn: ({ signal }) => contabilidadService.getSuggestedAccounts(signal),
+    enabled: activeDataTabs.accounts,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
+  const incomes = normalizeListResponse(incomesQuery.data);
+  const expenses = normalizeListResponse(expensesQuery.data);
+  const recurringExpenses = normalizeListResponse(recurringExpensesQuery.data);
+  const recurringIncomes = normalizeListResponse(recurringIncomesQuery.data);
+  const accounts = normalizeListResponse(accountsQuery.data);
+  const activeQueries = [
+    activeDataTabs.income && incomesQuery,
+    activeDataTabs.expense && expensesQuery,
+    activeDataTabs.recurringExpense && recurringExpensesQuery,
+    activeDataTabs.recurringIncome && recurringIncomesQuery,
+    activeDataTabs.accounts && accountsQuery,
+  ].filter(Boolean) as Array<{ isLoading: boolean; isError: boolean }>;
+  const loading = activeQueries.some(query => query.isLoading);
+
   const fIncomes = filterByDate(filterByBranch(incomes));
   const fExpenses = filterByDate(filterByBranch(expenses));
   const fRecurringExpenses = filterByDate(filterByBranch(recurringExpenses)).filter((r: any) => Number(r.amount) > 0);
   const fRecurringIncomes = filterByDate(filterByBranch(recurringIncomes)).filter((r: any) => Number(r.amount) > 0);
   const fAccounts = filterByDate(filterByBranch(accounts));
-
-  const normalizeListResponse = (response: any) => {
-    if (Array.isArray(response)) return response;
-    if (Array.isArray(response?.data)) return response.data;
-    return [];
-  };
 
   const normalizeItemResponse = (response: any) => {
     if (response && typeof response === 'object' && 'data' in response && response.data) {
@@ -119,7 +197,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const getAccountType = (account: any) => String(account?.type || '').toUpperCase();
 
   const findAccountByPreferredTypes = (preferredTypes: string[]) => {
-    const activeAccounts = accounts.filter((acc) => acc?.isActive !== false);
+    const activeAccounts = accounts.filter((acc) => acc?.isActive !== false && acc?.acceptsPostings !== false);
     return (
       activeAccounts.find((acc) => preferredTypes.includes(getAccountType(acc))) ||
       activeAccounts.find((acc) => getAccountType(acc) === 'ASSET') ||
@@ -131,7 +209,13 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
   const ensureDefaultAccount = async (accountKind: 'INCOME' | 'EXPENSE') => {
     const preferredTypes = accountKind === 'INCOME' ? ['INCOME', 'REVENUE'] : ['EXPENSE'];
-    const existing = findAccountByPreferredTypes(preferredTypes);
+    const configuredModule = accountKind === 'INCOME' ? 'financialIncome' : 'financialExpense';
+    const configuredField = accountKind === 'INCOME' ? 'income' : 'expense';
+    const configuredCode = accountingMappingsQuery.data?.mappings?.[configuredModule]?.[configuredField]?.code;
+    const configured = configuredCode
+      ? accounts.find((acc) => acc.code === configuredCode && acc.isActive !== false && acc.acceptsPostings !== false)
+      : undefined;
+    const existing = configured || findAccountByPreferredTypes(preferredTypes);
     if (existing) return existing;
 
     const suffix = Date.now().toString().slice(-6);
@@ -144,12 +228,18 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     const createdResponse = await accountsService.create(payload);
     const createdAccount = normalizeItemResponse(createdResponse);
     if (!createdAccount?.id) throw new Error('No se pudo crear una cuenta contable por defecto');
-    setAccounts((prev) => [createdAccount, ...prev]);
+    queryClient.invalidateQueries({ queryKey: ['finance', 'accounts'] });
     toast.success(accountKind === 'INCOME' ? 'Se creó una cuenta de ingresos por defecto' : 'Se creó una cuenta de gastos por defecto');
     return createdAccount;
   };
 
-  const currentTab = activeSubModule && subModuleToTab[activeSubModule] ? subModuleToTab[activeSubModule] : activeTab;
+  useEffect(() => {
+    if (activeSubModule && subModuleToTab[activeSubModule]) {
+      if (activeTab !== subModuleToTab[activeSubModule]) {
+        setActiveTab(subModuleToTab[activeSubModule]);
+      }
+    }
+  }, [activeSubModule, activeTab]);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
@@ -158,34 +248,10 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   };
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [incRes, expRes, rexpRes, accRes, rincRes] = await Promise.allSettled([
-          incomeService.getAll(),
-          expensesService.getAll(),
-          recurringExpensesService.getAll(),
-          accountsService.getAll(),
-          recurringIncomesService.getAll(),
-        ]);
-
-        setIncomes(incRes.status === 'fulfilled' ? normalizeListResponse(incRes.value) : []);
-        setExpenses(expRes.status === 'fulfilled' ? normalizeListResponse(expRes.value) : []);
-        setRecurringExpenses(rexpRes.status === 'fulfilled' ? normalizeListResponse(rexpRes.value) : []);
-        setAccounts(accRes.status === 'fulfilled' ? normalizeListResponse(accRes.value) : []);
-        setRecurringIncomes(rincRes.status === 'fulfilled' ? normalizeListResponse(rincRes.value) : []);
-
-        if ([incRes, expRes, rexpRes, accRes].every((res) => res.status === 'rejected')) {
-          toast.error('Error al cargar datos financieros');
-        }
-      } catch (error) {
-        console.error('Error fetching finance data:', error);
-        toast.error('Error al cargar datos financieros');
-      } finally {
-        setLoading(false);
-      }
-    };
-    void load();
-  }, []);
+    if (activeQueries.length > 0 && activeQueries.every(query => query.isError)) {
+      toast.error('Error al cargar datos financieros');
+    }
+  }, [activeTab, dateFrom, dateTo, activeQueries.map(query => query.isError).join('|')]);
 
   const INCOME_COLUMNS = [
     { key: 'number', label: 'No. Recibo', type: 'text' as const, editable: false },
@@ -229,7 +295,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       return;
     }
     await expensesService.update(id, updates);
-    setExpenses(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+    await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
   };
 
   const handleUpdateIncome = async (id: string, updates: any) => {
@@ -239,17 +305,17 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       return;
     }
     await incomeService.update(id, updates);
-    setIncomes(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+    await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] });
   };
 
   const handleUpdateRecurring = async (id: string, updates: any) => {
     const isIncome = recurringIncomes.some(r => r.id === id);
     if (isIncome) {
       await recurringIncomesService.update(id, updates);
-      setRecurringIncomes(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] });
     } else {
       await recurringExpensesService.update(id, updates);
-      setRecurringExpenses(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
     }
   };
 
@@ -269,14 +335,14 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
         exchangeRate: globalRate,
       };
       if (type === 'INCOME') {
-        const res = await recurringIncomesService.create(payload);
-        setRecurringIncomes([res, ...recurringIncomes]);
+        await recurringIncomesService.create(payload);
+        await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] });
       } else {
-        const res = await recurringExpensesService.create(payload);
-        setRecurringExpenses([res, ...recurringExpenses]);
+        await recurringExpensesService.create(payload);
+        await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
       }
       toast.success(`Nuevo movimiento ${type === 'INCOME' ? 'de ingreso' : 'de gasto'} recurrente añadido`);
-    } catch {
+    } catch (error) {
       toast.error('Error al crear movimiento recurrente');
     }
   };
@@ -285,26 +351,29 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     try {
       const defaultAccount = await ensureDefaultAccount('INCOME');
       const newItem = { source: 'Manual', description: '', amount: 0, date: new Date().toISOString(), accountId: defaultAccount.id, category: 'OTROS', currency: 'NIO' as any, exchangeRate: globalRate, notes: '' };
-      const res = await incomeService.create(newItem);
-      setIncomes([res, ...incomes]);
+      await incomeService.create(newItem);
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] });
       toast.success('Nuevo ingreso añadido');
-    } catch { toast.error('Error al crear ingreso'); }
+    } catch (error) { toast.error('Error al crear ingreso'); }
   };
 
   const handleAddExpense = async () => {
     try {
       const defaultAccount = await ensureDefaultAccount('EXPENSE');
       const newItem = { source: 'Manual', description: 'Nuevo Gasto', category: 'OTROS', amount: 0, date: new Date().toISOString(), accountId: defaultAccount.id, currency: 'NIO' as any, exchangeRate: globalRate, status: 'PENDING' as any, notes: '' };
-      const res = await expensesService.create(newItem);
-      setExpenses([res, ...expenses]);
+      await expensesService.create(newItem);
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
       toast.success('Nuevo gasto añadido');
-    } catch { toast.error('Error al crear gasto'); }
+    } catch (error) { toast.error('Error al crear gasto'); }
   };
 
-  const totalIncome = fIncomes.reduce((acc, i) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0);
-  const totalExpense = fExpenses.reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate || globalRate);
+  const totalIncome = fIncomes.reduce((acc, i) => acc + toDisplayAmount(Number(i.amount || i.baseAmount || 0), i.currency, i.exchangeRate), 0);
+  const totalExpense = fExpenses.reduce((acc, e) => acc + toDisplayAmount(Number(e.amount || e.baseAmount || 0), e.currency, e.exchangeRate), 0);
 
-  const tabTriggerClass = "flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all";
+  const tabTriggerClass = "flex min-w-10 shrink-0 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all sm:min-w-0 sm:justify-start sm:px-4";
 
   const tabs = [
     { id: 'resumen', label: 'Resumen', icon: BarChart3, module: 'FINANCIAL_DASHBOARD' },
@@ -320,7 +389,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   ];
 
   return (
-    <div className="mx-auto w-full max-w-[1700px] space-y-4 p-4 pb-20 sm:p-6 md:p-10">
+    <div className="finance-module mx-auto min-w-0 w-full max-w-[1700px] space-y-4 overflow-x-hidden p-3 pb-20 sm:p-6 md:p-10">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
@@ -332,7 +401,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
             </h1>
             <div className="flex items-center gap-2 mt-2">
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                {totalIncome.toLocaleString()} ingresos · {totalExpense.toLocaleString()} gastos
+                {formatCurrentAmount(totalIncome, displayCurrency)} ingresos · {formatCurrentAmount(totalExpense, displayCurrency)} gastos{showValuationLegend ? ` · ${valuationModeLabel}` : ''}
               </Badge>
               {isRestricted && (
                 <Badge variant="outline" className="border-amber-500/30 text-amber-600 bg-amber-500/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
@@ -344,38 +413,40 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
         </div>
       </div>
 
+      <CurrencyValuationBanner />
+
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl border border-border/40 bg-card/50">
-        <CalendarDays className="size-4 text-muted-foreground" />
+      <div className="grid min-w-0 grid-cols-2 gap-2 rounded-xl border border-border/40 bg-card/50 p-3 sm:flex sm:flex-wrap sm:items-center">
+        <CalendarDays className="col-span-2 size-4 text-muted-foreground sm:col-span-1" />
         {PERIOD_PRESETS.map(p => (
           <button key={p.label} onClick={() => applyPreset(p.label, p.days)}
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activePreset === p.label ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>
+            className={`min-w-0 rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all sm:px-3 ${activePreset === p.label ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>
             {p.label}
           </button>
         ))}
-        <div className="h-5 w-px bg-border mx-1" />
-        <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setActivePreset(''); }} className="h-8 w-36 text-xs" placeholder="Desde" />
-        <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setActivePreset(''); }} className="h-8 w-36 text-xs" placeholder="Hasta" />
+        <div className="hidden h-5 w-px bg-border mx-1 sm:block" />
+        <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setActivePreset(''); }} className="h-8 min-w-0 w-full text-xs sm:w-36" placeholder="Desde" />
+        <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setActivePreset(''); }} className="h-8 min-w-0 w-full text-xs sm:w-36" placeholder="Hasta" />
         {(dateFrom || dateTo || activePreset) && (
-          <button onClick={clearFilters} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground" title="Limpiar filtros"><X className="size-3.5" /></button>
+          <button onClick={clearFilters} className="col-span-2 justify-self-start rounded-lg p-1.5 text-muted-foreground hover:bg-muted sm:col-span-1" title="Limpiar filtros"><X className="size-3.5" /></button>
         )}
-        <BranchScopeFilter className="ml-auto" showLabel={false} />
+        <BranchScopeFilter className="col-span-2 w-full sm:col-span-1 sm:ml-auto sm:w-auto" showLabel={false} />
       </div>
 
-      <Tabs value={currentTab} className="w-full" onValueChange={handleTabChange}>
-        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
+      <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
+        <TabsList className="w-full min-w-0 scroll-px-2 h-auto overflow-x-auto rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 pl-2 pr-2 mb-6 flex flex-nowrap gap-1.5 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
           {tabs.map((tab) => {
             if (!hasAccess(tab.module)) return null;
             return (
               <TabsTrigger key={tab.id} value={tab.id} className={tabTriggerClass}>
                 <tab.icon className="size-4" />
-                <span>{tab.label}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
               </TabsTrigger>
             );
           })}
         </TabsList>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-4 min-h-[600px]">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-4 min-h-[600px] min-w-0">
           {loading ? (
             <div className="flex items-center justify-center h-96">
               <div className="flex flex-col items-center gap-4">
@@ -421,7 +492,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     columns={INCOME_COLUMNS}
                     onUpdate={handleUpdateIncome}
                     onAdd={handleAddIncome}
-                    onDelete={async (id) => { await incomeService.delete(id); setIncomes(prev => prev.filter(i => i.id !== id)); toast.success('Ingreso eliminado'); }}
+                    onDelete={async (id) => { await incomeService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'income'] }); toast.success('Ingreso eliminado'); }}
                     loading={loading}
                     canCreate={false}
                     canEdit={canPerform('FINANCIAL_INCOMES', 'edit')}
@@ -442,7 +513,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     onDelete={async (id) => {
                       const item = fExpenses.find((e: any) => e.id === id);
                       if (item && !['Manual', 'manual', '', null, undefined].includes(item.source)) { toast.error('No se puede eliminar un registro generado automáticamente'); return; }
-                      await expensesService.delete(id); setExpenses(prev => prev.filter(e => e.id !== id)); toast.success('Gasto eliminado');
+                      await expensesService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] }); toast.success('Gasto eliminado');
                     }}
                     loading={loading}
                     canCreate={false}
@@ -455,8 +526,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
               <TabsContent value="recurrentes" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
                         <h3 className="text-lg font-black uppercase tracking-tight">Movimientos Recurrentes</h3>
                         <p className="text-xs text-muted-foreground">Plantillas de compromisos programados. No afectan totales hasta generar el movimiento real.</p>
                       </div>
@@ -470,7 +541,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           columns={RECURRING_COLUMNS}
                           onUpdate={handleUpdateRecurring}
                           onAdd={() => handleAddRecurring('INCOME')}
-                          onDelete={async (id) => { await recurringIncomesService.delete(id); setRecurringIncomes(prev => prev.filter(r => r.id !== id)); toast.success('Eliminado'); }}
+                          onDelete={async (id) => { await recurringIncomesService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] }); toast.success('Eliminado'); }}
                           loading={loading}
                           canCreate={false}
                           canEdit={false}
@@ -485,7 +556,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           columns={RECURRING_COLUMNS}
                           onUpdate={handleUpdateRecurring}
                           onAdd={() => handleAddRecurring('EXPENSE')}
-                          onDelete={async (id) => { await recurringExpensesService.delete(id); setRecurringExpenses(prev => prev.filter(r => r.id !== id)); toast.success('Eliminado'); }}
+                          onDelete={async (id) => { await recurringExpensesService.delete(id); await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] }); toast.success('Eliminado'); }}
                           loading={loading}
                           canCreate={false}
                           canEdit={false}

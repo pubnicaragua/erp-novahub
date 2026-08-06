@@ -140,7 +140,6 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'analisis-ingresos-gastos': ['FINANCIAL_BALANCE'],
   'balance-general': ['FINANCIAL_BALANCE'],
   // Inventario
-  dashboard: ['INVENTORY_DASHBOARD'],
   productos: ['INVENTORY_PRODUCTS'],
   almacenes: ['INVENTORY_WAREHOUSES'],
   transferencias: ['INVENTORY_TRANSFERS'],
@@ -225,7 +224,6 @@ const menuItems: MenuItem[] = [
     submenu: [
       { id: 'productos', label: 'Productos', icon: <Package className="size-4" /> },
       { id: 'servicios', label: 'Servicios', icon: <BriefcaseBusiness className="size-4" /> },
-      { id: 'dashboard', label: 'Resumen', icon: <BarChart3 className="size-4" /> },
       { id: 'almacenes', label: 'Almacenes', icon: <Archive className="size-4" /> },
       { id: 'transferencias', label: 'Transferencias', icon: <Truck className="size-4" /> },
       { id: 'ajustes', label: 'Ajustes', icon: <Scale className="size-4" /> },
@@ -263,6 +261,7 @@ const menuItems: MenuItem[] = [
       { id: 'estado-resultados', label: 'Estado de Resultados', icon: <TrendingUp className="size-4" /> },
       { id: 'balance-general', label: 'Balance General', icon: <PieChart className="size-4" /> },
       { id: 'flujo-efectivo', label: 'Flujo de Efectivo', icon: <DollarSign className="size-4" /> },
+      { id: 'diferencias-cambiarias', label: 'Diferencias Cambiarias', icon: <BadgeDollarSign className="size-4" /> },
       { id: 'cambios-patrimonio', label: 'Cambios Patrimonio', icon: <FileSpreadsheet className="size-4" /> },
       { id: 'activos-fijos', label: 'Activos Fijos', icon: <Building2 className="size-4" /> },
       { id: 'conciliacion', label: 'Conciliación Bancaria', icon: <Landmark className="size-4" /> },

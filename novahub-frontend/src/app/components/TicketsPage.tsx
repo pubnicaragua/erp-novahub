@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Headphones, TicketIcon, Users, BookOpen, CircleHelp } from 'lucide-react';
 import { cn } from './ui/utils';
-import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { motion, AnimatePresence } from 'motion/react';
 import { TicketsView } from './support/TicketsView';
 import { Ticket } from '../types';
@@ -10,6 +10,7 @@ import { supportService, knowledgeBaseService, supportAgentsService } from '../s
 import { KnowledgeBaseView } from './support/KnowledgeBaseView';
 import { AgentsView } from './support/AgentsView';
 import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
+import { asList, useTenantQuery } from '../hooks/useTenantQuery';
 
 interface KnowledgeArticle {
   id: string;
@@ -53,61 +54,39 @@ interface TicketsPageProps {
 
 export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: TicketsPageProps) => {
   const [activeTab, setActiveTab] = useState(activeSubModule || 'tickets');
-  const [data, setData] = useState<{
-    tickets: Ticket[];
-    knowledgeBase: KnowledgeArticle[];
-    agents: SupportAgent[];
-  }>({
-    tickets: [],
-    knowledgeBase: [],
-    agents: [],
-  });
-  const [loading, setLoading] = useState(true);
   const [showTutorial, setShowTutorial] = useState(false);
 
-  const normalizeList = useCallback(<T,>(response: any): T[] => {
-    if (Array.isArray(response)) return response as T[];
-    if (Array.isArray(response?.data)) return response.data as T[];
-    return [];
-  }, []);
+  // Las pestañas son independientes: no cargamos tickets, artículos y agentes
+  // al mismo tiempo cuando el usuario solo necesita una de ellas.
+  const ticketsQuery = useTenantQuery<Ticket[]>(['support', 'tickets'], signal => supportService.getAll(undefined, signal), {
+    enabled: activeTab === 'tickets' || activeTab === 'agents',
+  });
+  const knowledgeBaseQuery = useTenantQuery<KnowledgeArticle[]>(['support', 'knowledge-base'], signal => knowledgeBaseService.getAll(undefined, signal), {
+    enabled: activeTab === 'faqs',
+  });
+  const agentsQuery = useTenantQuery<SupportAgent[]>(['support', 'agents'], signal => supportAgentsService.getAll(undefined, signal), {
+    enabled: activeTab === 'agents',
+  });
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [ticketsRes, kbRes, agentsRes] = await Promise.allSettled([
-        supportService.getAll(),
-        knowledgeBaseService.getAll(),
-        supportAgentsService.getAll(),
-      ]);
-
-      setData({
-        tickets: ticketsRes.status === 'fulfilled' ? normalizeList<Ticket>(ticketsRes.value) : [],
-        knowledgeBase: kbRes.status === 'fulfilled' ? normalizeList<KnowledgeArticle>(kbRes.value) : [],
-        agents: agentsRes.status === 'fulfilled' ? normalizeList<SupportAgent>(agentsRes.value) : [],
-      });
-
-      if (ticketsRes.status === 'rejected') console.error('Error fetching tickets:', ticketsRes.reason);
-      if (kbRes.status === 'rejected') console.error('Error fetching knowledge base:', kbRes.reason);
-      if (agentsRes.status === 'rejected') console.error('Error fetching agents:', agentsRes.reason);
-    } catch (error) {
-      console.error('Error fetching support data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [normalizeList]);
+  const data = {
+    tickets: asList(ticketsQuery.data) as Ticket[],
+    knowledgeBase: asList(knowledgeBaseQuery.data) as KnowledgeArticle[],
+    agents: asList(agentsQuery.data) as SupportAgent[],
+  };
+  const activeQuery = activeTab === 'tickets' || activeTab === 'agents' ? ticketsQuery
+    : activeTab === 'faqs' ? knowledgeBaseQuery : agentsQuery;
+  const loading = activeTab === 'agents'
+    ? ticketsQuery.isLoading || ticketsQuery.isFetching || agentsQuery.isLoading || agentsQuery.isFetching
+    : activeQuery.isLoading || activeQuery.isFetching;
+  const fetchData = () => activeTab === 'agents'
+    ? Promise.all([ticketsQuery.refetch(), agentsQuery.refetch()])
+    : activeQuery.refetch();
 
   useEffect(() => {
-    const timer = window.setTimeout(fetchData, 0);
-    return () => window.clearTimeout(timer);
-  }, [fetchData]);
-
-  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
-  if (prevSubModule !== activeSubModule) {
-    setPrevSubModule(activeSubModule);
     if (activeSubModule && activeSubModule !== activeTab) {
       setActiveTab(activeSubModule);
     }
-  }
+  }, [activeSubModule]);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);

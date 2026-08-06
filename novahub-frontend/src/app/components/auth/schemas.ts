@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PASSWORD_POLICY } from '../../utils/accountValidation';
 
 /**
  * Schema Zod para el formulario de registro de tenant (free trial).
@@ -7,7 +8,7 @@ import { z } from 'zod';
  *  - companyName: 2-100 chars, requerido
  *  - userName: 2-100 chars, requerido
  *  - email: email válido
- *  - password: mín. 8 chars, al menos una mayúscula y un número
+ *  - password: mín. 8 chars, al menos una mayúscula, un número y un carácter especial
  *  - acceptTerms: debe ser true
  */
 export const registerTenantSchema = z.object({
@@ -28,9 +29,10 @@ export const registerTenantSchema = z.object({
     .toLowerCase(),
   password: z
     .string()
-    .min(8, 'La contraseña debe tener al menos 8 caracteres')
+    .min(PASSWORD_POLICY.minLength, 'La contraseña debe tener al menos 8 caracteres')
     .regex(/[A-Z]/, 'La contraseña debe incluir al menos una mayúscula')
-    .regex(/[0-9]/, 'La contraseña debe incluir al menos un número'),
+    .regex(/[0-9]/, 'La contraseña debe incluir al menos un número')
+    .regex(/[^a-zA-Z0-9\s]/, 'La contraseña debe incluir al menos un carácter especial'),
   acceptTerms: z
     .boolean()
     .refine((val) => val === true, { message: 'Debés aceptar los términos' }),

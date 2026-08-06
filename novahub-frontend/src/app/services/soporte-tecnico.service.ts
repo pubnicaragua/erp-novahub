@@ -27,7 +27,7 @@ const hydrate = <T>(value: T) => resolveStorageReferences(value);
 
 export const soporteTecnicoService = {
   // Tenant: mis tickets
-  getMyTickets: async () => hydrate(await api.get<any[]>('/support-tickets/my')),
+  getMyTickets: async (signal?: AbortSignal) => hydrate(await api.get<any[]>('/support-tickets/my', { signal })),
 
   // Tenant: crear ticket (con evidencia como archivos)
   create: async (data: {
@@ -64,13 +64,13 @@ export const soporteTecnicoService = {
   },
 
   // SuperAdmin: todos los tickets
-  getAll: async () => hydrate(await api.get<any[]>('/support-tickets')),
+  getAll: async (signal?: AbortSignal) => hydrate(await api.get<any[]>('/support-tickets', { signal })),
 
   // SuperAdmin: stats
-  getStats: () => api.get<any>('/support-tickets/stats'),
+  getStats: (signal?: AbortSignal) => api.get<any>('/support-tickets/stats', { signal }),
 
   // Ver uno
-  getOne: async (id: string) => hydrate(await api.get<any>(`/support-tickets/${id}`)),
+  getOne: async (id: string, signal?: AbortSignal) => hydrate(await api.get<any>(`/support-tickets/${id}`, { signal })),
 
   // SuperAdmin: responder
   respond: (id: string, data: { status?: string; adminResponse?: string; priority?: string }) =>

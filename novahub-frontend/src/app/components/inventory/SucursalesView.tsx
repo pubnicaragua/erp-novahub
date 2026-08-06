@@ -4,6 +4,7 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
@@ -47,14 +48,14 @@ export function SucursalesView({
   const [savingUsers, setSavingUsers] = useState(false);
   const autoOpenHandledRef = useRef(false);
 
-  const fetchBranches = async () => {
+  const fetchBranches = async (signal?: AbortSignal) => {
     try {
       setLoading(true);
-      const response: any = await api.get('/sucursales');
+      const response: any = await api.get('/sucursales', { signal });
       const branchesData = Array.isArray(response) ? response : (response?.data || []);
       setBranches(branchesData);
 
-      const cajasRes: any = await api.get('/caja/registers?all=true');
+      const cajasRes: any = await api.get('/caja/registers', { params: { all: 'true' }, signal });
       const cajasData = Array.isArray(cajasRes) ? cajasRes : (cajasRes?.data || []);
       setCajas(cajasData);
     } catch (e: any) {
@@ -103,8 +104,9 @@ export function SucursalesView({
   };
 
   useEffect(() => {
-    const timeout = setTimeout(() => { void fetchBranches(); }, 0);
-    return () => clearTimeout(timeout);
+    const controller = new AbortController();
+    void fetchBranches(controller.signal);
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
@@ -153,7 +155,7 @@ export function SucursalesView({
 
   return (
     <Card className={isModal ? "border-none shadow-none bg-transparent" : "p-4 border bg-card rounded-xl"}>
-      <div className={`flex items-center justify-between mb-4 ${isModal ? 'pt-2' : ''}`}>
+      <div className={`flex min-w-0 flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between ${isModal ? 'pt-2' : ''}`}>
         {!isModal ? (
           <div>
             <h3 className="font-black text-lg uppercase tracking-tight italic">Sucursales</h3>
@@ -165,13 +167,26 @@ export function SucursalesView({
         <Button 
           size="sm" 
           onClick={() => { setForm({}); setIsFormOpen(true); }}
-          className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:-translate-y-0.5 transition-all font-black text-xs uppercase tracking-widest h-10 px-6"
+          className="w-full rounded-xl bg-gradient-to-br from-primary to-primary/80 px-4 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 sm:w-auto"
         >
           <Plus className="mr-2 size-4" /> Agregar Sucursal
         </Button>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      <div className="space-y-3 lg:hidden">
+        {loading ? <Card className="rounded-2xl p-8 text-center"><Loader2 className="mx-auto size-6 animate-spin text-primary" /></Card> : branches.length === 0 ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Store className="mx-auto mb-2 size-9 opacity-20" /><p>No hay sucursales</p></Card> : branches.map((branch) => {
+          const assignedCajas = cajas.filter((caja) => caja.branchId === branch.id);
+          return (
+            <Card key={branch.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm">
+              <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold">{branch.name}</p><p className="mt-0.5 font-mono text-xs text-muted-foreground">{branch.code}</p></div><Badge variant={branch.isActive === false ? 'secondary' : 'default'}>{branch.isActive === false ? 'Inactiva' : 'Activa'}</Badge></div>
+              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-3"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Ubicación</p><p className="truncate">{branch.location || '—'}</p></div><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Almacén padre</p><p className="truncate">{branch.warehouse?.name || '—'}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cajas</p><p className="font-bold tabular-nums">{assignedCajas.length}</p></div></div>
+              <div className="mt-3 flex justify-end gap-1 border-t border-border/40 pt-3"><Button type="button" variant="ghost" size="sm" className="h-9" onClick={() => openUsersDialog(branch)}><Users className="mr-1.5 size-3.5" /> Usuarios</Button><Button type="button" variant="ghost" size="icon" className="size-9" onClick={() => { setForm({ id: branch.id, name: branch.name, code: branch.code, location: branch.location || '', warehouseId: branch.warehouseId, isActive: branch.isActive !== false }); setIsFormOpen(true); }} aria-label={`Editar ${branch.name}`}><Edit2 className="size-4" /></Button><Button type="button" variant="ghost" size="icon" className="size-9 text-destructive hover:bg-destructive/10" onClick={() => setDeleteId(branch.id)} aria-label={`Eliminar ${branch.name}`}><Trash2 className="size-4" /></Button></div>
+            </Card>
+          );
+        })}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-lg border lg:block">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">

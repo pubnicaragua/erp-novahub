@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { subscriptionsService } from '../../services/subscriptions.service';
@@ -10,6 +10,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Layers, CheckCircle2, TrendingUp, DollarSign, Activity, ShoppingCart, ArrowUpRight, Scale, RefreshCw, UserMinus } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -61,43 +62,33 @@ function getRangeDates(range: string) {
 }
 
 export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, formatConvertedAmount, convertAmount, exchangeRate } = useCurrency();
+  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
+    formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
   
-  const [requests, setRequests] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: requests = [], isLoading: loading } = useTenantQuery(['reports', 'subscriptions'], async (signal) => {
+    const result = await subscriptionsService.getAllRequests({ report: true, pageSize: 5000 } as any, signal);
+    return asList(result);
+  }, { onError: (e) => toast.error(e.message || 'Error cargando suscripciones') });
 
   const fmtShort = (v: number) => {
-    const converted = convertAmount(v, 'NIO');
+    const converted = toBaseAmount(v, baseCurrency);
     if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted/1000000).toFixed(1)}M`;
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted/1000).toFixed(1)}k`;
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
-  useEffect(() => {
-    const fetch = async () => {
-      setLoading(true);
-      try {
-        const res = await subscriptionsService.getAllRequests().catch(() => ({ data: [] }));
-        setRequests(Array.isArray(res) ? res : (res as any)?.data || []);
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || "Error cargando suscripciones");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
-  }, []);
-
   const { start: currentStart } = useMemo(() => getRangeDates(dateRange), [dateRange]);
 
   const activeSubs = useMemo(() => requests.filter(r => r.status === 'APPROVED'), [requests]);
+  const sourceRate = (rate?: number) => valuationMode === 'CURRENT' ? exchangeRate : (rate || exchangeRate);
   const mrr = useMemo(() => activeSubs.reduce((acc, s) => {
     const basePrice = Number(s.customPrice || 49.99);
-    const currency = s.currency || 'USD'; 
-    return acc + (currency === 'USD' ? basePrice * exchangeRate : basePrice);
-  }, 0), [activeSubs, exchangeRate]);
+    const currency = s.currency || 'USD';
+    return acc + toBaseAmount(basePrice, currency, sourceRate(s.exchangeRate));
+  }, 0), [activeSubs, exchangeRate, valuationMode]);
   const churnedThisPeriod = useMemo(() => requests.filter(r => (r.status === 'REJECTED' || r.status === 'CANCELLED') && (toDate(r.updatedAt) || new Date(0)) >= currentStart).length, [requests, currentStart]);
 
   const retentionRate = 96.5; // Proxy
@@ -119,11 +110,11 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
       const name = s.clientTenant?.name || 'Cliente Corporativo';
       const basePrice = Number(s.customPrice || 49.99);
       const currency = s.currency || 'USD';
-      const val = currency === 'USD' ? basePrice * exchangeRate : basePrice;
+      const val = toBaseAmount(basePrice, currency, sourceRate(s.exchangeRate));
       map[name] = (map[name] || 0) + val;
     });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 5);
-  }, [activeSubs, exchangeRate]);
+  }, [activeSubs, exchangeRate, valuationMode]);
 
   const mrrTrendData = useMemo(() => {
     const currentMonth = new Date().getMonth();
@@ -227,7 +218,7 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(mrr, 'NIO')}</p>
+            <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(mrr, 'NIO')}</p>{valuationModeSuffix && <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{valuationModeLabel}</span>}
             <p className="text-[10px] text-muted-foreground mt-0.5">Cartera de suscripciones activa</p>
           </CardContent>
         </Card>

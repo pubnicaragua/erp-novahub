@@ -2,12 +2,12 @@ import { api } from './api';
 import { resolveStorageReferences } from './storage.service';
 
 const createCrudService = <T>(endpoint: string) => ({
-  getAll: async () => {
-    const data = await api.get(endpoint) as T[];
+  getAll: async (signal?: AbortSignal) => {
+    const data = await api.get(endpoint, { signal }) as T[];
     return resolveStorageReferences(data);
   },
-  getById: async (id: string) => {
-    const data = await api.get(`${endpoint}/${id}`) as T;
+  getById: async (id: string, signal?: AbortSignal) => {
+    const data = await api.get(`${endpoint}/${id}`, { signal }) as T;
     return resolveStorageReferences(data);
   },
   create: async (payload: Partial<T>) => {

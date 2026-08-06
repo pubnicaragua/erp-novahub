@@ -10,9 +10,9 @@ import { Combobox } from '../ui/Combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Calendar } from '../ui/calendar';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { expensesService, suppliersService } from '../../services/compras.service';
-import { contabilidadService } from '../../services/contabilidad.service';
+import { expensesService } from '../../services/compras.service';
 import type { Expense, Supplier } from '../../types';
+import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -22,8 +22,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { storageService } from '../../services/storage.service';
 import { generateExpensePDF } from '../../utils/pdfGenerator';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
+import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
-interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; }
+interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 type KpiFilter = { type: 'none' } | { type: 'pending' } | { type: 'category'; category: string };
 type DateFilterPreset = 'all' | 'last4' | 'last9' | 'month' | 'year' | 'specific';
 const paymentSourceOptions = ['EFECTIVO', 'BAC', 'LAFISE', 'ATLANTIDA', 'FICOHSA', 'BANPRO', 'BDF', 'AVANZ'] as const;
@@ -37,14 +40,11 @@ const statusOpts = [
   { label: 'Rechazado', value: 'REJECTED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function GastosView({ data, loading, onRefresh }: Props) {
+export function GastosView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
-
-  useEffect(() => {
-    contabilidadService.getExpenseCategories().then(setExpenseCategories).catch(() => {});
-  }, []);
+  useEffect(() => { setExpenseCategories(expenseCategoryCatalog); }, [expenseCategoryCatalog]);
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -64,24 +64,18 @@ export function GastosView({ data, loading, onRefresh }: Props) {
   const [localDoc, setLocalDoc] = useState<Partial<Expense> | null>(null);
 
   useEffect(() => {
-    suppliersService.getAll().then(res => {
-      const list = Array.isArray(res) ? res : (res as any).data || [];
-      setSuppliers(list);
-    }).catch();
-    contabilidadService.getChartOfAccounts(true).then(res => {
-      const tree = Array.isArray(res) ? res : (res as any)?.data || [];
-      const flatten = (items: any[]): any[] => {
-        const result: any[] = [];
-        for (const item of items) {
-          const { children, ...rest } = item;
-          result.push(rest);
-          if (Array.isArray(children) && children.length > 0) result.push(...flatten(children));
-        }
-        return result;
-      };
-      setAccounts(flatten(tree));
-    }).catch();
-  }, []);
+    setSuppliers(supplierCatalog);
+    const flatten = (items: any[]): any[] => {
+      const result: any[] = [];
+      for (const item of items) {
+        const { children, ...rest } = item;
+        result.push(rest);
+        if (Array.isArray(children) && children.length > 0) result.push(...flatten(children));
+      }
+      return result;
+    };
+    setAccounts(flatten(accountCatalog));
+  }, [supplierCatalog, accountCatalog]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -348,10 +342,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
       render: (val) => <span className="text-xs font-black text-muted-foreground">{val || '-'}</span> },
     { key: 'amount',      header: 'Monto',     width: '130px',
       render: (val, row) => (
-        <span className="font-black tabular-nums text-rose-500">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-
-        </span>
+        <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-rose-500" />
       ) },
     { key: 'status',      header: 'Estado',    width: '120px', editable: canPerform('PURCHASES_EXPENSES', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
@@ -447,7 +438,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de transacción</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-3">
              {!isNew && canPerform('PURCHASES_EXPENSES', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
@@ -480,7 +471,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Gasto</p>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Descripción / Concepto</p>
                     <Input 
@@ -568,18 +559,10 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                     </select>
                   </div>
                   <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Cuenta Contable (Gasto)</p>
-                    <select
-                      disabled={!canMutate}
-                      value={localDoc.accountId || ''}
-                      onChange={(e) => setLocalDoc({ ...localDoc, accountId: e.target.value })}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold"
-                    >
-                      <option value="">Seleccionar cuenta GL...</option>
-                      {accounts.map((a: any) => (
-                        <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
-                      ))}
-                    </select>
+                    <p className="text-[10px] text-muted-foreground mb-1">Cuenta contable</p>
+                    <div className="flex h-8 items-center rounded-md border border-primary/20 bg-primary/5 px-2 text-[10px] font-bold text-primary">
+                      Se aplica la cuenta global de Gastos configurada en Contabilidad
+                    </div>
                   </div>
                   {String(localDoc.category || '').toUpperCase() === 'OTRO' && (
                     <div className="col-span-2">
@@ -636,7 +619,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-border/50">
+          <Card className="w-full min-w-0 rounded-2xl border-border/50">
             <CardContent className="p-6 flex flex-col justify-center h-full space-y-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Valor del Gasto</p>
               <div className="space-y-4">
@@ -681,16 +664,19 @@ export function GastosView({ data, loading, onRefresh }: Props) {
     );
   }
 
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate || globalRate);
   const monthlyTotalInDisplayCurrency = data
     .filter(g => new Date(g.date).getMonth() === new Date().getMonth())
-    .reduce((acc, g) => acc + convertAmount(g.amount || 0, g.currency, g.exchangeRate), 0);
+    .reduce((acc, g) => acc + toDisplayAmount(Number(g.amount ?? g.baseAmount ?? 0), g.currency, g.exchangeRate), 0);
 
   const kpis = [
     { key: 'all', title: 'Gastos Operativos',  value: data.length,                                                                         icon: Wallet,       color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
     {
       key: 'month',
-      title: `Total del Mes (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${monthlyTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      title: `Total del Mes (${displayCurrency}${valuationModeSuffix})`,
+      value: formatCurrentAmount(monthlyTotalInDisplayCurrency, displayCurrency),
       icon: TrendingDown,
       color: 'text-rose-500',
       bg: 'bg-rose-500/10',
@@ -701,20 +687,22 @@ export function GastosView({ data, loading, onRefresh }: Props) {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => {
           const isActive =
             (k.key === 'pending' && activeKpiFilter.type === 'pending') ||
             (k.key === 'category' && activeKpiFilter.type === 'category');
           return (
-          <Card
+          <PurchaseKpiCard
             key={i}
-            className={cn(
-              "bg-card border-border/50 rounded-2xl shadow-sm",
-              k.interactive ? "cursor-pointer hover:border-primary/50 transition-colors" : "",
-              isActive ? "ring-1 ring-primary border-primary/50" : "",
-            )}
-            onClick={() => {
+            title={k.title}
+            value={k.value}
+            icon={k.icon}
+            color={k.color}
+            bg={k.bg}
+            kind={k.interactive ? 'filter' : 'indicator'}
+            active={isActive}
+            onClick={k.interactive ? () => {
               if (!k.interactive) return;
               if (k.key === 'pending') {
                 setActiveKpiFilter(prev => prev.type === 'pending' ? { type: 'none' } : { type: 'pending' });
@@ -728,46 +716,53 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   prev.type === 'category' ? { type: 'none' } : { type: 'category', category: fallbackCategory },
                 );
               }
-            }}
-          >
-            <CardContent className="p-5"><div className="flex items-center gap-4">
-              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
-            </div></CardContent>
-          </Card>
+            } : undefined}
+          />
         )})}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Gastos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Egresos operativos y administrativos</p></div>
-          <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/60 p-1">
-          <Button variant={datePreset === 'month' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('month')}>Último mes</Button>
-          <Button variant={datePreset === 'year' ? 'default' : 'ghost'} size="sm" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('year')}>Último año</Button>
-        </div>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant={datePreset === 'specific' ? 'default' : 'outline'} className="h-10 rounded-xl text-[10px] font-black uppercase tracking-widest gap-2">
-                  <CalendarIcon className="size-4" />
-                  {datePreset === 'specific' && specificDate ? specificDate.toLocaleDateString() : 'Fecha específica'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  mode="single"
-                  selected={specificDate}
-                  onSelect={(date) => {
-                    setSpecificDate(date);
-                    if (date) setDatePreset('specific');
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Egresos operativos y administrativos</p></div>
+          <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
+            <PurchaseViewTutorial view="expenses" className="w-full justify-center sm:w-auto" />
+            <div className="flex min-w-0 w-full items-center gap-0 rounded-xl border border-border/50 bg-background/60 p-1">
+              <Button variant={datePreset === 'month' ? 'default' : 'ghost'} size="sm" className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('month')}>Último mes</Button>
+              <Button variant={datePreset === 'year' ? 'default' : 'ghost'} size="sm" className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('year')}>Último año</Button>
+            </div>
+            <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant={datePreset === 'specific' ? 'default' : 'outline'} className="h-10 w-full min-w-0 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+                    <CalendarIcon className="size-4" />
+                    {datePreset === 'specific' && specificDate ? specificDate.toLocaleDateString() : 'Fecha específica'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="single"
+                    selected={specificDate}
+                    onSelect={(date) => {
+                      setSpecificDate(date);
+                      if (date) setDatePreset('specific');
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            {canPerform('PURCHASES_EXPENSES', 'create') && (
+              <Button
+                variant="outline"
+                onClick={() => { setImportOpen(true); setImportResult(null); }}
+                className="h-10 min-w-0 w-full gap-2 rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto"
+              >
+                <Upload className="size-4" /> Importar
+              </Button>
+            )}
             {datePreset !== 'all' && (
               <Button
                 variant="outline"
-                className="h-10 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                className="col-span-2 h-10 min-w-0 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:col-span-1 sm:w-auto"
                 onClick={() => {
                   setDatePreset('all');
                   setSpecificDate(undefined);
@@ -784,7 +779,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                   setSelectedCategory(category);
                   setActiveKpiFilter({ type: 'category', category });
                 }}
-                className="h-10 rounded-xl border border-input bg-background px-3 text-xs font-bold uppercase"
+                className="col-span-2 h-10 min-w-0 w-full rounded-xl border border-input bg-background px-3 text-xs font-bold uppercase sm:col-span-1 sm:w-auto"
               >
                 {uniqueCategories.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
@@ -794,28 +789,19 @@ export function GastosView({ data, loading, onRefresh }: Props) {
             {activeKpiFilter.type !== 'none' && (
               <Button
                 variant="outline"
-                className="h-10 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                className="col-span-2 h-10 min-w-0 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:col-span-1 sm:w-auto"
                 onClick={() => setActiveKpiFilter({ type: 'none' })}
               >
                 Limpiar filtro
               </Button>
             )}
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="relative min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full min-w-0 rounded-xl border-border/50 bg-background/50 pl-9 text-xs sm:w-56" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_EXPENSES', 'create') && (
-              <Button
-                variant="outline"
-                onClick={() => { setImportOpen(true); setImportResult(null); }}
-                className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
-              >
-                <Upload className="size-4" /> Importar
-              </Button>
-            )}
-            {canPerform('PURCHASES_EXPENSES', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Gasto</Button>
+              <Button onClick={() => setEditingId('NEW')} className="col-span-1 h-10 min-w-0 w-full gap-2 rounded-xl bg-primary px-3 text-[10px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90 sm:col-span-1 sm:w-auto"><Plus className="size-4" /> Registrar Gasto</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
           onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {
@@ -884,7 +870,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
                     Total: <b>{importResult.total}</b> · Creados: <b className="text-emerald-500">{importResult.created}</b> · Omitidos: <b className="text-amber-500">{importResult.skipped}</b>
                   </p>
                   {importResult.errors.length > 0 && (
-                    <div className="mt-2 text-xs text-amber-600 space-y-1">
+                    <div className="mt-2 space-y-1 text-xs text-amber-500">
                       <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
                       {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
                     </div>

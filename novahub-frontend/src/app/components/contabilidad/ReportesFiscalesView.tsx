@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   FileBarChart, FileText, Receipt, Users, Building2, Eye, ChevronDown, ChevronUp, Download
 } from 'lucide-react';
@@ -20,6 +21,7 @@ import {
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 const statusStyles: Record<string, string> = {
   DRAFT: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -41,8 +43,7 @@ const reportTypeInfo: Record<string, { label: string; icon: any; desc: string }>
 };
 
 export function ReportesFiscalesView() {
-  const [reports, setReports] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [expandedGenerate, setExpandedGenerate] = useState(true);
   const [showMeta, setShowMeta] = useState<any>(null);
   const [generating, setGenerating] = useState<string | null>(null);
@@ -53,28 +54,17 @@ export function ReportesFiscalesView() {
   const [inssForm, setInssForm] = useState({ month: '1', year: String(new Date().getFullYear()) });
   const [inatecForm, setInatecForm] = useState({ month: '1', year: String(new Date().getFullYear()) });
 
-  const fetchReports = async () => {
-    try {
-      setLoading(true);
-      const res = await contabilidadService.getFiscalReports();
-      setReports(res || []);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar reportes fiscales');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    Promise.resolve().then(fetchReports);
-  }, []);
+  const reportsQuery = useAccountingQuery<any[]>(['fiscal-reports'], async (signal) => accountingList(await contabilidadService.getFiscalReports(signal)));
+  const reports = reportsQuery.data || [];
+  const loading = reportsQuery.isLoading || reportsQuery.isFetching;
+  const fetchReports = () => reportsQuery.refetch();
 
   const handleGenerate = async (type: string, promise: Promise<any>) => {
     try {
       setGenerating(type);
       await promise;
       toast.success(`${reportTypeInfo[type]?.label || type} generado exitosamente`);
-      fetchReports();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.message || `Error al generar ${type}`);
     } finally {
@@ -94,7 +84,7 @@ export function ReportesFiscalesView() {
   const formatReportType = (type: string) => reportTypeInfo[type]?.label || type;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
         <div>
           <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Reportes Fiscales</h2>
@@ -126,7 +116,7 @@ export function ReportesFiscalesView() {
                 </div>
               </div>
               <p className="text-[10px] text-muted-foreground leading-relaxed">{reportTypeInfo.IVA.desc}</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Mes</Label>
                   <Select value={ivaForm.month} onValueChange={(v) => setIvaForm({ ...ivaForm, month: v })}>
@@ -189,7 +179,7 @@ export function ReportesFiscalesView() {
                 </div>
               </div>
               <p className="text-[10px] text-muted-foreground leading-relaxed">{reportTypeInfo.INSS.desc}</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Mes</Label>
                   <Select value={inssForm.month} onValueChange={(v) => setInssForm({ ...inssForm, month: v })}>
@@ -226,7 +216,7 @@ export function ReportesFiscalesView() {
                 </div>
               </div>
               <p className="text-[10px] text-muted-foreground leading-relaxed">{reportTypeInfo.INATEC.desc}</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Mes</Label>
                   <Select value={inatecForm.month} onValueChange={(v) => setInatecForm({ ...inatecForm, month: v })}>
@@ -255,6 +245,7 @@ export function ReportesFiscalesView() {
 
       <Card className="rounded-2xl border-border/50">
         <CardContent className="p-0">
+          <div className="hidden overflow-x-auto md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -338,6 +329,15 @@ export function ReportesFiscalesView() {
               ))}
             </TableBody>
           </Table>
+          </div>
+          <div className="space-y-2 p-3 md:hidden">
+            {loading ? <p className="py-8 text-center text-xs text-muted-foreground">Cargando...</p> : reports.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No hay reportes fiscales generados.</p> : reports.map((r) => (
+              <div key={r.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
+                <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words text-xs font-bold">{formatReportType(r.type)}</p><p className="mt-1 text-[10px] text-muted-foreground">{r.period || 'N/A'} · {r.year || 'N/A'}</p></div><Badge variant="outline" className={cn('shrink-0 text-[9px] font-black uppercase tracking-widest', statusStyles[r.status || 'DRAFT'])}>{statusLabels[r.status || 'DRAFT']}</Badge></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Monto total</span><span>C$ {Number(r.totalAmount || 0).toLocaleString()}</span></div><div><span className="block text-muted-foreground">Impuesto</span><span>C$ {Number(r.taxAmount || 0).toLocaleString()}</span></div><div className="col-span-2 flex justify-end gap-1"><Button variant="ghost" size="icon" className="size-7" onClick={() => setShowMeta(r)}><Eye className="size-4" /></Button><Button variant="ghost" size="icon" className="size-7" onClick={() => { const rows = [['Tipo', 'Período', 'Monto Total', 'Impuesto', 'Estado']]; rows.push([r.type, r.period, r.totalAmount, r.taxAmount, r.status]); const ws = XLSX.utils.aoa_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Reporte'); XLSX.writeFile(wb, `reporte-${r.type}-${r.period}.xlsx`); toast.success('Reporte exportado'); }}><Download className="size-4" /></Button></div></div>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -352,7 +352,7 @@ export function ReportesFiscalesView() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="rounded-xl bg-muted/30 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Período</p>
                 <p className="text-sm font-bold">{showMeta?.period || 'N/A'}</p>

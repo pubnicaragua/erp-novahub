@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { Ticket, TicketAudit, TicketComment } from '../../types';
 import { Card, CardContent } from '../ui/card';
@@ -24,6 +24,7 @@ import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useTenantQuery } from '../../hooks/useTenantQuery';
 
 interface TicketsViewProps {
   data: Ticket[];
@@ -32,7 +33,7 @@ interface TicketsViewProps {
 }
 
 const SlaStatusBadge: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
-  const [now] = useState(() => Date.now());
+  const now = Date.now();
   const dueAt = ticket.slaDueAt ? new Date(ticket.slaDueAt).getTime() : null;
   const resolved = ['RESOLVED', 'CLOSED'].includes((ticket.status || '').toUpperCase());
 
@@ -64,13 +65,24 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [comments, setComments] = useState<TicketComment[]>([]);
-  const [audit, setAudit] = useState<TicketAudit[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [detailLoading, setDetailLoading] = useState(false);
   const [commentLoading, setCommentLoading] = useState(false);
   const [pendingDeleteTicket, setPendingDeleteTicket] = useState<Ticket | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const commentsQuery = useTenantQuery<TicketComment[]>(
+    ['support', 'ticket-comments', selectedTicket?.id],
+    signal => supportService.getComments(selectedTicket!.id, signal),
+    { enabled: Boolean(selectedTicket?.id) },
+  );
+  const auditQuery = useTenantQuery<TicketAudit[]>(
+    ['support', 'ticket-audit', selectedTicket?.id],
+    signal => supportService.getAudit(selectedTicket!.id, signal),
+    { enabled: Boolean(selectedTicket?.id) },
+  );
+  const comments = Array.isArray(commentsQuery.data) ? commentsQuery.data : [];
+  const audit = Array.isArray(auditQuery.data) ? auditQuery.data : [];
+  const detailLoading = commentsQuery.isLoading || auditQuery.isLoading || commentsQuery.isFetching || auditQuery.isFetching;
 
   const statusOpts = [
     { value: 'OPEN', label: 'Abierto', color: 'bg-amber-500/10 text-amber-500' },
@@ -86,38 +98,11 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
     { value: 'URGENT', label: 'Urgente', color: 'text-rose-500' },
   ];
 
-  const loadTicketDetails = useCallback(async (ticketId: string) => {
-    try {
-      setDetailLoading(true);
-      const [commentsRes, auditRes] = await Promise.all([
-        supportService.getComments(ticketId),
-        supportService.getAudit(ticketId),
-      ]);
-      setComments(Array.isArray(commentsRes) ? commentsRes : []);
-      setAudit(Array.isArray(auditRes) ? auditRes : []);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar detalle del ticket');
-      setComments([]);
-      setAudit([]);
-    } finally {
-      setDetailLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     if (!selectedTicket?.id) return;
-    const timer = window.setTimeout(() => loadTicketDetails(selectedTicket.id), 0);
-    return () => window.clearTimeout(timer);
-  }, [loadTicketDetails, selectedTicket?.id]);
-
-  const [prevData, setPrevData] = useState(data);
-  if (prevData !== data) {
-    setPrevData(data);
-    if (selectedTicket?.id) {
-      const updated = data.find((item) => item.id === selectedTicket.id);
-      if (updated) setSelectedTicket(updated);
-    }
-  }
+    const updated = data.find((item) => item.id === selectedTicket.id);
+    if (updated) setSelectedTicket(updated);
+  }, [data, selectedTicket?.id]);
 
   const columns: ColumnDef<Ticket>[] = [
     { key: 'number', header: 'Ticket', width: '110px' },
@@ -216,8 +201,6 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
       toast.success('Ticket eliminado');
       if (selectedTicket?.id === ticket.id) {
         setSelectedTicket(null);
-        setComments([]);
-        setAudit([]);
       }
       onRefresh();
     } catch {
@@ -234,7 +217,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
       setCommentLoading(true);
       await supportService.addComment(selectedTicket.id, message);
       setNewComment('');
-      await loadTicketDetails(selectedTicket.id);
+      await Promise.all([commentsQuery.refetch(), auditQuery.refetch()]);
       onRefresh();
       toast.success('Comentario agregado');
     } catch {
@@ -275,11 +258,15 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
     },
   ];
 
-  const filtered = data.filter(
-    (t) =>
-      t.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.description?.toLowerCase().includes(searchTerm.toLowerCase()),
+  const filtered = useMemo(
+    () =>
+      data.filter(
+        (t) =>
+          t.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          t.number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          t.description?.toLowerCase().includes(searchTerm.toLowerCase()),
+      ),
+    [data, searchTerm],
   );
 
   return (

@@ -12,6 +12,7 @@ import { inventoryService } from '../../services/inventario.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import type { SalesPaginationControls } from '../../types';
 
 interface ControlStockViewProps {
   adjustments: any[];
@@ -19,6 +20,9 @@ interface ControlStockViewProps {
   products: any[];
   series?: any[];
   onRefresh: () => void;
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
+  onStatusChange?: (value: string) => void;
 }
 
 interface ReceptionAllocation {
@@ -69,9 +73,15 @@ const STOCK_TOUR_STEPS: GuidedTourStep[] = [
     description: 'Aquí verás todos los ajustes registrados. Los borradores aparecen en la primera fila para edición rápida. Usa "Aprobar" para confirmar un ajuste.',
     placement: 'top',
   },
+  {
+    target: '[data-tour="stock-pagination"]',
+    title: 'Paginación',
+    description: 'Cambia la cantidad de ajustes por página y recorre el historial con anterior y siguiente. El estado elegido y la búsqueda se conservan durante la navegación.',
+    placement: 'top',
+  },
 ];
 
-export function ControlStockView({ adjustments, warehouses, products, series = [], onRefresh }: ControlStockViewProps) {
+export function ControlStockView({ adjustments, warehouses, products, series = [], onRefresh, pagination, onSearchChange, onStatusChange }: ControlStockViewProps) {
   const { canPerform } = useAuth();
   const { baseCurrency } = useCurrency();
   const [showTutorial, setShowTutorial] = useState(false);
@@ -344,15 +354,22 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
 
   return (
     <Card className="p-4 border bg-card rounded-xl">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex min-w-0 flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="font-semibold" data-tour="stock-title">Ajustes de Inventario</h3>
-          <p className="text-sm text-muted-foreground">{adjustments.length} ajustes registrados</p>
+          <p className="text-sm text-muted-foreground">{pagination?.total ?? adjustments.length} ajustes registrados</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          {pagination && <>
+            <Input placeholder="Buscar ajuste..." className="h-9 w-full sm:w-44" onChange={(event) => onSearchChange?.(event.target.value)} />
+            <Select defaultValue="ALL" onValueChange={(value) => onStatusChange?.(value)}>
+              <SelectTrigger className="h-9 w-full sm:w-32"><SelectValue placeholder="Estado" /></SelectTrigger>
+              <SelectContent><SelectItem value="ALL">Todos</SelectItem><SelectItem value="DRAFT">Borrador</SelectItem><SelectItem value="APPROVED">Aprobado</SelectItem></SelectContent>
+            </Select>
+          </>}
           {canPerform('INVENTORY_ADJUSTMENTS', 'create') && (
             <>
-              <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="mr-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="h-10 rounded-xl">
                 <CircleHelp className="size-3.5 mr-1" /> Tutorial
               </Button>
               <Button
@@ -376,7 +393,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               </Button>
               <Button 
                 size="sm" 
-                className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6"
+                className="min-w-0 flex-1 rounded-xl bg-gradient-to-br from-primary to-primary/80 px-4 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl sm:flex-none"
                 onClick={() => setIsCreating(true)}
                 disabled={isCreating}
                 data-tour="stock-new-btn"
@@ -389,7 +406,12 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         </div>
       </div>
 
-      <div className="rounded-lg border overflow-hidden" data-tour="stock-table">
+      <div className="space-y-3 lg:hidden" data-tour="stock-table">
+        {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4"><div className="mb-3 flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nuevo ajuste</p><div className="flex gap-1"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateAdjustment} disabled={saving} aria-label="Guardar ajuste">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar ajuste"><X className="size-4" /></Button></div></div><div className="grid gap-3 sm:grid-cols-2"><Select value={newAdjustment.warehouseId} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, warehouseId: value })}><SelectTrigger><SelectValue placeholder="Almacén" /></SelectTrigger><SelectContent>{warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Select value={newAdjustment.reason} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, reason: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASON_OPTIONS.map((reason) => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}</SelectContent></Select><Select value={newAdjustment.productId} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, productId: value })}><SelectTrigger className="sm:col-span-2"><SelectValue placeholder="Producto" /></SelectTrigger><SelectContent>{products.map((product: any) => <SelectItem key={product.id} value={product.id}>{product.code} — {product.name}</SelectItem>)}</SelectContent></Select><Input type="number" min={0} value={newAdjustment.actualStock} onChange={(event) => setNewAdjustment({ ...newAdjustment, actualStock: Number(event.target.value) || 0 })} placeholder="Cantidad real" /><div className="flex gap-2"><Input type="number" min={0} step="0.01" value={newAdjustment.unitCost} onChange={(event) => setNewAdjustment({ ...newAdjustment, unitCost: Number(event.target.value) || 0 })} placeholder="Costo" /><Select value={newAdjustment.currency} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, currency: value })}><SelectTrigger className="w-24"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div></div></Card>}
+        {adjustments.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Scale className="mx-auto mb-2 size-9 opacity-20" /><p>No hay ajustes</p></Card> : adjustments.map((adjustment: any) => { const isApproving = approvingId === adjustment.id; return <Card key={adjustment.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono font-bold">{adjustment.number}</p><p className="mt-1 truncate text-xs text-muted-foreground">{adjustment.warehouse?.name || 'Sin almacén'}</p></div><Badge className={`shrink-0 text-[10px] ${getStatusBadge(adjustment.status)}`}>{adjustment.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}</Badge></div><div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-3"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Razón</p><p className="truncate">{REASON_OPTIONS.find((reason) => reason.value === adjustment.reason)?.label || adjustment.reason}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Artículos</p><p className="font-bold tabular-nums">{adjustment.items?.length || 0}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Costo</p><p className="font-bold tabular-nums">{adjustment.items?.[0] ? `${adjustment.items[0].currency} ${adjustment.items[0].unitCost || 0}` : '—'}</p></div></div>{adjustment.status === 'DRAFT' && canPerform('INVENTORY_ADJUSTMENTS', 'edit') && <div className="mt-3 flex justify-end border-t border-border/40 pt-3"><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-emerald-500" onClick={() => handleApproveAdjustment(adjustment.id)} disabled={isApproving}>{isApproving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle className="size-3.5" />} Aprobar</Button></div>}</Card>; })}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="stock-table">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
@@ -524,6 +546,14 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
           </TableBody>
         </Table>
       </div>
+      {pagination && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground" data-tour="stock-pagination">
+        <select value={pagination.pageSize} onChange={(event) => pagination.onPageSizeChange(Number(event.target.value) as 50 | 100 | 200)} className="h-7 rounded border bg-background px-1 font-bold text-foreground">
+          {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
+        </select>
+        <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" onClick={() => pagination.onPageChange(Math.max(1, pagination.page - 1))} disabled={pagination.page <= 1}>‹</button>
+        <span>Pág. {pagination.page}/{pagination.totalPages}</span>
+        <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" onClick={() => pagination.onPageChange(Math.min(pagination.totalPages, pagination.page + 1))} disabled={pagination.page >= pagination.totalPages}>›</button>
+      </div>}
 
       <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
         Los ajustes en borrador deben ser aprobados para aplicar cambios al stock

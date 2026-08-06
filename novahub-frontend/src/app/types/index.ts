@@ -22,6 +22,12 @@ export interface PaginatedResponse<T> {
 
 export interface ApiFilters {
   search?: string;
+  categoryId?: string;
+  type?: string;
+  warehouseId?: string;
+  productId?: string;
+  supplierId?: string;
+  supplierInvoiceId?: string;
   status?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -29,6 +35,8 @@ export interface ApiFilters {
   pageSize?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  /** Bounded bulk mode used by reports; regular lists remain capped at 200. */
+  report?: boolean;
 }
 
 export type SalesPageSize = 50 | 100 | 200;
@@ -228,6 +236,8 @@ export interface Invoice {
   exchangeRate?: number;
   baseTotal?: number;
   accountId?: string;
+  registerId?: string | null;
+  sessionId?: string | null;
   status: PaymentStatus;
   notes?: string;
   sellerEmployeeId?: string | null;
@@ -1087,6 +1097,8 @@ export interface Notification {
   type: 'info' | 'success' | 'warning' | 'error';
   timestamp: string;
   read: boolean;
+  link?: string | null;
+  metadata?: unknown;
 }
 
 export interface Transfer {
@@ -1116,7 +1128,7 @@ export interface Document {
 }
 
 export interface Task { id: string; title: string; description?: string; status: TaskStatus; priority: Priority; dueDate?: string; assignedTo?: string; createdAt: string; updatedAt: string; }
-export interface Event { id: string; title: string; description?: string; startDate: string; endDate: string; location?: string; attendees?: string[]; cost?: number; income?: number; currency?: string; expenseId?: string; incomeId?: string; createdAt: string; }
+export interface Event { id: string; title: string; description?: string; startDate: string; endDate: string; location?: string; attendees?: string[]; cost?: number; income?: number; currency?: string; exchangeRate?: number; baseCost?: number | null; baseIncome?: number | null; expenseId?: string; incomeId?: string; createdAt: string; }
 export interface Reminder { id: string; title: string; description?: string; reminderDate: string; status: string; createdAt: string; }
 export interface ActivityLog { id: string; action: string; entity: string; entityId: string; userId: string; timestamp: string; details?: string; activityId?: string; fileUrl?: string; fileName?: string; }
 
@@ -1125,7 +1137,7 @@ export interface LegalInvoice { id: string; number: string; type: string; amount
 export interface Report { id: string; title: string; type: string; generatedDate: string; format: string; size: number; createdBy: string; }
 export interface File { id: string; name: string; type: string; size: number; uploadDate: string; uploadedBy: string; category: string; url: string; }
 
-export interface Alert { id: string; title: string; content: string; type: string; severity?: string; isRead: boolean; createdAt: string; }
+export interface Alert { id: string; title: string; content: string; type: string; severity?: string; isRead: boolean; createdAt: string; link?: string | null; metadata?: unknown; }
 export interface MessageParticipant {
   id: string;
   name: string;
@@ -1156,7 +1168,7 @@ export interface Message {
   canReply: boolean;
   messages: ChatMessage[];
 }
-export interface PushNotification { id: string; title: string; content: string; type: string; sent?: boolean; isRead: boolean; createdAt: string; deviceId?: string; }
+export interface PushNotification { id: string; title: string; content: string; type: string; sent?: boolean; isRead: boolean; createdAt: string; deviceId?: string; link?: string | null; metadata?: unknown; }
 
 // ============================================================
 // SOLICITUDES DE COMPRA

@@ -14,6 +14,7 @@ import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { ChatMessage, Message, MessageParticipant } from '../../types';
 import { messagesService } from '../../services/notificaciones.service';
+import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import {
@@ -29,6 +30,7 @@ import { Textarea } from '../ui/textarea';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../hooks/useNotifications';
 
 interface MensajesViewProps {
   data: Message[];
@@ -74,13 +76,12 @@ const ParticipantAvatar = ({ participant, system = false }: { participant?: Mess
 
 export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRefresh }) => {
   const { canPerform } = useAuth();
+  const { refresh: refreshInbox } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<MessageFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
-  const [recipients, setRecipients] = useState<MessageParticipant[]>([]);
-  const [recipientsLoading, setRecipientsLoading] = useState(false);
   const [recipientId, setRecipientId] = useState('');
   const [subject, setSubject] = useState('');
   const [content, setContent] = useState('');
@@ -90,6 +91,19 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
   const [replyError, setReplyError] = useState('');
   const [replying, setReplying] = useState(false);
   const [markingReadId, setMarkingReadId] = useState<string | null>(null);
+  const recipientsQuery = useTenantQuery<MessageParticipant[]>(
+    ['notifications', 'recipients'],
+    signal => messagesService.getRecipients(signal),
+    { enabled: composeOpen },
+  );
+  const recipients = asList(recipientsQuery.data) as MessageParticipant[];
+  const recipientsLoading = recipientsQuery.isLoading || recipientsQuery.isFetching;
+
+  useEffect(() => {
+    if (composeOpen && recipientsQuery.isError) {
+      setComposeError('No pudimos cargar las personas de tu empresa.');
+    }
+  }, [composeOpen, recipientsQuery.isError]);
 
   useEffect(() => {
     if (selectedId && !data.some((thread) => thread.id === selectedId)) {
@@ -113,7 +127,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
     let active = true;
     Promise.resolve().then(() => setMarkingReadId(visibleThread.id));
     void messagesService.markRead(visibleThread.id)
-      .then(() => onRefresh())
+      .then(async () => { await refreshInbox(); await onRefresh(); })
       .catch((e: any) => {
         if (active) toast.error(e?.response?.data?.message || 'No pudimos marcar la conversación como leída');
       })
@@ -156,6 +170,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
     setMarkingReadId(thread.id);
     try {
       await messagesService.markRead(thread.id);
+      await refreshInbox();
       await refresh();
     } catch {
       toast.error('No pudimos marcar la conversación como leída');
@@ -167,15 +182,6 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
   const openComposer = async () => {
     setComposeOpen(true);
     setComposeError('');
-    if (recipients.length > 0) return;
-    setRecipientsLoading(true);
-    try {
-      setRecipients(await messagesService.getRecipients());
-    } catch {
-      setComposeError('No pudimos cargar las personas de tu empresa.');
-    } finally {
-      setRecipientsLoading(false);
-    }
   };
 
   const resetComposer = () => {

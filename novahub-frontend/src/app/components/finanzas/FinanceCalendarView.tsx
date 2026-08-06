@@ -6,20 +6,22 @@ import { useCurrency } from '../../contexts/CurrencyContext'
 interface Props { recurringExpenses: any[]; recurringIncomes?: any[] }
 
 export function FinanceCalendarView({ recurringExpenses, recurringIncomes }: Props) {
-  const { displayCurrency, convertAmount } = useCurrency()
-  const sym = displayCurrency === 'USD' ? '$' : 'C$'
-  const fmt = (n: number) => sym + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency()
+  const fmt = (n: number) => formatCurrentAmount(n, displayCurrency)
 
   const activeRecExpenses = (recurringExpenses || []).filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0)
   const activeRecIncomes = (recurringIncomes || []).filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0)
-  const totalMonthlyExpenses = activeRecExpenses.reduce((a, r) => a + convertAmount(r.amount || 0, r.currency, r.exchangeRate), 0)
-  const totalMonthlyIncomes = activeRecIncomes.reduce((a, r) => a + convertAmount(r.amount || 0, r.currency, r.exchangeRate), 0)
+  const toBase = (r: any) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(Number(r.amount ?? r.baseAmount ?? 0), r.currency)
+    : convertAmount(Number(r.amount ?? r.baseAmount ?? 0), r.currency, r.exchangeRate)
+  const totalMonthlyExpenses = activeRecExpenses.reduce((a, r) => a + toBase(r), 0)
+  const totalMonthlyIncomes = activeRecIncomes.reduce((a, r) => a + toBase(r), 0)
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="min-w-0 space-y-6">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <CalendarClock className="size-5 text-primary" />
-        <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Calendario Financiero</h3>
+        <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Calendario Financiero{valuationModeSuffix}</h3>
         <Badge variant="outline" className="text-xs">{activeRecExpenses.length + activeRecIncomes.length} compromisos activos</Badge>
       </div>
 
@@ -58,21 +60,21 @@ export function FinanceCalendarView({ recurringExpenses, recurringIncomes }: Pro
           ) : (
             <div className="space-y-2">
               {activeRecExpenses.map((r: any) => (
-                <div key={r.id} className="flex items-center justify-between py-2 px-3 rounded-xl bg-rose-500/10 border border-rose-500/20">
-                  <div>
-                    <p className="text-xs font-bold text-foreground">{r.description || r.source}</p>
+                <div key={r.id} className="flex min-w-0 items-start justify-between gap-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="break-words text-xs font-bold text-foreground">{r.description || r.source}</p>
                     <p className="text-[10px] text-muted-foreground">{r.frequency} · Próxima: {r.nextDate ? new Date(r.nextDate).toLocaleDateString('es-NI') : 'Pendiente'}</p>
                   </div>
-                  <span className="text-xs font-black text-rose-500">-{fmt(convertAmount(r.amount || 0, r.currency, r.exchangeRate))}</span>
+                  <span className="shrink-0 text-right text-xs font-black text-rose-500">-{fmt(toBase(r))}</span>
                 </div>
               ))}
               {activeRecIncomes.map((r: any) => (
-                <div key={r.id} className="flex items-center justify-between py-2 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                  <div>
-                    <p className="text-xs font-bold text-foreground">{r.description || r.source}</p>
+                <div key={r.id} className="flex min-w-0 items-start justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="break-words text-xs font-bold text-foreground">{r.description || r.source}</p>
                     <p className="text-[10px] text-muted-foreground">{r.frequency} · Próxima: {r.nextDate ? new Date(r.nextDate).toLocaleDateString('es-NI') : 'Pendiente'}</p>
                   </div>
-                  <span className="text-xs font-black text-emerald-500">+{fmt(convertAmount(r.amount || 0, r.currency, r.exchangeRate))}</span>
+                  <span className="shrink-0 text-right text-xs font-black text-emerald-500">+{fmt(toBase(r))}</span>
                 </div>
               ))}
             </div>

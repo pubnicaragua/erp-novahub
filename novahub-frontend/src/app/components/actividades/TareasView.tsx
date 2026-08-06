@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { EditableDataTable } from '../ui/EditableDataTable';
 import { Task } from '../../types';
 import { Card, CardContent } from '../ui/card';
@@ -15,6 +15,7 @@ import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { storageService } from '../../services/storage.service';
+import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 
 interface TareasViewProps {
   data: Task[];
@@ -24,7 +25,6 @@ interface TareasViewProps {
 
 export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [employees, setEmployees] = useState<any[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCompleteOpen, setIsCompleteOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any>(null);
@@ -36,19 +36,10 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
   const [evidenceUrl, setEvidenceUrl] = useState('');
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const { user, canPerform } = useAuth();
-  
-  useEffect(() => {
-    const fetchUsers = async () => {
-      if (!user?.tenantId) return;
-      try {
-        const u = await tenantsService.getUsers(user.tenantId);
-        setEmployees(Array.isArray(u) ? u : ((u as any).data || []));
-      } catch (e: any) {
-        console.error('Failed to load users', e);
-      }
-    };
-    fetchUsers();
-  }, [user]);
+  const usersQuery = useTenantQuery<any[]>(['activities', 'users'], signal => tenantsService.getUsers(user!.tenantId!, signal), {
+    enabled: Boolean(isAddOpen && user?.tenantId),
+  });
+  const employees = asList(usersQuery.data);
 
   const statusOpts = [
     { value: 'PENDING', label: 'Pendiente', color: 'bg-amber-500/10 text-amber-500' },

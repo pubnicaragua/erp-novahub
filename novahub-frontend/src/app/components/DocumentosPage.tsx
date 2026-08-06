@@ -10,6 +10,8 @@ import { ArchivosView } from './documentos/ArchivosView';
 import { NovaCloudPlanesView } from './documentos/NovaCloudPlanesView';
 import { contractsService, legalInvoicesService, reportsService, filesService } from '../services/documentos.service';
 import { useAuth } from '../contexts/AuthContext';
+import { asList, useTenantQuery } from '../hooks/useTenantQuery';
+import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 
 interface DocumentosPageProps {
   activeSubModule?: string;
@@ -19,46 +21,23 @@ interface DocumentosPageProps {
 export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: DocumentosPageProps) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'archivos');
-  const [data, setData] = useState<any>({
-    contratos: [],
-    facturas: [],
-    reportes: [],
-    archivos: []
-  });
-  const [loading, setLoading] = useState(true);
-
-  const fetchData = () => {
-    Promise.all([
-      contractsService.getAll().catch(() => []),
-      legalInvoicesService.getAll().catch(() => []),
-      reportsService.getAll().catch(() => []),
-      filesService.getAll().catch(() => [])
-    ]).then(
-      ([contratos, facturas, reportes, archivos]) => {
-        setData({ contratos, facturas, reportes, archivos });
-        setLoading(false);
-      },
-      (error) => {
-        console.error('Error fetching documentos:', error);
-        setLoading(false);
-      }
-    );
+  const filesQuery = useTenantQuery<any[]>(['documents', 'files'], signal => filesService.getAll(signal), { enabled: activeTab === 'archivos' });
+  const contractsQuery = useTenantQuery<any[]>(['documents', 'contracts'], signal => contractsService.getAll(signal), { enabled: activeTab === 'contratos' });
+  const invoicesQuery = useTenantQuery<any[]>(['documents', 'legal-invoices'], signal => legalInvoicesService.getAll(signal), { enabled: activeTab === 'facturas' });
+  const reportsQuery = useTenantQuery<any[]>(['documents', 'reports'], signal => reportsService.getAll(signal), { enabled: activeTab === 'reportes' });
+  const data = {
+    archivos: asList(filesQuery.data), contratos: asList(contractsQuery.data),
+    facturas: asList(invoicesQuery.data), reportes: asList(reportsQuery.data),
   };
-
-  const handleRefresh = () => {
-    setLoading(true);
-    fetchData();
-  };
+  const activeQuery = activeTab === 'archivos' ? filesQuery : activeTab === 'contratos' ? contractsQuery : activeTab === 'facturas' ? invoicesQuery : reportsQuery;
+  const loading = activeTab === 'planes' ? false : activeQuery.isLoading || activeQuery.isFetching;
+  const fetchData = () => activeQuery.refetch();
 
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
-  if (activeSubModule !== prevSubModule) {
-    setPrevSubModule(activeSubModule);
-    setActiveTab(activeSubModule || 'archivos');
-  }
+    if (activeSubModule) {
+      setActiveTab(activeSubModule);
+    }
+  }, [activeSubModule]);
 
   const tabs = [
     { id: 'archivos', label: 'Archivos', icon: HardDrive, color: 'text-blue-500', module: 'DOCUMENTS_FILES' },
@@ -82,11 +61,13 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
                   Nova Cloud
                 </h1>
                 <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/50 mt-2">
-                  Almacenamiento y gestiÃ³n documental en la nube
+                  Almacenamiento y gestión documental en la nube
                 </p>
               </div>
             </div>
           </div>
+
+          <CurrencyValuationBanner className="mb-6" />
 
           <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
           <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
@@ -121,10 +102,10 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                {activeTab === 'archivos' && <ArchivosView data={data.archivos} loading={loading} onRefresh={handleRefresh} />}
-                {activeTab === 'contratos' && <ContratosView data={data.contratos} loading={loading} onRefresh={handleRefresh} />}
-                {activeTab === 'facturas' && <FacturasLegalesView data={data.facturas} loading={loading} onRefresh={handleRefresh} />}
-                {activeTab === 'reportes' && <ReportesView data={data.reportes} loading={loading} onRefresh={handleRefresh} />}
+                {activeTab === 'archivos' && <ArchivosView data={data.archivos} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'contratos' && <ContratosView data={data.contratos} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'facturas' && <FacturasLegalesView data={data.facturas} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'reportes' && <ReportesView data={data.reportes} loading={loading} onRefresh={fetchData} />}
                 {activeTab === 'planes' && <NovaCloudPlanesView />}
               </motion.div>
             </AnimatePresence>

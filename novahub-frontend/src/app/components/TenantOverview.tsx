@@ -11,6 +11,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { type Module, useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { CurrencyValuationAmount, CurrencyValuationBanner } from './ui/CurrencyValuation';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from './ui/table';
@@ -72,7 +73,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const [skipSetup, setSkipSetup] = useState(() => localStorage.getItem('erp-skip-setup') === 'true');
   const [dataLoadError, setDataLoadError] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const { formatConvertedAmount } = useCurrency();
+  const { formatConvertedAmount, valuationMode, valuationModeSuffix } = useCurrency();
   const { user } = useAuth();
 
   const fmt = (amount: number) => formatConvertedAmount(amount);
@@ -80,49 +81,102 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const loadDataRef = useRef<() => void>();
   const mountedRef = useRef(true);
   const pollCountRef = useRef(0);
+  const requestIdRef = useRef(0);
+  const setupSummaryRef = useRef<ImplementationSetupSummary | null>(null);
+  const setupPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cajaDataRef = useRef<any>(null);
+  const dashboardControllerRef = useRef<AbortController | null>(null);
+
+  const normalizeDashboardResponse = (value: unknown): any | null => {
+    const candidate = (value as any)?.data ?? value;
+    return candidate && typeof candidate === 'object' && candidate.kpis && typeof candidate.kpis === 'object'
+      ? candidate
+      : null;
+  };
+
+  const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, onTimeout?: () => void): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            onTimeout?.();
+            reject(new Error('Timeout'));
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  };
 
   const loadData = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    const isCurrentRequest = () => mountedRef.current && requestId === requestIdRef.current;
+    dashboardControllerRef.current?.abort();
+    const dashboardController = new AbortController();
+    dashboardControllerRef.current = dashboardController;
     setLoading(true);
-    try {
-      const force = setupSummary === null || !setupSummary.isComplete;
-      const setup = await getImplementationSetupSummary(force, user?.enabledModules);
-      if (!mountedRef.current) return;
+    setDataLoadError(false);
+
+    // La validación de implementación no debe bloquear la primera pintura del
+    // dashboard. Se ejecuta en paralelo y solo cambia la vista si realmente hay
+    // pasos pendientes.
+    const setupPromise = getImplementationSetupSummary(
+      setupSummaryRef.current === null || !setupSummaryRef.current.isComplete,
+      user?.enabledModules,
+    );
+    setupPromise.then((setup) => {
+      if (!isCurrentRequest()) return;
+      setupSummaryRef.current = setup;
       setSetupSummary(setup);
+    }).catch(() => {
+      // El dashboard sigue siendo utilizable aunque falle la validación auxiliar.
+    });
 
-      if (!setup.isComplete && !skipSetup) {
-        setCajaData(null);
-        setPrevData(null);
-        if (mountedRef.current) setLoading(false);
-        return;
-      }
+    const effectivePeriod = period === 'custom' ? 'month' : period;
+    const params = period === 'custom'
+      ? { startDate: dateFrom || undefined, endDate: dateTo || undefined }
+      : {};
 
-      const effectivePeriod = period === 'custom' ? 'month' : period;
-      const params = period === 'custom'
-        ? { startDate: dateFrom || undefined, endDate: dateTo || undefined }
-        : {};
-      const [current, prev] = await Promise.all([
-        Promise.race([
-          cajaService.getDashboard(effectivePeriod, undefined, params.startDate, params.endDate),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000)),
-        ]).catch(() => null),
-        Promise.race([
-          cajaService.getDashboard('last-month' as any),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000)),
-        ]).catch(() => null),
-      ]);
-      if (!mountedRef.current) return;
-      setCajaData(current);
-      setPrevData(prev);
-      setDataLoadError(current === null);
+    let current: any | null = null;
+    try {
+      current = normalizeDashboardResponse(await withTimeout(
+        cajaService.getDashboard(effectivePeriod, undefined, params.startDate, params.endDate, dashboardController.signal, valuationMode),
+        12000,
+        () => dashboardController.abort(),
+      ));
     } catch {
-      if (!mountedRef.current) return;
-      setCajaData(null);
-      setPrevData(null);
-      setDataLoadError(true);
-    } finally {
-      if (mountedRef.current) setLoading(false);
+      if (isCurrentRequest()) setDataLoadError(true);
     }
-  }, [period, skipSetup, dateFrom, dateTo]);
+
+    if (!isCurrentRequest()) return;
+
+    // Nunca reemplazar datos válidos por null durante un refresh transitorio.
+    // Así una latencia puntual no convierte el dashboard en una tarjeta vacía.
+    if (current) {
+      cajaDataRef.current = current;
+      setCajaData(current);
+      setDataLoadError(false);
+    } else if (!cajaDataRef.current) {
+      setDataLoadError(true);
+    }
+    setLoading(false);
+
+    // La comparación con el período anterior es secundaria. Se carga después
+    // del período actual para no duplicar la carga pesada del endpoint inicial.
+    try {
+      const previous = normalizeDashboardResponse(await withTimeout(
+        cajaService.getDashboard('last-month' as any, undefined, undefined, undefined, dashboardController.signal, valuationMode),
+        12000,
+        () => dashboardController.abort(),
+      ));
+      if (isCurrentRequest() && previous) setPrevData(previous);
+    } catch {
+      // Los KPIs actuales no dependen de esta consulta secundaria.
+    }
+  }, [period, dateFrom, dateTo, user?.enabledModules, valuationMode]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -147,7 +201,10 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     window.addEventListener('focus', onFocus);
     return () => {
       mountedRef.current = false;
+      requestIdRef.current++;
+      dashboardControllerRef.current?.abort();
       clearTimeout(focusTimer);
+      if (setupPollTimerRef.current) clearTimeout(setupPollTimerRef.current);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onFocus);
     };
@@ -160,7 +217,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         if (!mountedRef.current) return;
         pollCountRef.current++;
         const delay = Math.min(4000 * Math.pow(1.5, pollCountRef.current), 30000);
-        setTimeout(() => {
+        setupPollTimerRef.current = setTimeout(() => {
           if (!mountedRef.current) return;
           loadDataRef.current?.();
           fn();
@@ -168,6 +225,12 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       };
       fn();
     }
+    return () => {
+      if (setupPollTimerRef.current) {
+        clearTimeout(setupPollTimerRef.current);
+        setupPollTimerRef.current = null;
+      }
+    };
   }, [setupSummary?.isComplete, skipSetup]);
 
   const handleExport = async () => {
@@ -310,7 +373,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
 
   const kpiData = kpis ? [
     {
-      label: 'Ingresos Totales',
+      label: `Ingresos Totales${valuationModeSuffix}`,
       value: fmt(kpis.totalRevenue || 0),
       extra: null,
       icon: DollarSign,
@@ -319,7 +382,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       iconBg: 'bg-emerald-500/10',
     },
     {
-      label: 'Gastos Totales',
+      label: `Gastos Totales${valuationModeSuffix}`,
       value: fmt(kpis.totalExpenses || 0),
       extra: prevKpis && pctChange(kpis.totalExpenses, prevKpis.expenses) !== null
         ? { text: `${pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 ? '↑' : '↓'} ${Math.abs(pctChange(kpis.totalExpenses, prevKpis.expenses)!).toFixed(1)}% vs anterior`, up: pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 }
@@ -381,6 +444,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
 
   return (
     <div className="space-y-6 p-4 md:p-6 pb-16">
+      <CurrencyValuationBanner />
       {/* Hero */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-2 relative">
         <div className="absolute -left-10 -top-10 size-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
@@ -447,7 +511,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         </div>
       </div>
 
-      {loading ? (
+      {loading && !cajaData ? (
         <div className="space-y-4 py-8">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -652,7 +716,14 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                           <TableCell className="font-black pl-5 text-xs group-hover:text-primary transition-colors">{tx.number || `FAC-${String(i + 1).padStart(3, '0')}`}</TableCell>
                           <TableCell className="text-xs font-bold flex items-center gap-1.5 py-2.5"><Store className="size-3 text-muted-foreground/40" />{tx.register?.name || '—'}</TableCell>
                           <TableCell className="text-xs font-bold text-foreground/70">{tx.customer || 'Cliente General'}</TableCell>
-                          <TableCell className="font-black text-right text-xs tabular-nums">{fmt(tx.total || 0)}</TableCell>
+                          <TableCell className="text-right text-xs tabular-nums">
+                            <CurrencyValuationAmount
+                              amount={Number(tx.sourceTotal ?? tx.total ?? 0)}
+                              sourceCurrency={tx.currency}
+                              sourceExchangeRate={tx.exchangeRate}
+                              className="font-black"
+                            />
+                          </TableCell>
                           <TableCell className="text-center pr-5">
                             {tx.hasIVA ? (
                               <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-black px-2 py-0.5">15%</Badge>

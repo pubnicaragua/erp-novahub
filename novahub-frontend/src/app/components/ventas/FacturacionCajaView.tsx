@@ -30,8 +30,6 @@ import {
   type CashRegisterAvailability,
   type PotentialDuplicateSale,
 } from '../../services/caja.service';
-import { accountsService } from '../../services/finanzas.service';
-import type { Account } from '../../types';
 import { QuickAddCustomerModal } from './QuickAddCustomerModal';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { brandingService } from '../../services/branding.service';
@@ -42,6 +40,7 @@ import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceLis
 import { SalesIrSelector } from './SalesIrSelector';
 import { formatSalesAmount, getMissingSalesPriceMessage, getSalesUnitPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
 import { getPdfDesignSettings } from '../../utils/pdfGenerator';
+import { SalesAccountingLegend } from './SalesAccountingLegend';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -309,8 +308,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const [emitDate, setEmitDate] = useState(getTodayInputDate());
   const [discountPercent, setDiscountPercent] = useState(0);
   const [pricingMode, setPricingMode] = useState<PricingMode>('global');
-  const [irRate] = useState(0);
-  const [irTaxId] = useState<string | null>(null);
+  const [irRate, setIrRate] = useState(0);
+  const [irTaxId, setIrTaxId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState('');
   const [catalogItemFilter, setCatalogItemFilter] = useState<CatalogItemFilter>('ALL');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -321,7 +320,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const [showPayment, setShowPayment] = useState(false);
   const [paymentCurrency, setPaymentCurrency] = useState<PaymentCurrency>('NIO');
   const [activeSession, setActiveSession] = useState<CashRegisterSession | null>(null);
-  const [bankAccounts, setBankAccounts] = useState<Account[]>([]);
   const [payments, setPayments] = useState<PosPaymentLine[]>([{ method: 'CASH', amount: 0 }]);
   const [createdInvoice, setCreatedInvoice] = useState<PosInvoice | null>(null);
   const [createdTicketCart, setCreatedTicketCart] = useState<CartItem[]>([]);
@@ -334,16 +332,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
 
   const cartSessions = useRef<Map<string, CartSession>>(new Map());
 
-  const [prevTenantId, setPrevTenantId] = useState(user?.tenantId);
-  if (prevTenantId !== user?.tenantId) {
-    setPrevTenantId(user?.tenantId);
+  useEffect(() => {
+    if (!user?.tenantId) return;
     setPriceLists([]);
     setPriceListItems([]);
     setSelectedPriceListId('');
-  }
-
-  useEffect(() => {
-    if (!user?.tenantId) return;
     let active = true;
     void Promise.all([priceListsService.getAll(), priceListsService.getMatrix()]).then(([lists, matrix]) => {
       if (!active) return;
@@ -463,15 +456,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(loadInitialData, 0);
+    void loadInitialData();
     brandingService.getCurrent().then((branding) => {
       if (branding?.companyName?.trim()) setCompanyName(branding.companyName.trim());
     }).catch(() => undefined);
-    accountsService.getAll({ page: 1, pageSize: 100 }).then((response: any) => {
-      const items = response?.data ?? response?.items ?? response;
-      setBankAccounts(Array.isArray(items) ? items.filter((account: Account) => account.isActive && String(account.type || '').toUpperCase() === 'ASSET') : []);
-    }).catch(() => setBankAccounts([]));
-    return () => window.clearTimeout(timer);
   }, [loadInitialData]);
 
   useEffect(() => {
@@ -487,17 +475,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     }
   }, [catalogView]);
 
-  const [prevRegisterId, setPrevRegisterId] = useState(selectedRegisterId);
-  if (prevRegisterId !== selectedRegisterId) {
-    setPrevRegisterId(selectedRegisterId);
-    if (!selectedRegisterId) setRecentInvoices([]);
-  }
-
   useEffect(() => {
-    if (!selectedRegisterId) return;
+    if (!selectedRegisterId) {
+      setRecentInvoices([]);
+      return;
+    }
 
-    const timer = window.setTimeout(() => loadRecentInvoices(selectedRegisterId), 0);
-    return () => window.clearTimeout(timer);
+    void loadRecentInvoices(selectedRegisterId);
   }, [loadRecentInvoices, selectedRegisterId]);
 
   const productsById = useMemo(
@@ -695,6 +679,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       toast.error(missingPriceMessage);
       return;
     }
+    if (!selectedRegister?.accountId) {
+      toast.error('Configura la cuenta contable de la caja antes de cobrar');
+      return;
+    }
     setPayments([{ method: 'CASH', amount: 0 }]);
     setPaymentCurrency('NIO');
     setCreatedInvoice(null);
@@ -715,10 +703,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     const received = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     if (received + 0.005 < totalInPaymentCurrency) {
       toast.error('El monto recibido debe ser igual o mayor al total');
-      return;
-    }
-    if (payments.some((payment) => !payment.accountId)) {
-      toast.error('Cada método de pago requiere una cuenta contable');
       return;
     }
     if (payments.some((payment) => payment.method === 'TRANSFER' && !payment.reference?.trim())) {
@@ -955,6 +939,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                 <h3 className="text-sm font-black uppercase tracking-tight mb-4 flex items-center gap-2">
                   <Receipt className="size-4 text-primary" /> Configuración de Emisión
                 </h3>
+                <SalesAccountingLegend flow="pos" paymentMethod={payments[0]?.method} cashAccount={selectedRegister?.account} />
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1.5" data-tour="pos-register">
                     <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Caja Operativa</Label>
@@ -1488,15 +1473,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                           <Button variant="ghost" disabled={payments.length === 1} onClick={() => setPayments(current => current.filter((_, itemIndex) => itemIndex !== index))}>✕</Button>
                         </div>
                         {payment.method === 'CARD' && <Input className="mt-2" placeholder="Voucher / referencia (opcional)" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          <Select value={payment.accountId || ''} onValueChange={(value) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, accountId: value } : item))}>
-                            <SelectTrigger><SelectValue placeholder="Cuenta contable del cobro *" /></SelectTrigger>
-                            <SelectContent>{bankAccounts.map(account => <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>)}</SelectContent>
-                          </Select>
-                          {payment.method === 'TRANSFER' && (
-                            <Input placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
-                          )}
-                        </div>
+                        {payment.method === 'TRANSFER' && (
+                          <Input className="mt-2" placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
+                        )}
                       </div>
                     ))}
                   </div>

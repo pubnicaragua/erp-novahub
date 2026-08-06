@@ -58,6 +58,7 @@ import {
 } from '../ui/table';
 import { inventoryService } from '../../services/inventario.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ProductThumbnail } from '../ui/ProductImage';
 
 // ============================================================================
@@ -187,7 +188,7 @@ export function ProductDetailDrawer({
   movements = [],
   series = [],
 }: ProductDetailDrawerProps) {
-  const { formatAmount, currency, baseCurrency } = useCurrency();
+  const { baseCurrency } = useCurrency();
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [detail, setDetail] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
@@ -196,63 +197,60 @@ export function ProductDetailDrawer({
   const [expandedImageOpen, setExpandedImageOpen] = useState(false);
 
   // ------------------------------------------------------------------
-  // Resetear tab a 'general' cada vez que cambia el producto
+  // Fetch del detalle completo cuando se abre el drawer
   // ------------------------------------------------------------------
-  const [prevProductId, setPrevProductId] = useState(productId);
-  if (productId !== prevProductId) {
-    setPrevProductId(productId);
-    setActiveTab('general');
+  useEffect(() => {
     if (!productId) {
       setDetail(null);
       setKardexMovements(null);
       setError(null);
+      return;
     }
-  }
 
-  // ------------------------------------------------------------------
-  // Fetch del detalle completo cuando se abre el drawer
-  // ------------------------------------------------------------------
-  useEffect(() => {
-    if (!productId) return;
-
+    const controller = new AbortController();
     let cancelled = false;
-    Promise.resolve().then(() => {
-      if (cancelled) return;
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      (async () => {
+    (async () => {
+      try {
+        // Fetch del producto completo
+        const resp: any = await inventoryService.getProduct(productId, controller.signal);
+        const product = resp?.data?.data || resp?.data || resp;
+        if (cancelled) return;
+        setDetail(product);
+
+        // Intentar traer movimientos frescos para el kardex
         try {
-          // Fetch del producto completo
-          const resp: any = await inventoryService.getProduct(productId);
-          const product = resp?.data?.data || resp?.data || resp;
-          if (cancelled) return;
-          setDetail(product);
-
-          // Intentar traer movimientos frescos para el kardex
-          try {
-            const movResp: any = await inventoryService.getMovements({ limit: 200 });
-            const list = Array.isArray(movResp) ? movResp : movResp?.data?.data || movResp?.data || [];
-            if (!cancelled) setKardexMovements(Array.isArray(list) ? list : []);
-          } catch {
-            // Si falla, dejamos que se use el fallback desde props
-            if (!cancelled) setKardexMovements([]);
-          }
-        } catch (e: any) {
-          if (!cancelled) {
-            // El snapshot de la tabla sigue siendo suficiente para mostrar el detalle
-            // cuando falla la consulta complementaria. No tapar la vista con un error.
-            if (!productSnapshot) setError(e?.message || 'No se pudo cargar el producto');
-          }
-        } finally {
-          if (!cancelled) setLoading(false);
+          const movResp: any = await inventoryService.getMovements({ productId, page: 1, pageSize: 200 }, controller.signal);
+          const list = Array.isArray(movResp) ? movResp : movResp?.data?.data || movResp?.data || [];
+          if (!cancelled) setKardexMovements(Array.isArray(list) ? list : []);
+        } catch {
+          // Si falla, dejamos que se use el fallback desde props
+          if (!cancelled) setKardexMovements([]);
         }
-      })();
-    });
+      } catch (e: any) {
+        if (!cancelled) {
+          // El snapshot de la tabla sigue siendo suficiente para mostrar el detalle
+          // cuando falla la consulta complementaria. No tapar la vista con un error.
+          if (!productSnapshot) setError(e?.message || 'No se pudo cargar el producto');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
+  }, [productId]);
+
+  // ------------------------------------------------------------------
+  // Resetear tab a 'general' cada vez que cambia el producto
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    setActiveTab('general');
   }, [productId]);
 
   // ------------------------------------------------------------------
@@ -535,14 +533,14 @@ export function ProductDetailDrawer({
                     />
                     <MetricCard
                       label="Valor stock"
-                      value={isService ? '—' : formatAmount(stockValue, currency)}
+                      value={isService ? '—' : <CurrencyValuationAmount amount={stockValue} sourceCurrency={product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.priceExchangeRate} className="text-base" />}
                       icon={DollarSign}
                       accent="text-emerald-500"
                       loading={loading && !productSnapshot}
                     />
                     <MetricCard
                       label="Precio costo"
-                      value={formatAmount(costPrice, currency)}
+                      value={<CurrencyValuationAmount amount={costPrice} sourceCurrency={product?.costCurrency || product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.costExchangeRate || product?.priceExchangeRate} className="text-base" />}
                       icon={TrendingDown}
                       accent="text-rose-500"
                       loading={loading && !productSnapshot}
@@ -760,10 +758,7 @@ export function ProductDetailDrawer({
                                 <TableCell className="text-right text-xs">
                                   {move.unitCost !== undefined && move.unitCost !== null ? (
                                     <div className="flex flex-col">
-                                      <span>{move.currency || 'NIO'} {move.unitCost || 0}</span>
-                                      {move.baseCost && move.currency !== baseCurrency && (
-                                        <span className="text-[10px] text-muted-foreground">{baseCurrency} {move.baseCost}</span>
-                                      )}
+                                      <CurrencyValuationAmount amount={Number(move.unitCost || 0)} sourceCurrency={move.currency || 'NIO'} sourceExchangeRate={move.exchangeRate} className="font-medium" />
                                     </div>
                                   ) : (
                                     <span className="text-muted-foreground">-</span>
@@ -907,7 +902,7 @@ export function ProductDetailDrawer({
 
 interface MetricCardProps {
   label: string;
-  value: string;
+  value: React.ReactNode;
   icon: React.ComponentType<{ className?: string }>;
   accent?: string;
   loading?: boolean;
@@ -925,9 +920,9 @@ function MetricCard({ label, value, icon: Icon, accent = 'text-foreground', load
       {loading ? (
         <Skeleton className="h-5 w-3/4 mt-1" />
       ) : (
-        <p className={`text-base font-black tabular-nums ${accent} truncate`} title={value}>
+        <div className={`text-base font-black tabular-nums ${accent} min-w-0`}>
           {value}
-        </p>
+        </div>
       )}
     </Card>
   );

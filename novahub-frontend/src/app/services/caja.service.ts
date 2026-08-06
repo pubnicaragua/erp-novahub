@@ -18,6 +18,8 @@ export interface CashRegister {
   location?: string;
   isActive: boolean;
   branchId?: string;
+  accountId?: string | null;
+  account?: { id: string; code: string; name: string } | null;
   warehouse?: any;
   hasActiveSession?: boolean;
   resolvedWarehouseId?: string | null;
@@ -126,6 +128,9 @@ export interface PosInvoice {
   number: string;
   customerId?: string;
   customCustomerName?: string;
+  accountId?: string | null;
+  registerId?: string | null;
+  sessionId?: string | null;
   date: string;
   subtotal: number;
   taxAmount: number;
@@ -202,6 +207,9 @@ export interface RecentTransaction {
   register: { code: string; name: string } | null;
   customer: string;
   total: number;
+  sourceTotal?: number;
+  currency?: 'NIO' | 'USD';
+  exchangeRate?: number;
   taxAmount: number;
   status: string;
   hasIVA: boolean;
@@ -221,16 +229,16 @@ export interface DashboardData {
 }
 
 export const cajaService = {
-  getRegisters: (all: boolean = false) =>
-    api.get<CashRegister[]>('/caja/registers', { params: all ? { all: 'true' } : undefined }),
+  getRegisters: (all: boolean = false, signal?: AbortSignal) =>
+    api.get<CashRegister[]>('/caja/registers', { params: all ? { all: 'true' } : undefined, signal }),
 
   getRegisterAvailability: () =>
     api.get<CashRegisterAvailability>('/caja/registers/status'),
 
-  createRegister: (data: { name: string; code: string; location?: string; branchId?: string }) =>
+  createRegister: (data: { name: string; code: string; location?: string; branchId?: string; accountId?: string }) =>
     api.post<CashRegister>('/caja/registers', data),
 
-  updateRegister: (id: string, data: { name?: string; code?: string; location?: string; isActive?: boolean; branchId?: string }) =>
+  updateRegister: (id: string, data: { name?: string; code?: string; location?: string; isActive?: boolean; branchId?: string; accountId?: string }) =>
     api.put<CashRegister>(`/caja/registers/${id}`, data),
 
   deleteRegister: (id: string) =>
@@ -305,10 +313,10 @@ export const cajaService = {
     return res?.data !== undefined ? res.data : res;
   },
 
-  getSessionHistory: async (registerId?: string, page: number = 1) => {
+  getSessionHistory: async (registerId?: string, page: number = 1, signal?: AbortSignal) => {
     const params: any = { page };
     if (registerId) params.registerId = registerId;
-    const res = await api.get<any>('/caja/sessions/history', { params });
+    const res = await api.get<any>('/caja/sessions/history', { params, signal });
     return res?.data !== undefined ? res.data : res; // { items, total, pages }
   },
 
@@ -339,6 +347,6 @@ export const cajaService = {
     return res?.data !== undefined ? res.data : res;
   },
 
-  getDashboard: (period?: string, registerId?: string, startDate?: string, endDate?: string) =>
-    api.get<DashboardData>('/caja/dashboard', { params: { period, registerId, startDate, endDate } }),
+  getDashboard: (period?: string, registerId?: string, startDate?: string, endDate?: string, signal?: AbortSignal, valuationMode?: 'HISTORICAL' | 'CURRENT') =>
+    api.get<DashboardData>('/caja/dashboard', { params: { period, registerId, startDate, endDate, valuationMode }, signal }),
 };

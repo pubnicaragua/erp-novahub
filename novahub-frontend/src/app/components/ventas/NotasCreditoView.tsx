@@ -16,7 +16,7 @@ import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
-import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesIrSelector } from './SalesIrSelector';
@@ -44,7 +44,7 @@ const statusOptions = [
 ];
 
 export function NotasCreditoView({ data, loading, onRefresh, customers = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: NotasCreditoViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'ISSUED'>('ALL');
@@ -85,7 +85,6 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
       total: 0,
       currency: displayCurrency,
       exchangeRate: globalRate,
-      accountId: '',
     });
   };
 
@@ -93,7 +92,6 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
     if (!localDoc.reason.trim()) { toast.error('Ingresa la razón de la nota'); return; }
-    if (!localDoc.accountId) { toast.error('Selecciona la cuenta contable de la nota de crédito'); return; }
     const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
     if (priceMessage) { toast.error(priceMessage); return; }
     const saveToastId = toast.loading(isCreating ? 'Creando nota de crédito...' : 'Guardando cambios...');
@@ -117,11 +115,11 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
           currency: localDoc.currency || displayCurrency,
           exchangeRate: localDoc.exchangeRate || globalRate,
           priceListId: localDoc.priceListId || undefined,
-          accountId: localDoc.accountId,
         } as any);
         toast.success('Nota de crédito creada', { id: saveToastId });
       } else {
-        await creditNotesService.update(localDoc.id, localDoc);
+        const { accountId: _accountId, ...creditNotePayload } = localDoc;
+        await creditNotesService.update(localDoc.id, creditNotePayload);
       }
       setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar', { id: saveToastId }); }
@@ -175,10 +173,14 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
 
   const issuedTotalInDisplayCurrency = data
     .filter(cn => (cn.status||'').toUpperCase() === 'ISSUED')
-    .reduce((acc, cn) => acc + convertAmount(cn.total || 0, (cn as any).currency, (cn as any).exchangeRate), 0);
+    .reduce((acc, cn) => acc + ((cn as any).baseTotal !== null && (cn as any).baseTotal !== undefined
+      ? Number((cn as any).baseTotal)
+      : toBaseAmount(cn.total || 0, (cn as any).currency, (cn as any).exchangeRate)), 0);
   const liveCreditInDisplayCurrency = data
     .filter(cn => ['ISSUED','APPLIED'].includes((cn.status||'').toUpperCase()))
-    .reduce((acc, cn) => acc + convertAmount(cn.total || 0, (cn as any).currency, (cn as any).exchangeRate), 0);
+    .reduce((acc, cn) => acc + ((cn as any).baseTotal !== null && (cn as any).baseTotal !== undefined
+      ? Number((cn as any).baseTotal)
+      : toBaseAmount(cn.total || 0, (cn as any).currency, (cn as any).exchangeRate)), 0);
 
   // ─── INLINE FORM ────────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
@@ -213,6 +215,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información de la Nota</p>
+              <SalesAccountingLegend flow="creditNote" />
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
@@ -230,12 +233,6 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
                 {localDoc?.salesReturnId && <div><p className="text-[10px] text-muted-foreground mb-1">Devolución Asociada</p>
                   <span className="text-xs font-bold text-blue-500">{localDoc.salesReturnId.slice(0, 10)}...</span></div>}
               </div>
-              <AccountingAccountSelect
-                value={localDoc?.accountId || ''}
-                onChange={(accountId) => setLocalDoc({ ...localDoc, accountId })}
-                label="Cuenta contable de la nota de crédito"
-                required
-              />
               <div><p className="text-[10px] text-muted-foreground mb-1">Razón</p>
                 <textarea value={localDoc?.reason || ''} onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })}
                   className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm resize-none" placeholder="Razón de la nota de crédito..." /></div>
@@ -248,7 +245,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
                 <span className="font-black">Total Nota de Crédito</span>
                 <span className="text-rose-500 font-black text-lg">{formatConvertedAmount(Number(localDoc?.total||0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
               </div>
-              <p className="text-[10px] text-muted-foreground italic">Al emitir esta nota, el balance del cliente se reducirá por el monto total.</p>
+              <p className="text-[10px] text-muted-foreground italic">Al emitir esta nota, el ajuste se aplicará a la factura relacionada según el flujo de devoluciones y crédito.</p>
             </CardContent>
           </Card>
         </div>
@@ -296,11 +293,11 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SalesKpiCard title="Total Emitido" value={formatConvertedAmount(issuedTotalInDisplayCurrency, displayCurrency)} icon={FileMinus} color="text-rose-500" bg="bg-rose-500/10" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
+        <SalesKpiCard title={`Total Emitido (${baseCurrency})`} value={formatConvertedAmount(issuedTotalInDisplayCurrency, baseCurrency)} icon={FileMinus} color="text-rose-500" bg="bg-rose-500/10" />
         <SalesKpiCard title="Borradores" value={data.filter(cn => (cn.status||'').toUpperCase() === 'DRAFT').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
         <SalesKpiCard title="Emitidas" value={data.filter(cn => (cn.status||'').toUpperCase() === 'ISSUED').length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'ISSUED'} onClick={() => setStatusFilter(statusFilter === 'ISSUED' ? 'ALL' : 'ISSUED')} />
-        <SalesKpiCard title="Crédito Vivo" value={formatConvertedAmount(liveCreditInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title={`Crédito Vivo (${baseCurrency})`} value={formatConvertedAmount(liveCreditInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
@@ -320,7 +317,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
         <EditableDataTable data={filtered}
           pagination={pagination}
           onBulkDelete={async (ids) => { try { for (const id of ids) { await creditNotesService.delete(id as string); } toast.success('Eliminadas'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error'); } }}
-          columns={columns} onRowUpdate={async () => {}} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
+          columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setEditingId(row.id)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           actions={(row) => (
             <div className="flex items-center gap-1">
                {canPerform('SALES_CREDIT_NOTES', 'edit') && (row.status||'').toUpperCase() === 'DRAFT' && (

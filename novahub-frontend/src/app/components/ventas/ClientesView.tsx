@@ -75,15 +75,18 @@ const customerToDraft = (customer: Customer): CustomerDraft => ({
 
 const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="customers-title"]', title: 'Directorio de Clientes', description: 'Aquí administras los clientes, sus datos fiscales, ubicación, crédito, estado y lista de precios asignada.', placement: 'bottom' },
+  { target: '[data-tour="sales-list-kpis"]', title: 'KPIs de clientes', description: 'Total Clientes, Particulares y Empresas son filtros rápidos. Saldo deudor es un indicador monetario para priorizar la cobranza; la tarjeta activa se refleja en la lista.', placement: 'bottom' },
+  { target: '[data-tour="sales-list-actions"]', title: 'Búsqueda y filtros', description: 'Busca por nombre, identificación o contacto y combina el texto con Activos, Inactivos o Todos. Cambiar el filtro reinicia la paginación.', placement: 'bottom' },
   { target: '[data-tour="customers-columns"]', title: 'Configurar columnas', description: 'Elige qué campos se muestran en la tabla. La vista se ajusta automáticamente a las columnas seleccionadas.', placement: 'bottom' },
   { target: '[data-tour="customers-layout"]', title: 'Lista o tarjetas', description: 'Cambia entre una tabla para revisar muchos registros y tarjetas para consultar cada cliente de forma más visual.', placement: 'bottom' },
   { target: '[data-tour="customers-import"]', title: 'Importar clientes', description: 'Descarga la plantilla, completa los datos sin código de cliente y carga el archivo. La numeración la genera automáticamente el sistema.', tip: 'La importación de clientes puede repetirse. Primero se prepara el archivo y luego puedes abrir una previsualización editable.', placement: 'bottom' },
   { target: '[data-tour="customers-new"]', title: 'Crear clientes', description: 'Agrega uno o varios clientes desde el formulario. Para empresas el RUC es obligatorio; la cédula y el RUC pueden registrarse juntos.', placement: 'bottom' },
   { target: '[data-tour="customers-table"]', title: 'Consultar y gestionar', description: 'Abre el detalle desde Ver, edita los campos permitidos y cambia el estado con confirmación. Los clientes inactivos no se pueden usar en nuevas operaciones.', placement: 'top' },
+  { target: '[data-tour="sales-list-pagination"]', title: 'Paginación', description: 'Elige 50, 100 o 200 clientes por página. El rango muestra qué registros estás viendo del total y las flechas permiten ir al inicio, anterior, siguiente o final.', placement: 'top' },
 ];
 
 export function ClientesView({ data, loading, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ClientesViewProps) {
-  const { formatConvertedAmount } = useCurrency();
+  const { baseCurrency, formatConvertedAmount } = useCurrency();
   const { canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Customer | null>(null);
@@ -441,13 +444,13 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       editable: canPerform('SALES_CLIENTS', 'edit'),
       type: 'select',
       options: [
-        { label: 'Particular', value: 'INDIVIDUAL', color: 'bg-blue-500/10 text-blue-500' },
-        { label: 'Empresa', value: 'COMPANY', color: 'bg-purple-500/10 text-purple-500' }
+        { label: 'Particular', value: 'INDIVIDUAL', color: 'bg-primary/10 text-primary' },
+        { label: 'Empresa', value: 'COMPANY', color: 'bg-primary/10 text-primary' }
       ],
       render: (val) => (
         <Badge variant="outline" className={cn(
           "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
-          (val || '').toUpperCase() === 'COMPANY' ? 'bg-purple-500/10 text-purple-500' : 'bg-blue-500/10 text-blue-500'
+          'bg-primary/10 text-primary'
         )}>
           {(val || '').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Particular'}
         </Badge>
@@ -491,20 +494,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'email', header: 'Correo', width: '185px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'department', header: 'Departamento', width: '150px', editable: canPerform('SALES_CLIENTS', 'edit') },
-    { key: 'creditLimit', header: 'Límite de crédito', width: '140px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="text-xs font-bold tabular-nums">{formatConvertedAmount(val || 0, 'NIO')}</span> },
-    { 
-      key: 'balance', 
-      header: 'Saldo Deudor', 
-      width: '150px',
-      render: (val) => (
-        <span className={cn(
-          "text-[13px] font-black tabular-nums",
-          (val || 0) > 0 ? "text-rose-500" : "text-emerald-500"
-        )}>
-          {formatConvertedAmount(val || 0, 'NIO')}
-        </span>
-      )
-    },
+    { key: 'creditLimit', header: 'Límite de crédito', width: '140px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="text-xs font-bold tabular-nums">{formatConvertedAmount(val || 0, baseCurrency)}</span> },
+    { key: 'balance', header: 'Saldo deudor', width: '150px', render: (val) => <span className={cn('text-[13px] font-black tabular-nums', Number(val || 0) > 0 ? 'text-destructive' : 'text-primary')}>{formatConvertedAmount(val || 0, baseCurrency)}</span> },
     { 
       key: 'status', 
       header: 'Estado', 
@@ -513,12 +504,12 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       type: 'select',
       options: [
         { label: 'Activo', value: 'ACTIVE', color: 'bg-emerald-500/10 text-emerald-500' },
-        { label: 'Inactivo', value: 'INACTIVE', color: 'bg-muted/20 text-muted-foreground' }
+        { label: 'Inactivo', value: 'INACTIVE', color: 'bg-primary/10 text-primary' }
       ],
       render: (val) => (
         <Badge variant="outline" className={cn(
           "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
-          (val || '').toUpperCase() === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/20 text-muted-foreground'
+          (val || '').toUpperCase() === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-primary/10 text-primary'
         )}>
           {(val || '').toUpperCase() === 'ACTIVE' ? 'Activo' : 'Inactivo'}
         </Badge>
@@ -546,16 +537,16 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* KPIs Section */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title="Total Clientes" value={data.length} icon={Users} color="text-primary" bg="bg-primary/10" kind="filter" active={customerTypeFilter === 'ALL' && statusFilter === 'ALL'} onClick={() => { setCustomerTypeFilter('ALL'); setStatusFilter('ALL'); }} />
-        <SalesKpiCard title="Particulares" value={data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length} icon={Users} color="text-blue-500" bg="bg-blue-500/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
-        <SalesKpiCard title="Empresas" value={data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length} icon={CheckCircle2} color="text-amber-500" bg="bg-amber-500/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
-        <SalesKpiCard title="Saldo Pendiente" value={formatConvertedAmount(data.reduce((acc, c) => acc + Number(c.balance || 0), 0), 'NIO')} icon={CreditCard} color="text-rose-500" bg="bg-rose-500/10" />
+        <SalesKpiCard title="Particulares" value={data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length} icon={Users} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
+        <SalesKpiCard title="Empresas" value={data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
+        <SalesKpiCard title="Saldo deudor" value={formatConvertedAmount(data.reduce((acc, customer) => acc + Number(customer.balance || 0), 0), baseCurrency)} icon={CreditCard} color="text-destructive" bg="bg-destructive/10" />
       </div>
 
       {/* Main Content */}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2" data-tour="sales-list-actions">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="customers-title">Directorio de Clientes</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión integral Excel-like sin interrupciones.</p>
@@ -622,6 +613,9 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               data={filtered}
               columns={visibleColumns}
               onRowUpdate={handleUpdate}
+              onRowClick={(row) => setSelectedCustomerDetail(row)}
+              onRowDoubleClick={(row) => openEditCustomer(row)}
+              editOnPencilOnly
               isLoading={loading}
               pagination={pagination}
               showClearSelection={false}
@@ -636,7 +630,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                      <Button variant="ghost" size="icon" title="Editar cliente" aria-label="Editar cliente" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => openEditCustomer(row)}><Pencil className="size-4" /></Button>
                    )}
                    {canPerform('SALES_CLIENTS', 'edit') && (
-                     <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Inactivar cliente'} className={cn('size-8 rounded-lg transition-colors', String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'hover:bg-emerald-500/10 hover:text-emerald-500' : 'hover:bg-amber-500/10 hover:text-amber-500')} onClick={() => setPendingStatusChange(row)}><Ban className="size-4" /></Button>
+                   <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Inactivar cliente'} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setPendingStatusChange(row)}><Ban className="size-4" /></Button>
                    )}
                 </div>
               )}
@@ -644,7 +638,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 text-[10px] font-black uppercase tracking-wider text-amber-600 hover:bg-amber-500/10"
+                  className="h-8 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10"
                   onClick={() => setPendingBulkDeactivateIds(selectedIds)}
                 >
                   <Ban className="mr-2 size-3" /> Desactivar clientes
@@ -737,7 +731,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,1400px)] !flex-col overflow-hidden rounded-3xl p-0">
           <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
             <DialogTitle className="text-xl font-black uppercase tracking-tight">Nuevo cliente</DialogTitle>
-            <DialogDescription>Completa los datos del cliente. Puedes agregar varios a una lista temporal y guardarlos en una sola acción.</DialogDescription>
+          <DialogDescription>Completa los datos del cliente y usa “Agregar a la lista” para preparar varios registros antes de guardarlos juntos.</DialogDescription>
           </DialogHeader>
           <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
             <div className="min-w-0 space-y-6">
@@ -771,16 +765,20 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 </div>
               </section>
             </div>
-            <aside className="min-w-0 rounded-2xl border border-border/50 bg-muted/10 p-4">
-              <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-black uppercase tracking-widest">Clientes en espera</h3><p className="mt-1 text-xs text-muted-foreground">Agrega registros aquí y guárdalos juntos.</p></div><Badge variant="secondary" className="shrink-0">{pendingCustomers.length}</Badge></div>
-              {pendingCustomers.length === 0 ? (
-                <div className="mt-5 rounded-xl border border-dashed border-border/60 p-5 text-center text-xs text-muted-foreground">Aún no hay clientes agregados. Completa el formulario y usa “Agregar a la lista”.</div>
-              ) : (
+            {pendingCustomers.length > 0 && (
+              <aside className="min-w-0 rounded-2xl border border-border/50 bg-muted/10 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-widest">Clientes en lista de ingreso múltiple</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">Registros preparados para guardarse juntos.</p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0">{pendingCustomers.length}</Badge>
+                </div>
                 <div className="mt-4 max-h-[42vh] space-y-2 overflow-y-auto pr-1">
                   {pendingCustomers.map((customer, index) => <div key={customer.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/50 bg-background/50 p-3"><div className="min-w-0"><p className="truncate text-sm font-bold">{index + 1}. {customer.name}</p><p className="mt-1 truncate text-[11px] text-muted-foreground">{customer.taxId || customer.ruc || 'Sin identificación'} · {priceLists.find((list) => list.id === customer.priceListId)?.name || 'Sin lista asignada'}</p></div><Button variant="ghost" size="icon" title="Quitar de la lista" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:text-destructive" onClick={() => setPendingCustomers((current) => current.filter((item) => item.id !== customer.id))}><CircleX className="size-4" /></Button></div>)}
                 </div>
-              )}
-            </aside>
+              </aside>
+            )}
           </div>
           <DialogFooter className="flex-col gap-2 border-t border-border/40 px-5 py-4 sm:flex-row sm:flex-wrap sm:justify-between sm:px-7">
             <Button variant="outline" onClick={() => setCreateOpen(false)} className="w-full rounded-xl sm:w-auto">Cerrar</Button>

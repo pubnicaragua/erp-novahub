@@ -1,33 +1,34 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { notificationsService } from '../services/notifications.service';
 import type { Notification } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { useTenantQuery } from './useTenantQuery';
 
 export function useNotifications() {
-    const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [unreadCount, setUnreadCount] = useState(0);
-
-    const fetchNotifications = useCallback(async () => {
-        try {
-            const data = await notificationsService.getAll();
-            setNotifications(data);
-            setUnreadCount(data.filter((n: Notification) => !n.read).length);
-        } catch (error) {
-            console.error('Error fetching notifications:', error);
-        }
-    }, []);
-
-    useEffect(() => {
-        const initialTimer = window.setTimeout(fetchNotifications, 0);
-        // Polling for new notifications every 30 seconds
-        const interval = setInterval(fetchNotifications, 30000);
-        return () => { window.clearTimeout(initialTimer); clearInterval(interval); };
-    }, [fetchNotifications]);
+    const queryClient = useQueryClient();
+    const { user } = useAuth();
+    const authUser = user as (typeof user & { clientTenantId?: string }) | null | undefined;
+    const tenantKey = authUser?.clientTenantId || authUser?.tenantId || 'current';
+    const queryKey = ['tenant-module', tenantKey, 'notifications', 'inbox'] as const;
+    const notificationsQuery = useTenantQuery<Notification[]>(
+        ['notifications', 'inbox'],
+        signal => notificationsService.getAll(signal),
+        {
+            refetchInterval: 30000,
+            refetchIntervalInBackground: false,
+        },
+    );
+    const notifications = notificationsQuery.data ?? [];
+    const unreadCount = notifications.filter(notification => !notification.read).length;
 
     const markAsRead = async (id: string) => {
         try {
             await notificationsService.markAsRead(id);
-            setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-            setUnreadCount(prev => Math.max(0, prev - 1));
+            queryClient.setQueryData<Notification[]>(queryKey, previous =>
+                (previous ?? []).map(notification =>
+                    notification.id === id ? { ...notification, read: true } : notification,
+                ),
+            );
         } catch (error) {
             console.error('Error marking notification as read:', error);
         }
@@ -36,8 +37,9 @@ export function useNotifications() {
     const markAllAsRead = async () => {
         try {
             await notificationsService.markAllAsRead();
-            setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-            setUnreadCount(0);
+            queryClient.setQueryData<Notification[]>(queryKey, previous =>
+                (previous ?? []).map(notification => ({ ...notification, read: true })),
+            );
         } catch (error) {
             console.error('Error marking all notifications as read:', error);
         }
@@ -45,8 +47,7 @@ export function useNotifications() {
 
     const clearAll = () => {
         // Not implemented in backend yet, but can keep as local clear for now
-        setNotifications([]);
-        setUnreadCount(0);
+        queryClient.setQueryData<Notification[]>(queryKey, []);
     };
 
     return {
@@ -55,6 +56,6 @@ export function useNotifications() {
         markAsRead,
         markAllAsRead,
         clearAll,
-        refresh: fetchNotifications
+        refresh: notificationsQuery.refetch,
     };
 }

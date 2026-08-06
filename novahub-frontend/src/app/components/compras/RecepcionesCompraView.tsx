@@ -8,11 +8,11 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { purchaseReceiptsService, suppliersService, purchaseOrdersService } from '../../services/compras.service';
-import { contabilidadService } from '../../services/contabilidad.service';
+import { purchaseReceiptsService } from '../../services/compras.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { inventoryService } from '../../services/inventario.service';
 import type { PurchaseReceipt, Supplier, PurchaseOrder, Warehouse } from '../../types';
+import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { TaxTypeSelect } from '../ui/TaxSelector';
@@ -20,8 +20,11 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
+import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
-interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; onConvertToInvoice?: (draft: any) => void; }
+interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; onConvertToInvoice?: (draft: any) => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
 const statusOpts = [
   { label: 'Pendiente',     value: 'PENDING',        color: 'bg-amber-500/10 text-amber-500' },
@@ -37,10 +40,11 @@ const incidenciaIcons: Record<string, any> = {
   incidencia: AlertTriangle,
 };
 
-export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInvoice }: Props) {
+export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], warehouseCatalog = [], orderCatalog = [], onConvertToInvoice, pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency } = useCurrency();
+  const { formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'RECEIVED' | 'WITH_INCIDENTS'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -52,23 +56,11 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseReceipt> | null>(null);
 
   useEffect(() => {
-    suppliersService.getAll().then(res => {
-      const list = Array.isArray(res) ? res : (res as any).data || [];
-      setSuppliers(list);
-    }).catch();
-    purchaseOrdersService.getAll().then(res => {
-      const list = Array.isArray(res) ? res : (res as any).data || [];
-      setOrders(list);
-    }).catch();
-    inventoryService.getWarehouses().then((res: any) => {
-      const list = Array.isArray(res) ? res : (res as any).data || [];
-      setWarehouses(list);
-    }).catch();
-    contabilidadService.getChartOfAccounts().then((res: any) => {
-      const list = Array.isArray(res) ? res : (res as any)?.data || [];
-      setAccounts(Array.isArray(list) ? list : []);
-    }).catch();
-  }, []);
+    setSuppliers(supplierCatalog);
+    setOrders(orderCatalog);
+    setWarehouses(warehouseCatalog);
+    setAccounts(accountCatalog);
+  }, [supplierCatalog, orderCatalog, warehouseCatalog, accountCatalog]);
 
   const [prevEdit, setPrevEdit] = useState({ editingId, data });
   if (editingId !== prevEdit.editingId || data !== prevEdit.data) {
@@ -91,10 +83,12 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
     }
   }
 
-  const filtered = data.filter(r =>
-    (r.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (r.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = data.filter(r => {
+    const status = String(r.status || '').toUpperCase();
+    if (statusFilter !== 'ALL' && status !== statusFilter) return false;
+    return (r.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (r.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   const columns: ColumnDef<PurchaseReceipt>[] = [
     { key: 'number',    header: 'Recibo #',    width: '120px',
@@ -346,7 +340,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
           <Card className="rounded-2xl border-border/50 col-span-2">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
                   <Combobox 
@@ -363,7 +357,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
                   <p className="text-[10px] text-muted-foreground mb-1">Orden de Compra</p>
                   <Combobox 
                     disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
-                    options={currentAvailableOrders.map(c => ({ label: `${c.number} (Total: ${c.total})`, value: c.id }))}
+                    options={currentAvailableOrders.map(c => ({ label: `${c.number} (Total: ${formatConvertedAmount(Number(c.total || 0), c.currency, c.exchangeRate)})`, value: c.id }))}
                     value={localDoc.purchaseOrderId || ''}
                     onChange={(val) => {
                        const ord = currentAvailableOrders.find(x => x.id === val);
@@ -484,7 +478,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
                       </Button>
                     )}
                   </div>
-                  <div className="grid grid-cols-12 gap-2 items-end">
+                  <div className="purchase-item-fields grid grid-cols-12 gap-2 items-end">
                     <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Cant. Ordenada</p>
                       <Input 
@@ -554,21 +548,11 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
                       />
                     </div>
                   </div>
-                  <div className="flex items-center justify-end gap-2">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1 mr-auto">Cuenta Contable</p>
-                    <select
-                      disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
-                      value={item.accountId || ''}
-                      onChange={(e) => handleItemChange(idx, 'accountId', e.target.value)}
-                      className="h-7 rounded-md border border-input bg-background px-1 text-[10px] font-bold max-w-[250px]"
-                    >
-                      <option value="">Seleccionar...</option>
-                      {accounts
-                        .filter((a: any) => (a.isActive ?? true) !== false)
-                        .map((a: any) => (
-                          <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
-                        ))}
-                    </select>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                    <p className="mr-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Cuenta Contable</p>
+                    <span className="rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-[10px] font-bold text-primary">
+                      Inventario + Inventario en Tránsito · configuración global
+                    </span>
                     <div className="flex items-center gap-2 ml-2">
                       <TaxTypeSelect
                         type="WITHHOLDING"
@@ -583,9 +567,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
                           }
                         }}
                       />
-                      <span className="text-xs font-black tabular-nums">
-                        {localDoc.currency === 'USD' ? '$' : 'C$'} {Number((item.unitPrice||0) * (item.quantityReceived||0)).toLocaleString()}
-                      </span>
+                      <CurrencyValuationAmount amount={Number((item.unitPrice || 0) * (item.quantityReceived || 0))} sourceCurrency={(localDoc as any).currency} sourceExchangeRate={(localDoc as any).exchangeRate} className="text-xs font-black" />
                     </div>
                   </div>
                 </div>
@@ -609,35 +591,31 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
   const withIncidencias = data.filter(r => String(r.status||'').toUpperCase() === 'WITH_INCIDENTS').length;
 
   const kpis = [
-    { title: 'Recepciones',   value: data.length, icon: PackageCheck, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { title: 'Ítems Recibidos', value: totalItemsReceived, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Faltantes', value: totalFaltantes, icon: ArrowDown, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: 'Incidencias', value: `${withIncidencias} rec. / ${totalRechazados} rech.`, icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+    { title: 'Recepciones',   value: data.length, icon: PackageCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Ítems Recibidos', value: totalItemsReceived, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'RECEIVED' as const },
+    { title: 'Faltantes', value: totalFaltantes, icon: ArrowDown, color: 'text-amber-500', bg: 'bg-amber-500/10', kind: 'indicator' as const },
+    { title: 'Incidencias', value: `${withIncidencias} rec. / ${totalRechazados} rech.`, icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-500/10', kind: 'filter' as const, filter: 'WITH_INCIDENTS' as const },
   ];
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
-          <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
-            <CardContent className="p-5"><div className="flex items-center gap-4">
-              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
-            </div></CardContent>
-          </Card>
+          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Recepciones</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Inventario entregado por proveedores</p></div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-            <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Recepciones</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Inventario entregado por proveedores</p></div>
+          <div className="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
+            <PurchaseViewTutorial view="receipts" />
+            <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_RECEIPTS', 'create') && (
               <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Recepción</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
           onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {

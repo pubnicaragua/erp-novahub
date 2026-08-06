@@ -4,6 +4,7 @@ import {
   DollarSign, Landmark, Calendar, FileBarChart,
   BookOpenCheck, Building2, FileSpreadsheet, HelpCircle,
   Database, GitBranch, ChevronDown, X, Settings2,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Badge } from '../ui/badge';
@@ -25,6 +26,8 @@ import { CambiosPatrimonioView } from './CambiosPatrimonioView';
 import { ConfiguracionContableView } from './ConfiguracionContableView';
 import { CategoriasGastosView } from './CategoriasGastosView';
 import { BudgetItemsView } from './BudgetItemsView';
+import { DiferenciasCambiariasView } from './DiferenciasCambiariasView';
+import { CurrencyValuationBanner } from '../ui/CurrencyValuation';
 
 const SECTIONS = [
   { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: BookOpen },
@@ -34,6 +37,7 @@ const SECTIONS = [
   { id: 'estado-resultados', label: 'Estado de Resultados', icon: TrendingUp },
   { id: 'balance-general', label: 'Balance General', icon: PieChart },
   { id: 'flujo-efectivo', label: 'Flujo de Efectivo', icon: DollarSign },
+  { id: 'diferencias-cambiarias', label: 'Diferencias Cambiarias', icon: ArrowLeftRight },
   { id: 'cambios-patrimonio', label: 'Cambios Patrimonio', icon: FileSpreadsheet },
   { id: 'activos-fijos', label: 'Activos Fijos', icon: Building2 },
   { id: 'conciliacion', label: 'Conciliación Bancaria', icon: Landmark },
@@ -214,6 +218,20 @@ const HELP_DATA: Record<string, {
       { q: '¿Puedo cambiar las cuentas de los asientos automáticos?', a: 'Sí. En la sección "Mapeo de Cuentas Contables" puedes editar los códigos de cuenta que el sistema usará para cada tipo de transacción.' },
     ],
   },
+  'diferencias-cambiarias': {
+    description: 'Previsualización de la valoración de cuentas por cobrar y cuentas por pagar en moneda extranjera. Compara el saldo histórico con el equivalente a la tasa de corte y separa ganancia o pérdida no realizada.',
+    model: 'Invoice / SupplierInvoice + ExchangeRateHistory → CurrencyRevaluation preview',
+    relationships: [
+      { parent: 'Invoice', child: 'CurrencyRevaluationItem', relation: 'saldo pendiente valorado como cuenta por cobrar' },
+      { parent: 'SupplierInvoice', child: 'CurrencyRevaluationItem', relation: 'saldo pendiente valorado como cuenta por pagar' },
+      { parent: 'ExchangeRateHistory', child: 'CurrencyRevaluation preview', relation: 'tasa histórica y tasa de corte' },
+    ],
+    faq: [
+      { q: '¿Esto modifica la factura o el pago?', a: 'No. La primera versión es únicamente una vista previa y conserva intactos los documentos originales.' },
+      { q: '¿Qué significa histórico y actual?', a: 'Histórico es el saldo convertido con la tasa guardada en el documento. Actual es el mismo saldo convertido con la tasa de corte seleccionada.' },
+      { q: '¿Cuándo se registra la diferencia?', a: 'Después de validar cuentas, periodo y saldos. El registro se implementará como asiento de revaluación separado, no como modificación de la factura.' },
+    ],
+  },
 };
 
 interface ContabilidadPageProps {
@@ -247,15 +265,15 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
   };
 
   return (
-    <div className="flex h-full min-h-[calc(100vh-5rem)]">
-      <main className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="mx-auto w-full max-w-[1700px] p-4 sm:p-6 md:p-10">
+    <div className="accounting-module flex h-full min-h-[calc(100vh-5rem)] min-w-0 overflow-x-hidden">
+      <main className="min-w-0 flex-1 overflow-y-auto custom-scrollbar">
+        <div className="mx-auto min-w-0 w-full max-w-[1700px] overflow-x-hidden p-3 pb-20 sm:p-6 md:p-10">
           {/* Header */}
-          <div className="flex items-center gap-3 mb-6">
+          <div className="mb-6 flex flex-wrap items-center gap-3">
             <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10">
               <BookOpen className="size-9 text-primary" />
             </div>
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
                 Contabilidad <span className="text-primary">General</span>
               </h1>
@@ -278,10 +296,14 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
               <span className="hidden sm:inline">¿Ayuda?</span>
             </Button>
           </div>
+          <CurrencyValuationBanner className="mb-6" />
 
           {/* Horizontal tab navigation */}
-          <div className={cn("w-full overflow-x-auto custom-scrollbar mb-8", !isSidebarCollapsed && "hidden lg:hidden")}>
-            <div className="flex w-max min-w-full gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40">
+          <div className={cn(
+            'mb-8 w-full min-w-0 overflow-x-auto custom-scrollbar',
+            !isSidebarCollapsed && 'hidden lg:hidden',
+          )}>
+            <div className="flex w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm">
               {SECTIONS.map((section) => {
                 const isActive = activeSection === section.id;
                 return (
@@ -289,21 +311,21 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                     key={section.id}
                     onClick={() => handleSectionChange(section.id)}
                     className={cn(
-                      'flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all shrink-0',
+                      'flex min-w-10 shrink-0 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all sm:min-w-0 sm:justify-start sm:px-3',
                       isActive
                         ? 'bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg'
                         : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     )}
                   >
                     <section.icon className="size-4" />
-                    <span>{section.label}</span>
+                    <span className="hidden sm:inline">{section.label}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          <div className="flex gap-6">
+          <div className="flex min-w-0 flex-col gap-6 lg:flex-row">
             <div className="flex-1 min-w-0">
               <AnimatePresence mode="wait">
                 <motion.div
@@ -320,6 +342,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   {activeSection === 'estado-resultados' && <EstadoResultadosView />}
                   {activeSection === 'balance-general' && <BalanceGeneralView />}
                   {activeSection === 'flujo-efectivo' && <FlujoEfectivoView />}
+                  {activeSection === 'diferencias-cambiarias' && <DiferenciasCambiariasView />}
                   {activeSection === 'cambios-patrimonio' && <CambiosPatrimonioView />}
                   {activeSection === 'activos-fijos' && <ActivosFijosView />}
                   {activeSection === 'conciliacion' && <ConciliacionView />}
@@ -336,13 +359,13 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
             <AnimatePresence>
               {showHelp && help && (
                 <motion.aside
-                  initial={{ opacity: 0, x: 30, width: 0 }}
-                  animate={{ opacity: 1, x: 0, width: 380 }}
-                  exit={{ opacity: 0, x: 30, width: 0 }}
+                  initial={{ opacity: 0, x: 30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 30 }}
                   transition={{ duration: 0.25 }}
-                  className="shrink-0 overflow-hidden"
+                  className="w-full min-w-0 shrink-0 overflow-hidden lg:w-[380px]"
                 >
-                  <div className="w-[380px] border border-border/50 rounded-2xl bg-card shadow-sm overflow-y-auto max-h-[calc(100vh-14rem)] sticky top-24">
+                  <div className="w-full border border-border/50 rounded-2xl bg-card shadow-sm overflow-y-auto max-h-[calc(100vh-14rem)] sticky top-24 lg:w-[380px]">
                     <div className="p-5 border-b border-border/30 flex items-center justify-between sticky top-0 bg-card z-10">
                       <div className="flex items-center gap-2">
                         <HelpCircle className="size-5 text-primary" />

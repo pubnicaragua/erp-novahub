@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Card } from './ui/card';
+import { Button } from './ui/button';
 import { Activity, ListTodo, CalendarDays, Bell, Database } from 'lucide-react';
 import { cn } from './ui/utils';
-import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { motion, AnimatePresence } from 'motion/react';
 import { TareasView } from './actividades/TareasView';
 import { EventosView } from './actividades/EventosView';
@@ -9,6 +12,8 @@ import { RecordatoriosView } from './actividades/RecordatoriosView';
 import { BitacoraView } from './actividades/BitacoraView';
 import { tasksService, eventsService, remindersService, activityLogsService } from '../services/actividades.service';
 import { useAuth } from '../contexts/AuthContext';
+import { asList, useTenantQuery } from '../hooks/useTenantQuery';
+import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 
 interface ActividadesPageProps {
   activeSubModule?: string;
@@ -18,62 +23,60 @@ interface ActividadesPageProps {
 
 export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ActividadesPageProps) => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'tareas');
-  const [data, setData] = useState<{ tareas: any[], eventos: any[], recordatorios: any[], bitacora: any[] }>({
-    tareas: [],
-    eventos: [],
-    recordatorios: [],
-    bitacora: []
+
+  // Cada pestaña consulta solo sus datos cuando se activa. React Query conserva
+  // los resultados por tenant y aborta la petición anterior al cambiar rápido.
+  const tasksQuery = useTenantQuery<any[]>(['activities', 'tasks'], signal => tasksService.getAll(signal), {
+    enabled: activeTab === 'tareas',
   });
-  const [loading, setLoading] = useState(true);
+  const eventsQuery = useTenantQuery<any[]>(['activities', 'events'], signal => eventsService.getAll(signal), {
+    enabled: activeTab === 'eventos',
+  });
+  const remindersQuery = useTenantQuery<any[]>(['activities', 'reminders'], signal => remindersService.getAll(signal), {
+    enabled: activeTab === 'recordatorios',
+  });
+  const logsQuery = useTenantQuery<any[]>(['activities', 'logs'], signal => activityLogsService.getAll(signal), {
+    enabled: activeTab === 'bitacora',
+  });
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [tareas, eventos, recordatorios, bitacora] = await Promise.all([
-        tasksService.getAll().catch(() => []),
-        eventsService.getAll().catch(() => []),
-        remindersService.getAll().catch(() => []),
-        activityLogsService.getAll().catch(() => [])
-      ]);
-      let fetchTareas = Array.isArray(tareas) ? tareas : (tareas as any).data || [];
-      let fetchRecordatorios = Array.isArray(recordatorios) ? recordatorios : (recordatorios as any).data || [];
-      const fetchEventos = Array.isArray(eventos) ? eventos : (eventos as any).data || [];
-      const fetchBitacora = Array.isArray(bitacora) ? bitacora : (bitacora as any).data || [];
+  const data = useMemo(() => {
+    let fetchTareas = asList(tasksQuery.data);
+    let fetchRecordatorios = asList(remindersQuery.data);
+    const fetchEventos = asList(eventsQuery.data);
+    const fetchBitacora = asList(logsQuery.data);
 
-      // Filipter tareas y recordatorios segun el usuario
-      if (user && user.role !== 'admin' && !user.isPlatformAdmin) {
-         fetchTareas = fetchTareas.filter((t: any) => 
-            t.createdBy === user.id || t.assignments?.some((a: any) => a.userId === user.id)
-         );
-         fetchRecordatorios = fetchRecordatorios.filter((r: any) => {
-            if (r.scope === 'GLOBAL') return true;
-            if (r.scope === 'DEPARTMENT') { return true; } // Por ahora visibles
-            if (r.scope === 'PERSONAL') {
-               try { const uIds = JSON.parse(r.targetId); return uIds.includes(user.id); } 
-               catch { return r.targetId === user.id; }
-            }
-            return false;
-         });
-      }
-
-      setData({ tareas: fetchTareas, eventos: fetchEventos, recordatorios: fetchRecordatorios, bitacora: fetchBitacora });
-    } catch (error) {
-      console.error('Error fetching actividades:', error);
-    } finally {
-      setLoading(false);
+    // Mantener la visibilidad existente para usuarios que no son administradores.
+    if (user && user.role !== 'admin' && !user.isPlatformAdmin) {
+      fetchTareas = fetchTareas.filter((t: any) =>
+        t.createdBy === user.id || t.assignments?.some((a: any) => a.userId === user.id)
+      );
+      fetchRecordatorios = fetchRecordatorios.filter((r: any) => {
+        if (r.scope === 'GLOBAL' || r.scope === 'DEPARTMENT') return true;
+        if (r.scope === 'PERSONAL') {
+          try { return JSON.parse(r.targetId).includes(user.id); }
+          catch { return r.targetId === user.id; }
+        }
+        return false;
+      });
     }
-  };
 
-  const currentTab = activeSubModule || activeTab;
+    return { tareas: fetchTareas, eventos: fetchEventos, recordatorios: fetchRecordatorios, bitacora: fetchBitacora };
+  }, [tasksQuery.data, eventsQuery.data, remindersQuery.data, logsQuery.data, user]);
+
+  const activeQuery = activeTab === 'tareas' ? tasksQuery
+    : activeTab === 'eventos' ? eventsQuery
+    : activeTab === 'recordatorios' ? remindersQuery
+    : logsQuery;
+  const loading = activeQuery.isLoading || activeQuery.isFetching;
+  const fetchData = () => queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      await fetchData();
-    };
-    load();
-  }, []);
+    if (activeSubModule) {
+      setActiveTab(activeSubModule);
+    }
+  }, [activeSubModule]);
 
   const tabs = [
     { id: 'tareas', label: 'Tareas', icon: ListTodo, color: 'text-blue-500', module: 'ACTIVITIES_TASKS' },
@@ -102,7 +105,9 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
             </div>
           </div>
 
-          <Tabs value={currentTab} className="w-full" onValueChange={(val) => {
+          <CurrencyValuationBanner className="mb-6" />
+
+          <Tabs value={activeTab} className="w-full" onValueChange={(val) => {
             setActiveTab(val);
             if (onSubModuleChange) onSubModuleChange(val);
           }}>
@@ -132,16 +137,16 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
             
             <AnimatePresence mode="wait">
               <motion.div
-                key={currentTab}
+                key={activeTab}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                {currentTab === 'tareas' && <TareasView data={data.tareas} loading={loading} onRefresh={fetchData} />}
-                {currentTab === 'eventos' && <EventosView data={data.eventos} loading={loading} onRefresh={fetchData} />}
-                {currentTab === 'recordatorios' && <RecordatoriosView data={data.recordatorios} loading={loading} onRefresh={fetchData} />}
-                {currentTab === 'bitacora' && <BitacoraView data={data.bitacora} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'tareas' && <TareasView data={data.tareas} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'eventos' && <EventosView data={data.eventos} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'recordatorios' && <RecordatoriosView data={data.recordatorios} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'bitacora' && <BitacoraView data={data.bitacora} loading={loading} onRefresh={fetchData} />}
               </motion.div>
             </AnimatePresence>
           </Tabs>

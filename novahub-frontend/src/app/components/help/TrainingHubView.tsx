@@ -32,6 +32,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { trainingService } from '../../services/training.service';
 import { cn } from '../ui/utils';
+import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 
 const MODULE_CATEGORIES = [
   { id: 'ALL', label: 'Todos', color: 'bg-primary/10 text-primary border-primary/20', gradient: 'from-primary/20 to-primary/5', icon: GraduationCap },
@@ -48,8 +49,9 @@ export function TrainingHubView() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'superadmin';
   
-  const [loading, setLoading] = useState(true);
-  const [videos, setVideos] = useState<any[]>([]);
+  const videosQuery = useTenantQuery<any[]>(['training', 'videos'], signal => trainingService.getVideos(undefined, signal));
+  const videos = asList(videosQuery.data);
+  const loading = videosQuery.isLoading || videosQuery.isFetching;
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('ALL');
   const [selectedVideo, setSelectedVideo] = useState<any | null>(null);
@@ -67,38 +69,17 @@ export function TrainingHubView() {
 
   const [saving, setSaving] = useState(false);
 
-  const fetchVideos = async () => {
-    try {
-      setLoading(true);
-      const res = await trainingService.getVideos();
-      setVideos(Array.isArray(res) ? res : []);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar centro de capacitación');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    Promise.resolve().then(fetchVideos);
-  }, []);
-
-  const [prevSelectedVideo, setPrevSelectedVideo] = useState(selectedVideo);
-  if (selectedVideo !== prevSelectedVideo) {
-    setPrevSelectedVideo(selectedVideo);
     if (selectedVideo) {
       setShowVideoInfo(true);
-    }
-  }
-
-  useEffect(() => {
-    if (selectedVideo) {
       const timer = setTimeout(() => {
         setShowVideoInfo(false);
       }, 3500);
       return () => clearTimeout(timer);
     }
   }, [selectedVideo]);
+
+  const fetchVideos = () => videosQuery.refetch();
 
   const handleUpload = async () => {
     if (!uploadData.title || !uploadData.file) {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, FileDown, Eye, Trash2, Ban, ChevronLeft, MessageCircle
+  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, FileDown, Eye, Trash2, Ban, ChevronLeft, MessageCircle
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -21,6 +21,7 @@ import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
+import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
@@ -48,11 +49,13 @@ const statusOptions = [
   { label: 'Cancelada',value: 'CANCELLED', color: 'bg-muted/20 text-muted-foreground' },
 ];
 const editableStatusOptions = statusOptions.filter((status) => status.value !== 'APPROVED');
+const actionButtonClass = 'text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors';
+const actionIconClass = 'size-4 text-muted-foreground';
 
 export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: EstimacionesViewProps) {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SENT' | 'APPROVED'>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
@@ -152,6 +155,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     currency: localDoc?.currency,
     exchangeRate: localDoc?.exchangeRate,
     baseTotal: (localDoc as any)?.baseTotal,
+    accountId: (localDoc as any)?.accountId || null,
     notes: localDoc?.notes,
     items: localDoc?.items || [],
     status,
@@ -404,7 +408,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   ];
 
   const quotedTotalInDisplayCurrency = data.reduce(
-    (acc, estimate) => acc + convertAmount(estimate.total || 0, estimate.currency, estimate.exchangeRate),
+    (acc, estimate) => acc + ((estimate as any).baseTotal !== null && (estimate as any).baseTotal !== undefined
+      ? Number((estimate as any).baseTotal)
+      : toBaseAmount(estimate.total || 0, estimate.currency, estimate.exchangeRate || globalRate)),
     0,
   );
 
@@ -498,6 +504,19 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                     </Select>
                     <p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc?.currency === 'NIO' ? '1.00' : Number(localDoc?.exchangeRate || globalRate || 1).toFixed(2)}</span></p>
                   </div>
+                <div className="sm:col-span-2">
+                  <AccountingAccountSelect
+                    value={(localDoc as any)?.accountId || ''}
+                    onChange={(accountId) => {
+                      setLocalDoc({ ...localDoc, accountId } as any);
+                      void handleUpdate(localDoc!.id, { accountId } as any);
+                    }}
+                    label="Cuenta contable de ingresos"
+                    incomeOnly
+                    required
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">Necesaria para enviar este borrador a orden de venta o emitirlo como factura.</p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -763,8 +782,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, displayCurrency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
+        <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, baseCurrency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />
         <SalesKpiCard title="Tasa Conversión" value={`${((data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (data.length || 1)) * 100).toFixed(0)}%`} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
         <SalesKpiCard title="Enviadas" value={data.filter(e => (e.status||'').toUpperCase() === 'SENT').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'SENT'} onClick={() => setStatusFilter(statusFilter === 'SENT' ? 'ALL' : 'SENT')} />
         <SalesKpiCard title="Aprobadas" value={data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-purple-500" bg="bg-purple-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
@@ -800,6 +819,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           pagination={pagination}
           columns={columns}
           onRowUpdate={handleUpdate}
+          onRowClick={(row) => setEditingId(row.id)}
           actionsWidth="w-52"
           fitContent
           showHorizontalControls
@@ -814,12 +834,12 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                   size="icon"
                   disabled={convertingId === row.id}
                   onClick={(e) => { e.stopPropagation(); void handleConvertToOrder(row); }}
-                  className="hover:bg-emerald-500/10 hover:text-emerald-500"
+                  className={actionButtonClass}
                 >
-                  <CheckCircle2 className={cn('size-4', convertingId === row.id && 'animate-pulse')} />
+                  <ArrowRightCircle className={cn(actionIconClass, convertingId === row.id && 'animate-pulse')} />
                 </Button>
               )}
-              <Button type="button" variant="ghost" title="Descargar PDF" size="icon" className="relative z-20" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { 
+              <Button type="button" variant="ghost" title="Descargar PDF" size="icon" className={cn('relative z-20', actionButtonClass)} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => {
                 e.stopPropagation();
                 void (async () => {
                   try {
@@ -835,14 +855,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                   }
                 })();
               }}>
-                <FileDown className="size-4 text-muted-foreground hover:text-primary" />
+                <FileDown className={actionIconClass} />
               </Button>
-              <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setEditingId(row.id); }}>
-                <Eye className="size-4 text-muted-foreground hover:text-primary" />
+              <Button variant="ghost" size="icon" className={actionButtonClass} onClick={(e) => { e.stopPropagation(); setEditingId(row.id); }}>
+                <Eye className={actionIconClass} />
               </Button>
               {canPerform('SALES_QUOTES', 'edit') && !['CANCELLED', 'APPROVED'].includes(String(row.status).toUpperCase()) && (
-                <Button type="button" title="Cancelar cotización" variant="ghost" size="icon" className="hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingCancelId(row.id)}>
-                  <Ban className="size-4" />
+                <Button type="button" title="Cancelar cotización" variant="ghost" size="icon" className={actionButtonClass} onClick={() => setPendingCancelId(row.id)}>
+                  <Ban className={actionIconClass} />
                 </Button>
               )}
             </>

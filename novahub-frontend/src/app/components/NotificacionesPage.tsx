@@ -9,6 +9,7 @@ import { MensajesView } from './notificaciones/MensajesView';
 import { PushView } from './notificaciones/PushView';
 import { alertsService, messagesService, pushNotificationsService } from '../services/notificaciones.service';
 import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
+import { asList, useTenantQuery } from '../hooks/useTenantQuery';
 
 const NOTIFICACIONES_TOUR_STEPS: GuidedTourStep[] = [
   {
@@ -66,67 +67,30 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
   const tabIds = tabs.map((tab) => tab.id);
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'alertas');
   const [showTour, setShowTour] = useState(false);
-  const [data, setData] = useState<{ alertas: any[]; mensajes: any[]; push: any[] }>({
-    alertas: [],
-    mensajes: [],
-    push: [],
+  const alertsQuery = useTenantQuery<any[]>(['notifications', 'alerts'], signal => alertsService.getAll(signal), {
+    enabled: activeTab === 'alertas',
   });
-  const [loading, setLoading] = useState(true);
-
-  const currentTab = activeSubModule && tabIds.includes(activeSubModule) ? activeSubModule : activeTab;
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [alertas, mensajes, push] = await Promise.all([
-        alertsService.getAll().catch(() => []),
-        messagesService.getAll().catch(() => []),
-        pushNotificationsService.getAll().catch(() => []),
-      ]);
-      setData({ alertas, mensajes, push });
-    } catch (error) {
-      console.error('Error fetching notificaciones:', error);
-    } finally {
-      setLoading(false);
-    }
+  const messagesQuery = useTenantQuery<any[]>(['notifications', 'messages'], signal => messagesService.getAll(signal), {
+    enabled: activeTab === 'mensajes',
+    refetchInterval: activeTab === 'mensajes' ? 5000 : false,
+    refetchIntervalInBackground: false,
+  });
+  const pushQuery = useTenantQuery<any[]>(['notifications', 'push'], signal => pushNotificationsService.getAll(signal), {
+    enabled: activeTab === 'push',
+  });
+  const data = {
+    alertas: asList(alertsQuery.data),
+    mensajes: asList(messagesQuery.data),
+    push: asList(pushQuery.data),
   };
+  const activeQuery = activeTab === 'alertas' ? alertsQuery : activeTab === 'mensajes' ? messagesQuery : pushQuery;
+  const loading = activeQuery.isLoading || activeQuery.isFetching;
+  const fetchData = () => activeQuery.refetch();
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      await fetchData();
-    };
-    load();
-  }, []);
-
-  useEffect(() => {
-    if (currentTab !== 'mensajes') return;
-    let active = true;
-    const syncMessages = async () => {
-      try {
-        const mensajes = await messagesService.getAll();
-        if (active) setData((current) => ({ ...current, mensajes }));
-      } catch {
-        // Keep the last successful inbox visible and retry on the next cycle.
-      }
-    };
-    const syncWhenVisible = () => {
-      if (document.visibilityState === 'visible') void syncMessages();
-    };
-    const syncWhenFocused = () => void syncMessages();
-
-    void syncMessages();
-    const timer = window.setInterval(syncMessages, 5000);
-    window.addEventListener('focus', syncWhenFocused);
-    document.addEventListener('visibilitychange', syncWhenVisible);
-
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-      window.removeEventListener('focus', syncWhenFocused);
-      document.removeEventListener('visibilitychange', syncWhenVisible);
-    };
-  }, [currentTab]);
+    if (!activeSubModule) return;
+    setActiveTab(tabIds.includes(activeSubModule) ? activeSubModule : 'alertas');
+  }, [activeSubModule]);
 
   return (
     <div className="min-h-full bg-background">
@@ -145,7 +109,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
         </header>
 
         <Tabs
-          value={currentTab}
+          value={activeTab}
           className="w-full"
           onValueChange={(value) => {
             setActiveTab(value);
@@ -170,15 +134,15 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
 
           <AnimatePresence mode="wait">
             <motion.div
-              key={currentTab}
+              key={activeTab}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.18 }}
             >
-              {currentTab === 'alertas' && <AlertasView data={data.alertas} loading={loading} onRefresh={fetchData} />}
-              {currentTab === 'mensajes' && <MensajesView data={data.mensajes} loading={loading} onRefresh={fetchData} />}
-              {currentTab === 'push' && <PushView data={data.push} loading={loading} onRefresh={fetchData} />}
+              {activeTab === 'alertas' && <AlertasView data={data.alertas} loading={loading} onRefresh={fetchData} />}
+              {activeTab === 'mensajes' && <MensajesView data={data.mensajes} loading={loading} onRefresh={fetchData} />}
+              {activeTab === 'push' && <PushView data={data.push} loading={loading} onRefresh={fetchData} />}
             </motion.div>
           </AnimatePresence>
         </Tabs>

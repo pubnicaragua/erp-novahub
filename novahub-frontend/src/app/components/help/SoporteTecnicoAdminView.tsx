@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { useTenantQuery } from '../../hooks/useTenantQuery';
 import {
   LifeBuoy, Search, X, Clock, CheckCircle2, Loader2, MessageSquareText,
   ImagePlus, Eye, ChevronRight, Building2, Send, AlertTriangle, Trash2
@@ -36,9 +37,11 @@ interface SoporteTecnicoAdminViewProps {
 }
 
 export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: SoporteTecnicoAdminViewProps) {
-  const [loading, setLoading] = useState(true);
-  const [tickets, setTickets] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>({});
+  const ticketsQuery = useTenantQuery<any[]>(['technical-support', 'all-tickets'], signal => soporteTecnicoService.getAll(signal));
+  const statsQuery = useTenantQuery<any>(['technical-support', 'stats'], signal => soporteTecnicoService.getStats(signal));
+  const tickets = Array.isArray(ticketsQuery.data) ? ticketsQuery.data : [];
+  const stats = statsQuery.data || {};
+  const loading = ticketsQuery.isLoading || statsQuery.isLoading || ticketsQuery.isFetching || statsQuery.isFetching;
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState(activeSubModule || 'ALL');
   const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
@@ -47,36 +50,24 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
   const [saving, setSaving] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
-  const fetchAll = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [ticketsRes, statsRes] = await Promise.all([
-        soporteTecnicoService.getAll(),
-        soporteTecnicoService.getStats(),
-      ]);
-      setTickets(Array.isArray(ticketsRes) ? ticketsRes : []);
-      setStats(statsRes || {});
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al cargar soporte técnico'); }
-    finally { setLoading(false); }
-  }, []);
-
   useEffect(() => {
-    const timer = window.setTimeout(fetchAll, 0);
-    return () => window.clearTimeout(timer);
-  }, [fetchAll]);
-
-  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
-  if (prevSubModule !== activeSubModule) {
-    setPrevSubModule(activeSubModule);
     if (activeSubModule && activeSubModule !== filterStatus) {
       setFilterStatus(activeSubModule);
     }
-  }
+  }, [activeSubModule]);
 
   const handleStatusChange = (status: string) => {
     setFilterStatus(status);
     if (onSubModuleChange) {
       onSubModuleChange(status);
+    }
+  };
+
+  const fetchAll = async () => {
+    try {
+      await Promise.all([ticketsQuery.refetch(), statsQuery.refetch()]);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar soporte técnico');
     }
   };
 

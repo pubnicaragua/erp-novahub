@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTenantQuery } from '../../hooks/useTenantQuery';
 import {
   LifeBuoy, Plus, Search, X, Send, Clock, CheckCircle2,
   Loader2, MessageSquareText, ImagePlus, Eye,
@@ -47,8 +48,9 @@ interface SoporteTecnicoViewProps {
 }
 
 export function SoporteTecnicoView({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: SoporteTecnicoViewProps) {
-  const [loading, setLoading] = useState(true);
-  const [tickets, setTickets] = useState<any[]>([]);
+  const ticketsQuery = useTenantQuery<any[]>(['technical-support', 'my-tickets'], signal => soporteTecnicoService.getMyTickets(signal));
+  const tickets = Array.isArray(ticketsQuery.data) ? ticketsQuery.data : [];
+  const loading = ticketsQuery.isLoading || ticketsQuery.isFetching;
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState(activeSubModule || 'ALL');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -60,26 +62,11 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange, isSideb
     evidenceFiles: [] as File[],
   });
 
-  const fetchTickets = async () => {
-    try {
-      setLoading(true);
-      const res = await soporteTecnicoService.getMyTickets();
-      setTickets(Array.isArray(res) ? res : []);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al cargar tickets');
-    }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { Promise.resolve().then(fetchTickets); }, []);
-
-  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
-  if (activeSubModule !== prevSubModule) {
-    setPrevSubModule(activeSubModule);
+  useEffect(() => {
     if (activeSubModule && activeSubModule !== activeCategory) {
       setActiveCategory(activeSubModule);
     }
-  }
+  }, [activeSubModule]);
 
   const handleCategoryChange = (id: string) => {
     setActiveCategory(id);
@@ -94,7 +81,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange, isSideb
       setSaving(true);
       toast.loading('Enviando ticket...', { id: 'create-ticket' });
       const createdTicket = await soporteTecnicoService.create(form);
-      setTickets(current => [createdTicket, ...current.filter(ticket => ticket.id !== createdTicket.id)]);
+      await ticketsQuery.refetch();
       toast.success(
         createdTicket.number ? `Ticket ${createdTicket.number} enviado correctamente` : 'Ticket enviado correctamente',
         { id: 'create-ticket' },

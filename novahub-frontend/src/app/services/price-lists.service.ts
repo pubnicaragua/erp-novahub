@@ -23,9 +23,9 @@ export interface PriceListItem {
 }
 
 export const priceListsService = {
-  getAll: () => api.get<PriceList[]>('/sales/price-lists'),
-  getMatrix: () => api.get<{ lists: PriceList[]; products: any[]; items: PriceListItem[] }>('/sales/price-lists/matrix'),
-  getItems: (id: string) => api.get<PriceListItem[]>(`/sales/price-lists/${id}/items`),
+  getAll: (signal?: AbortSignal) => api.get<PriceList[]>('/sales/price-lists', { signal }),
+  getMatrix: (signal?: AbortSignal) => api.get<{ lists: PriceList[]; products: any[]; items: PriceListItem[] }>('/sales/price-lists/matrix', { signal }),
+  getItems: (id: string, signal?: AbortSignal) => api.get<PriceListItem[]>(`/sales/price-lists/${id}/items`, { signal }),
   create: (data: { name: string; code?: string; description?: string }) => api.post<PriceList>('/sales/price-lists', data),
   update: (id: string, data: Partial<Pick<PriceList, 'name' | 'description' | 'isActive'>>) => api.patch<PriceList>(`/sales/price-lists/${id}`, data),
   updateItem: (id: string, productId: string, data: { price: number; currency: string; exchangeRate?: number }) => api.patch<PriceListItem>(`/sales/price-lists/${id}/items/${productId}`, data),

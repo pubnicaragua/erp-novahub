@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -8,6 +8,7 @@ import { RefreshCw, Filter, X, DollarSign, TrendingUp, TrendingDown } from 'luci
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 interface EquityRow {
   accountId: string;
@@ -32,17 +33,11 @@ function formatCurrency(n: number): string {
 export function CambiosPatrimonioView() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [data, setData] = useState<EquityData | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    if (!dateFrom || !dateTo) {
-      toast.error('Seleccione el rango de fechas');
-      return;
-    }
-    try {
-      setLoading(true);
-      const raw: any = await contabilidadService.getEquityChanges({ dateFrom, dateTo });
+  const query = useAccountingQuery<EquityData | null>(
+    ['equity-changes', dateFrom, dateTo],
+    async (signal) => {
+      if (!dateFrom || !dateTo) return null;
+      const raw: any = await contabilidadService.getEquityChanges({ dateFrom, dateTo }, signal);
       const rows: EquityRow[] = (raw?.rows || raw || []).map((r: any) => ({
         accountId: r.accountId || r.accountCode || '',
         accountCode: r.accountCode || r.codigo || '',
@@ -51,29 +46,25 @@ export function CambiosPatrimonioView() {
         periodChange: r.periodChange || r.cambioPeriodo || 0,
         closingBalance: r.closingBalance || r.saldoFinal || 0,
       }));
-      setData({
+      return {
         rows,
         totalOpening: raw?.totalOpening || raw?.totalSaldoInicial || rows.reduce((s: number, r: EquityRow) => s + r.openingBalance, 0),
         totalClosing: raw?.totalClosing || raw?.totalSaldoFinal || rows.reduce((s: number, r: EquityRow) => s + r.closingBalance, 0),
         netIncome: raw?.netIncome || raw?.resultadoEjercicio || 0,
-      });
-    } catch (err: any) {
-      toast.error(err.message || 'Error al cargar cambios en el patrimonio');
-    } finally {
-      setLoading(false);
-    }
-  }, [dateFrom, dateTo]);
-
+      };
+    },
+    { enabled: Boolean(dateFrom && dateTo) },
+  );
+  const data = query.data;
+  const loading = query.isLoading || query.isFetching;
   useEffect(() => {
-    if (!dateFrom || !dateTo) return;
-    const timer = window.setTimeout(fetchData, 0);
-    return () => window.clearTimeout(timer);
-  }, [dateFrom, dateTo, fetchData]);
+    if (query.error) toast.error(query.error.message || 'Error al cargar cambios en el patrimonio');
+  }, [query.error]);
 
   const netIncomePositive = (data?.netIncome ?? 0) >= 0;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase italic">
@@ -89,14 +80,14 @@ export function CambiosPatrimonioView() {
         <div className="flex items-center gap-2 text-xs font-black text-muted-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
           <Filter className="size-3.5" /> Filtros
         </div>
-        <div className="flex flex-wrap items-center gap-4 flex-1">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Desde</label>
-            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 w-[150px]" />
+            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Hasta</label>
-            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 w-[150px]" />
+            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           {(dateFrom || dateTo) && (
             <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all mt-5">
@@ -105,14 +96,14 @@ export function CambiosPatrimonioView() {
           )}
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20">
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading || !dateFrom || !dateTo} className="h-9">
+          <Button variant="outline" size="sm" onClick={() => query.refetch()} disabled={loading || !dateFrom || !dateTo} className="h-9">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
         </div>
       </div>
 
       {data && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
@@ -176,7 +167,8 @@ export function CambiosPatrimonioView() {
               <p className="text-xs mt-1">No se encontraron movimientos en el período seleccionado</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="hidden overflow-x-auto md:block">
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow className="hover:bg-transparent border-border/50">
@@ -206,6 +198,27 @@ export function CambiosPatrimonioView() {
                 </TableBody>
               </Table>
             </div>
+            <div className="space-y-2 p-3 md:hidden">
+              {data.rows.map((row, i) => (
+                <div key={row.accountId || i} className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[10px] text-muted-foreground">{row.accountCode}</p>
+                      <p className="mt-0.5 truncate text-sm font-bold" title={row.accountName}>{row.accountName}</p>
+                    </div>
+                    <span className={cn("shrink-0 text-right font-mono text-sm font-black", row.closingBalance >= 0 ? "text-emerald-600" : "text-red-600")}>
+                      {formatCurrency(row.closingBalance)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/50 pt-3 text-[10px]">
+                    <div><span className="block uppercase tracking-wider text-muted-foreground">Saldo inicial</span><span className={cn("font-mono", row.openingBalance >= 0 ? "text-emerald-600" : "text-red-600")}>{formatCurrency(row.openingBalance)}</span></div>
+                    <div className="text-right"><span className="block uppercase tracking-wider text-muted-foreground">Cambio período</span><span className={cn("font-mono font-bold", row.periodChange >= 0 ? "text-emerald-600" : "text-red-600")}>{row.periodChange >= 0 ? '+' : ''}{formatCurrency(row.periodChange)}</span></div>
+                  </div>
+                  <p className="mt-2 text-right text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Saldo final</p>
+                </div>
+              ))}
+            </div>
+            </>
           )}
         </CardContent>
         {data && data.rows.length > 0 && (

@@ -1,42 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
 import { toast } from 'sonner'
 import { api } from '../../services/api'
 import { Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery'
 
 export function TrialExtensionRequestsPanel() {
-  const [requests, setRequests] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
-
-  const fetchRequests = async () => {
-    setLoading(true)
-    try {
-      const res = await api.get<any[]>('/admin/trial-extension-requests')
-      setRequests(res || [])
-    } catch { setRequests([]) }
-    finally { setLoading(false) }
-  }
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await api.get<any[]>('/admin/trial-extension-requests')
-        setRequests(res || [])
-      } catch { setRequests([]) }
-      finally { setLoading(false) }
-    }
-    void load()
-  }, [])
+  const { data: requestData, isLoading: loading, refetch: refetchRequests } = useTenantQuery(
+    ['trial-extension-requests'],
+    async (signal) => asList(await api.get<any[]>('/admin/trial-extension-requests', { signal })),
+    { onError: () => toast.error('No se pudieron cargar las solicitudes de extensión') },
+  )
+  const requests = requestData || []
 
   const handleApprove = async (id: string, days: number) => {
     setProcessing(id)
     try {
       await api.patch(`/admin/trial-extension-requests/${id}`, { status: 'APPROVED', extensionDays: days })
       toast.success(`Trial extendido ${days} días`)
-      fetchRequests()
+      await refetchRequests()
     } catch (e: any) {
       toast.error(e?.message || 'Error al aprobar')
     } finally { setProcessing(null) }
@@ -47,7 +32,7 @@ export function TrialExtensionRequestsPanel() {
     try {
       await api.patch(`/admin/trial-extension-requests/${id}`, { status: 'REJECTED' })
       toast.success('Solicitud rechazada')
-      fetchRequests()
+      await refetchRequests()
     } catch (e: any) {
       toast.error(e?.message || 'Error al rechazar')
     } finally { setProcessing(null) }

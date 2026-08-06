@@ -43,12 +43,14 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
   const [internalWarehouses, setInternalWarehouses] = useState<any[]>([]);
 
   useEffect(() => {
+    const controller = new AbortController();
     if (!categories && open) {
-      inventoryService.getCategories().then(r => setInternalCategories((r as any)?.data || r || []));
+      inventoryService.getCategories(controller.signal).then(r => setInternalCategories((r as any)?.data || r || [])).catch(() => undefined);
     }
     if (!warehouses && open) {
-      inventoryService.getWarehouses().then(r => setInternalWarehouses((r as any)?.data || r || []));
+      inventoryService.getWarehouses(controller.signal).then(r => setInternalWarehouses((r as any)?.data || r || [])).catch(() => undefined);
     }
+    return () => controller.abort();
   }, [open, categories, warehouses]);
 
   const effectiveCategories = categories ?? internalCategories;
@@ -265,7 +267,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
         <div className="flex-1 overflow-auto flex flex-col gap-6 p-1">
           
           {/* FORMULARIO SUPERIOR */}
-          <div className="bg-muted/30 p-4 rounded-xl border border-dashed flex gap-4">
+          <div className="flex flex-col gap-4 rounded-xl border border-dashed bg-muted/30 p-4 sm:flex-row">
             <div>
               <ProductImagePicker
                 src={draftProduct.imagePreviewUrl}
@@ -274,7 +276,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 onRemove={handleImageRemoved}
               />
             </div>
-            <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-5">
               <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Código *</label>
                 <div className="flex flex-col gap-1 mt-1 w-full">
@@ -287,7 +289,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   {skuError && <span className="text-[9px] text-red-500 font-bold uppercase tracking-wider leading-tight">{skuError}</span>}
                 </div>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Nombre *</label>
                 <Input 
                   value={draftProduct.name} 
@@ -296,7 +298,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                     placeholder={`Nombre del ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
                 />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría *</label>
                 <Select value={draftProduct.categoryId} onValueChange={v => handleUpdateDraft('categoryId', v)}>
                   <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
@@ -353,7 +355,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
 
               {draftProduct.itemType === 'PRODUCT' ? (
                 <>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén (Stock Inicial)</label>
                     <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
                       <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Bodega para ingreso" /></SelectTrigger>
@@ -374,7 +376,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   </div>
                 </>
               ) : (
-                <div className="col-span-3">
+                <div className="sm:col-span-2 md:col-span-3">
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén vinculado *</label>
                   <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
                     <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar almacén" /></SelectTrigger>
@@ -385,7 +387,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 </div>
               )}
               
-              <div className={`col-span-5 flex justify-end ${draftProduct.itemType === 'SERVICE' ? 'mt-0' : 'mt-0'}`}>
+              <div className={`sm:col-span-2 md:col-span-5 flex justify-end ${draftProduct.itemType === 'SERVICE' ? 'mt-0' : 'mt-0'}`}>
                 <Button onClick={handleAddToList} className="h-8 text-xs font-bold" variant="secondary" disabled={!!skuError}>
                   <Plus className="size-3 mr-2" />
                   Agregar a la lista

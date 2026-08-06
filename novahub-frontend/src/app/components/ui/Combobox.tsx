@@ -20,7 +20,7 @@ import {
 } from "./popover"
 
 interface ComboboxProps {
-  options: { label: string; value: string; description?: string }[]
+  options: { label: string; value: string; description?: string; disabled?: boolean }[]
   value?: string
   onChange: (value: string) => void
   placeholder?: string
@@ -89,8 +89,10 @@ export function Combobox({
               {visibleOptions.map((option) => (
                 <CommandItem
                   key={option.value}
+                  disabled={option.disabled}
                   value={`${option.label} ${option.description || ''}`}
                   onPointerDown={(event) => {
+                    if (option.disabled) return
                     if (event.button === 2) return
                     pointerSelection.current = option.value
                     commitSelection(option.value)
@@ -99,6 +101,7 @@ export function Combobox({
                     }, 250)
                   }}
                   onSelect={() => {
+                    if (option.disabled) return
                     if (pointerSelection.current === option.value) {
                       pointerSelection.current = null
                       return

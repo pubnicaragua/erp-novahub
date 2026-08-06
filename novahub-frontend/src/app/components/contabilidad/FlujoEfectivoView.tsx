@@ -1,14 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
-import { ScrollArea } from '../ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { RefreshCw, Filter, X, ArrowUpCircle, ArrowDownCircle, DollarSign } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 interface CashFlowItem {
   concept: string;
@@ -56,17 +56,11 @@ const SECTION_CONFIG = [
 export function FlujoEfectivoView() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [data, setData] = useState<CashFlowData | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    if (!dateFrom || !dateTo) {
-      toast.error('Seleccione el rango de fechas');
-      return;
-    }
-    try {
-      setLoading(true);
-      const raw: any = await contabilidadService.getCashFlow({ dateFrom, dateTo });
+  const query = useAccountingQuery<CashFlowData | null>(
+    ['cash-flow', dateFrom, dateTo],
+    async (signal) => {
+      if (!dateFrom || !dateTo) return null;
+      const raw: any = await contabilidadService.getCashFlow({ dateFrom, dateTo }, signal);
       const result: CashFlowData = {
         operativas: {
           items: raw?.operatingActivities?.items || [{ concept: 'Actividades Operativas', amount: raw?.operatingActivities?.netCash || 0 }],
@@ -84,23 +78,15 @@ export function FlujoEfectivoView() {
         beginningCash: raw?.beginningCashBalance || 0,
         endingCash: raw?.endingCashBalance || 0,
       };
-      setData(result);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar flujo de efectivo');
-    } finally {
-      setLoading(false);
-    }
-  }, [dateFrom, dateTo]);
-
+      return result;
+    },
+    { enabled: Boolean(dateFrom && dateTo) },
+  );
+  const data = query.data;
+  const loading = query.isLoading || query.isFetching;
   useEffect(() => {
-    if (dateFrom && dateTo) {
-      const load = async () => {
-        setLoading(true);
-        await fetchData();
-      };
-      load();
-    }
-  }, [fetchData]);
+    if (query.error) toast.error(query.error.message || 'Error al cargar flujo de efectivo');
+  }, [query.error]);
 
   const fmt = (n: number) => {
     const abs = Math.abs(n).toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -118,6 +104,7 @@ export function FlujoEfectivoView() {
           </div>
           <p className="text-[9px] font-normal opacity-70 tracking-normal normal-case">{section.subtitle}</p>
         </div>
+        <div className="hidden md:block">
         <Table>
           <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent border-border/50">
@@ -146,24 +133,39 @@ export function FlujoEfectivoView() {
             </TableRow>
           </TableBody>
         </Table>
+        </div>
+        <div className="space-y-2 p-3 md:hidden">
+          {secData.items.length === 0 ? (
+            <div className="py-6 text-center text-xs text-muted-foreground">Sin movimientos</div>
+          ) : secData.items.map((item, i) => (
+            <div key={`${section.key}-${i}`} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
+              <p className="min-w-0 truncate text-sm font-medium" title={item.concept}>{item.concept}</p>
+              <span className={cn("shrink-0 font-mono text-sm font-black", item.amount >= 0 ? "text-emerald-600" : "text-red-600")}>{fmt(item.amount)}</span>
+            </div>
+          ))}
+          <div className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-3 font-bold">
+            <span className="text-xs uppercase tracking-wider">Subtotal</span>
+            <span className={cn("font-mono text-sm", secData.subtotal >= 0 ? "text-emerald-600" : "text-red-600")}>{fmt(secData.subtotal)}</span>
+          </div>
+        </div>
       </div>
     );
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 bg-muted/30 rounded-2xl border border-border/50 shadow-sm">
         <div className="flex items-center gap-2 text-xs font-black text-muted-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
           <Filter className="size-3.5" /> Filtros
         </div>
-        <div className="flex flex-wrap items-center gap-4 flex-1">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Desde</label>
-            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 w-[150px]" />
+            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Hasta</label>
-            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 w-[150px]" />
+            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           {(dateFrom || dateTo) && (
             <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all mt-5">
@@ -172,7 +174,7 @@ export function FlujoEfectivoView() {
           )}
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20">
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="h-9">
+          <Button variant="outline" size="sm" onClick={() => query.refetch()} disabled={loading || !dateFrom || !dateTo} className="h-9">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
         </div>
@@ -193,7 +195,7 @@ export function FlujoEfectivoView() {
           ) : !data ? (
             <div className="h-40 flex items-center justify-center text-muted-foreground">Seleccione un rango de fechas para ver el reporte</div>
           ) : (
-            <ScrollArea className="max-h-[70vh]">
+            <div>
               {SECTION_CONFIG.map(section => renderSection(section, data[section.key]))}
 
               <Separator className="my-4" />
@@ -223,12 +225,12 @@ export function FlujoEfectivoView() {
                   {SECTION_CONFIG.map(section => {
                     const secData = data[section.key];
                     return (
-                      <div key={section.key} className="flex items-center justify-between py-1.5 border-b border-border/20 last:border-0">
+                      <div key={section.key} className="flex min-w-0 items-center justify-between gap-3 border-b border-border/20 py-1.5 last:border-0">
                         <div className="flex items-center gap-2">
                           <div className={cn("size-2 rounded-full", section.headerClass.replace('bg-', 'bg-').replace('600', '500'))} />
                           <span className="text-sm font-medium">{section.title}</span>
                         </div>
-                        <span className={cn("text-sm font-bold font-mono", secData.subtotal >= 0 ? "text-emerald-600" : "text-red-600")}>
+                        <span className={cn("shrink-0 text-right text-sm font-bold font-mono", secData.subtotal >= 0 ? "text-emerald-600" : "text-red-600")}>
                           {fmt(secData.subtotal)}
                         </span>
                       </div>
@@ -242,7 +244,7 @@ export function FlujoEfectivoView() {
                   </div>
                 </div>
               </div>
-            </ScrollArea>
+            </div>
           )}
         </CardContent>
       </Card>

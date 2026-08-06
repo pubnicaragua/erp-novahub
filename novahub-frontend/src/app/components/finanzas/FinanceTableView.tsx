@@ -24,6 +24,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -428,7 +429,7 @@ export function FinanceTableView({
     const value = item[col.key];
     if (col.type === 'currency') {
       const n = Number(value || 0);
-      return <span className={n >= 0 ? "text-emerald-500" : "text-rose-500"}>{formatConvertedAmount(n, item.currency, item.exchangeRate)}</span>;
+      return <CurrencyValuationAmount amount={n} sourceCurrency={item.currency} sourceExchangeRate={item.exchangeRate} className={n >= 0 ? "text-emerald-500" : "text-rose-500"} />;
     }
     if (col.type === 'date' || col.type === 'datetime') {
       if (!value) return '-';
@@ -460,24 +461,24 @@ export function FinanceTableView({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
-        <div className="flex items-center gap-3 shrink-0">
-          <h3 className="text-lg md:text-xl font-black uppercase tracking-tight text-foreground">{title}</h3>
-          {subtitle && <p className="text-xs text-muted-foreground max-w-md">{subtitle}</p>}
+        <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <h3 className="shrink-0 text-lg font-black uppercase tracking-tight text-foreground md:text-xl">{title}</h3>
+          {subtitle && <p className="max-w-md break-words text-xs leading-relaxed text-muted-foreground">{subtitle}</p>}
           <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-primary/30 text-primary hidden sm:inline-flex">LIVE SYNC</Badge>
         </div>
-        <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-          <div className="relative w-full sm:w-auto flex-1 sm:flex-none">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
+          <div className="relative col-span-2 w-full sm:flex-1 lg:w-auto">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-10 w-full sm:w-56 md:w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" />
           </div>
-          <button onClick={() => setShowFilters(!showFilters)} className={cn("flex items-center gap-2 rounded-xl border px-4 h-10 text-[10px] font-black uppercase tracking-widest transition-colors shrink-0", showFilters ? "bg-primary/10 border-primary/30 text-primary" : "border-border/50 bg-background/50 hover:bg-muted")}>
+          <button onClick={() => setShowFilters(!showFilters)} className={cn("flex w-full items-center justify-center gap-2 rounded-xl border px-4 h-10 text-[10px] font-black uppercase tracking-widest transition-colors sm:w-auto", showFilters ? "bg-primary/10 border-primary/30 text-primary" : "border-border/50 bg-background/50 hover:bg-muted")}>
             <Filter className="size-4" /> Filtros
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/50 px-4 h-10 text-[10px] font-black uppercase tracking-widest hover:bg-muted shrink-0"><Download className="size-4" /> Exportar</button>
+              <button className="flex w-full items-center justify-center gap-2 rounded-xl border border-border/50 bg-background/50 px-4 h-10 text-[10px] font-black uppercase tracking-widest hover:bg-muted sm:w-auto"><Download className="size-4" /> Exportar</button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={exportExcel}><FileSpreadsheet className="size-4 mr-2 text-green-600" /> Excel (.xlsx)</DropdownMenuItem>
@@ -485,13 +486,13 @@ export function FinanceTableView({
             </DropdownMenuContent>
           </DropdownMenu>
           {canCreate && (
-            <button onClick={onAdd} className="flex items-center gap-2 rounded-xl bg-primary px-4 h-10 text-[10px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90 transition-colors shrink-0 shadow-xl shadow-primary/20 border border-primary/20"><Plus className="size-4" /> Nuevo Registro</button>
+            <button onClick={onAdd} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 h-10 text-[10px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90 transition-colors sm:w-auto shadow-xl shadow-primary/20 border border-primary/20"><Plus className="size-4" /> Nuevo Registro</button>
           )}
         </div>
       </div>
 
       {showFilters && (
-        <div className="flex flex-wrap gap-4 p-4 bg-muted/30 rounded-xl border border-border/50 animate-in fade-in slide-in-from-top-2">
+        <div className="grid grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/30 p-4 animate-in fade-in slide-in-from-top-2 sm:grid-cols-2 lg:flex lg:flex-wrap">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Categoría</label>
             <Input placeholder="Filtrar..." value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="h-8 max-w-[200px]" />
@@ -518,9 +519,9 @@ export function FinanceTableView({
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader><DialogTitle>Nueva Categoría</DialogTitle><DialogDescription>Crea una nueva categoría para clasificar tus registros financieros.</DialogDescription></DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Nombre</Label>
-              <Input className="col-span-3" placeholder="Ej: SERVICIOS, NÓMINA..." value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveNewCategory(); }} />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+              <Label className="sm:text-right">Nombre</Label>
+              <Input className="sm:col-span-3" placeholder="Ej: SERVICIOS, NÓMINA..." value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveNewCategory(); }} />
             </div>
           </div>
           <DialogFooter>
@@ -712,9 +713,9 @@ export function FinanceTableView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-y-4 gap-x-6 relative">
+              <div className="relative grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-6 sm:gap-y-4">
                 {columns.map(col => (
-                  <div key={col.key} className={cn("space-y-1", col.type === 'currency' ? "col-span-2 bg-primary/5 -mx-5 px-5 py-3 border-y border-primary/10 mt-1" : "")}>
+                  <div key={col.key} className={cn("min-w-0 space-y-1", col.type === 'currency' ? "sm:col-span-2 bg-primary/5 -mx-5 px-5 py-3 border-y border-primary/10 mt-1" : "")}>
                     <p className="text-[9px] font-black uppercase text-muted-foreground/50 tracking-[0.15em]">{col.label}</p>
                     <div className={cn(
                       "transition-all",

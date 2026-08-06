@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Landmark, Plus, Search, ChevronLeft, CheckCircle2, RefreshCw, Eye
 } from 'lucide-react';
@@ -21,6 +22,7 @@ import {
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 const statusStyles: Record<string, string> = {
   PENDING: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -36,9 +38,7 @@ const statusLabels: Record<string, string> = {
 
 export function ConciliacionView() {
   const { canPerform } = useAuth();
-  const [reconciliations, setReconciliations] = useState<any[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -50,41 +50,26 @@ export function ConciliacionView() {
     accountId: '', period: '', startDate: '', endDate: '', startBalance: '', endBalance: '',
   });
 
-  const fetchReconciliations = async () => {
-    try {
-      setLoading(true);
-      const res = await contabilidadService.getReconciliations();
-      setReconciliations(res || []);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar conciliaciones');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAccounts = async () => {
-    try {
-      const res = await contabilidadService.getChartOfAccounts(true);
-      const tree = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
-      const flatten = (items: any[]): any[] => {
-        const result: any[] = [];
-        for (const item of items) {
-          const { children, ...rest } = item;
-          result.push(rest);
-          if (Array.isArray(children) && children.length > 0) result.push(...flatten(children));
-        }
-        return result;
-      };
-      setAccounts(flatten(tree));
-    } catch {
-      // Silently fail
-    }
-  };
+  const reconciliationsQuery = useAccountingQuery<any[]>(['reconciliations'], async (signal) => accountingList(await contabilidadService.getReconciliations(signal)));
+  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
+  const reconciliations = reconciliationsQuery.data || [];
+  const accounts = (() => {
+    const result: any[] = [];
+    const flatten = (items: any[]) => items.forEach(item => { const { children, ...rest } = item; result.push(rest); if (Array.isArray(children)) flatten(children); });
+    flatten(accountsQuery.data || []);
+    return result;
+  })();
+  const loading = reconciliationsQuery.isLoading || accountsQuery.isLoading;
+  const fetchReconciliations = () => reconciliationsQuery.refetch();
 
   const fetchDetail = async (id: string) => {
     try {
       setDetailLoading(true);
-      const res = await contabilidadService.getReconciliation(id);
+      const res = await queryClient.fetchQuery({
+        queryKey: ['accounting', 'reconciliation-detail', id],
+        queryFn: ({ signal }) => contabilidadService.getReconciliation(id, signal),
+        staleTime: 5 * 60_000,
+      });
       setDetail(res);
       setSelectedId(id);
     } catch (e: any) {
@@ -93,14 +78,6 @@ export function ConciliacionView() {
       setDetailLoading(false);
     }
   };
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      await Promise.all([fetchReconciliations(), fetchAccounts()]);
-    };
-    load();
-  }, []);
 
   const filtered = reconciliations.filter((r) => {
     const q = searchTerm.toLowerCase();
@@ -128,7 +105,7 @@ export function ConciliacionView() {
       toast.success('Conciliación creada');
       setShowCreate(false);
       setForm({ accountId: '', period: '', startDate: '', endDate: '', startBalance: '', endBalance: '' });
-      fetchReconciliations();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al crear');
     }
@@ -219,7 +196,7 @@ export function ConciliacionView() {
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div><p className="text-[10px] text-muted-foreground">Cuenta</p><p className="text-xs font-black">{detail.account?.code} - {detail.account?.name}</p></div>
                 <div><p className="text-[10px] text-muted-foreground">Período</p><p className="text-xs font-black">{detail.period}</p></div>
                 <div><p className="text-[10px] text-muted-foreground">Fecha Inicio</p><p className="text-xs font-black">{detail.startDate ? new Date(detail.startDate).toLocaleDateString() : 'N/A'}</p></div>
@@ -230,7 +207,7 @@ export function ConciliacionView() {
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Saldos</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div><p className="text-[10px] text-muted-foreground">Saldo Inicial</p><p className="text-xl font-black tabular-nums">C$ {Number(detail.startBalance || 0).toLocaleString()}</p></div>
                 <div><p className="text-[10px] text-muted-foreground">Saldo Final</p><p className="text-xl font-black tabular-nums">C$ {Number(detail.endBalance || 0).toLocaleString()}</p></div>
               </div>
@@ -287,7 +264,7 @@ export function ConciliacionView() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
         <div>
           <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Conciliación Bancaria</h2>
@@ -295,22 +272,22 @@ export function ConciliacionView() {
             {reconciliations.length} conciliación(es) registrada(s)
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:gap-3">
+          <div className="relative col-span-2 sm:col-span-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input
               placeholder="Buscar conciliación..."
-              className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
+              className="h-10 w-full bg-background/50 pl-9 border-border/50 rounded-xl text-xs font-bold tracking-widest sm:w-64"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           {canPerform('ACCOUNTING_RECONCILIATIONS', 'create') && (
-            <Button
+              <Button
               onClick={() => setShowCreate(true)}
               className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
             >
-              <Plus className="size-4" /> Nueva Conciliación
+                <Plus className="size-4" /> <span className="hidden sm:inline">Nueva Conciliación</span><span className="sm:hidden">Nueva</span>
             </Button>
           )}
         </div>
@@ -318,6 +295,7 @@ export function ConciliacionView() {
 
       <Card className="rounded-2xl border-border/50">
         <CardContent className="p-0">
+          <div className="hidden overflow-x-auto md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -360,6 +338,15 @@ export function ConciliacionView() {
               ))}
             </TableBody>
           </Table>
+          </div>
+          <div className="space-y-2 p-3 md:hidden">
+            {loading ? <p className="py-8 text-center text-xs text-muted-foreground">Cargando...</p> : filtered.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No hay conciliaciones registradas</p> : filtered.map((r) => (
+              <button key={r.id} type="button" className="block w-full min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3 text-left hover:bg-muted/40" onClick={() => fetchDetail(r.id)}>
+                <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs font-black">{r.account?.code}</p><p className="break-words text-[10px] text-muted-foreground">{r.account?.name}</p></div><Badge variant="outline" className={cn('shrink-0 text-[9px] font-black uppercase tracking-widest', statusStyles[r.status || 'PENDING'])}>{statusLabels[r.status || 'PENDING']}</Badge></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Período</span><span>{r.period}</span></div><div><span className="block text-muted-foreground">Fecha</span><span>{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'N/A'}</span></div><div><span className="block text-muted-foreground">Saldo inicial</span><span>C$ {Number(r.startBalance || 0).toLocaleString()}</span></div><div><span className="block text-muted-foreground">Saldo final</span><span className="font-bold">C$ {Number(r.endBalance || 0).toLocaleString()}</span></div></div>
+              </button>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -369,13 +356,13 @@ export function ConciliacionView() {
             <DialogTitle className="text-lg font-black uppercase tracking-tight">Nueva Conciliación Bancaria</DialogTitle>
             <DialogDescription className="text-xs">Completa los datos para iniciar una conciliación</DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
+          <div className="grid grid-cols-1 gap-4 py-4 sm:grid-cols-2">
             <div className="col-span-2 space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cuenta Bancaria</Label>
               <Select value={form.accountId} onValueChange={(v) => setForm({ ...form, accountId: v })}>
                 <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
                 <SelectContent>
-                  {accounts.map((a) => (
+                  {accounts.filter((a) => a.isActive !== false && a.acceptsPostings !== false).map((a) => (
                     <SelectItem key={a.id} value={a.id} className="text-xs">{a.code} - {a.name}</SelectItem>
                   ))}
                 </SelectContent>

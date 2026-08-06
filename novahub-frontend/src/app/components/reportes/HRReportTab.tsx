@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -14,6 +14,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Users, DollarSign, Clock, Activity, Plane, TrendingUp, Scale, GraduationCap, FileText, Gift, Star, ShieldCheck, UserPlus, UserMinus, RefreshCw, AlertTriangle, Filter, Lightbulb, BadgeCheck, Timer, CalendarX, Trophy, Gauge } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 
@@ -150,7 +151,7 @@ function fmtTenure(months: number): string {
 }
 
 function nextAnniversary(hireDate: Date, now: Date): { label: string; days: number } {
-  const next = new Date(hireDate);
+  let next = new Date(hireDate);
   next.setFullYear(now.getFullYear());
   if (next.getTime() < now.getTime()) next.setFullYear(now.getFullYear() + 1);
   const days = Math.max(0, Math.round((next.getTime() - now.getTime()) / 86400000));
@@ -207,21 +208,36 @@ function makeBuckets(start: Date, end: Date): EvoBucket[] {
 type ListRow = { label: string; sub?: string; right?: string; rightClass?: string; tag?: string };
 
 export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
+    formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [payrolls, setPayrolls] = useState<any[]>([]);
-  const [leaves, setLeaves] = useState<any[]>([]);
-  const [attendances, setAttendances] = useState<any[]>([]);
-  const [vacations, setVacations] = useState<any[]>([]);
-  const [reviews, setReviews] = useState<any[]>([]);
-  const [trainings, setTrainings] = useState<any[]>([]);
-  const [benefits, setBenefits] = useState<any[]>([]);
-  const [documents, setDocuments] = useState<any[]>([]);
-  const [kpiResults, setKpiResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'hr'], async (signal) => {
+    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const [empRes, payRes, toRes, attRes, vacRes, revRes, traRes, benRes, docRes, kpiRes] = await Promise.all([
+      employeesService.getAll(filters, signal), payrollService.getAll(filters, signal), timeOffService.getAll(filters, signal),
+      hrService.getAttendanceRecords(filters, signal), hrService.getVacationBalances(undefined, signal),
+      hrService.getPerformanceReviews(undefined, signal, filters), hrService.getTrainings(filters, signal),
+      hrService.getBenefits(filters, signal), hrService.getDocuments(undefined, signal, filters), hrService.getKpiResults(undefined, undefined, signal),
+    ]);
+    return {
+      employees: asList(empRes), payrolls: asList(payRes), leaves: asList(toRes), attendances: asList(attRes),
+      vacations: asList(vacRes), reviews: asList(revRes), trainings: asList(traRes), benefits: asList(benRes),
+      documents: asList(docRes), kpiResults: asList(kpiRes),
+    };
+  }, { onError: (e) => toast.error(e.message || 'Error cargando RRHH') });
+  const employees = reportData?.employees || [];
+  const payrolls = reportData?.payrolls || [];
+  const leaves = reportData?.leaves || [];
+  const attendances = reportData?.attendances || [];
+  const vacations = reportData?.vacations || [];
+  const reviews = reportData?.reviews || [];
+  const trainings = reportData?.trainings || [];
+  const benefits = reportData?.benefits || [];
+  const documents = reportData?.documents || [];
+  const kpiResults = reportData?.kpiResults || [];
 
   const [movTab, setMovTab] = useState('altas-bajas');
   const [evoTab, setEvoTab] = useState('costo');
@@ -239,19 +255,19 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   const fmtShort = (v: number) => {
     const num = Number(v);
     if (!Number.isFinite(num)) return 'C$0';
-    const converted = convertAmount(num, 'NIO');
+    const converted = toBaseAmount(num, baseCurrency, 1);
     if (Math.abs(converted) >= 1000000) return `${currencySymbol}${(converted / 1000000).toFixed(1)}M`;
     if (Math.abs(converted) >= 1000) return `${currencySymbol}${(converted / 1000).toFixed(1)}k`;
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
-  const fmtMoney = useCallback((v: number) => {
+  const fmtMoney = (v: number) => {
     const num = Number(v);
     if (!Number.isFinite(num)) return `${currencySymbol}0.00`;
-    const converted = convertAmount(num, 'NIO');
+    const converted = toBaseAmount(num, baseCurrency, 1);
     const sign = converted < 0 ? '-' : '';
     return `${sign}${currencySymbol}${Math.abs(converted).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  }, [currencySymbol, convertAmount]);
+  };
 
   const pctVar = (cur: number, prev: number) => (prev > 0 ? ((cur - prev) / prev) * 100 : cur > 0 ? 100 : 0);
   const ppVar = (cur: number, prev: number) => cur - prev;
@@ -271,41 +287,6 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       </span>
     );
   };
-
-  useEffect(() => {
-    const fetch = async () => {
-      setLoading(true);
-      try {
-        const [empRes, payRes, toRes, attRes, vacRes, revRes, traRes, benRes, docRes, kpiRes] = await Promise.all([
-          employeesService.getAll().catch(() => ({ data: [] })),
-          payrollService.getAll().catch(() => ({ data: [] })),
-          timeOffService.getAll().catch(() => ({ data: [] })),
-          hrService.getAttendanceRecords().catch(() => ({ data: [] })),
-          hrService.getVacationBalances().catch(() => ({ data: [] })),
-          hrService.getPerformanceReviews().catch(() => ({ data: [] })),
-          hrService.getTrainings().catch(() => ({ data: [] })),
-          hrService.getBenefits().catch(() => ({ data: [] })),
-          hrService.getDocuments().catch(() => ({ data: [] })),
-          hrService.getKpiResults().catch(() => ({ data: [] })),
-        ]);
-        setEmployees(Array.isArray(empRes) ? empRes : (empRes as any)?.data || []);
-        setPayrolls(Array.isArray(payRes) ? payRes : (payRes as any)?.data || []);
-        setLeaves(Array.isArray(toRes) ? toRes : (toRes as any)?.data || []);
-        setAttendances(Array.isArray(attRes) ? attRes : (attRes as any)?.data || []);
-        setVacations(Array.isArray(vacRes) ? vacRes : (vacRes as any)?.data || []);
-        setReviews(Array.isArray(revRes) ? revRes : (revRes as any)?.data || []);
-        setTrainings(Array.isArray(traRes) ? traRes : (traRes as any)?.data || []);
-        setBenefits(Array.isArray(benRes) ? benRes : (benRes as any)?.data || []);
-        setDocuments(Array.isArray(docRes) ? docRes : (docRes as any)?.data || []);
-        setKpiResults(Array.isArray(kpiRes) ? kpiRes : (kpiRes as any)?.data || []);
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || "Error cargando RRHH");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
-  }, []);
 
   const now = useMemo(() => new Date(), []);
   const { start: currentStart, prevStart, prevEnd } = useMemo(() => getRangeDates(dateRange), [dateRange]);
@@ -408,38 +389,46 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   }, [fEmployees, dateRange, currentStart]);
 
   // ── Costo de nómina ──
-  const employerCost = useCallback((p: any) => {
-    const total = Number(p.costoTotalEmpresa || 0);
-    if (total > 0) return total;
-    return Number(p.grossPay || 0) + Number(p.inssPatronal || 0) + Number(p.inatec || 0) + Number(p.trecenoMes || 0) + Number(p.vacacionesProv || 0) + Number(p.indemnizacion || 0);
-  }, []);
+  const sourceRate = (rate?: number) => valuationMode === 'CURRENT' ? exchangeRate : (rate || exchangeRate);
+  const payrollBase = (p: any, field: string, baseField: string) =>
+    toBaseAmount(Number(p[field] ?? p[baseField] ?? 0), p.currency, sourceRate(p.exchangeRate));
 
-  const sumTotals = useCallback((list: any[]) => {
+  const employerCost = (p: any) => {
+    if (p.costoTotalEmpresa !== null && p.costoTotalEmpresa !== undefined) return payrollBase(p, 'costoTotalEmpresa', 'costoTotalEmpresaBase');
+    return payrollBase(p, 'grossPay', 'grossPayBase')
+      + payrollBase(p, 'inssPatronal', 'inssPatronalBase')
+      + payrollBase(p, 'inatec', 'inatecBase')
+      + payrollBase(p, 'trecenoMes', 'trecenoMesBase')
+      + payrollBase(p, 'vacacionesProv', 'vacacionesProvBase')
+      + payrollBase(p, 'indemnizacion', 'indemnizacionBase');
+  };
+
+  const sumTotals = (list: any[]) => {
     let salario = 0, horasExtra = 0, comisiones = 0, cargas = 0, prestaciones = 0, deducciones = 0, neto = 0, total = 0;
     const emps = new Set<string>();
     for (const p of list) {
-      salario += Number(p.baseSalary || 0);
-      horasExtra += Number(p.overtime || 0);
-      comisiones += Number(p.commissionsSales || 0) + Number(p.bonuses || 0);
-      cargas += Number(p.inssPatronal || 0) + Number(p.inatec || 0);
-      prestaciones += Number(p.trecenoMes || 0) + Number(p.vacacionesProv || 0) + Number(p.indemnizacion || 0);
-      deducciones += Number(p.deductions || 0) + Number(p.ir || 0) + Number(p.inssLaboral || 0);
-      neto += Number(p.netPay || 0);
+      salario += payrollBase(p, 'baseSalary', 'baseSalaryBase');
+      horasExtra += payrollBase(p, 'overtime', 'overtimeBase');
+      comisiones += payrollBase(p, 'commissionsSales', 'commissionsSalesBase') + payrollBase(p, 'bonuses', 'bonusesBase');
+      cargas += payrollBase(p, 'inssPatronal', 'inssPatronalBase') + payrollBase(p, 'inatec', 'inatecBase');
+      prestaciones += payrollBase(p, 'trecenoMes', 'trecenoMesBase') + payrollBase(p, 'vacacionesProv', 'vacacionesProvBase') + payrollBase(p, 'indemnizacion', 'indemnizacionBase');
+      deducciones += payrollBase(p, 'deductions', 'deductionsBase') + payrollBase(p, 'ir', 'irBase') + payrollBase(p, 'inssLaboral', 'inssLaboralBase');
+      neto += payrollBase(p, 'netPay', 'netPayBase');
       total += employerCost(p);
       if (p.employeeId || p.employee?.id) emps.add(p.employeeId || p.employee.id);
     }
     return { salario, horasExtra, comisiones, cargas, prestaciones, deducciones, neto, total, empleados: emps.size };
-  }, [employerCost]);
+  };
 
   const fPay = useMemo(() => fPayrolls.filter(p => {
     const d = toDate(p.periodEnd || p.paymentDate || p.createdAt);
     return d && d >= currentStart;
   }), [fPayrolls, currentStart]);
 
-  const payrollTotals = useMemo(() => sumTotals(fPay), [fPay, sumTotals]);
+  const payrollTotals = useMemo(() => sumTotals(fPay), [fPay]);
   const costoPorColaborador = payrollTotals.empleados > 0 ? payrollTotals.total / payrollTotals.empleados : 0;
 
-  const prevPayrollTotals = useMemo(() => prevWin ? sumTotals(fPayrolls.filter(p => isDateInWindow(p.periodEnd || p.paymentDate || p.createdAt, prevWin.startMs, prevWin.endMs))) : sumTotals([]), [fPayrolls, prevWin, sumTotals]);
+  const prevPayrollTotals = useMemo(() => prevWin ? sumTotals(fPayrolls.filter(p => isDateInWindow(p.periodEnd || p.paymentDate || p.createdAt, prevWin.startMs, prevWin.endMs))) : sumTotals([]), [fPayrolls, prevWin]);
   const prevCostoPorColaborador = prevPayrollTotals.empleados > 0 ? prevPayrollTotals.total / prevPayrollTotals.empleados : 0;
 
   const costoPorEmp = useMemo(() => {
@@ -457,7 +446,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       const emp = employeesById.get(id);
       return { id, name: emp ? empName(emp) : (fallback.get(id) || 'Sin nombre'), dept: emp ? empDept(emp) : '—', total };
     }).sort((a, b) => b.total - a.total).slice(0, 5);
-  }, [fPay, employeesById, payrolls, employerCost]);
+  }, [fPay, employeesById, payrolls]);
 
   const prevCostByDept = useMemo(() => {
     const map = new Map<string, number>();
@@ -471,7 +460,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       }
     }
     return map;
-  }, [fPayrolls, prevWin, employeesById, employerCost]);
+  }, [fPayrolls, prevWin, employeesById]);
 
   const costByDept = useMemo(() => {
     const map = new Map<string, number>();
@@ -487,7 +476,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       pct: (totalC / total) * 100,
       prev: prevCostByDept.get(name) || 0,
     })).sort((a, b) => b.total - a.total).slice(0, 8);
-  }, [fPay, employeesById, payrollTotals.total, prevCostByDept, employerCost]);
+  }, [fPay, employeesById, payrollTotals.total, prevCostByDept]);
 
   // ── Asistencia y ausentismo ──
   const attendancePeriod = useMemo(() => fAttendance.filter(a => isDateInRange(a.date, dateRange)), [fAttendance, dateRange]);
@@ -592,16 +581,16 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       });
       let salario = 0, horasExtra = 0, comisiones = 0, cargas = 0, prestaciones = 0, total = 0;
       for (const p of rows) {
-        salario += Number(p.baseSalary || 0);
-        horasExtra += Number(p.overtime || 0);
-        comisiones += Number(p.commissionsSales || 0) + Number(p.bonuses || 0);
-        cargas += Number(p.inssPatronal || 0) + Number(p.inatec || 0);
-        prestaciones += Number(p.trecenoMes || 0) + Number(p.vacacionesProv || 0) + Number(p.indemnizacion || 0);
+        salario += payrollBase(p, 'baseSalary', 'baseSalaryBase');
+        horasExtra += payrollBase(p, 'overtime', 'overtimeBase');
+        comisiones += payrollBase(p, 'commissionsSales', 'commissionsSalesBase') + payrollBase(p, 'bonuses', 'bonusesBase');
+        cargas += payrollBase(p, 'inssPatronal', 'inssPatronalBase') + payrollBase(p, 'inatec', 'inatecBase');
+        prestaciones += payrollBase(p, 'trecenoMes', 'trecenoMesBase') + payrollBase(p, 'vacacionesProv', 'vacacionesProvBase') + payrollBase(p, 'indemnizacion', 'indemnizacionBase');
         total += employerCost(p);
       }
       return { key: b.key, label: b.label, salario, variables: horasExtra + comisiones + prestaciones, cargas, total, prev: prevByKey.get(b.key) ?? null };
     });
-  }, [fPay, fPayrolls, currentStart, now, prevWin, employerCost]);
+  }, [fPay, fPayrolls, currentStart, now, prevWin]);
 
   // ── Movimientos ──
   const movBuckets = useMemo(() => {
@@ -704,7 +693,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       total: activeEmployees.length,
       sinSucursal: distKey === 'sucursal' && items.length === 1 && items[0]?.name === 'Sin sucursal',
     };
-  }, [activeEmployees, distKey, fPay, payrollTotals.total, employerCost]);
+  }, [activeEmployees, distKey, fPay, payrollTotals.total]);
 
   // ── Vacaciones ──
   const vacStats = useMemo(() => {
@@ -761,7 +750,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     const completed = allEnroll.filter((en: any) => en.status === 'COMPLETED').length;
     const rate = allEnroll.length > 0 ? (completed / allEnroll.length) * 100 : 0;
     const participantes = new Set(allEnroll.map((en: any) => en.employeeId || en.employee?.id).filter(Boolean)).size;
-    const costo = activas.reduce((a, t) => a + Number(t.cost || 0), 0);
+    const costo = activas.reduce((a, t) => a + toBaseAmount(Number(t.cost ?? t.baseCost ?? 0), t.currency, sourceRate(t.exchangeRate)), 0);
     const pendientesEnroll = allEnroll.filter((en: any) => en.status === 'SCHEDULED');
     const horas = activas.reduce((a, t) => {
       const s = toDate(t.startDate)?.getTime() || 0;
@@ -791,7 +780,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   // ── Beneficios ──
   const benStats = useMemo(() => {
     const beneficiados = new Set(fBenefits.flatMap(b => (b.employeeBenefits || []).map((eb: any) => eb.employeeId || eb.employee?.id)).filter(Boolean)).size;
-    const costo = fBenefits.reduce((a, b) => a + Number(b.cost || 0), 0);
+    const costo = fBenefits.reduce((a, b) => a + toBaseAmount(Number(b.cost ?? b.baseCost ?? 0), b.currency, sourceRate(b.exchangeRate)), 0);
     const sinAsignacion = fBenefits.filter(b => !b.employeeBenefits || b.employeeBenefits.length === 0);
     const byType = new Map<string, number>();
     for (const b of fBenefits) byType.set(b.type || 'Otro', (byType.get(b.type || 'Otro') || 0) + (b.employeeBenefits?.length || 0));
@@ -845,7 +834,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     }
     const order = { rojo: 0, naranja: 1, azul: 2, verde: 3 };
     return list.slice().sort((a, b) => order[a.tone] - order[b.tone]).slice(0, 6);
-  }, [prevPayrollTotals.total, payrollTotals.total, costByDept, perfStats, vacProximas30, vacStats.inconsistentes, docStats, tasaRotacion, ausentismoRate, ausentismoDias, trainStats.vencidas, fmtMoney]);
+  }, [prevPayrollTotals.total, payrollTotals.total, costByDept, perfStats, vacProximas30, vacStats.inconsistentes, docStats, tasaRotacion, ausentismoRate, ausentismoDias, trainStats.vencidas]);
 
   // ── Modals ──
   const openAltasModal = () => {
@@ -1004,7 +993,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
 
         const kpis = [
           { label: 'ACTIVOS', value: activeEmployees.length.toString(), detail: `Plantilla: ${fEmployees.length}`, color: [59, 130, 246] },
-          { label: 'COSTO NÓMINA', value: formatConvertedAmount(payrollTotals.total, 'NIO'), detail: `Período anterior: ${formatConvertedAmount(prevPayrollTotals.total, 'NIO')}`, color: [16, 185, 129] },
+          { label: `COSTO NÓMINA · ${valuationModeLabel}`, value: formatConvertedAmount(payrollTotals.total, 'NIO'), detail: `Período anterior: ${formatConvertedAmount(prevPayrollTotals.total, 'NIO')}`, color: [16, 185, 129] },
           { label: 'COSTO / COLAB.', value: formatConvertedAmount(costoPorColaborador, 'NIO'), detail: 'Promedio del período', color: [59, 130, 246] },
           { label: 'ASISTENCIA', value: `${attendanceRate.toFixed(1)}%`, detail: estimated ? 'Estimada por permisos' : `${attStats.present} presentes`, color: [16, 185, 129] },
           { label: 'ROTACIÓN', value: `${tasaRotacion.toFixed(1)}%`, detail: `${bajasPeriodo.length} bajas · ${plantillaPromedio.toFixed(0)} prom.`, color: [245, 158, 11] },
@@ -1040,7 +1029,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
             });
             doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
             currentY += height + 5;
-          } catch { /* intentionally empty */ }
+          } catch {}
         };
 
         await capture('hr-evolution-chart', 80);

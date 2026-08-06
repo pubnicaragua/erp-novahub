@@ -1,16 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
-import { ScrollArea } from '../ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { RefreshCw, Filter, Scale, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
+import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 interface BSAccount {
   accountId: string;
@@ -35,14 +35,11 @@ interface BSData {
 export function BalanceGeneralView() {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [showPreviousYear, setShowPreviousYear] = useState(false);
-  const [data, setData] = useState<BSData | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    if (!date) return;
-    try {
-      setLoading(true);
-      const raw: any = await contabilidadService.getBalanceSheet({ date, previousYear: showPreviousYear });
+  const query = useAccountingQuery<BSData | null>(
+    ['balance-sheet', date, showPreviousYear],
+    async (signal) => {
+      if (!date) return null;
+      const raw: any = await contabilidadService.getBalanceSheet({ date, previousYear: showPreviousYear }, signal);
       const curr = raw?.current || raw || {};
       const prev = raw?.previous || null;
       const mapAccounts = (accounts: any[]): BSAccount[] => (accounts || []).map((a: any) => ({
@@ -71,18 +68,14 @@ export function BalanceGeneralView() {
         result.liabilities = result.liabilities.map(a => ({ ...a, previousAmount: prevLiabMap.get(a.codigo) as number | undefined }));
         result.equity = result.equity.map(a => ({ ...a, previousAmount: prevEqMap.get(a.codigo) as number | undefined }));
       }
-      setData(result);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar balance general');
-    } finally {
-      setLoading(false);
-    }
-  }, [date, showPreviousYear]);
-
+      return result;
+    },
+  );
+  const data = query.data;
+  const loading = query.isLoading || query.isFetching;
   useEffect(() => {
-    const timer = window.setTimeout(fetchData, 0);
-    return () => window.clearTimeout(timer);
-  }, [fetchData]);
+    if (query.error) toast.error(query.error.message || 'Error al cargar balance general');
+  }, [query.error]);
 
   const totalActivos = data?.totalAssets || 0;
   const totalPasivos = data?.totalLiabilities || 0;
@@ -99,6 +92,7 @@ export function BalanceGeneralView() {
         {title}
         <span className="ml-2 text-[10px] opacity-70">({accounts.length} cuentas)</span>
       </div>
+      <div className="hidden md:block">
       <Table>
         <TableHeader className="bg-muted/30">
           <TableRow className="hover:bg-transparent border-border/50">
@@ -134,19 +128,48 @@ export function BalanceGeneralView() {
           </TableRow>
         </TableBody>
       </Table>
+      </div>
+      <div className="space-y-2 p-3 md:hidden">
+        {accounts.map((acc, i) => (
+          <div key={acc.accountId || i} className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] text-muted-foreground">{acc.codigo}</p>
+                <p className="mt-0.5 truncate text-sm font-bold" title={acc.cuenta}>{acc.cuenta}</p>
+              </div>
+              <span className={cn("shrink-0 text-right font-mono text-sm font-black", acc.currentAmount >= 0 ? "text-emerald-600" : "text-red-600")}>
+                {fmt(acc.currentAmount)}
+              </span>
+            </div>
+            {showPreviousYear && (
+              <div className="mt-2 flex items-center justify-between border-t border-border/50 pt-2 text-[10px] text-muted-foreground">
+                <span>Año anterior</span>
+                <span className="font-mono">{acc.previousAmount != null ? fmt(acc.previousAmount) : '-'}</span>
+              </div>
+            )}
+          </div>
+        ))}
+        <div className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-3 font-bold">
+          <span className="text-xs uppercase tracking-wider">Total {title}</span>
+          <div className="text-right">
+            <p className={cn("font-mono text-sm", total >= 0 ? "text-emerald-600" : "text-red-600")}>{fmt(total)}</p>
+            {showPreviousYear && <p className="text-[10px] font-mono text-muted-foreground">Anterior: {fmt(totalPrev)}</p>}
+          </div>
+        </div>
+      </div>
     </div>
   );
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 bg-muted/30 rounded-2xl border border-border/50 shadow-sm">
         <div className="flex items-center gap-2 text-xs font-black text-muted-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
           <Filter className="size-3.5" /> Filtros
         </div>
-        <div className="flex flex-wrap items-center gap-4 flex-1">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Fecha</label>
-            <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="h-9 w-[150px]" />
+            <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           <div className="flex items-center gap-3 mt-5">
             <Switch id="prev-year" checked={showPreviousYear} onCheckedChange={setShowPreviousYear} />
@@ -156,7 +179,7 @@ export function BalanceGeneralView() {
           </div>
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20">
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="h-9">
+          <Button variant="outline" size="sm" onClick={() => query.refetch()} disabled={loading} className="h-9">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
         </div>
@@ -164,8 +187,8 @@ export function BalanceGeneralView() {
 
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
               <CardTitle className="text-lg font-bold">Balance General</CardTitle>
               {date && (
                 <p className="text-xs text-muted-foreground mt-1">
@@ -188,7 +211,7 @@ export function BalanceGeneralView() {
           ) : !data ? (
             <div className="h-40 flex items-center justify-center text-muted-foreground">Seleccione una fecha para ver el reporte</div>
           ) : (
-            <ScrollArea className="max-h-[70vh]">
+            <div>
               {renderSection('ACTIVOS', data.assets, data.totalAssets, data.totalAssetsPrev, 'bg-blue-600')}
               <Separator className="my-4" />
               {renderSection('PASIVOS', data.liabilities, data.totalLiabilities, data.totalLiabilitiesPrev, 'bg-amber-600')}
@@ -206,7 +229,7 @@ export function BalanceGeneralView() {
                     </p>
                   </div>
                 </div>
-                <div className="mt-4 grid grid-cols-3 gap-4">
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                   <div className="bg-blue-500/10 rounded-lg p-3 text-center">
                     <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">Total Activos</p>
                     <p className="text-lg font-black text-blue-600">{fmt(totalActivos)}</p>
@@ -226,7 +249,7 @@ export function BalanceGeneralView() {
                   </p>
                 </div>
               </div>
-            </ScrollArea>
+            </div>
           )}
         </CardContent>
       </Card>

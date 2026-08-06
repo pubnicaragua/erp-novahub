@@ -7,7 +7,7 @@ import type {
 
 // ---- Customers ----
 export const customersService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<Customer>>('/sales/customers', filters as any),
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Customer>>('/sales/customers', { params: filters as any, signal }),
   getById: (id: string) => api.get<Customer>(`/sales/customers/${id}`),
   create: (data: Partial<Customer>) => api.post<Customer>('/sales/customers', data),
   importMassive: (data: { rows: Array<Partial<Customer> & { fiscalRegime?: string; customerClass?: string; priceListCode?: string }> }) => api.post<{ total: number; created: number; skipped: number; errors: string[]; warnings: string[] }>('/sales/customers/import', data),
@@ -21,7 +21,7 @@ export const auditService = {
 
 // ---- Estimates ----
 export const estimatesService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<Estimate>>('/sales/estimates', filters as any),
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Estimate>>('/sales/estimates', { params: filters as any, signal }),
   getById: (id: string) => api.get<Estimate>(`/sales/estimates/${id}`),
   create: (data: Partial<Estimate>) => api.post<Estimate>('/sales/estimates', data),
   update: (id: string, data: Partial<Estimate>) => api.patch<Estimate>(`/sales/estimates/${id}`, data),
@@ -31,7 +31,7 @@ export const estimatesService = {
 
 // ---- Sales Orders ----
 export const salesOrdersService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<SalesOrder>>('/sales/orders', filters as any),
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<SalesOrder>>('/sales/orders', { params: filters as any, signal }),
   getById: (id: string) => api.get<SalesOrder>(`/sales/orders/${id}`),
   create: (data: Partial<SalesOrder>, idempotencyKey?: string) => api.idempotentPost<SalesOrder>('/sales/orders', data, idempotencyKey),
   update: (id: string, data: Partial<SalesOrder>) => api.patch<SalesOrder>(`/sales/orders/${id}`, data),
@@ -43,7 +43,7 @@ export const salesOrdersService = {
 
 // ---- Invoices ----
 export const invoicesService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<Invoice>>('/sales/invoices', filters as any),
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Invoice>>('/sales/invoices', { params: filters as any, signal }),
   getById: (id: string) => api.get<Invoice>(`/sales/invoices/${id}`),
   create: (data: Partial<Invoice>, idempotencyKey?: string) => api.idempotentPost<Invoice>('/sales/invoices', data, idempotencyKey),
   update: (id: string, data: Partial<Invoice>) => api.patch<Invoice>(`/sales/invoices/${id}`, data),
@@ -55,7 +55,7 @@ export const invoicesService = {
 
 // ---- Recurring Invoices ----
 export const recurringInvoicesService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<RecurringInvoice>>('/sales/recurring-invoices', filters as any),
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<RecurringInvoice>>('/sales/recurring-invoices', { params: filters as any, signal }),
   getById: (id: string) => api.get<RecurringInvoice>(`/sales/recurring-invoices/${id}`),
   create: (data: Partial<RecurringInvoice>) => api.post<RecurringInvoice>('/sales/recurring-invoices', data),
   update: (id: string, data: Partial<RecurringInvoice>) => api.patch<RecurringInvoice>(`/sales/recurring-invoices/${id}`, data),
@@ -66,7 +66,7 @@ export const recurringInvoicesService = {
 
 // ---- Payments Received ----
 export const paymentsService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<PaymentReceived>>('/sales/payments', filters as any),
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PaymentReceived>>('/sales/payments', { params: filters as any, signal }),
   getById: (id: string) => api.get<PaymentReceived>(`/sales/payments/${id}`),
   create: (data: Partial<PaymentReceived>, idempotencyKey?: string) => api.idempotentPost<PaymentReceived>('/sales/payments', data, idempotencyKey),
   update: (id: string, data: Partial<PaymentReceived>) => api.patch<PaymentReceived>(`/sales/payments/${id}`, data),
@@ -78,7 +78,7 @@ export const paymentsService = {
 
 // ---- Sales Returns ----
 export const salesReturnsService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<SalesReturn>>('/sales/returns', filters as any),
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<SalesReturn>>('/sales/returns', { params: filters as any, signal }),
   getById: (id: string) => api.get<SalesReturn>(`/sales/returns/${id}`),
   create: (data: Partial<SalesReturn>, idempotencyKey?: string) => api.idempotentPost<SalesReturn>('/sales/returns', data, idempotencyKey),
   update: (id: string, data: Partial<SalesReturn>) => api.patch<SalesReturn>(`/sales/returns/${id}`, data),
@@ -89,7 +89,7 @@ export const salesReturnsService = {
 
 // ---- Credit Notes ----
 export const creditNotesService = {
-  getAll: (filters?: ApiFilters) => api.get<PaginatedResponse<CreditNote>>('/sales/credit-notes', filters as any),
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<CreditNote>>('/sales/credit-notes', { params: filters as any, signal }),
   getById: (id: string) => api.get<CreditNote>(`/sales/credit-notes/${id}`),
   create: (data: Partial<CreditNote>, idempotencyKey?: string) => api.idempotentPost<CreditNote>('/sales/credit-notes', data, idempotencyKey),
   update: (id: string, data: Partial<CreditNote>) => api.patch<CreditNote>(`/sales/credit-notes/${id}`, data),

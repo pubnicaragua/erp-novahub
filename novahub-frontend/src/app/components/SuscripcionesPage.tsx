@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
-import { Card, CardContent } from './ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -13,19 +13,26 @@ import { api } from '../services/api';
 import { TrialExtensionRequestsPanel } from './suscripciones/TrialExtensionRequestsPanel';
 import { NovaSuiteIcon } from './ui/NovaIcons';
 import { 
+  CheckCircle2, 
   Clock, 
+  XCircle, 
   Plus, 
   HandCoins, 
   ShieldCheck, 
   LayoutGrid, 
   Building2,
+  Lock,
   Zap,
   DollarSign,
   Search,
   Check,
   Globe,
+  Mail,
   User as UserIcon,
+  MessageSquare,
   TrendingUp,
+  Activity,
+  Award,
   Edit2,
   Eye,
   Trash2,
@@ -34,6 +41,7 @@ import {
   Settings,
   BarChart3,
   CalendarDays,
+  Briefcase,
   Package,
   Headphones,
   BellRing,
@@ -45,7 +53,7 @@ import {
   GraduationCap,
   LifeBuoy
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './ui/utils';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
@@ -67,7 +75,10 @@ import {
   type Submodule 
 } from '../types/modules';
 import { storageService } from '../services/storage.service';
+import { authService } from '../services/auth.service';
 import { TenantSubscriptionView } from './suscripciones/TenantSubscriptionView';
+import { getPasswordError, isValidEmail, normalizeEmail } from '../utils/accountValidation';
+import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 
 const AVAILABLE_MODULES = [
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes', submodules: SALES_SUBMODULES },
@@ -131,6 +142,8 @@ export function SuscripcionesPage() {
   const [passwordDialogUser, setPasswordDialogUser] = useState<any>(null);
   const [newPassword, setNewPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [tenantAdminEmailError, setTenantAdminEmailError] = useState('');
+  const [checkingTenantAdminEmail, setCheckingTenantAdminEmail] = useState(false);
   const [pendingDeleteTenant, setPendingDeleteTenant] = useState<{ id: string; name: string } | null>(null);
 
   // Form state for module request
@@ -147,35 +160,86 @@ export function SuscripcionesPage() {
     slug: '',
     adminName: '',
     adminEmail: '',
+    adminPassword: '',
     industry: 'TECHNOLOGY',
     plan: 'BASIC',
     logo: '',
     customPrice: ''
   });
 
+  useEffect(() => {
+    const email = normalizeEmail(tenantForm.adminEmail);
+    setTenantAdminEmailError('');
+    if (!email || !isValidEmail(email)) {
+      setCheckingTenantAdminEmail(false);
+      return;
+    }
+    const currentEmail = normalizeEmail(selectedTenant?.users?.[0]?.email || '');
+    if (selectedTenant && email === currentEmail) {
+      setCheckingTenantAdminEmail(false);
+      return;
+    }
+    const timer = window.setTimeout(async () => {
+      setCheckingTenantAdminEmail(true);
+      try {
+        const response: any = await authService.checkEmail(email);
+        const exists = response?.data?.exists ?? response?.exists;
+        setTenantAdminEmailError(exists ? 'Este correo ya está en uso. Escribe otro.' : '');
+      } catch {
+        setTenantAdminEmailError('No se pudo verificar el correo. Intenta nuevamente.');
+      } finally {
+        setCheckingTenantAdminEmail(false);
+      }
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [tenantForm.adminEmail, selectedTenant]);
+
+  const { data: subscriptionData, isLoading: subscriptionLoading, refetch: refetchSubscriptions } = useTenantQuery(
+    ['my-company', user?.tenantId || 'platform', user?.role || 'unknown'],
+    async (signal) => {
+      if (!user?.isPlatformAdmin && !user?.isTenantAdmin) return { requests: [], tenants: [], customRoles: [] };
+      if (user.isPlatformAdmin) {
+        const [reqs, allTenants, rolesRes] = await Promise.all([
+          user.role === 'partner' ? subscriptionsService.getPartnerRequests(undefined, signal) : subscriptionsService.getAllRequests(undefined, signal),
+          tenantsService.getAll(undefined, signal),
+          rolesService.getAll(undefined, signal),
+        ]);
+        return { requests: asList(reqs), tenants: asList(allTenants), customRoles: asList(rolesRes) };
+      }
+      const [reqs, myTenants, rolesRes] = await Promise.all([
+        subscriptionsService.getAllRequests({ clientTenantId: user.tenantId } as any, signal),
+        tenantsService.getAll(undefined, signal),
+        rolesService.getAll({ clientTenantId: user.tenantId }, signal),
+      ]);
+      return {
+        requests: asList(reqs).filter((request: any) => request.clientTenantId === user.tenantId),
+        tenants: asList(myTenants).filter((tenant: any) => tenant.id === user.tenantId),
+        customRoles: asList(rolesRes),
+      };
+    },
+    {
+      enabled: Boolean(user && (user.isPlatformAdmin || user.isTenantAdmin)),
+      refetchInterval: user?.isPlatformAdmin ? 5000 : false,
+      onError: (error) => toast.error(error.message || 'Error al cargar datos de Mi Empresa'),
+    },
+  );
+
+  useEffect(() => {
+    setLoading(subscriptionLoading);
+    if (!subscriptionData) return;
+    setRequests(subscriptionData.requests as SubscriptionRequest[]);
+    setTenants(subscriptionData.tenants);
+    setCustomRoles(subscriptionData.customRoles);
+  }, [subscriptionData, subscriptionLoading]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      if (user?.isPlatformAdmin) {
-        const [reqs, allTenants, rolesRes] = await Promise.all([
-          user.role === 'partner' ? subscriptionsService.getPartnerRequests() : subscriptionsService.getAllRequests(),
-          tenantsService.getAll(),
-          rolesService.getAll()
-        ]);
-        setRequests(reqs);
-        setTenants(allTenants);
-        setCustomRoles(Array.isArray((rolesRes as any)?.data) ? (rolesRes as any).data : []);
-      } else if (user?.isTenantAdmin) {
-        const [reqs, myTenants, rolesRes] = await Promise.all([
-          subscriptionsService.getAllRequests({ clientTenantId: user.tenantId } as any),
-          tenantsService.getAll(),
-          rolesService.getAll({ clientTenantId: user.tenantId })
-        ]);
-        const filteredRequests = (Array.isArray(reqs) ? reqs : []).filter((r: any) => r.clientTenantId === user.tenantId);
-        const filteredTenants = (Array.isArray(myTenants) ? myTenants : []).filter((t: any) => t.id === user.tenantId);
-        setRequests(filteredRequests);
-        setTenants(filteredTenants);
-        setCustomRoles(Array.isArray(rolesRes) ? rolesRes : (rolesRes as any)?.data || []);
+      const refreshed = await refetchSubscriptions();
+      if (refreshed.data) {
+        setRequests(refreshed.data.requests as SubscriptionRequest[]);
+        setTenants(refreshed.data.tenants);
+        setCustomRoles(refreshed.data.customRoles);
       }
     } catch (error) {
       console.error('Error fetching subscription data:', error);
@@ -184,19 +248,6 @@ export function SuscripcionesPage() {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (user && (user.isPlatformAdmin || user.isTenantAdmin)) {
-      Promise.resolve().then(fetchData);
-      // Actualización automática cada 5 segundos SOLO para platform admins
-      if (user.isPlatformAdmin) {
-        const interval = setInterval(() => {
-          fetchData();
-        }, 5000);
-        return () => clearInterval(interval);
-      }
-    }
-  }, [user]);
 
   const inferSystemRoleFromCustomRole = (role: any): 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER' => {
     const perms = Array.isArray(role?.permissions) ? role.permissions : [];
@@ -232,6 +283,11 @@ export function SuscripcionesPage() {
   };
 
   const handleCreateTenant = async () => {
+    const passwordError = getPasswordError(tenantForm.adminPassword);
+    if (!tenantForm.name.trim() || !tenantForm.adminName.trim() || !isValidEmail(tenantForm.adminEmail) || tenantAdminEmailError || checkingTenantAdminEmail || passwordError) {
+      toast.error(tenantAdminEmailError || passwordError || 'Completa los datos del administrador con un correo disponible');
+      return;
+    }
     try {
       setUploading(true);
       let logoUrl = tenantForm.logo || null;
@@ -240,7 +296,7 @@ export function SuscripcionesPage() {
         logoUrl = await storageService.uploadTenantLogo(logoFile, tenantForm.slug || 'temp');
       }
       
-      await tenantsService.create({ ...tenantForm, logo: logoUrl || undefined });
+      await tenantsService.create({ ...tenantForm, adminEmail: normalizeEmail(tenantForm.adminEmail), logo: logoUrl || undefined });
       toast.success('Empresa creada exitosamente');
       setIsTenantDialogOpen(false);
       resetTenantForm();
@@ -256,6 +312,10 @@ export function SuscripcionesPage() {
 
   const handleUpdateTenant = async () => {
     if (!selectedTenant) return;
+    if (!isValidEmail(tenantForm.adminEmail) || tenantAdminEmailError || checkingTenantAdminEmail) {
+      toast.error(tenantAdminEmailError || 'Escribe un correo válido y disponible para el administrador');
+      return;
+    }
     try {
       setUploading(true);
       let logoUrl = tenantForm.logo;
@@ -264,7 +324,7 @@ export function SuscripcionesPage() {
         logoUrl = await storageService.uploadTenantLogo(logoFile, selectedTenant.id);
       }
       
-      await tenantsService.update(selectedTenant.id, { ...tenantForm, logo: logoUrl });
+      await tenantsService.update(selectedTenant.id, { ...tenantForm, adminEmail: normalizeEmail(tenantForm.adminEmail), logo: logoUrl });
       toast.success('Información actualizada correctamente');
       setIsTenantDialogOpen(false);
       setSelectedTenant(null);
@@ -293,6 +353,7 @@ export function SuscripcionesPage() {
       slug: '',
       adminName: '',
       adminEmail: '',
+      adminPassword: '',
       industry: 'TECHNOLOGY',
       plan: 'BASIC',
       logo: '',
@@ -309,6 +370,7 @@ export function SuscripcionesPage() {
       slug: tenant.slug,
       adminName: tenant.users?.[0]?.name || '',
       adminEmail: tenant.users?.[0]?.email || '',
+      adminPassword: '',
       industry: tenant.industry,
       plan: tenant.plan,
       logo: tenant.logo || '',
@@ -433,8 +495,9 @@ export function SuscripcionesPage() {
   };
 
   const handleChangePassword = async () => {
-    if (!newPassword || newPassword.length < 6) {
-      toast.error('La contraseña debe tener al menos 6 caracteres');
+    const passwordError = getPasswordError(newPassword);
+    if (passwordError) {
+      toast.error(passwordError);
       return;
     }
     try {
@@ -622,11 +685,28 @@ export function SuscripcionesPage() {
                     />
                     <Input 
                       placeholder="correo@empresa.com" 
-                      className="bg-muted/10 border-border/50 h-11 rounded-xl"
+                      className={cn("bg-muted/10 border-border/50 h-11 rounded-xl", tenantAdminEmailError && 'border-destructive')}
                       value={tenantForm.adminEmail}
-                      onChange={e => setTenantForm({...tenantForm, adminEmail: e.target.value})}
+                      onChange={e => {
+                        setTenantForm({...tenantForm, adminEmail: e.target.value});
+                        setTenantAdminEmailError('');
+                      }}
                     />
                   </div>
+                  {!selectedTenant && (
+                    <div className="col-span-2 space-y-2">
+                      <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Contraseña inicial</Label>
+                      <Input
+                        type="password"
+                        placeholder="8 caracteres, mayúscula, número y símbolo"
+                        className={cn("bg-muted/10 border-border/50 h-11 rounded-xl", getPasswordError(tenantForm.adminPassword) && 'border-destructive')}
+                        value={tenantForm.adminPassword}
+                        onChange={e => setTenantForm({...tenantForm, adminPassword: e.target.value})}
+                      />
+                      {getPasswordError(tenantForm.adminPassword) && <p className="text-xs text-destructive">{getPasswordError(tenantForm.adminPassword)}</p>}
+                    </div>
+                  )}
+                  {tenantAdminEmailError && <p className="col-span-2 text-xs text-destructive">{tenantAdminEmailError}</p>}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -697,7 +777,7 @@ export function SuscripcionesPage() {
               </div>
               <DialogFooter className="gap-3">
                 <Button variant="outline" className="border-border/50 rounded-xl h-11" onClick={() => { setIsTenantDialogOpen(false); setSelectedTenant(null); resetTenantForm(); }}>Cancelar</Button>
-                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-11 px-8 font-bold" onClick={selectedTenant ? handleUpdateTenant : handleCreateTenant}>
+                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-11 px-8 font-bold" onClick={selectedTenant ? handleUpdateTenant : handleCreateTenant} disabled={uploading || checkingTenantAdminEmail || !!tenantAdminEmailError || !isValidEmail(tenantForm.adminEmail) || (!selectedTenant && !!getPasswordError(tenantForm.adminPassword))}>
                   {selectedTenant ? 'Guardar Cambios' : 'Crear Entidad'}
                 </Button>
               </DialogFooter>
@@ -1114,15 +1194,16 @@ export function SuscripcionesPage() {
             <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Nueva Contraseña</Label>
             <Input 
               type="password" 
-              placeholder="Min. 6 caracteres" 
+              placeholder="8 caracteres, mayúscula, número y símbolo" 
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="bg-muted/10 border-border/50 h-11 rounded-xl"
+              className={cn("bg-muted/10 border-border/50 h-11 rounded-xl", getPasswordError(newPassword) && 'border-destructive')}
             />
+            {getPasswordError(newPassword) && <p className="text-xs text-destructive">{getPasswordError(newPassword)}</p>}
           </div>
           <DialogFooter className="gap-3">
             <Button variant="outline" className="border-border/50 rounded-xl h-11" onClick={() => setPasswordDialogUser(null)} disabled={isChangingPassword}>Cancelar</Button>
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-11 px-8 font-bold" onClick={handleChangePassword} disabled={isChangingPassword || newPassword.length < 6}>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-11 px-8 font-bold" onClick={handleChangePassword} disabled={isChangingPassword || !!getPasswordError(newPassword)}>
               {isChangingPassword ? 'Guardando...' : 'Guardar Contraseña'}
             </Button>
           </DialogFooter>
@@ -1207,7 +1288,7 @@ export function SuscripcionesPage() {
                   {tenantDetails.subscriptions?.filter((s: any) => s.isActive).length > 0 ? (
                     tenantDetails.subscriptions.filter((s: any) => s.isActive).map((sub: any) => {
                       // Buscar en módulos principales
-                      const mod = AVAILABLE_MODULES.find(m => m.id === sub.module);
+                      let mod = AVAILABLE_MODULES.find(m => m.id === sub.module);
                       let label = mod?.label;
                       // Si no está, buscar en submódulos
                       if (!mod) {

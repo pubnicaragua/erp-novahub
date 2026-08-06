@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2, Banknote, Loader2, Users, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -88,7 +88,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [cajasLoading, setCajasLoading] = useState(false);
   const [isCajaFormOpen, setIsCajaFormOpen] = useState(false);
   const [cajaForm, setCajaForm] = useState<Partial<CashRegister>>({});
-  const [pendingDeleteCajaId, setPendingDeleteCajaId] = useState<string | null>(null);
   const [sucursalesList, setSucursalesList] = useState<any[]>([]);
 
   const fetchSucursales = async () => {
@@ -150,9 +149,29 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   };
 
   React.useEffect(() => {
-    Promise.resolve().then(fetchCajas);
-    Promise.resolve().then(fetchSucursales);
-    contabilidadService.getChartOfAccounts().then(res => setAccounts(res.data || [])).catch(() => {});
+    const controller = new AbortController();
+    const loadCatalogs = async () => {
+      try {
+        setCajasLoading(true);
+        const [cajas, sucursales, chart] = await Promise.all([
+          cajaService.getRegisters(true, controller.signal),
+          api.get('/sucursales', { signal: controller.signal }),
+          contabilidadService.getChartOfAccounts(false, controller.signal),
+        ]);
+        setCajasList(Array.isArray(cajas) ? cajas : []);
+        const branches: any = sucursales;
+        setSucursalesList(Array.isArray(branches) ? branches : (branches?.data || []));
+        setAccounts((chart as any)?.data || chart || []);
+      } catch (error: any) {
+        if (error?.code !== 'ERR_CANCELED' && error?.name !== 'CanceledError') {
+          toast.error(getApiErrorMessage(error, 'Error al cargar catálogos de almacenes'));
+        }
+      } finally {
+        if (!controller.signal.aborted) setCajasLoading(false);
+      }
+    };
+    void loadCatalogs();
+    return () => controller.abort();
   }, []);
 
   const handleAddNewRow = () => {
@@ -173,7 +192,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     if (!context) return;
 
     cameFromSetupRef.current = true;
-    Promise.resolve().then(() => setShowTutorial(context.tourActive));
+    setShowTutorial(context.tourActive);
     window.setTimeout(() => {
       if (context.action === 'open-warehouse-form') {
         handleAddNewRow();
@@ -388,24 +407,75 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     );
   };
 
+  const renderMobileWarehouseCard = (warehouse: any | EditingWarehouse) => {
+    const draft = editingRows.get(warehouse.id);
+    if (draft) {
+      const isSaving = savingIds.has(draft.id);
+      return (
+        <Card key={draft.id} className="rounded-2xl border-primary/30 bg-primary/5 p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-primary">{draft.isNew ? 'Nuevo almacén' : 'Editar almacén'}</p>
+            <div className="flex items-center gap-1">
+              <Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={() => handleSaveRow(draft.id)} disabled={isSaving} aria-label="Guardar almacén">
+                {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+              </Button>
+              <Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => handleCancelEdit(draft.id)} disabled={isSaving} aria-label="Cancelar edición"><X className="size-4" /></Button>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1 sm:col-span-2"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Nombre</p><Input value={draft.name} onChange={(e) => handleUpdateField(draft.id, 'name', e.target.value)} placeholder="Nombre del almacén" disabled={isSaving} autoFocus={draft.isNew} /></div>
+            <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ubicación</p><Input value={draft.location} onChange={(e) => handleUpdateField(draft.id, 'location', e.target.value)} placeholder="Ubicación" disabled={isSaving} /></div>
+            <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tipo</p><Select value={draft.type} onValueChange={(value) => handleUpdateField(draft.id, 'type', value)} disabled={isSaving}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{WAREHOUSE_TYPES.map((type) => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Almacén matriz</p><Select value={draft.parentId || 'none'} onValueChange={(value) => handleUpdateField(draft.id, 'parentId', value === 'none' ? null : value)} disabled={isSaving}><SelectTrigger><SelectValue placeholder="Sin padre" /></SelectTrigger><SelectContent><SelectItem value="none">Sin padre</SelectItem>{warehouses.filter((item) => item.id !== draft.id).map((item: any) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta contable</p><Select value={draft.inventoryAccountId || 'none'} onValueChange={(value) => handleUpdateField(draft.id, 'inventoryAccountId', value === 'none' ? null : value)} disabled={isSaving}><SelectTrigger><SelectValue placeholder="Sin cuenta" /></SelectTrigger><SelectContent><SelectItem value="none">Sin cuenta</SelectItem>{accounts.map((account: any) => <SelectItem key={account.id} value={account.id}>{account.code} - {account.name}</SelectItem>)}</SelectContent></Select></div>
+          </div>
+        </Card>
+      );
+    }
+
+    const stockCount = getStockCount(warehouse);
+    const assignedSucursales = sucursalesList.filter((branch) => branch.warehouseId === warehouse.id);
+    return (
+      <Card key={warehouse.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm" onDoubleClick={() => handleEditRow(warehouse)}>
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Warehouse className="size-5" /></div>
+            <div className="min-w-0"><p className="truncate font-bold">{warehouse.name}</p><p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" />{warehouse.location || 'Sin ubicación'}</p></div>
+          </div>
+          <Badge variant="outline" className="shrink-0 text-[9px]">{WAREHOUSE_TYPES.find((type) => type.value === warehouse.type)?.label || warehouse.type}</Badge>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-4">
+          <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Matriz</p><p className="truncate font-medium">{warehouse.parent?.name || '—'}</p></div>
+          <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cuenta</p><p className="truncate font-medium">{warehouse.inventoryAccount?.code || 'Sin asignar'}</p></div>
+          <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Sucursales</p><p className="font-bold tabular-nums">{assignedSucursales.length}</p></div>
+          <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Stock</p><p className="font-bold tabular-nums">{stockCount}</p></div>
+        </div>
+        <div className="mt-3 flex justify-end gap-1 border-t border-border/40 pt-3">
+          <Button type="button" variant="ghost" size="icon" className="size-9" onClick={() => handleEditRow(warehouse)} aria-label={`Editar ${warehouse.name}`}><Edit2 className="size-4" /></Button>
+          <Button type="button" variant="ghost" size="icon" className="size-9 text-destructive hover:bg-destructive/10" onClick={() => handleDeleteWarehouse(warehouse.id)} aria-label={`Eliminar ${warehouse.name}`}><Trash2 className="size-4" /></Button>
+        </div>
+      </Card>
+    );
+  };
+
   return (
     <>
       <Card className="p-4 border bg-card rounded-xl">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex min-w-0 flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="font-black text-lg uppercase tracking-tight italic" data-tour="almacenes-title">Almacenes y Sucursales</h3>
           <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
             {warehouses.length} ubicaciones · {warehouses.filter((w: any) => String(w.type || '').toUpperCase() === 'STORE').length} sucursales
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="mr-1">
+        <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+          <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="order-1 h-10 min-w-0 w-full rounded-xl px-3 sm:order-none sm:w-auto">
             <CircleHelp className="size-3.5 mr-1" /> Tutorial
           </Button>
           <Button 
             variant="outline" 
             size="sm" 
-            className="h-10 gap-2 font-black text-xs uppercase tracking-widest text-primary hover:bg-primary hover:text-primary-foreground border-primary/20 rounded-xl"
+            className="order-3 col-span-2 h-10 min-w-0 w-full gap-2 whitespace-nowrap border-primary/20 px-3 text-xs font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-primary-foreground sm:order-none sm:col-span-1 sm:w-auto"
             onClick={() => {
               setIsManageSucursalesDialogOpen(true);
             }}
@@ -415,7 +485,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           </Button>
           <Button 
             size="sm" 
-            className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all gap-2 font-black text-xs uppercase tracking-widest h-10 px-6" 
+            className="order-2 h-10 min-w-0 w-full rounded-xl bg-gradient-to-br from-primary to-primary/80 px-3 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl sm:order-none sm:w-auto" 
             onClick={handleAddNewRow}
             data-tour="almacenes-add-btn"
           >
@@ -425,7 +495,13 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         </div>
       </div>
 
-      <div className="rounded-lg border overflow-hidden" data-tour="almacenes-table">
+      <div className="space-y-3 lg:hidden" data-tour="almacenes-table">
+        {Array.from(editingRows.values()).filter((warehouse) => warehouse.isNew).map(renderMobileWarehouseCard)}
+        {warehouses.map(renderMobileWarehouseCard)}
+        {warehouses.length === 0 && editingRows.size === 0 && <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Warehouse className="mx-auto mb-2 size-9 opacity-20" /><p>No hay almacenes</p></Card>}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="almacenes-table">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
@@ -541,26 +617,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         loading={deleteLoading}
         onConfirm={handleConfirmDeleteWarehouse}
       />
-      <ConfirmDialog
-        open={pendingDeleteCajaId !== null}
-        onOpenChange={(open) => !open && setPendingDeleteCajaId(null)}
-        title="¿Eliminar caja?"
-        description="¿Estás seguro de que deseas eliminar esta caja registradora? Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
-        variant="destructive"
-        onConfirm={async () => {
-          if (!pendingDeleteCajaId) return;
-          try {
-            await cajaService.deleteRegister(pendingDeleteCajaId);
-            toast.success('Caja eliminada');
-            fetchCajas();
-          } catch (e: any) {
-            toast.error(getApiErrorMessage(e, 'Error al eliminar la caja'));
-          } finally {
-            setPendingDeleteCajaId(null);
-          }
-        }}
-      />
       {showTutorial && <GuidedTour steps={ALMACEN_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Almacenes y Sucursales" allowTargetInteraction />}
     </Card>
     {/* Modal de Gestión de Cajas */}
@@ -620,9 +676,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                             setIsCajaFormOpen(true);
                           }}>
                             <Edit2 className="size-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setPendingDeleteCajaId(caja.id!)}>
-                            <Trash2 className="size-4" />
                           </Button>
                         </div>
                       </td>

@@ -10,6 +10,7 @@ interface RequestOptions {
   body?: unknown;
   params?: Record<string, string | number | boolean | undefined>;
   headers?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
 const idempotentInFlight = new Map<string, Promise<unknown>>();
@@ -149,7 +150,7 @@ function extractServerMessages(errorBody: ApiErrorBody | null) {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, params, headers = {} } = options;
+  const { method = 'GET', body, params, headers = {}, signal } = options;
   const context = describeRequest(path, method);
 
   let response: Response;
@@ -161,6 +162,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         ...headers,
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal,
   };
   try {
     response = await fetch(buildUrl(path, params), requestInit);
@@ -220,9 +222,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 }
 
 export const api = {
-  get: <T>(path: string, options?: Record<string, any> | { params?: Record<string, any> }) => {
-    const params = options?.params ?? options;
-    return apiRequest<T>(path, { method: 'GET', params });
+  get: <T>(path: string, options?: Record<string, any> | { params?: Record<string, any>; signal?: AbortSignal }) => {
+    // Cuando se usa la forma { params, signal }, no confundas el objeto de
+    // opciones con los query params si `params` viene vacío/undefined. Antes
+    // eso podía serializar AbortSignal como `?signal=[object Object]`.
+    const isRequestOptions = Boolean(options && ('params' in options || 'signal' in options));
+    const params = isRequestOptions ? (options as any)?.params : options;
+    const signal = isRequestOptions ? (options as any)?.signal : undefined;
+    return apiRequest<T>(path, { method: 'GET', params, signal });
   },
 
   post: <T>(path: string, body: unknown) =>

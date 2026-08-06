@@ -107,12 +107,12 @@ const normalizeMessageThreads = (response: unknown): Message[] => {
 };
 
 const createCrudService = <T>(endpoint: string) => ({
-  getAll: async () => {
-    const data = await api.get(endpoint) as T[];
+  getAll: async (signal?: AbortSignal) => {
+    const data = await api.get(endpoint, { signal }) as T[];
     return data;
   },
-  getById: async (id: string) => {
-    const data = await api.get(`${endpoint}/${id}`) as T;
+  getById: async (id: string, signal?: AbortSignal) => {
+    const data = await api.get(`${endpoint}/${id}`, { signal }) as T;
     return data;
   },
   create: async (payload: Partial<T>) => {
@@ -131,8 +131,8 @@ const createCrudService = <T>(endpoint: string) => ({
 
 export const alertsService = createCrudService<any>('/notifications/alerts');
 export const messagesService = {
-  getAll: async () => normalizeMessageThreads(await api.get<unknown>('/notifications/messages')),
-  getRecipients: () => api.get<MessageParticipant[]>('/notifications/messages/recipients'),
+  getAll: async (signal?: AbortSignal) => normalizeMessageThreads(await api.get<unknown>('/notifications/messages', { signal })),
+  getRecipients: (signal?: AbortSignal) => api.get<MessageParticipant[]>('/notifications/messages/recipients', { signal }),
   create: (payload: { recipientId: string; title: string; content: string }) =>
     api.post<Message>('/notifications/messages', payload),
   reply: (threadId: string, content: string) =>

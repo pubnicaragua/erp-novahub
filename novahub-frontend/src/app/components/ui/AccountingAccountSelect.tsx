@@ -13,6 +13,14 @@ type AccountingAccountSelectProps = {
   disabled?: boolean;
 };
 
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  ASSET: 'Activo',
+  LIABILITY: 'Pasivo',
+  EQUITY: 'Capital',
+  INCOME: 'Ingreso',
+  EXPENSE: 'Gasto',
+};
+
 export function AccountingAccountSelect({
   value,
   onChange,
@@ -32,9 +40,9 @@ export function AccountingAccountSelect({
       if (!active) return;
       const normalized = Array.isArray(items) ? items : [];
       setAccounts(normalized.filter((account) => {
-        if (!account.isActive || account.acceptsPostings === false || account.allowManualEntry === false) return false;
-        if (assetOnly) return String(account.type || '').toUpperCase() === 'ASSET';
-        if (incomeOnly) return String(account.type || '').toUpperCase() === 'INCOME';
+        const type = String(account.type || '').toUpperCase();
+        if (assetOnly) return type === 'ASSET';
+        if (incomeOnly) return type === 'INCOME';
         return true;
       }));
     }).catch(() => { if (active) setAccounts([]); });
@@ -51,11 +59,20 @@ export function AccountingAccountSelect({
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
-          {accounts.map((account) => (
-            <SelectItem key={account.id} value={account.id}>
-              {account.code} · {account.name}
-            </SelectItem>
-          ))}
+          {accounts.map((account) => {
+            const type = String(account.type || '').toUpperCase();
+            const isUsable = account.isActive !== false
+              && account.acceptsPostings !== false
+              && account.allowManualEntry !== false;
+            const statusLabel = account.isActive === false ? 'Inactiva' : 'Activa';
+            const usabilityLabel = isUsable ? '' : ' · No acepta registros';
+
+            return (
+              <SelectItem key={account.id} value={account.id} disabled={!isUsable}>
+                {account.code} · {account.name} · {ACCOUNT_TYPE_LABELS[type] || type || 'Sin tipo'} · {statusLabel}{usabilityLabel}
+              </SelectItem>
+            );
+          })}
         </SelectContent>
       </Select>
     </div>

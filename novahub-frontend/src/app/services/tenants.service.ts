@@ -9,10 +9,11 @@ export interface CreateTenantDto {
   adminUser?: {
     name: string;
     email: string;
-    password?: string;
+    password: string;
   };
   adminEmail?: string;
   adminName?: string;
+  adminPassword: string;
 }
 
 export interface TenantUser {
@@ -21,7 +22,11 @@ export interface TenantUser {
   email: string;
   role: string;
   customRoleId?: string | null;
-  customRole?: { id: string; name: string; allowedModules: string[] } | null;
+  customRole?: { id: string; name: string; permissions?: any; allowedModules: string[] } | null;
+  departments?: Array<{ id: string; code?: string; name: string; isPrimary?: boolean }>;
+  departmentMemberships?: Array<{ id: string; isPrimary: boolean; department: { id: string; name: string } }>;
+  employeeDepartmentMemberships?: Array<{ isPrimary: boolean; department: { id: string; name: string } }>;
+  employee?: { id: string; employeeNumber: string; firstName: string; lastName: string; isSeller: boolean; employmentStatus: string } | null;
   isActive: boolean;
   avatar?: string | null;
   lastLoginAt?: string | null;
@@ -29,19 +34,19 @@ export interface TenantUser {
 }
 
 export const tenantsService = {
-  getAll: () => api.get<any[]>('/tenants'),
-  getOne: (id: string) => api.get<any>(`/tenants/${id}`),
+  getAll: (filters?: Record<string, any>, signal?: AbortSignal) => api.get<any[]>('/tenants', { params: filters, signal }),
+  getOne: (id: string, signal?: AbortSignal) => api.get<any>(`/tenants/${id}`, { signal }),
   create: (data: CreateTenantDto) => api.post<any>('/tenants', data),
   update: (id: string, data: any) => api.patch<any>(`/tenants/${id}`, data),
   delete: (id: string) => api.delete(`/tenants/${id}`),
   
   // User management within a tenant
-  getUsers: async (tenantId: string) => {
+  getUsers: async (tenantId: string, signal?: AbortSignal) => {
     try {
-      return await api.get<TenantUser[]>(`/tenants/${tenantId}/users`);
+      return await api.get<TenantUser[]>(`/tenants/${tenantId}/users`, { signal });
     } catch (primaryError) {
       try {
-        return await api.get<TenantUser[]>('/tenant/users', { tenantId });
+        return await api.get<TenantUser[]>('/tenant/users', { params: { tenantId }, signal });
       } catch {
         throw primaryError;
       }
@@ -51,7 +56,7 @@ export const tenantsService = {
     clientTenantId: string; 
     name: string; 
     email: string; 
-    password?: string;
+    password: string;
     role?: string;
     avatar?: string | null;
   }) => api.post(`/tenants/${data.clientTenantId}/users`, data),
@@ -63,6 +68,12 @@ export const tenantsService = {
     isActive?: boolean;
     password?: string;
   }) => api.patch(`/tenants/${tenantId}/users/${userId}`, data),
+  updateUserDepartments: (tenantId: string, userId: string, departmentIds: string[], primaryDepartmentId?: string | null) =>
+    api.put(`/tenants/${tenantId}/users/${userId}/departments`, { departmentIds, primaryDepartmentId }),
+  linkUserToEmployee: (tenantId: string, userId: string, employeeId: string) =>
+    api.put(`/tenants/${tenantId}/users/${userId}/employee/${employeeId}`),
+  unlinkUserFromEmployee: (tenantId: string, userId: string) =>
+    api.delete(`/tenants/${tenantId}/users/${userId}/employee`),
   deleteUser: (tenantId: string, userId: string) => api.delete(`/tenants/${tenantId}/users/${userId}`),
 
   getUserAccess: (tenantId: string, userId: string) =>

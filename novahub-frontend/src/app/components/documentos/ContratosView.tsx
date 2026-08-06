@@ -12,6 +12,7 @@ import { cn } from '../ui/utils';
 import { format } from 'date-fns';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 interface ContratosViewProps {
   data: Contract[];
@@ -20,9 +21,8 @@ interface ContratosViewProps {
 }
 
 export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onRefresh }) => {
-  const { baseCurrency, displayCurrency, exchangeRate, convertAmount, formatConvertedAmount } = useCurrency();
+  const { baseCurrency, displayCurrency, exchangeRate, formatConvertedAmount, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
-  const [nowMs] = useState(() => Date.now());
   const { canPerform } = useAuth();
 
   const statusOpts = [
@@ -35,7 +35,7 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onR
   const columns: ColumnDef<Contract>[] = [
     { key: 'number', header: 'No.', width: '100px', editable: canPerform('DOCUMENTS_CONTRACTS', 'edit') },
     { key: 'title', header: 'Título', width: '30%', editable: canPerform('DOCUMENTS_CONTRACTS', 'edit') },
-    { key: 'value', header: 'Valor', width: '120px', editable: canPerform('DOCUMENTS_CONTRACTS', 'edit'), type: 'number', render: (val: any, row: Contract) => val ? formatConvertedAmount(Number(val), row.currency || baseCurrency, row.exchangeRate) : '-' },
+    { key: 'value', header: 'Valor', width: '120px', editable: canPerform('DOCUMENTS_CONTRACTS', 'edit'), type: 'number', render: (val: any, row: Contract) => val ? <CurrencyValuationAmount amount={Number(val)} sourceCurrency={row.currency || baseCurrency} sourceExchangeRate={row.exchangeRate} className="font-bold" /> : '-' },
     { key: 'endDate', header: 'Vencimiento', width: '140px', editable: canPerform('DOCUMENTS_CONTRACTS', 'edit'), type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, yyyy') : '-' },
     { key: 'status', header: 'Estado', width: '120px', editable: canPerform('DOCUMENTS_CONTRACTS', 'edit'), type: 'select', options: statusOpts,
       render: (val: any) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
@@ -54,15 +54,17 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onR
   };
 
   const totalValue = data.reduce(
-    (sum, contract) => sum + convertAmount(Number(contract.value || 0), contract.currency || baseCurrency, contract.exchangeRate),
+    (sum, contract) => sum + (valuationMode === 'CURRENT'
+      ? convertCurrentAmount(Number(contract.value || 0), contract.currency || baseCurrency)
+      : convertAmount(Number(contract.value || 0), contract.currency || baseCurrency, contract.exchangeRate)),
     0,
   );
 
   const kpis = [
     { title: 'Total Contratos', value: data.length,                                                                    icon: Scale,         color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Activos',         value: data.filter(c => (c.status||'').toUpperCase() === 'ACTIVE').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Por Vencer',      value: data.filter(c => c.endDate && new Date(c.endDate) < new Date(nowMs + 30*86400000) && (c.status||'').toUpperCase() === 'ACTIVE').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { title: `Valor Total (${displayCurrency})`, value: formatConvertedAmount(totalValue, displayCurrency), icon: AlertTriangle, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    { title: 'Por Vencer',      value: data.filter(c => c.endDate && new Date(c.endDate) < new Date(Date.now() + 30*86400000) && (c.status||'').toUpperCase() === 'ACTIVE').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { title: `Valor Total (${displayCurrency}${valuationModeSuffix})`, value: formatConvertedAmount(totalValue, displayCurrency), icon: AlertTriangle, color: 'text-purple-500', bg: 'bg-purple-500/10' },
   ];
 
   const filtered = data.filter(c => c.title?.toLowerCase().includes(searchTerm.toLowerCase()) || c.number?.toLowerCase().includes(searchTerm.toLowerCase()));

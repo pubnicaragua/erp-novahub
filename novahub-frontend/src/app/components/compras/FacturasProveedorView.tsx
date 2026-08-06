@@ -9,10 +9,10 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { billsService, suppliersService, purchaseOrdersService, paymentsService, expensesService, purchaseReceiptsService } from '../../services/compras.service';
-import { contabilidadService } from '../../services/contabilidad.service';
+import { billsService, purchaseOrdersService, paymentsService, expensesService } from '../../services/compras.service';
 import { TaxDetail } from '../ui/TaxSelector';
 import type { SupplierInvoice, Supplier } from '../../types';
+import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -21,6 +21,8 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateSupplierInvoicePDF } from '../../utils/pdfGenerator';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
+import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 
 interface Props {
   data: SupplierInvoice[];
@@ -29,6 +31,12 @@ interface Props {
   draftInvoiceFromOrder?: any;
   onDraftConsumed?: () => void;
   onRegisterPaymentFromInvoice?: (draft: any) => void;
+  supplierCatalog?: Supplier[];
+  accountCatalog?: any[];
+  purchaseReceiptCatalog?: any[];
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
+  onStatusChange?: (value: string) => void;
 }
 
 const statusOpts = [
@@ -39,9 +47,22 @@ const statusOpts = [
   { label: 'Reembolsada', value: 'REFUNDED', color: 'bg-muted/30 text-muted-foreground/50' },
 ];
 
-export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice }: Props) {
+export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], accountCatalog = [], purchaseReceiptCatalog = [], pagination, onSearchChange, onStatusChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const {
+    exchangeRate: globalRate,
+    displayCurrency,
+    baseCurrency,
+    valuationMode,
+    valuationModeLabel,
+    valuationModeSuffix,
+    showValuationLegend,
+    formatConvertedAmount,
+    formatHistoricalAmount,
+    formatCurrentAmount,
+    convertAmount,
+    convertCurrentAmount,
+  } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
@@ -61,19 +82,10 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const generateSupplierInvoiceNumber = () => `INV-${Date.now().toString().slice(-6)}`;
 
   useEffect(() => {
-    suppliersService.getAll().then(res => {
-      const list = Array.isArray(res) ? res : (res as any).data || [];
-      setSuppliers(list);
-    }).catch();
-    contabilidadService.getChartOfAccounts().then((res: any) => {
-      const list = Array.isArray(res) ? res : (res as any)?.data || [];
-      setAccounts(Array.isArray(list) ? list : []);
-    }).catch();
-    purchaseReceiptsService.getAll().then((res: any) => {
-      const list = Array.isArray(res) ? res : (res as any)?.data || [];
-      setReceipts(Array.isArray(list) ? list : []);
-    }).catch();
-  }, []);
+    setSuppliers(supplierCatalog);
+    setAccounts(accountCatalog);
+    setReceipts(purchaseReceiptCatalog);
+  }, [supplierCatalog, accountCatalog, purchaseReceiptCatalog]);
 
   useEffect(() => {
     if (draftInvoiceFromOrder) {
@@ -256,8 +268,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     const supplier = suppliers.find((s) => s.id === invoice.supplierId);
     const syncReference = `AUTO-INV-${invoice.id}`;
     const [paymentsResponse, expensesResponse] = await Promise.all([
-      paymentsService.getAll().catch(() => ({ data: [] as any[] })),
-      expensesService.getAll().catch(() => ({ data: [] as any[] })),
+      paymentsService.getAll({ supplierInvoiceId: invoice.id, page: 1, pageSize: 200 }).catch(() => ({ data: [] as any[] })),
+      expensesService.getAll({ search: syncReference, page: 1, pageSize: 50 }).catch(() => ({ data: [] as any[] })),
     ]);
     const existingPayments = (paymentsResponse as any)?.data || [];
     const existingExpenses = (expensesResponse as any)?.data || [];
@@ -306,12 +318,30 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     { key: 'dueDate',  header: 'Vencimiento', width: '110px',
       render: (val) => { const isLate = new Date(val).getTime() < Date.now(); return <span className={cn("text-xs", isLate && "text-rose-500 font-bold")}>{val ? new Date(val).toLocaleDateString() : '-'}</span>; } },
     { key: 'total',    header: 'Total',       width: '130px',
-      render: (val, row) => (
-        <span className="font-black tabular-nums text-rose-500">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-
-        </span>
-      ) },
+      render: (val, row) => {
+        const amount = Number(val || 0);
+        const sourceCurrency = String(row.currency || baseCurrency).toUpperCase();
+        const difference = sourceCurrency === baseCurrency || sourceCurrency === displayCurrency
+          ? 0
+          : convertCurrentAmount(amount, row.currency) - convertAmount(amount, row.currency, row.exchangeRate || globalRate);
+        return (
+          <div className="min-w-0">
+            <span className="font-black tabular-nums text-rose-500">
+              {valuationMode === 'CURRENT'
+                ? formatCurrentAmount(amount, row.currency)
+                : formatHistoricalAmount(amount, row.currency, row.exchangeRate)}
+            </span>
+            {showValuationLegend && <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+              {valuationModeLabel}
+              {valuationMode === 'CURRENT' && Math.abs(difference) >= 0.005 && (
+                <span className={cn('ml-1', difference > 0 ? 'text-orange-500' : 'text-emerald-500')}>
+                  · Δ {formatCurrentAmount(difference, displayCurrency)}
+                </span>
+              )}
+            </div>}
+          </div>
+        );
+      } },
     { key: 'status',   header: 'Estado',      width: '110px', editable: canPerform('PURCHASES_INVOICES', 'edit'), type: 'select', options: statusOpts,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
@@ -604,7 +634,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div className="col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Número de Factura <span className="text-rose-500">*</span></p>
                   <Input 
@@ -791,7 +821,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                       </Button>
                     )}
                   </div>
-                  <div className="grid grid-cols-12 gap-2 items-end">
+                  <div className="purchase-item-fields grid grid-cols-12 gap-2 items-end">
                     <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Cant.</p>
                       <Input 
@@ -821,20 +851,10 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                       />
                     </div>
                     <div className="col-span-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Cuenta Contable</p>
-                      <select
-                        disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
-                        value={item.accountId || ''}
-                        onChange={(e) => handleItemChange(idx, 'accountId', e.target.value)}
-                        className="h-8 w-full rounded-md border border-input bg-background px-1 text-[10px] font-bold"
-                      >
-                        <option value="">Seleccionar...</option>
-                        {accounts
-                          .filter((a: any) => (a.isActive ?? true) !== false)
-                          .map((a: any) => (
-                            <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
-                          ))}
-                      </select>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Cuentas contables</p>
+                      <div className="flex h-8 items-center rounded-md border border-primary/20 bg-primary/5 px-2 text-[10px] font-bold text-primary">
+                        Inventario, IVA y CxP se toman de la configuración global
+                      </div>
                     </div>
                     <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Total</p>
@@ -910,7 +930,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   Total: <b>{importResult.total}</b> · Creadas: <b className="text-emerald-500">{importResult.created}</b> · Omitidas: <b className="text-amber-500">{importResult.skipped}</b>
                 </p>
                 {importResult.errors.length > 0 && (
-                  <div className="mt-2 text-xs text-amber-600 space-y-1">
+                  <div className="mt-2 space-y-1 text-xs text-amber-500">
                     <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
                     {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
                   </div>
@@ -932,13 +952,19 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   const pendingTotalInDisplayCurrency = data
     .filter(invoice => ['PENDING', 'PARTIAL'].includes((invoice.status || '').toUpperCase()))
-    .reduce((acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate), 0);
+    .reduce((acc, invoice) => {
+      const amount = Number(invoice.total ?? invoice.baseTotal ?? 0);
+      const converted = valuationMode === 'CURRENT'
+        ? convertCurrentAmount(amount, invoice.currency)
+        : convertAmount(amount, invoice.currency, invoice.exchangeRate || globalRate);
+      return acc + converted;
+    }, 0);
 
   const kpis = [
      { title: 'Facturas',        value: data.length,                   icon: FileStack, color: 'text-blue-500',   bg: 'bg-blue-500/10',    filter: 'ALL'       },
      {
-       title: `Por Pagar (${displayCurrency})`,
-       value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${pendingTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+       title: `Por Pagar (${displayCurrency}${valuationModeSuffix})`,
+       value: formatCurrentAmount(pendingTotalInDisplayCurrency, displayCurrency),
        icon: Clock,
        color: 'text-amber-500',
        bg: 'bg-amber-500/10',
@@ -950,27 +976,17 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
-          <Card key={i}
-            className={cn(
-              'bg-card border-border/50 rounded-2xl shadow-sm transition-all cursor-pointer',
-              statusFilter === k.filter ? 'ring-2 ring-primary/30 border-primary/30' : 'hover:border-border'
-            )}
-            onClick={() => setStatusFilter(prev => prev === k.filter ? 'ALL' : k.filter)}
-          >
-            <CardContent className="p-5"><div className="flex items-center gap-4">
-              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
-            </div></CardContent>
-          </Card>
+          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind="filter" active={statusFilter === k.filter} onClick={() => { const next = statusFilter === k.filter ? 'ALL' : k.filter; setStatusFilter(next); onStatusChange?.(next); }} />
         ))}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Facturas de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Cuentas por pagar</p></div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-            <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Facturas de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">{showValuationLegend ? `Cuentas por pagar · Vista ${valuationModeLabel.toLowerCase()} al tipo de cambio ${globalRate.toFixed(4)}.` : 'Cuentas por pagar.'}</p></div>
+          <div className="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
+            <PurchaseViewTutorial view="invoices" />
+            <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_INVOICES', 'create') && (
               <>
                 <Button onClick={handleCreateNew} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Factura</Button>
@@ -978,7 +994,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
           onBulkDelete={canPerform('PURCHASES_INVOICES', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {

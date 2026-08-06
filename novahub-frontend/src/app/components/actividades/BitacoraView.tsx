@@ -16,6 +16,7 @@ import { Label } from '../ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { useAuth } from '../../contexts/AuthContext';
 import { storageService } from '../../services/storage.service';
+import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 
 // Tipos para el nuevo log
 type LogFormData = {
@@ -37,9 +38,16 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [availableTasks, setAvailableTasks] = useState<any[]>([]);
-  const [availableEvents, setAvailableEvents] = useState<any[]>([]);
   const { canPerform } = useAuth();
+  const tasksQuery = useTenantQuery<any[]>(['activities', 'tasks'], signal => tasksService.getAll(signal), {
+    enabled: isAddOpen,
+  });
+  const eventsQuery = useTenantQuery<any[]>(['activities', 'events'], signal => eventsService.getAll(signal), {
+    enabled: isAddOpen,
+  });
+  const linkedActivityIds = new Set(data.map(l => l.activityId).filter(Boolean));
+  const availableTasks = asList(tasksQuery.data).filter((task: any) => !linkedActivityIds.has(task.id));
+  const availableEvents = asList(eventsQuery.data).filter((event: any) => !linkedActivityIds.has(event.id));
   
   const [formData, setFormData] = useState<Omit<LogFormData, 'action' | 'entity'>>({
     details: '',
@@ -47,23 +55,6 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
     file: null,
     activityId: undefined
   });
-
-  // Fetch Tasks and Events
-  React.useEffect(() => {
-    if (isAddOpen) {
-      Promise.all([tasksService.getAll(), eventsService.getAll()]).then(([ts, evs]) => {
-        // Find which activities already have logs
-        const linkedActivityIds = new Set(data.map(l => l.activityId).filter(Boolean));
-        
-        // Ensure ts and evs are arrays (extract data if nested)
-        const taskArray = Array.isArray(ts) ? ts : ((ts as any).data || []);
-        const eventArray = Array.isArray(evs) ? evs : ((evs as any).data || []);
-
-        setAvailableTasks(taskArray.filter((t: any) => !linkedActivityIds.has(t.id)));
-        setAvailableEvents(eventArray.filter((e: any) => !linkedActivityIds.has(e.id)));
-      }).catch((e: any) => toast.error(e?.response?.data?.message || e?.message || 'Error al cargar Tareas/Eventos vinculables'));
-    }
-  }, [isAddOpen, data]);
 
   const columns = [
     { 

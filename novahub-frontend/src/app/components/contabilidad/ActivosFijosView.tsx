@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -11,6 +12,8 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 interface FixedAsset {
   id: string;
@@ -28,42 +31,23 @@ interface NewAssetForm {
   description: string;
 }
 
-function formatCurrency(n: number): string {
-  return new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-}
-
 function emptyForm(): NewAssetForm {
   return { accountCode: '', accountName: '', acquisitionCost: 0, description: '' };
 }
 
 export function ActivosFijosView() {
   const { canPerform } = useAuth();
-  const [assets, setAssets] = useState<FixedAsset[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<NewAssetForm>(emptyForm());
 
-  const loadAssets = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await contabilidadService.getFixedAssets();
-      setAssets(data as FixedAsset[]);
-    } catch (err: any) {
-      toast.error(err.message || 'Error al cargar activos fijos');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      await loadAssets();
-    };
-    load();
-  }, [loadAssets]);
+  const assetsQuery = useAccountingQuery<FixedAsset[]>(['fixed-assets'], async (signal) => accountingList(await contabilidadService.getFixedAssets(signal)) as FixedAsset[]);
+  const assets = assetsQuery.data || [];
+  const loading = assetsQuery.isLoading || assetsQuery.isFetching;
+  const loadAssets = () => assetsQuery.refetch();
 
   const filtered = assets.filter((a) =>
     !searchTerm ||
@@ -73,6 +57,7 @@ export function ActivosFijosView() {
 
   const totalAcquisition = filtered.reduce((s, a) => s + a.acquisitionCost, 0);
   const totalCurrent = filtered.reduce((s, a) => s + a.currentBalance, 0);
+  const formatCurrency = (value: number) => formatConvertedAmount(value, baseCurrency);
 
   function handleFormChange(field: keyof NewAssetForm, value: string | number) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -94,7 +79,7 @@ export function ActivosFijosView() {
       toast.success('Activo fijo registrado exitosamente');
       setCreateOpen(false);
       resetForm();
-      loadAssets();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar activo fijo');
     } finally {
@@ -103,7 +88,7 @@ export function ActivosFijosView() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase italic">
@@ -182,7 +167,7 @@ export function ActivosFijosView() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
@@ -217,8 +202,8 @@ export function ActivosFijosView() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg font-bold flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-lg font-bold">
+            <div className="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
               <span>Activos Fijos Registrados</span>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -226,7 +211,7 @@ export function ActivosFijosView() {
                   placeholder="Buscar..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 h-8 w-[200px] text-xs"
+                  className="h-8 w-full pl-9 text-xs sm:w-[200px]"
                 />
               </div>
             </div>
@@ -247,6 +232,8 @@ export function ActivosFijosView() {
               <p className="text-xs mt-1">Registra un nuevo activo para comenzar</p>
             </div>
           ) : (
+            <div className="space-y-2">
+            <div className="hidden overflow-x-auto md:block">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent border-border/50">
@@ -271,6 +258,16 @@ export function ActivosFijosView() {
                 ))}
               </TableBody>
             </Table>
+            </div>
+            <div className="space-y-2 p-3 md:hidden">
+              {filtered.map((asset) => (
+                <div key={asset.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
+                  <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-mono text-muted-foreground">{asset.accountCode}</p><p className="break-words text-xs font-bold">{asset.accountName}</p></div><Badge variant="secondary" className="shrink-0 text-[10px]">{asset.transactions}</Badge></div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Costo adquisición</span><span className="font-mono">{formatCurrency(asset.acquisitionCost)}</span></div><div><span className="block text-muted-foreground">Saldo actual</span><span className="font-bold text-emerald-600">{formatCurrency(asset.currentBalance)}</span></div></div>
+                </div>
+              ))}
+            </div>
+            </div>
           )}
         </CardContent>
         {filtered.length > 0 && (

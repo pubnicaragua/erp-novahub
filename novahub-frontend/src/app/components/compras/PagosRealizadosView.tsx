@@ -5,8 +5,9 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { paymentsService, suppliersService, billsService } from '../../services/compras.service';
+import { paymentsService, billsService } from '../../services/compras.service';
 import type { PaymentMade, Supplier, SupplierInvoice } from '../../types';
+import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { toast } from 'sonner';
@@ -15,14 +16,20 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateExpensePDF } from '../../utils/pdfGenerator';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
+import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 interface Props {
   data: PaymentMade[];
   loading: boolean;
   onRefresh: () => void;
   supplierInvoices?: SupplierInvoice[];
+  supplierCatalog?: Supplier[];
   draftPaymentFromInvoice?: Partial<PaymentMade> | null;
   onDraftConsumed?: () => void;
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
 }
 
 const methodOpts = [
@@ -33,11 +40,9 @@ const methodOpts = [
   { label: 'Otro',            value: 'OTHER' },
 ];
 
-const fallbackPaymentReference = () => `PAG-${Date.now().toString().slice(-5)}`;
-
-export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], draftPaymentFromInvoice, onDraftConsumed }: Props) {
+export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -59,67 +64,51 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   };
 
   useEffect(() => {
-    suppliersService.getAll().then(res => {
-      const list = Array.isArray(res) ? res : (res as any).data || [];
-      setSuppliers(list);
-    }).catch();
-    billsService.getAll().then(res => {
-      const list = Array.isArray(res) ? res : (res as any).data || [];
-      setBills(list);
-    }).catch();
-  }, []);
+    setSuppliers(supplierCatalog);
+  }, [supplierCatalog]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (supplierInvoices.length > 0) {
-        setBills(supplierInvoices);
-      }
-    }, 0);
-    return () => clearTimeout(timer);
+    if (supplierInvoices.length > 0) {
+      setBills(supplierInvoices);
+    }
   }, [supplierInvoices]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (draftPaymentFromInvoice) {
-        setEditingId('NEW');
-      }
-    }, 0);
-    return () => clearTimeout(timer);
+    if (draftPaymentFromInvoice) {
+      setEditingId('NEW');
+    }
   }, [draftPaymentFromInvoice]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (editingId) {
-        setIsMixed(false);
-        if (editingId === 'NEW') {
-           const prefilled = draftPaymentFromInvoice || {};
-           setLocalDoc({
-             supplierId: prefilled.supplierId || '',
-             supplierInvoiceId: prefilled.supplierInvoiceId || '',
-              date: prefilled.date || new Date().toISOString(),
-              amount: Number(prefilled.amount || 0),
-              currency: (prefilled.currency as any) || displayCurrency,
-              exchangeRate: prefilled.exchangeRate || globalRate,
-              method: normalizeMethod(prefilled.method as any),
-              reference: prefilled.reference || `PAG-${Date.now().toString().slice(-5)}`,
-              notes: prefilled.notes || '',
-             });
-           if (draftPaymentFromInvoice && onDraftConsumed) onDraftConsumed();
-         } else {
-            const found = data.find(x => x.id === editingId);
-            setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
-         }
-      } else {
-        setLocalDoc(null);
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [editingId, data, draftPaymentFromInvoice, onDraftConsumed, displayCurrency, globalRate]);
+    if (editingId) {
+      setIsMixed(false);
+      if (editingId === 'NEW') {
+         const prefilled = draftPaymentFromInvoice || {};
+         setLocalDoc({
+           supplierId: prefilled.supplierId || '',
+           supplierInvoiceId: prefilled.supplierInvoiceId || '',
+            date: prefilled.date || new Date().toISOString(),
+            amount: Number(prefilled.amount || 0),
+            currency: (prefilled.currency as any) || displayCurrency,
+            exchangeRate: prefilled.exchangeRate || globalRate,
+            method: normalizeMethod(prefilled.method as any),
+            reference: prefilled.reference || `PAG-${Date.now().toString().slice(-5)}`,
+            notes: prefilled.notes || '',
+           });
+         if (draftPaymentFromInvoice && onDraftConsumed) onDraftConsumed();
+       } else {
+          const found = data.find(x => x.id === editingId);
+          setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+       }
+    } else {
+      setLocalDoc(null);
+    }
+  }, [editingId, data, draftPaymentFromInvoice, onDraftConsumed]);
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const getMethodLabel = (method?: string) => methodOpts.find((opt) => opt.value === normalizeMethod(method))?.label || method || '-';
   const toExpensePayload = (payment: Partial<PaymentMade>, supplierName?: string) => ({
-    number: payment.number || payment.reference || payment.id || fallbackPaymentReference(),
+    number: payment.number || payment.reference || payment.id || `PAG-${Date.now().toString().slice(-5)}`,
     id: payment.id,
     date: payment.date,
     amount: Number(payment.amount || 0),
@@ -171,9 +160,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'amount',    header: 'Monto',      width: '130px',
       render: (val, row) => (
-        <span className="font-black tabular-nums text-emerald-500">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-        </span>
+        <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-emerald-500" />
       ) },
     { key: 'method',    header: 'Método',     width: '120px', editable: canPerform('PURCHASES_PAYMENTS', 'edit'), type: 'select', options: methodOpts,
       render: (val) => { const o = methodOpts.find(x => x.value === normalizeMethod(String(val || ''))); return <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{o?.label||val||'-'}</Badge>; } },
@@ -194,7 +181,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       toast.success('Pago actualizado');
       onRefresh();
     }
-    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
   };
 
   const syncLinkedInvoiceStatus = async (paymentDraft: Partial<PaymentMade>, paymentIdToUpsert?: string) => {
@@ -203,7 +190,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
 
     const [invoiceResponse, paymentsResponse] = await Promise.all([
       billsService.getById(invoiceId),
-      paymentsService.getAll(),
+      paymentsService.getAll({ supplierInvoiceId: invoiceId, page: 1, pageSize: 200 }),
     ]);
     const invoice = (invoiceResponse as any)?.data || invoiceResponse;
     const allPayments = ((paymentsResponse as any)?.data || []) as PaymentMade[];
@@ -226,9 +213,23 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         })()
       : [...paymentsForInvoice, nextPaymentEntry as any];
 
-    const totalPaid = mergedPayments.reduce((acc, payment: any) => acc + Number(payment.amount || 0), 0);
+    const totalPaidBase = mergedPayments.reduce((acc, payment: any) => acc + (
+      payment.baseAmount !== null && payment.baseAmount !== undefined
+        ? Number(payment.baseAmount)
+        : toBaseAmount(Number(payment.amount || 0), payment.currency, payment.exchangeRate)
+    ), 0);
     const invoiceTotal = Number(invoice?.total || 0);
-    const nextAmountPaid = Math.min(invoiceTotal, totalPaid);
+    const invoiceCurrency = String(invoice?.currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
+    const invoiceRate = invoiceCurrency === baseCurrency ? 1 : Number(invoice?.exchangeRate || globalRate || 1);
+    const invoiceTotalBase = invoice?.baseTotal !== null && invoice?.baseTotal !== undefined
+      ? Number(invoice.baseTotal)
+      : toBaseAmount(invoiceTotal, invoiceCurrency, invoiceRate);
+    const appliedBase = Math.min(invoiceTotalBase, totalPaidBase);
+    const nextAmountPaid = invoiceCurrency === baseCurrency
+      ? appliedBase
+      : baseCurrency === 'NIO' && invoiceCurrency === 'USD'
+        ? appliedBase / invoiceRate
+        : appliedBase * invoiceRate;
     const nextBalance = Math.max(invoiceTotal - nextAmountPaid, 0);
     const nextStatus = nextAmountPaid <= 0 ? 'PENDING' : nextBalance <= 0 ? 'PAID' : 'PARTIAL';
 
@@ -255,7 +256,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         const rate = localDoc.exchangeRate || globalRate;
         payload.amount = nioAmount + (usdAmount * rate);
         payload.currency = 'NIO';
-        payload.baseAmount = payload.amount;
+        payload.baseAmount = toBaseAmount(payload.amount, 'NIO', rate);
         payload.notes = [(localDoc.notes || ''), `Pago mixto: C$${nioAmount.toFixed(2)} + $${usdAmount.toFixed(2)} (TC ${rate})`].filter(Boolean).join(' | ');
         delete payload.amountNio;
         delete payload.amountUsd;
@@ -349,7 +350,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Pago</p>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
                     <Combobox
@@ -544,16 +545,19 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     );
   }
 
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate || globalRate);
   const paidTotalInDisplayCurrency = data.reduce(
-    (acc, payment) => acc + convertAmount(payment.amount || 0, payment.currency, payment.exchangeRate),
+    (acc, payment) => acc + toDisplayAmount(Number(payment.amount ?? payment.baseAmount ?? 0), payment.currency, payment.exchangeRate),
     0,
   );
 
   const kpis = [
     { title: 'Transacciones',   value: data.length,                   icon: Hash,         color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
     {
-      title: `Pagos Realizados (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${paidTotalInDisplayCurrency.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      title: `Pagos Realizados (${displayCurrency}${valuationModeSuffix})`,
+      value: formatCurrentAmount(paidTotalInDisplayCurrency, displayCurrency),
       icon: TrendingDown,
       color: 'text-rose-500',
       bg: 'bg-rose-500/10',
@@ -563,27 +567,23 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
-          <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
-            <CardContent className="p-5"><div className="flex items-center gap-4">
-              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
-            </div></CardContent>
-          </Card>
+          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind="indicator" />
         ))}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Pagos Realizados</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Desembolsos a proveedores</p></div>
-          <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Pagos Realizados</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Desembolsos a proveedores</p></div>
+          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
+            <PurchaseViewTutorial view="payments" />
+            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
              {canPerform('PURCHASES_PAYMENTS', 'create') && (
                <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Pago</Button>
              )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
           onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {

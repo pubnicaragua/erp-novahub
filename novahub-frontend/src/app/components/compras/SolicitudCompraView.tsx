@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
-  ClipboardList, Search, Eye, X,
-  CheckCircle, Clock, Printer,
-  Building2, ArrowUpRight, Plus,
-  Loader2, Package,
+  ClipboardList, Search, Eye, X, AlertTriangle,
+  CheckCircle, Clock, FileText, Printer,
+  Building2, ArrowUpRight, FileSpreadsheet, Plus,
+  Loader2, Package, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -15,31 +15,35 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner';
 import { purchaseRequestsService, purchaseManagementService } from '../../services/compras.service';
 import { inventoryService } from '../../services/inventario.service';
-import type { PurchaseRequest, PurchaseManagement, Warehouse } from '../../types';
+import { employeesService } from '../../services/rh.service';
+import type { PurchaseRequest, PurchaseManagement, Warehouse, Employee, PaginatedResponse } from '../../types';
+import type { SalesPaginationControls } from '../../types';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { PromptDialog } from '../ui/PromptDialog';
+import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: 'bg-zinc-100 text-zinc-700 border-zinc-200',
-  SUBMITTED: 'bg-blue-100 text-blue-700 border-blue-200',
-  RECEIVED: 'bg-purple-100 text-purple-700 border-purple-200',
-  IN_REVIEW: 'bg-amber-100 text-amber-700 border-amber-200',
-  IN_QUOTATION: 'bg-indigo-100 text-indigo-700 border-indigo-200',
-  PENDING_APPROVAL: 'bg-orange-100 text-orange-700 border-orange-200',
-  APPROVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  REJECTED: 'bg-red-100 text-red-700 border-red-200',
-  RETURNED_FOR_CORRECTION: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-  CONVERTED_TO_ORDER: 'bg-teal-100 text-teal-700 border-teal-200',
-  CLOSED: 'bg-slate-100 text-slate-700 border-slate-200',
-  CANCELLED: 'bg-gray-100 text-gray-400 border-gray-200',
+  DRAFT: 'bg-muted/50 text-muted-foreground border-border/50',
+  SUBMITTED: 'bg-primary/10 text-primary border-primary/20',
+  RECEIVED: 'bg-primary/10 text-primary border-primary/20',
+  IN_REVIEW: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+  IN_QUOTATION: 'bg-primary/10 text-primary border-primary/20',
+  PENDING_APPROVAL: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+  APPROVED: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+  REJECTED: 'bg-red-500/10 text-red-500 border-red-500/20',
+  RETURNED_FOR_CORRECTION: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
+  CONVERTED_TO_ORDER: 'bg-primary/10 text-primary border-primary/20',
+  CLOSED: 'bg-muted/50 text-muted-foreground border-border/50',
+  CANCELLED: 'bg-muted/50 text-muted-foreground border-border/50',
 };
 
 const PRIORITY_STYLES: Record<string, string> = {
-  NORMAL: 'bg-blue-100 text-blue-700',
-  URGENT: 'bg-amber-100 text-amber-700',
-  CRITICAL: 'bg-red-100 text-red-700',
+  NORMAL: 'bg-primary/10 text-primary',
+  URGENT: 'bg-amber-500/10 text-amber-500',
+  CRITICAL: 'bg-red-500/10 text-red-500',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -54,9 +58,13 @@ interface SolicitudCompraViewProps {
   data: PurchaseRequest[];
   loading?: boolean;
   onRefresh: () => void;
+  pagination?: SalesPaginationControls;
+  onSearchChange?: (value: string) => void;
+  onStatusChange?: (value: string) => void;
+  warehouseCatalog?: Warehouse[];
 }
 
-export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompraViewProps) {
+export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, warehouseCatalog = [] }: SolicitudCompraViewProps) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -154,10 +162,18 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
     new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
 
   const statusOptions = Object.keys(STATUS_STYLES);
+  const requestKpis = [
+    { title: 'Solicitudes', value: data.length, icon: ClipboardList, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Pendientes', value: data.filter(r => r.status === 'PENDING_APPROVAL').length, icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-500/10', kind: 'filter' as const, filter: 'PENDING_APPROVAL' },
+    { title: 'En Revisión', value: data.filter(r => r.status === 'IN_REVIEW').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10', kind: 'filter' as const, filter: 'IN_REVIEW' },
+    { title: 'Aprobadas', value: data.filter(r => r.status === 'APPROVED').length, icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'APPROVED' },
+    { title: 'Rechazadas', value: data.filter(r => r.status === 'REJECTED').length, icon: X, color: 'text-rose-500', bg: 'bg-rose-500/10', kind: 'filter' as const, filter: 'REJECTED' },
+  ];
 
   // ─── Nueva Solicitud ──────────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [productSearch, setProductSearch] = useState('');
   const [createForm, setCreateForm] = useState({
@@ -166,6 +182,7 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
     warehouseId: '',
     requiredDate: '',
     notes: '',
+    requestedById: '',
   });
   const [createItems, setCreateItems] = useState<Array<{
     productId: string; productName: string; description: string; quantity: number; observations: string;
@@ -173,25 +190,30 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
   }>>([]);
   const [creating, setCreating] = useState(false);
 
-  const loadWarehouses = async () => {
-    try {
-      const res = await inventoryService.getWarehouses();
-      setWarehouses(Array.isArray(res) ? res : []);
-    } catch { /* ignore */ }
-  };
+  useEffect(() => { setWarehouses(warehouseCatalog); }, [warehouseCatalog]);
 
-  const searchProducts = async (q: string) => {
+  useEffect(() => {
+    employeesService.getAll({ page: 1, pageSize: 200 }).then((res: any) => {
+      const list = Array.isArray(res) ? res : (res as PaginatedResponse<Employee>)?.data || [];
+      setEmployees(list);
+      const linked = list.find((e: Employee) => e.userId === user?.id);
+      if (linked) setCreateForm(prev => ({ ...prev, requestedById: linked.id }));
+    }).catch(() => setEmployees([]));
+  }, [user?.id]);
+
+  const searchProducts = async (q: string, signal?: AbortSignal) => {
     if (!q || q.length < 2) { setProducts([]); return; }
     try {
-      const res = await inventoryService.getProducts({ search: q, pageSize: 10 });
+      const res = await inventoryService.getProducts({ search: q, page: 1, pageSize: 10 }, signal);
       const list = Array.isArray(res) ? res : (res as any)?.data || [];
       setProducts(list);
-    } catch { setProducts([]); }
+    } catch (error: any) { if (error?.name !== 'AbortError') setProducts([]); }
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => searchProducts(productSearch), 300);
-    return () => clearTimeout(timer);
+    const controller = new AbortController();
+    const timer = setTimeout(() => searchProducts(productSearch, controller.signal), 300);
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [productSearch]);
 
   const addItem = (product: any) => {
@@ -215,6 +237,7 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
   const handleCreate = async () => {
     if (createItems.length === 0) { toast.error('Agrega al menos un artículo'); return; }
     if (!createForm.warehouseId) { toast.error('Selecciona una bodega'); return; }
+    if (!createForm.requestedById) { toast.error('Selecciona el solicitante'); return; }
     setCreating(true);
     try {
       const payload = {
@@ -223,7 +246,8 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
         warehouseId: createForm.warehouseId,
         requiredDate: createForm.requiredDate || undefined,
         notes: createForm.notes || undefined,
-        requestedById: user?.id,
+        requestedById: createForm.requestedById,
+        userId: user?.id,
         items: createItems.map(item => ({
           productId: item.productId, description: item.description,
           quantity: item.quantity, observations: item.observations || undefined,
@@ -234,7 +258,7 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
       await purchaseRequestsService.create(payload as any);
       toast.success('Solicitud de compra creada');
       setCreateOpen(false);
-      setCreateForm({ priority: 'NORMAL', justification: '', warehouseId: '', requiredDate: '', notes: '' });
+      setCreateForm({ priority: 'NORMAL', justification: '', warehouseId: '', requiredDate: '', notes: '', requestedById: '' });
       setCreateItems([]);
       onRefresh();
     } catch (e: any) {
@@ -245,29 +269,61 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
   };
 
   const openCreateDialog = () => {
-    loadWarehouses();
     setCreateOpen(true);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4" data-tour="purchases-list-kpis">
+        {requestKpis.map((k) => (
+          <PurchaseKpiCard
+            key={k.title}
+            title={k.title}
+            value={k.value}
+            icon={k.icon}
+            color={k.color}
+            bg={k.bg}
+            kind={k.kind}
+            active={k.filter === statusFilter}
+            onClick={k.filter ? () => {
+              const next = statusFilter === k.filter ? 'all' : k.filter;
+              setStatusFilter(next);
+              onStatusChange?.(next);
+            } : undefined}
+          />
+        ))}
+      </div>
+      <div className="flex flex-col gap-4">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <ClipboardList className="size-6 text-primary" />
-          <h2 className="text-xl font-bold">Solicitudes de Compra</h2>
+          <h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Solicitudes de Compra</h2>
           <Badge variant="secondary" className="text-xs">{data.length}</Badge>
         </div>
-        <Button size="sm" onClick={openCreateDialog}>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+        <PurchaseViewTutorial view="requests" />
+        <Button size="sm" onClick={openCreateDialog} className="rounded-xl font-black uppercase text-[10px] tracking-widest">
           <Plus className="size-3.5 mr-1" /> Nueva Solicitud
         </Button>
+        </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-3" data-tour="purchases-list-actions">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input placeholder="Buscar por número, solicitante, proveedor, bodega..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Buscar por número, solicitante, proveedor, bodega..." value={search} onChange={e => { setSearch(e.target.value); onSearchChange?.(e.target.value); }} className="pl-9" />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        {pagination && (
+          <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground" data-tour="purchases-list-pagination">
+            <span>Mostrando {filtered.length} de {pagination.total} solicitudes</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" className="size-8" onClick={() => pagination.onPageChange(pagination.page - 1)} disabled={pagination.page <= 1}><ChevronLeft className="size-4" /></Button>
+              <span className="min-w-20 text-center font-bold text-foreground">Pág. {pagination.page} / {Math.max(1, pagination.totalPages)}</span>
+              <Button variant="outline" size="icon" className="size-8" onClick={() => pagination.onPageChange(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}><ChevronRight className="size-4" /></Button>
+            </div>
+          </div>
+        )}
+        <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); onStatusChange?.(value); }}>
           <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filtrar por estado" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos los estados</SelectItem>
@@ -281,7 +337,7 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
       ) : filtered.length === 0 ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">No hay solicitudes de compra</CardContent></Card>
       ) : (
-        <div className="rounded-xl border border-border/40 overflow-hidden">
+        <div className="rounded-xl border border-border/40 overflow-hidden" data-tour="sales-data-table">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -311,7 +367,7 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
                           {STATUS_LABELS[req.status] || req.status.replace(/_/g, ' ')}
                         </Badge>
                         {mgmt && mgmt.status === 'PENDING_APPROVAL' && (
-                          <Badge className="ml-1 text-[8px] bg-orange-100 text-orange-700 border-orange-200">Gestión</Badge>
+                          <Badge className="ml-1 border-orange-500/20 bg-orange-500/10 text-[8px] text-orange-500">Gestión</Badge>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -338,13 +394,13 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
                               <Button variant="ghost" size="sm" className="h-7 px-2 text-emerald-600 hover:text-emerald-700" onClick={() => handleApproveManagement(mgmt)} disabled={actionLoading === mgmt.id}>
                                 <CheckCircle className="size-3.5" />
                               </Button>
-                              <Button variant="ghost" size="sm" className="h-7 px-2 text-red-600 hover:text-red-700" onClick={() => handleRejectManagement(mgmt)} disabled={actionLoading === mgmt.id}>
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-red-500 hover:text-red-400" onClick={() => handleRejectManagement(mgmt)} disabled={actionLoading === mgmt.id}>
                                 <X className="size-3.5" />
                               </Button>
                             </>
                           )}
                           {mgmt?.status === 'APPROVED' && (
-                            <Button variant="ghost" size="sm" className="h-7 px-2 text-teal-600" onClick={() => handleConvertToOrder(mgmt)} disabled={actionLoading === mgmt.id}>
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-primary" onClick={() => handleConvertToOrder(mgmt)} disabled={actionLoading === mgmt.id}>
                               <ArrowUpRight className="size-3.5" />
                             </Button>
                           )}
@@ -358,6 +414,7 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
           </div>
         </div>
       )}
+      </div>
 
       {/* Detail Dialog */}
       <Dialog open={!!detailOpen} onOpenChange={(o) => { if (!o) setDetailOpen(null); }}>
@@ -452,7 +509,7 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
                     {mgmt.internalNotes && <p className="text-sm text-muted-foreground mt-2">Notas internas: {mgmt.internalNotes}</p>}
                     {mgmt.notes && <p className="text-sm text-muted-foreground">Notas: {mgmt.notes}</p>}
                     {mgmt.approvedBy && <p className="text-sm text-muted-foreground mt-2">Aprobado por: {mgmt.approvedBy.name} {mgmt.approvedAt ? `el ${new Date(mgmt.approvedAt).toLocaleDateString()}` : ''}</p>}
-                    {mgmt.rejectionReason && <p className="text-sm text-red-600 mt-2">Motivo de rechazo: {mgmt.rejectionReason}</p>}
+                    {mgmt.rejectionReason && <p className="mt-2 text-sm text-red-500">Motivo de rechazo: {mgmt.rejectionReason}</p>}
                   </div>
                 )}
 
@@ -512,6 +569,17 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
           </DialogHeader>
           <div className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold">Solicitante *</label>
+                <Select value={createForm.requestedById} onValueChange={(v) => setCreateForm(prev => ({ ...prev, requestedById: v }))}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} <span className="font-mono text-muted-foreground">({emp.code || emp.email})</span></SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold">Prioridad</label>
                 <Select value={createForm.priority} onValueChange={(v) => setCreateForm(prev => ({ ...prev, priority: v }))}>
@@ -585,7 +653,7 @@ export function SolicitudCompraView({ data, loading, onRefresh }: SolicitudCompr
                               onChange={(e) => updateItem(idx, { observations: e.target.value })} />
                           </td>
                           <td className="p-2">
-                            <button onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700 p-1">
+                            <button onClick={() => removeItem(idx)} className="p-1 text-red-500 hover:text-red-400">
                               <X className="size-3.5" />
                             </button>
                           </td>

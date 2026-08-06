@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -9,6 +9,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { Combobox } from '../ui/Combobox';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 // import { motion } from 'motion/react';
 
 interface LedgerEntry {
@@ -28,47 +29,27 @@ function formatCurrency(n: number): string {
 }
 
 export function LibroMayorView() {
-  const [entries, setEntries] = useState<LedgerEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [accounts, setAccounts] = useState<{ id: string; code: string; name: string }[]>([]);
-
   const [filterAccountId, setFilterAccountId] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
 
-  const loadEntries = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params: { accountId?: string; dateFrom?: string; dateTo?: string } = {};
-      if (filterAccountId) params.accountId = filterAccountId;
-      if (filterDateFrom) params.dateFrom = filterDateFrom;
-      if (filterDateTo) params.dateTo = filterDateTo;
-      const data = await contabilidadService.getLedger(params);
-      setEntries(data as LedgerEntry[]);
-    } catch (err: any) {
-      toast.error(err.message || 'Error al cargar libro mayor');
-    } finally {
-      setLoading(false);
-    }
-  }, [filterAccountId, filterDateFrom, filterDateTo]);
-
-  const loadAccounts = useCallback(async () => {
-    try {
-      const data: any = await contabilidadService.getChartOfAccounts();
-      setAccounts(data.map((a: any) => ({ id: a.id, code: a.code, name: a.name })));
-    } catch {
-      // non-critical
-    }
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setTimeout(loadEntries, 0);
-    return () => window.clearTimeout(timer);
-  }, [loadEntries]);
-  useEffect(() => {
-    const timer = window.setTimeout(loadAccounts, 0);
-    return () => window.clearTimeout(timer);
-  }, [loadAccounts]);
+  const ledgerParams = useMemo(() => ({
+    ...(filterAccountId ? { accountId: filterAccountId } : {}),
+    ...(filterDateFrom ? { dateFrom: filterDateFrom } : {}),
+    ...(filterDateTo ? { dateTo: filterDateTo } : {}),
+  }), [filterAccountId, filterDateFrom, filterDateTo]);
+  const entriesQuery = useAccountingQuery<LedgerEntry[]>(['ledger', ledgerParams], async (signal) => accountingList(await contabilidadService.getLedger(ledgerParams, signal)) as LedgerEntry[]);
+  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
+  const entries = entriesQuery.data || [];
+  const loading = entriesQuery.isLoading || entriesQuery.isFetching;
+  const accounts = useMemo(() => {
+    const result: { id: string; code: string; name: string }[] = [];
+    const flatten = (items: any[]) => items.forEach(a => { result.push({ id: a.id, code: a.code, name: a.name }); if (a.children) flatten(a.children); });
+    flatten(accountsQuery.data || []);
+    return result;
+  }, [accountsQuery.data]);
+  const loadEntries = () => entriesQuery.refetch();
+  const loadAccounts = () => accountsQuery.refetch();
 
   const accountOptions = accounts.map((a) => ({
     label: `${a.code} - ${a.name}`,
@@ -87,7 +68,7 @@ export function LibroMayorView() {
   const hasFilters = filterAccountId || filterDateFrom || filterDateTo;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase italic">
@@ -103,8 +84,8 @@ export function LibroMayorView() {
         <div className="flex items-center gap-2 text-xs font-black text-muted-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
           <Filter className="size-3.5" /> Filtros
         </div>
-        <div className="flex flex-wrap items-center gap-4 flex-1">
-          <div className="flex flex-col gap-1.5 min-w-[200px]">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
+            <div className="flex min-w-0 flex-col gap-1.5 sm:min-w-[200px]">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Cuenta Contable</label>
             <Combobox
               options={accountOptions}
@@ -116,11 +97,11 @@ export function LibroMayorView() {
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Desde</label>
-            <Input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="h-9 w-[150px]" />
+            <Input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Hasta</label>
-            <Input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="h-9 w-[150px]" />
+            <Input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           {hasFilters && (
             <button onClick={clearFilters} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all mt-5">
@@ -137,7 +118,7 @@ export function LibroMayorView() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg font-bold flex items-center justify-between">
+          <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-lg font-bold">
             <span>Movimientos del Libro Mayor</span>
             {entries.length > 0 && (
               <Badge variant="outline" className="text-[10px] font-bold">{entries.length} registros</Badge>
@@ -156,18 +137,19 @@ export function LibroMayorView() {
               <p className="text-xs mt-1">Ajusta los filtros para ver resultados</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="hidden overflow-x-auto md:block">
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow className="hover:bg-transparent border-border/50">
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Fecha</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Código</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Descripción</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Referencia</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground text-right">Débito</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground text-right">Crédito</TableHead>
-                    <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground text-right">Saldo</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Código</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Cuenta</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Descripción</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Referencia</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Débito</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Crédito</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Saldo</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -192,10 +174,32 @@ export function LibroMayorView() {
                 </TableBody>
               </Table>
             </div>
+            <div className="space-y-3 p-3 md:hidden">
+              {entries.map((entry, i) => (
+                <div key={`${entry.accountId}-${i}`} className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[10px] text-muted-foreground">{new Date(entry.date).toLocaleDateString('es-NI')} · {entry.accountCode}</p>
+                      <p className="mt-0.5 truncate text-sm font-bold" title={entry.accountName}>{entry.accountName}</p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground" title={entry.description}>{entry.description}</p>
+                    </div>
+                    <span className={cn("shrink-0 font-mono text-sm font-black", entry.balance >= 0 ? "text-emerald-600" : "text-red-600")}>
+                      {formatCurrency(entry.balance)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/50 pt-3">
+                    <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Débito</p><p className={cn("truncate font-mono text-xs", entry.debit > 0 && "text-emerald-600")}>{entry.debit > 0 ? formatCurrency(entry.debit) : '-'}</p></div>
+                    <div className="min-w-0 text-right"><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Crédito</p><p className={cn("truncate font-mono text-xs", entry.credit > 0 && "text-red-600")}>{entry.credit > 0 ? formatCurrency(entry.credit) : '-'}</p></div>
+                  </div>
+                  <div className="mt-2 truncate border-t border-border/50 pt-2 text-[10px] text-muted-foreground"><span className="font-bold text-foreground/80">Referencia:</span> {entry.reference || 'Sin referencia'}</div>
+                </div>
+              ))}
+            </div>
+            </>
           )}
         </CardContent>
         {entries.length > 0 && (
-          <div className="px-6 py-4 flex items-center justify-between bg-muted/20 border-t border-border/50 rounded-b-2xl">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-2xl border-t border-border/50 bg-muted/20 px-4 py-4 sm:px-6">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Totales</span>
             <div className="flex items-center gap-8 text-sm font-mono font-bold">
               <span className="text-emerald-600">{formatCurrency(totalDebits)}</span>

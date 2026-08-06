@@ -42,11 +42,11 @@ export const subscriptionsService = {
   createRequest: (data: CreateSubscriptionRequestDto) => 
     api.post<SubscriptionRequest>('/subscriptions/request', data),
     
-  getAllRequests: (filters?: ApiFilters) => 
-    api.get<SubscriptionRequest[]>('/subscriptions/requests', filters as any),
+  getAllRequests: (filters?: ApiFilters, signal?: AbortSignal) =>
+    api.get<SubscriptionRequest[]>('/subscriptions/requests', { params: filters as any, signal }),
     
-  getPartnerRequests: (filters?: ApiFilters) => 
-    api.get<SubscriptionRequest[]>('/subscriptions/requests/partner', filters as any),
+  getPartnerRequests: (filters?: ApiFilters, signal?: AbortSignal) =>
+    api.get<SubscriptionRequest[]>('/subscriptions/requests/partner', { params: filters as any, signal }),
     
   updateRequestStatus: (id: string, data: UpdateSubscriptionStatusDto) => 
     api.patch<SubscriptionRequest>(`/subscriptions/requests/${id}/status`, data),
@@ -54,6 +54,6 @@ export const subscriptionsService = {
   toggleModuleStatus: (data: ToggleModuleStatusDto) =>
     api.patch('/subscriptions/module-status', data),
     
-  getEnabledModules: (clientTenantId: string, filters?: ApiFilters) => 
-    api.get<string[]>(`/subscriptions/enabled/${clientTenantId}`, filters as any),
+  getEnabledModules: (clientTenantId: string, filters?: ApiFilters, signal?: AbortSignal) =>
+    api.get<string[]>(`/subscriptions/enabled/${clientTenantId}`, { params: filters as any, signal }),
 };

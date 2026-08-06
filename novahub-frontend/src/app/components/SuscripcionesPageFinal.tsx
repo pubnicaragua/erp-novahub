@@ -19,6 +19,7 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ConfirmDialog } from './ui/ConfirmDialog';
+import { getPasswordError, isValidEmail, normalizeEmail } from '../utils/accountValidation';
 
 const AVAILABLE_MODULES = [
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes' },
@@ -90,8 +91,9 @@ export function SuscripcionesPageFinal() {
 
   const handleCreateTenant = async () => {
     if (!isPlatformAdmin) return toast.error('No autorizado');
-    if (!tenantForm.adminPassword || tenantForm.adminPassword.length < 10) {
-      return toast.error('La contraseña del administrador es obligatoria y debe tener al menos 10 caracteres');
+    const passwordError = getPasswordError(tenantForm.adminPassword);
+    if (passwordError || !isValidEmail(tenantForm.adminEmail)) {
+      return toast.error(passwordError || 'Escribe un correo válido para el administrador');
     }
     try {
       const payload = {
@@ -99,11 +101,9 @@ export function SuscripcionesPageFinal() {
         slug: tenantForm.slug || tenantForm.name.toLowerCase().replace(/\s+/g, '-'),
         industry: tenantForm.industry,
         plan: tenantForm.plan,
-        adminUser: {
-          name: tenantForm.adminName,
-          email: tenantForm.adminEmail,
-          password: tenantForm.adminPassword
-        }
+        adminName: tenantForm.adminName,
+        adminEmail: normalizeEmail(tenantForm.adminEmail),
+        adminPassword: tenantForm.adminPassword
       };
       await tenantsService.create(payload);
       toast.success('Empresa creada exitosamente');
@@ -153,14 +153,15 @@ export function SuscripcionesPageFinal() {
 
   const handleAddUser = async () => {
     if (!isPlatformAdmin) return toast.error('No autorizado');
-    if (!userForm.password || userForm.password.length < 10) {
-      return toast.error('La contraseña es obligatoria y debe tener al menos 10 caracteres');
+    const passwordError = getPasswordError(userForm.password);
+    if (passwordError || !isValidEmail(userForm.email)) {
+      return toast.error(passwordError || 'Escribe un correo válido para el usuario');
     }
     try {
       const payload = {
         clientTenantId: selectedTenant.id,
         name: userForm.name,
-        email: userForm.email,
+        email: normalizeEmail(userForm.email),
         password: userForm.password,
         role: userForm.role
       };
@@ -506,7 +507,7 @@ export function SuscripcionesPageFinal() {
                     </div>
                     <div className="space-y-2">
                       <Label>Contraseña (opcional)</Label>
-                      <Input type="password" value={tenantForm.adminPassword} onChange={e => setTenantForm({...tenantForm, adminPassword: e.target.value})} placeholder="Requerida, mínimo 10 caracteres" />
+                      <Input type="password" value={tenantForm.adminPassword} onChange={e => setTenantForm({...tenantForm, adminPassword: e.target.value})} placeholder="8 caracteres, mayúscula, número y símbolo" />
                     </div>
                   </div>
                 </div>
@@ -583,7 +584,7 @@ export function SuscripcionesPageFinal() {
               <div className="space-y-3">
                 <Input placeholder="Nombre completo" value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} />
                 <Input type="email" placeholder="Email" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} />
-                <Input type="password" placeholder="Contraseña temporal (mín. 10 caracteres)" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} />
+                <Input type="password" placeholder="8 caracteres, mayúscula, número y símbolo" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} />
                 <Select value={userForm.role} onValueChange={v => setUserForm({...userForm, role: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>

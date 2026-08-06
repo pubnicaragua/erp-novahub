@@ -8,6 +8,8 @@ interface InboxNotificationDto {
   type: 'ALERT' | 'MESSAGE' | 'PUSH';
   isRead: boolean;
   createdAt: string;
+  link?: string | null;
+  metadata?: unknown;
 }
 
 const mapNotificationType = (type: InboxNotificationDto['type']): Notification['type'] => {
@@ -23,11 +25,13 @@ const mapInboxNotification = (item: InboxNotificationDto): Notification => ({
   type: mapNotificationType(item.type),
   timestamp: item.createdAt,
   read: item.isRead,
+  link: item.link || null,
+  metadata: item.metadata,
 });
 
 export const notificationsService = {
-  getAll: async () => {
-    const data = await api.get<InboxNotificationDto[]>('/notifications/inbox');
+  getAll: async (signal?: AbortSignal) => {
+    const data = await api.get<InboxNotificationDto[]>('/notifications/inbox', { signal });
     return data.map(mapInboxNotification);
   },
   markAsRead: (id: string) => api.patch<{ success: boolean }>(`/notifications/inbox/${id}/read`, {}),

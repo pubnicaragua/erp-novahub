@@ -6,11 +6,11 @@ import { Label } from '../../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { Switch } from '../../ui/switch';
 import { Badge } from '../../ui/badge';
-import { Banknote, Plus, Loader2, Edit2, Trash2, Users } from 'lucide-react';
+import { Banknote, Plus, Loader2, Edit2, Ban, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { cajaService, type CashRegister, type CashClosureMode } from '../../../services/caja.service';
 import { api, getApiErrorMessage } from '../../../services/api';
-import { ConfirmDialog } from '../../ui/ConfirmDialog';
+import { AccountingAccountSelect } from '../../ui/AccountingAccountSelect';
 
 interface AdministrarCajasModalProps {
   open: boolean;
@@ -26,6 +26,7 @@ function toCajaPayload(form: Partial<CashRegister>) {
     code: String(form.code || '').trim(),
     location: String(form.location || '').trim(),
     branchId: form.branchId || undefined,
+    accountId: form.accountId || undefined,
     isActive: form.isActive !== false,
   };
 }
@@ -42,7 +43,6 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [assignedUsers, setAssignedUsers] = useState<Map<string, CashClosureMode>>(new Map());
   const [accessLoading, setAccessLoading] = useState(false);
-  const [pendingDeleteCaja, setPendingDeleteCaja] = useState<CashRegister | null>(null);
 
   const fetchCajas = async () => {
     setCajasLoading(true);
@@ -77,7 +77,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
 
     const timer = window.setTimeout(() => {
       onOpenChange(false);
-      setCajaForm({ isActive: true });
+      setCajaForm({ isActive: true, accountId: '' });
       setIsCajaFormOpen(true);
       onInitialModeHandled?.();
     }, 250);
@@ -114,16 +114,15 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
     }
   };
 
-  const confirmDeleteCaja = async () => {
-    if (!pendingDeleteCaja?.id) return;
+  const toggleCajaStatus = async (caja: CashRegister) => {
+    if (!caja.id) return;
     try {
-      await cajaService.deleteRegister(pendingDeleteCaja.id);
-      toast.success('Caja eliminada');
-      setPendingDeleteCaja(null);
+      await cajaService.updateRegister(caja.id, { isActive: !caja.isActive });
+      toast.success(caja.isActive ? 'Caja inhabilitada' : 'Caja habilitada');
       fetchCajas();
       onRegistersChanged?.();
     } catch (e: any) {
-      toast.error(getApiErrorMessage(e, 'Error al eliminar la caja'));
+      toast.error(getApiErrorMessage(e, 'Error al cambiar el estado de la caja'));
     }
   };
 
@@ -140,7 +139,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
             </div>
             <Button onClick={() => {
               onOpenChange(false);
-              setCajaForm({ isActive: true });
+              setCajaForm({ isActive: true, accountId: '' });
               setIsCajaFormOpen(true);
             }} className="gap-2 mt-0 mr-8">
               <Plus className="size-4" /> Nueva Caja
@@ -159,6 +158,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                       <th className="px-4 py-3 text-left font-semibold">Nombre</th>
                       <th className="px-4 py-3 text-left font-semibold">Sucursal</th>
                       <th className="px-4 py-3 text-left font-semibold">Ubicación</th>
+                      <th className="px-4 py-3 text-left font-semibold">Cuenta contable</th>
                       <th className="px-4 py-3 text-left font-semibold">Estado</th>
                       <th data-actions-column="compact" className="px-4 py-3 text-right font-semibold">Acciones</th>
                     </tr>
@@ -172,6 +172,9 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                         <td className="px-4 py-3">{caja.name}</td>
                         <td className="px-4 py-3 text-muted-foreground">{sucursal ? sucursal.name : 'No Asignada'}</td>
                         <td className="px-4 py-3 text-muted-foreground">{caja.location || '-'}</td>
+                        <td className="px-4 py-3 text-xs">
+                          {caja.account ? `${caja.account.code} · ${caja.account.name}` : <span className="text-amber-600">Sin asignar</span>}
+                        </td>
                         <td className="px-4 py-3">
                           <Badge variant={caja.isActive ? 'default' : 'secondary'} className={caja.isActive ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : ''}>
                             {caja.isActive ? 'Activa' : 'Inactiva'}
@@ -191,13 +194,21 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                                 location: caja.location || '',
                                 branchId: caja.branchId,
                                 isActive: caja.isActive !== false,
+                                accountId: caja.accountId || '',
                               });
                               setIsCajaFormOpen(true);
                             }}>
                               <Edit2 className="size-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setPendingDeleteCaja(caja)}>
-                              <Trash2 className="size-4" />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
+                              title={caja.isActive ? 'Inhabilitar caja' : 'Habilitar caja'}
+                              aria-label={caja.isActive ? 'Inhabilitar caja' : 'Habilitar caja'}
+                              onClick={() => void toggleCajaStatus(caja)}
+                            >
+                              <Ban className="size-4" />
                             </Button>
                           </div>
                         </td>
@@ -205,7 +216,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                     )})}
                     {cajasList.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                        <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                           No hay cajas creadas. Haz clic en "Nueva Caja" para empezar.
                         </td>
                       </tr>
@@ -220,16 +231,6 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <ConfirmDialog
-        open={Boolean(pendingDeleteCaja)}
-        onOpenChange={open => { if (!open) setPendingDeleteCaja(null); }}
-        title="¿Eliminar caja?"
-        description={pendingDeleteCaja ? `La caja «${pendingDeleteCaja.name}» se eliminará y esta acción no se puede deshacer.` : undefined}
-        confirmLabel="Eliminar caja"
-        variant="destructive"
-        onConfirm={confirmDeleteCaja}
-      />
 
       {/* Modal Formulario de Caja */}
       <Dialog open={isCajaFormOpen} onOpenChange={(open) => {
@@ -265,6 +266,14 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
               <Label>Ubicación</Label>
               <Input value={cajaForm.location || ''} onChange={e => setCajaForm({...cajaForm, location: e.target.value})} placeholder="Primer Piso" />
             </div>
+            <AccountingAccountSelect
+              value={cajaForm.accountId || ''}
+              onChange={(value) => setCajaForm({ ...cajaForm, accountId: value })}
+              label="Cuenta contable de cobro"
+              placeholder="Seleccione una cuenta de activo"
+              assetOnly
+              required
+            />
             <div className="flex items-center justify-between">
               <Label>Estado de la Caja</Label>
               <Switch checked={cajaForm.isActive} onCheckedChange={c => setCajaForm({...cajaForm, isActive: c})} />
@@ -274,6 +283,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
             <Button variant="outline" onClick={() => setIsCajaFormOpen(false)}>Cancelar</Button>
             <Button onClick={async () => {
               if (!cajaForm.name || !cajaForm.code) return toast.error('Nombre y código son obligatorios');
+              if (!cajaForm.accountId) return toast.error('Debes asignar una cuenta contable de cobro');
               try {
                 const payload = toCajaPayload(cajaForm);
                 if (cajaForm.id) {

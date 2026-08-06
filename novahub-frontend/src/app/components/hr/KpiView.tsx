@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -7,14 +7,16 @@ import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Separator } from '../ui/separator';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
 import {
-  BarChart3, Plus, Save, RefreshCw, X, Target, Weight, Calendar, Users, User, MessageSquare, Edit3
+  BarChart3, Plus, Save, RefreshCw, Check, X, Target, Weight, Calendar, Users, User, MessageSquare, Edit3
 } from 'lucide-react';
 import { hrService } from '../../services/hr.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import type { KpiDefinition, KpiResult } from '../../types';
 
 interface KpiViewProps {
@@ -49,9 +51,7 @@ const defaultKpiResult = () => ({
 
 export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
   const { canPerform } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [definitions, setDefinitions] = useState<KpiDefinition[]>([]);
-  const [results, setResults] = useState<KpiResult[]>([]);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('definitions');
 
   const [showDefForm, setShowDefForm] = useState(false);
@@ -63,27 +63,25 @@ export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
   const [savingResult, setSavingResult] = useState(false);
   const [resultForm, setResultForm] = useState(defaultKpiResult());
 
-  const fetchAll = useCallback(async () => {
-    try {
-      setLoading(true);
+  const kpiQuery = useQuery({
+    queryKey: ['hr', 'kpi-data'],
+    queryFn: async ({ signal }) => {
       const [defRes, resRes] = await Promise.all([
-        hrService.getKpiDefinitions() as any,
-        hrService.getKpiResults() as any,
+        hrService.getKpiDefinitions(undefined, signal) as any,
+        hrService.getKpiResults(undefined, undefined, signal) as any,
       ]);
-      setDefinitions(Array.isArray(defRes) ? defRes : defRes?.data || []);
-      setResults(Array.isArray(resRes) ? resRes : resRes?.data || []);
-    } catch (error) {
-      console.error('Error fetching KPI data:', error);
-      toast.error('Error al cargar datos de KPI');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setTimeout(fetchAll, 0);
-    return () => window.clearTimeout(timer);
-  }, [fetchAll]);
+      return { definitions: Array.isArray(defRes) ? defRes : defRes?.data || [], results: Array.isArray(resRes) ? resRes : resRes?.data || [] };
+    },
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    placeholderData: keepPreviousData,
+  });
+  const loading = kpiQuery.isLoading;
+  const definitions = (kpiQuery.data?.definitions || []) as KpiDefinition[];
+  const results = (kpiQuery.data?.results || []) as KpiResult[];
+  const fetchAll = () => queryClient.invalidateQueries({ queryKey: ['hr', 'kpi-data'] });
 
   const resetDefForm = () => { setDefForm(defaultKpiDef()); setEditingDefId(null); setShowDefForm(false); };
   const openEditDef = (d: KpiDefinition) => {

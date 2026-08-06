@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react'
-import { Wallet } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Landmark, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { useCurrency } from '../../contexts/CurrencyContext'
-import { contabilidadService } from '../../services/contabilidad.service'
+import { accountsService } from '../../services/finanzas.service'
 import { invoicesService } from '../../services/ventas.service'
 import { supplierInvoicesService, paymentsMadeService } from '../../services/compras.service'
 import { toast } from 'sonner'
+import { useAuth } from '../../contexts/AuthContext'
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, ComposedChart, Cell, Legend,
 } from 'recharts'
@@ -15,45 +16,41 @@ import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceToolti
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316']
 
 export function FinanceCashView() {
-  const { displayCurrency } = useCurrency()
+  const { displayCurrency, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatCurrentAmount } = useCurrency()
+  const { user } = useAuth()
+  const tenantKey = user?.clientTenantId || user?.tenantId || 'current'
   const sym = displayCurrency === 'USD' ? '$' : 'C$'
-  const fmt = (n: number) => sym + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  // Los saldos contables y de las cuentas están en moneda funcional. Solo se
+  // convierten para la visualización; nunca se mezclan importes fuente.
+  const fmt = (n: number) => formatCurrentAmount(n, displayCurrency)
   const fmtShort = (n: number) => {
-    if (Math.abs(n) >= 1_000_000) return sym + (n / 1_000_000).toFixed(1) + 'M'
-    if (Math.abs(n) >= 1_000) return sym + (n / 1_000).toFixed(1) + 'K'
-    return sym + n.toLocaleString(undefined, { minimumFractionDigits: 0 })
+    const displayed = n
+    if (Math.abs(displayed) >= 1_000_000) return sym + (displayed / 1_000_000).toFixed(1) + 'M'
+    if (Math.abs(displayed) >= 1_000) return sym + (displayed / 1_000).toFixed(1) + 'K'
+    return sym + displayed.toLocaleString(undefined, { minimumFractionDigits: 0 })
   }
 
-  const [bankAccounts, setBankAccounts] = useState<any[]>([])
-  const [salesInvoices, setSalesInvoices] = useState<any[]>([])
-  const [supplierInvoices, setSupplierInvoices] = useState<any[]>([])
-  const [paymentsMade, setPaymentsMade] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const toList = (response: any) => Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : [])
+  const accountsQuery = useQuery({ queryKey: ['finance', 'accounts', tenantKey], queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal), staleTime: 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const salesInvoicesQuery = useQuery({ queryKey: ['finance', 'sales-invoices', tenantKey], queryFn: ({ signal }) => invoicesService.getAll({ page: 1, pageSize: 200 }, signal), staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const supplierInvoicesQuery = useQuery({ queryKey: ['finance', 'supplier-invoices', tenantKey], queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal), staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const paymentsQuery = useQuery({ queryKey: ['finance', 'payments-made', tenantKey], queryFn: ({ signal }) => paymentsMadeService.getAll({ page: 1, pageSize: 200 }, signal), staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const bankAccounts = toList(accountsQuery.data).filter((a: any) => ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) || String(a.name || '').toUpperCase().includes('CAJA') || String(a.name || '').toUpperCase().includes('BANCO'))
+  const salesInvoices = toList(salesInvoicesQuery.data)
+  const supplierInvoices = toList(supplierInvoicesQuery.data)
+  const paymentsMade = toList(paymentsQuery.data)
+  const loading = [accountsQuery, salesInvoicesQuery, supplierInvoicesQuery, paymentsQuery].some(query => query.isLoading)
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate)
+  const invoiceBase = (invoice: any) => toDisplayAmount(Number(invoice.total || invoice.baseTotal || 0), invoice.currency, invoice.exchangeRate)
+  const paymentBase = (payment: any) => toDisplayAmount(Number(payment.amount || payment.baseAmount || 0), payment.currency, payment.exchangeRate)
 
-  useEffect(() => {
-    Promise.all([
-      contabilidadService.getChartOfAccounts(),
-      invoicesService.getAll(),
-      supplierInvoicesService.getAll(),
-      paymentsMadeService.getAll(),
-    ]).then(([accRes, invRes, suppRes, payRes]: any[]) => {
-      const all = accRes?.data || accRes || []
-      setBankAccounts(all.filter((a: any) =>
-        ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) ||
-        String(a.name || '').toUpperCase().includes('CAJA') ||
-        String(a.name || '').toUpperCase().includes('BANCO')
-      ))
-      setSalesInvoices(invRes?.data || invRes || [])
-      setSupplierInvoices(suppRes?.data || suppRes || [])
-      setPaymentsMade(payRes?.data || payRes || [])
-    }).catch(() => {}).finally(() => setLoading(false))
-  }, [])
-
-  const totalBalance = bankAccounts.reduce((a, acc: any) => a + Number(acc.balance || 0), 0)
+  const totalBalance = bankAccounts.reduce((a, acc: any) => a + toDisplayAmount(Number(acc.balance || 0), acc.currency, acc.exchangeRate), 0)
   const cashAccounts = bankAccounts.filter((a: any) => String(a.subtype || '').toUpperCase() === 'CASH')
   const bankAccs = bankAccounts.filter((a: any) => String(a.subtype || '').toUpperCase() !== 'CASH')
-  const cashTotal = cashAccounts.reduce((a: number, ac: any) => a + Number(ac.balance || 0), 0)
-  const bankTotal = bankAccs.reduce((a: number, ac: any) => a + Number(ac.balance || 0), 0)
+  const cashTotal = cashAccounts.reduce((a: number, ac: any) => a + toDisplayAmount(Number(ac.balance || 0), ac.currency, ac.exchangeRate), 0)
+  const bankTotal = bankAccs.reduce((a: number, ac: any) => a + toDisplayAmount(Number(ac.balance || 0), ac.currency, ac.exchangeRate), 0)
 
   // Aggregate real monthly data from invoices + payments
   const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
@@ -63,19 +60,19 @@ export function FinanceCashView() {
     const y = now.getFullYear()
     const entradas = salesInvoices
       .filter((inv: any) => { const d = inv.date || inv.createdAt; return d && d.startsWith(`${y}-${m}`) && String(inv.status || '').toUpperCase() !== 'CANCELLED' })
-      .reduce((a: number, inv: any) => a + Number(inv.total || 0), 0)
+      .reduce((a: number, inv: any) => a + invoiceBase(inv), 0)
     const salidas = supplierInvoices
       .filter((inv: any) => { const d = inv.date || inv.createdAt; return d && d.startsWith(`${y}-${m}`) && String(inv.status || '').toUpperCase() !== 'CANCELLED' })
-      .reduce((a: number, inv: any) => a + Number(inv.total || 0), 0)
+      .reduce((a: number, inv: any) => a + invoiceBase(inv), 0)
     const pags = paymentsMade
       .filter((p: any) => { const d = p.date || p.createdAt; return d && d.startsWith(`${y}-${m}`) })
-      .reduce((a: number, p: any) => a + Number(p.amount || 0), 0)
+      .reduce((a: number, p: any) => a + paymentBase(p), 0)
     return { month, saldo: entradas - salidas - pags, entradas, salidas: salidas + pags }
   })
 
   const distribution = [
-    ...bankAccs.map((a: any) => ({ name: a.name || 'Banco', value: Number(a.balance || 0) })),
-    ...cashAccounts.map((a: any) => ({ name: a.name || 'Caja', value: Number(a.balance || 0) })),
+    ...bankAccs.map((a: any) => ({ name: a.name || 'Banco', value: toDisplayAmount(Number(a.balance || 0), a.currency, a.exchangeRate) })),
+    ...cashAccounts.map((a: any) => ({ name: a.name || 'Caja', value: toDisplayAmount(Number(a.balance || 0), a.currency, a.exchangeRate) })),
   ]
   if (distribution.length === 0) distribution.push({ name: 'Efectivo', value: 0 }, { name: 'Bancos', value: 0 })
 
@@ -85,24 +82,24 @@ export function FinanceCashView() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardContent className="p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo Total Disponible</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo Total Disponible{valuationModeSuffix}</p>
             <p className="text-2xl font-black tabular-nums text-primary">{fmt(totalBalance)}</p>
             <p className="text-[9px] text-muted-foreground mt-1">{bankAccounts.length} cuenta(s) · {cashAccounts.length} caja(s) · {bankAccs.length} banco(s)</p>
           </CardContent>
         </Card>
         <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardContent className="p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">En Efectivo (Cajas)</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">En Efectivo (Cajas){valuationModeSuffix}</p>
             <p className="text-lg font-black tabular-nums text-emerald-500">{fmt(cashTotal)}</p>
           </CardContent>
         </Card>
         <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardContent className="p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">En Bancos</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">En Bancos{valuationModeSuffix}</p>
             <p className="text-lg font-black tabular-nums text-blue-500">{fmt(bankTotal)}</p>
           </CardContent>
         </Card>
@@ -120,7 +117,7 @@ export function FinanceCashView() {
                 <defs><linearGradient id="balG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#06b6d4" stopOpacity={0.25} /><stop offset="100%" stopColor="#06b6d4" stopOpacity={0} /></linearGradient></defs>
                 <CartesianGrid strokeDasharray="4 4" stroke={FINANCE_GRID} opacity={0.45} vertical={false} />
                 <XAxis dataKey="month" tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickMargin={8} />
-                <YAxis tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => sym + (v / 1000).toFixed(0) + 'K'} width={64} />
+                <YAxis tick={FINANCE_AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtShort(v)} width={64} />
                 <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#06b6d4', strokeWidth: 1, strokeDasharray: '4 4' }} />
               <Legend verticalAlign="bottom" height={28} formatter={(value: string) => <span style={{ color: 'var(--foreground)', fontWeight: 600, fontSize: 11 }}>{value}</span>} />
                 <Area dataKey="saldo" fill="url(#balG)" stroke="#06b6d4" strokeWidth={2.5} type="monotone" dot={{ r: 3, fill: '#06b6d4', strokeWidth: 0 }} />
@@ -168,7 +165,8 @@ export function FinanceCashView() {
               <p className="text-xs mt-1">Configure cuentas de tipo CASH o BANK en el Plan de Cuentas (Contabilidad).</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="space-y-3">
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-xs">
                 <thead><tr className="border-b border-border text-muted-foreground">
                   <th className="text-left py-2 font-bold uppercase tracking-wider">Cuenta</th>
@@ -187,6 +185,20 @@ export function FinanceCashView() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="space-y-2 md:hidden">
+              {bankAccounts.map((acc: any) => (
+                <div key={acc.id} className="min-w-0 rounded-xl border border-border/40 bg-muted/20 p-3">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words text-xs font-bold font-mono text-foreground">{acc.code} - {acc.name}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">{subtypeLabel(acc.subtype || acc.type)} · {acc.currency || 'NIO'}</p>
+                    </div>
+                    <p className="shrink-0 text-right text-sm font-black tabular-nums text-foreground">{fmt(Number(acc.balance || 0))}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
             </div>
           )}
         </CardContent>

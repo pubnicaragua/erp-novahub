@@ -70,7 +70,8 @@ function DashboardLayout() {
     return (localStorage.getItem('erp-active-module') as Module | 'overview') || 'overview';
   });
   const [activeSubModule, setActiveSubModule] = useState<string | undefined>(() => {
-    return localStorage.getItem('erp-active-submodule') || undefined;
+    const storedSubModule = localStorage.getItem('erp-active-submodule');
+    return storedSubModule === 'dashboard' ? 'productos' : (storedSubModule || undefined);
   });
 
   useEffect(() => {

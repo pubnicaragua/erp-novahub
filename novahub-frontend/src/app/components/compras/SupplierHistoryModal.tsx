@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
-import { Card } from '../ui/card';
+import { Card, CardContent } from '../ui/card';
 import { purchaseOrdersService, supplierInvoicesService, expensesService, recurringExpensesService, supplierPricesService } from '../../services/compras.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -33,14 +34,24 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
   const { formatConvertedAmount } = useCurrency();
   const { user } = useAuth();
 
-  const loadHistory = async () => {
+  useEffect(() => {
+    const controller = new AbortController();
+    if (open && supplier) {
+      loadHistory(controller.signal);
+    } else {
+      setItems([]);
+    }
+    return () => controller.abort();
+  }, [open, supplier]);
+
+  const loadHistory = async (signal?: AbortSignal) => {
     try {
       setLoading(true);
       const [ordersRes, invoicesRes, expensesRes, recurringRes] = await Promise.all([
-        purchaseOrdersService.getAll({ supplierId: supplier!.id } as any),
-        supplierInvoicesService.getAll({ supplierId: supplier!.id } as any),
-        expensesService.getAll({ supplierId: supplier!.id } as any),
-        recurringExpensesService.getAll({ supplierId: supplier!.id } as any),
+        purchaseOrdersService.getAll({ supplierId: supplier!.id, page: 1, pageSize: 200 } as any, signal),
+        supplierInvoicesService.getAll({ supplierId: supplier!.id, page: 1, pageSize: 200 } as any, signal),
+        expensesService.getAll({ supplierId: supplier!.id, page: 1, pageSize: 200 } as any, signal),
+        recurringExpensesService.getAll({ supplierId: supplier!.id, page: 1, pageSize: 200 } as any, signal),
       ]);
       
       const rawOrders = Array.isArray(ordersRes) ? ordersRes : ((ordersRes as any).data || []);
@@ -122,28 +133,15 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
       historyItems.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
       setItems(historyItems);
 
-      const priceRes = await supplierPricesService.getAll(supplier!.id);
+      const priceRes = await supplierPricesService.getAll(supplier!.id, signal);
       setPrices(Array.isArray(priceRes) ? priceRes : []);
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return;
       console.error('Error loading history:', error);
     } finally {
       setLoading(false);
     }
   };
-
-  const [prevDialog, setPrevDialog] = useState({ open, supplier });
-  if (open !== prevDialog.open || supplier !== prevDialog.supplier) {
-    setPrevDialog({ open, supplier });
-    if (!open || !supplier) {
-      setItems([]);
-    }
-  }
-
-  useEffect(() => {
-    if (open && supplier) {
-      Promise.resolve().then(loadHistory);
-    }
-  }, [open, supplier]);
 
   const handleExportPDF = () => {
     if (!supplier || items.length === 0) return;
@@ -193,11 +191,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
 
   const totalPages = Math.ceil(items.length / 50);
   const pageItems = items.slice((page - 1) * 50, page * 50);
-  const [prevItems, setPrevItems] = useState(items);
-  if (items !== prevItems) {
-    setPrevItems(items);
-    setPage(1);
-  }
+  useEffect(() => { setPage(1); }, [items]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -257,15 +251,15 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                         <tr key={idx} className="hover:bg-muted/30 transition-colors">
                           <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{it.date}</td>
                           <td className="px-4 py-3">
-                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${it.type === 'Factura' ? 'bg-primary/10 text-primary' : it.type.includes('Gasto') ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'}`}>
+                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${it.type === 'Factura' ? 'bg-primary/10 text-primary' : it.type.includes('Gasto') ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary'}`}>
                                {it.type}
                              </span>
                           </td>
                           <td className="px-4 py-3 font-mono text-xs">{it.docNumber}</td>
                           <td className="px-4 py-3">{it.description}</td>
                           <td className="px-4 py-3 text-center">{it.quantity}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{formatConvertedAmount(it.unitPrice, it.currency, it.exchangeRate)}</td>
-                          <td className="px-4 py-3 text-right font-medium tabular-nums">{formatConvertedAmount(it.total, it.currency, it.exchangeRate)}</td>
+                          <td className="px-4 py-3 text-right"><CurrencyValuationAmount amount={it.unitPrice} sourceCurrency={it.currency} sourceExchangeRate={it.exchangeRate} className="font-medium" /></td>
+                          <td className="px-4 py-3 text-right"><CurrencyValuationAmount amount={it.total} sourceCurrency={it.currency} sourceExchangeRate={it.exchangeRate} className="font-medium" /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -325,7 +319,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                       <tr key={p.id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs">{new Date(p.date).toLocaleDateString()}</td>
                         <td className="px-4 py-3">{p.description}</td>
-                        <td className="px-4 py-3 text-right font-medium tabular-nums">{formatConvertedAmount(p.unitPrice, p.currency)}</td>
+                        <td className="px-4 py-3 text-right"><CurrencyValuationAmount amount={p.unitPrice} sourceCurrency={p.currency} sourceExchangeRate={p.exchangeRate} className="font-medium" /></td>
                         <td className="px-4 py-3 text-center text-xs font-mono">{p.currency}</td>
                         <td className="px-4 py-3 text-center">
                           <button onClick={() => setDeletePriceId(p.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="size-3.5" /></button>

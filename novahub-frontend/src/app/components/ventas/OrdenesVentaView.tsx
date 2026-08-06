@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Search, TrendingUp, Clock, FilePlus, Package, Eye, Ban, ChevronLeft, Trash2
+  ClipboardList, Plus, Search, TrendingUp, Clock, ArrowRightCircle, Package, Eye, Ban, ChevronLeft, Trash2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -20,7 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { FileDown } from 'lucide-react';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
-import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
@@ -54,7 +54,7 @@ const statusOptions = [
 ];
 
 export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: OrdenesVentaViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount, formatAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
@@ -101,7 +101,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     const orderForConversion = localDoc?.id === order.id
       ? {
           ...order,
-          accountId: localDoc.accountId,
           sellerEmployeeId: localDoc.sellerEmployeeId,
         }
       : order;
@@ -117,10 +116,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     const priceMessage = getMissingSalesPriceMessage(orderForConversion.items);
     if (priceMessage) {
       toast.error(priceMessage);
-      return;
-    }
-    if (!orderForConversion.accountId) {
-      toast.error('Asigna la cuenta contable de la venta antes de facturar la orden');
       return;
     }
     for (const item of orderForConversion.items) {
@@ -223,7 +218,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     currency: localDoc?.currency,
     exchangeRate: localDoc?.exchangeRate,
     baseTotal: localDoc?.baseTotal,
-    accountId: localDoc?.accountId || null,
     warehouseId: localDoc?.warehouseId || null,
     notes: localDoc?.notes,
     items: localDoc?.items || [],
@@ -412,7 +406,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   const confirmedAmountInDisplayCurrency = data
     .filter(order => (order.status || '').toUpperCase() === 'CONFIRMED')
-    .reduce((acc, order) => acc + convertAmount(order.total || 0, order.currency, order.exchangeRate), 0);
+    .reduce((acc, order) => acc + ((order as any).baseTotal !== null && (order as any).baseTotal !== undefined
+      ? Number((order as any).baseTotal)
+      : toBaseAmount(order.total || 0, order.currency, order.exchangeRate)), 0);
 
   if (editingId && localDoc) {
     return (
@@ -446,6 +442,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
+              <SalesAccountingLegend flow="order" />
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Número</p>
@@ -567,17 +564,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   <p className="mt-1 text-[10px] text-muted-foreground/70">
                     Tasa de cambio configurada: <span className="font-bold">{formatNumber2(Number(localDoc?.currency === 'NIO' ? 1 : localDoc?.exchangeRate || globalRate || 1))}</span>
                   </p>
-                </div>
-                <div className="sm:col-span-2">
-                  <AccountingAccountSelect
-                    value={localDoc?.accountId || ''}
-                    onChange={(accountId) => {
-                      setLocalDoc({ ...localDoc, accountId } as any);
-                      void handleUpdate(localDoc!.id, { accountId } as any);
-                    }}
-                    label="Cuenta contable de la venta"
-                    required
-                  />
                 </div>
               </div>
             </CardContent>
@@ -800,7 +786,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                           <span className="text-xs">Aplicar</span>
                         </span>
                       </label>
-                      <label className="flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
+                      <label className="relative flex-1">
+                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Desc.</span>
                         <Input
                           type="number"
                           min="0"
@@ -813,7 +800,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                             setLocalDoc({ ...localDoc, ...next } as any);
                             void handleUpdate(localDoc!.id, next as any);
                           }}
-                          className="h-8 w-full rounded-md bg-muted/30 text-right text-xs"
+                          className="h-8 w-full rounded-md bg-muted/30 pl-12 text-right text-xs"
                         />
                       </label>
                     </div>
@@ -910,13 +897,12 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title="Órdenes Abiertas" value={data.filter(o => (o.status||'').toUpperCase() === 'CONFIRMED').length} icon={Package} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'CONFIRMED'} onClick={() => setStatusFilter(statusFilter === 'CONFIRMED' ? 'ALL' : 'CONFIRMED')} />
-        <SalesKpiCard title={`Monto Confirmado (${displayCurrency})`} value={formatConvertedAmount(confirmedAmountInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
+        <SalesKpiCard title={`Monto Confirmado (${baseCurrency})`} value={formatConvertedAmount(confirmedAmountInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
         <SalesKpiCard title="En Proceso" value={data.filter(o => (o.status||'').toUpperCase() === 'IN_PROGRESS').length} icon={Clock} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'IN_PROGRESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROGRESS' ? 'ALL' : 'IN_PROGRESS')} />
         <SalesKpiCard title="Total del Mes" value={data.length} icon={ClipboardList} color="text-purple-500" bg="bg-purple-500/10" />
       </div>
-
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div>
@@ -950,6 +936,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           fitContent
           columns={columns}
           onRowUpdate={handleUpdate}
+          onRowClick={(row) => setEditingId(row.id)}
           isLoading={loading}
           actions={(row) => (
             <div className="flex min-w-max items-center justify-end gap-2 pr-1">
@@ -962,13 +949,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     disabled={invoicingOrderId === row.id}
                     variant="ghost" 
                     size="icon" 
-                    className="size-8 shrink-0 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
+                    className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors"
                   >
-                    <FilePlus className={cn('size-4', invoicingOrderId === row.id && 'animate-pulse')} />
+                    <ArrowRightCircle className={cn('size-4 text-muted-foreground', invoicingOrderId === row.id && 'animate-pulse')} />
                   </Button>
                 )}
-                <Button type="button" title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-                <Button type="button" title="Exportar PDF" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch (e: any) { console.error(e) } }}><FileDown className="size-4" /></Button>
+                <Button type="button" title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4 text-muted-foreground" /></Button>
+                <Button type="button" title="Exportar PDF" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch (e: any) { console.error(e) } }}><FileDown className="size-4 text-muted-foreground" /></Button>
                 {canPerform('SALES_ORDERS', 'delete') &&
                   !['CANCELLED', 'DELIVERED'].includes(String(row.status || '').toUpperCase()) &&
                   !row.invoiceId && !row.invoiceNumber && (
@@ -978,7 +965,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     aria-label="Cancelar orden"
                     variant="ghost"
                     size="icon"
-                    className="size-8 shrink-0 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                    className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors"
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
                       event.preventDefault();
@@ -986,7 +973,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       setPendingCancelId(row.id);
                     }}
                   >
-                    <Ban className="size-4" />
+                  <Ban className="size-4 text-muted-foreground" />
                   </Button>
                 )}
              </div>

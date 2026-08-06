@@ -15,13 +15,14 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useGlobalSearch } from '../hooks/useGlobalSearch';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
-import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
@@ -58,12 +59,25 @@ const statusOptions = [
 ];
 
 export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: FacturasViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const {
+    exchangeRate: globalRate,
+    displayCurrency,
+    baseCurrency,
+    valuationMode,
+    valuationModeLabel,
+    valuationModeSuffix,
+    showValuationLegend,
+    formatConvertedAmount,
+    formatHistoricalAmount,
+    formatCurrentAmount,
+    convertAmount,
+    convertCurrentAmount,
+  } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState(sessionStorage.getItem('global-search-module') === 'facturas' ? (sessionStorage.removeItem('global-search-module') || sessionStorage.getItem('global-search-term') || '') : '');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'RECEIVABLE' | 'OVERDUE' | 'PAID'>('ALL');
-  useEffect(() => { try { sessionStorage.removeItem('global-search-term') } catch { /* intentionally empty */ } }, [])
+  useEffect(() => { try { sessionStorage.removeItem('global-search-term') } catch {} }, [])
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -164,59 +178,66 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (invoiceDraft) {
-        setIsCreating(true);
-        setEditingId(null);
-        const draftSnapshot = { paymentMethod: 'CASH', accountId: '', ...JSON.parse(JSON.stringify(invoiceDraft)) };
-        setLocalDoc(draftSnapshot);
-        setPricingMode(inferPricingMode(draftSnapshot));
+    if (!invoiceDraft) return;
 
-        const sub = Number(invoiceDraft.subtotal || 0);
+    const draftId = (invoiceDraft as Partial<Invoice>).id;
+    const isExistingInvoice = Boolean(draftId);
+    setIsCreating(!isExistingInvoice);
+    setEditingId(isExistingInvoice ? draftId! : null);
+    const draftSnapshot = { paymentMethod: 'CASH', ...JSON.parse(JSON.stringify(invoiceDraft)) };
+    setLocalDoc(draftSnapshot);
+    setPricingMode(inferPricingMode(draftSnapshot));
+
+    const sub = Number(invoiceDraft.subtotal || 0);
+    if (sub > 0) {
+      const dRate = (Number(invoiceDraft.discountAmount || 0) / sub) * 100;
+      const base = sub - Number(invoiceDraft.discountAmount || 0);
+      const tRate = base > 0 ? (Number(invoiceDraft.taxAmount || 0) / base) * 100 : 0;
+      setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
+    } else {
+      setLocalRates({ dRate: 0, tRate: 15 });
+    }
+
+    if (onClearInvoiceDraft && !isExistingInvoice) {
+      setTimeout(() => onClearInvoiceDraft(), 0);
+    }
+  }, [invoiceDraft]);
+
+  // El documento abierto es un snapshot local. Las actualizaciones de la
+  // lista paginada no deben reemplazarlo con una respuesta parcial sin líneas.
+  useEffect(() => {
+    if (invoiceDraft) return;
+    if (editingId) {
+      const inv = data.find(x => x.id === editingId);
+      if (inv) {
+        setIsCreating(false);
+        const invoiceSnapshot = JSON.parse(JSON.stringify(inv));
+        setLocalDoc(invoiceSnapshot);
+        setPricingMode(inferPricingMode(invoiceSnapshot));
+        const sub = Number(inv.subtotal || 0);
         if (sub > 0) {
-          const dRate = (Number(invoiceDraft.discountAmount || 0) / sub) * 100;
-          const base = sub - Number(invoiceDraft.discountAmount || 0);
-          const tRate = base > 0 ? (Number(invoiceDraft.taxAmount || 0) / base) * 100 : 0;
+          const dRate = (Number(inv.discountAmount || 0) / sub) * 100;
+          const base = sub - Number(inv.discountAmount || 0);
+          const tRate = base > 0 ? (Number(inv.taxAmount || 0) / base) * 100 : 0;
           setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
-        } else {
-          setLocalRates({ dRate: 0, tRate: 15 });
         }
-
-        if (onClearInvoiceDraft) {
-          setTimeout(() => onClearInvoiceDraft(), 0);
-        }
-      } else if (editingId) {
-        const inv = data.find(x => x.id === editingId);
-        if (inv) {
-          const invoiceSnapshot = JSON.parse(JSON.stringify(inv));
-          setLocalDoc(invoiceSnapshot);
-          setPricingMode(inferPricingMode(invoiceSnapshot));
-          const sub = Number(inv.subtotal || 0);
-          if (sub > 0) {
-            const dRate = (Number(inv.discountAmount || 0) / sub) * 100;
-            const base = sub - Number(inv.discountAmount || 0);
-            const tRate = base > 0 ? (Number(inv.taxAmount || 0) / base) * 100 : 0;
-            setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
-          }
-        }
-      } else if (!isCreating) {
-        setLocalDoc(null);
       }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [editingId, invoiceDraft, data, isCreating, onClearInvoiceDraft]);
+    } else if (!isCreating) {
+      setLocalDoc(null);
+    }
+    // `data` se usa únicamente para inicializar al cambiar de factura.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId, invoiceDraft, isCreating]);
 
   useEffect(() => {
-    if (!targetInvoiceId) return;
-    const timer = window.setTimeout(() => {
+    if (targetInvoiceId) {
       const exists = data.find(x => x.id === targetInvoiceId);
       if (exists) {
         setEditingId(targetInvoiceId);
         setIsCreating(false);
         onClearTargetInvoiceId?.();
       }
-    }, 0);
-    return () => window.clearTimeout(timer);
+    }
   }, [targetInvoiceId, data, onClearTargetInvoiceId]);
 
   const filtered = data.filter(f =>
@@ -248,11 +269,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error('La factura no tiene saldo pendiente');
       return;
     }
-    if (invoiceStatus === 'DRAFT' && !invoice.accountId) {
-      toast.error('La factura necesita una cuenta contable de venta antes de cobrarla');
-      return;
-    }
-
     try {
       setPayingInvoiceId(invoice.id);
       if (invoiceStatus === 'DRAFT') {
@@ -311,7 +327,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       commissionType: 'PERCENTAGE',
       commissionRate: 0,
       commissionAmount: 0,
-      accountId: '',
       paymentMethod: 'CASH',
     });
     setLocalRates({ dRate: 0, tRate: 15 });
@@ -333,10 +348,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         toast.error(priceMessage);
         return;
       }
-    }
-    if (emitir && !localDoc.accountId) {
-      toast.error('Selecciona la cuenta contable de la venta antes de emitir');
-      return;
     }
     const serialRows = (localDoc.items || []).filter((item: any) => {
       const p = findProductForItem(item);
@@ -412,7 +423,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           total: Number(localDoc.total || 0),
           status: emitir ? 'PENDING' : 'DRAFT',
           paymentMethod: localDoc.paymentMethod || 'CASH',
-          accountId: localDoc.accountId || undefined,
           notes: finalNotes,
           salesOrderId: localDoc.salesOrderId || undefined,
           sellerEmployeeId: localDoc.sellerEmployeeId || undefined,
@@ -447,7 +457,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const base = subtotal - discountAmount;
     const taxAmount = base * (tRate / 100);
     const total = base + taxAmount;
-    return { subtotal, discountAmount, taxAmount, total };
+    // Mantener las líneas en ambos modos. El selector de lista de precios
+    // también recalcula los totales cuando su matriz termina de cargar; si
+    // este retorno no incluye `items`, esa actualización visualiza la factura
+    // sin líneas aunque la base de datos las conserve.
+    return { items, subtotal, discountAmount, taxAmount, total };
   };
 
   const recalcIndividualTotals = (items: any[]) => {
@@ -465,6 +479,24 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       return sum + ((gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100);
     }, 0);
     return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount };
+  };
+
+  const getInvoiceBalance = (invoice: Partial<Invoice>) => {
+    const status = String(invoice.status || '').toUpperCase();
+    if (status === 'DRAFT' || status === 'CANCELLED') return 0;
+    return Math.max(0, Number(invoice.balance ?? invoice.total ?? 0));
+  };
+
+  const formatInvoiceAmount = (amount: number, currency?: string, rate?: number) => (
+    valuationMode === 'CURRENT'
+      ? formatCurrentAmount(amount, currency)
+      : formatHistoricalAmount(amount, currency, rate)
+  );
+
+  const getInvoiceExchangeDifference = (amount: number, currency?: string, rate?: number) => {
+    const sourceCurrency = String(currency || baseCurrency).toUpperCase();
+    if (!amount || sourceCurrency === baseCurrency || sourceCurrency === displayCurrency) return 0;
+    return convertCurrentAmount(amount, currency) - convertAmount(amount, currency, rate || globalRate);
   };
 
 
@@ -502,11 +534,52 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       key: 'total',
       header: 'Total Neto',
       width: '150px',
-      render: (val, row) => (
-        <span className="text-[13px] font-black tabular-nums text-foreground">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-        </span>
-      )
+      render: (val, row) => {
+        const amount = Number(val || 0);
+        const difference = getInvoiceExchangeDifference(amount, row.currency, row.exchangeRate);
+        return (
+          <div className="min-w-0">
+            <span className="text-[13px] font-black tabular-nums text-foreground">
+              {formatInvoiceAmount(amount, row.currency, row.exchangeRate)}
+            </span>
+            {showValuationLegend && <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+              {valuationModeLabel}
+              {valuationMode === 'CURRENT' && Math.abs(difference) >= 0.005 && (
+                <span className={cn('ml-1', difference > 0 ? 'text-orange-500' : 'text-emerald-500')}>
+                  · Δ {formatCurrentAmount(difference, displayCurrency)}
+                </span>
+              )}
+            </div>}
+          </div>
+        );
+      }
+    },
+    {
+      key: 'balance',
+      header: 'Saldo deudor',
+      width: '150px',
+      render: (_val, row) => {
+        const balance = getInvoiceBalance(row);
+        const difference = getInvoiceExchangeDifference(balance, row.currency, row.exchangeRate);
+        return (
+          <div className="min-w-0">
+            <span className={cn(
+              "text-[13px] font-black tabular-nums",
+              balance > 0 ? "text-orange-500" : "text-emerald-500"
+            )}>
+              {formatInvoiceAmount(balance, row.currency, row.exchangeRate)}
+            </span>
+            {showValuationLegend && <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+              {valuationModeLabel}
+              {valuationMode === 'CURRENT' && Math.abs(difference) >= 0.005 && (
+                <span className={cn('ml-1', difference > 0 ? 'text-orange-500' : 'text-emerald-500')}>
+                  · Δ {formatCurrentAmount(difference, displayCurrency)}
+                </span>
+              )}
+            </div>}
+          </div>
+        );
+      }
     },
     {
       key: 'status',
@@ -526,25 +599,33 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
   ];
 
+  const displayInvoiceAmount = (amount: number, currency?: string, rate?: number) => (
+    valuationMode === 'CURRENT'
+      ? convertCurrentAmount(amount, currency)
+      : convertAmount(amount, currency, rate || globalRate)
+  );
+
   const totalBilledInDisplayCurrency = data.reduce(
-    (acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate),
+    (acc, invoice) => acc + displayInvoiceAmount(Number(invoice.total ?? invoice.baseTotal ?? 0), invoice.currency, invoice.exchangeRate),
     0,
   );
   const accountsReceivableInDisplayCurrency = data
     .filter(invoice => ['PENDING', 'OVERDUE', 'PARTIAL'].includes((invoice.status || '').toUpperCase()))
-    .reduce((acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate), 0);
-  const paidInDisplayCurrency = data
-    .filter(invoice => (invoice.status || '').toUpperCase() === 'PAID')
-    .reduce((acc, invoice) => acc + convertAmount(invoice.total || 0, invoice.currency, invoice.exchangeRate), 0);
+    .reduce((acc, invoice) => acc + displayInvoiceAmount(getInvoiceBalance(invoice), invoice.currency, invoice.exchangeRate), 0);
+  const paidInDisplayCurrency = data.reduce(
+    (acc, invoice) => acc + displayInvoiceAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate),
+    0,
+  );
 
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
     const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED'].includes(String(localDoc?.status || '').toUpperCase());
+    const isCashRegisterInvoice = !isCreating && Boolean(localDoc?.registerId || localDoc?.sessionId);
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setIsCreating(false); setLocalDoc(null); }} className="rounded-full">
+          <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setIsCreating(false); setLocalDoc(null); onClearInvoiceDraft?.(); }} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -577,6 +658,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           <Card className="rounded-2xl border-border/50">
             <CardContent className="min-w-0 p-4 space-y-3 sm:p-6">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
+              <SalesAccountingLegend
+                flow={isCashRegisterInvoice ? 'pos' : 'invoice'}
+                paymentMethod={localDoc?.paymentMethod}
+              />
               <div className="grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Número</p>
@@ -679,7 +764,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     <p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc?.currency === 'NIO' ? '1.00' : Number(localDoc?.exchangeRate || globalRate || 1).toFixed(2)}</span></p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Forma de pago al emitir</p>
+                    <p className="text-[10px] text-muted-foreground mb-1">Forma sugerida para el cobro</p>
                      <select disabled={isInvoiceLocked} value={localDoc?.paymentMethod || 'CASH'} onChange={(event) => setLocalDoc({ ...localDoc, paymentMethod: event.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                       <option value="CASH">Efectivo</option>
                       <option value="CARD">Tarjeta</option>
@@ -687,16 +772,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       <option value="CHECK">Cheque</option>
                     </select>
                   </div>
-                  <AccountingAccountSelect
-                    value={localDoc?.accountId || ''}
-                    onChange={(accountId) => {
-                      setLocalDoc({ ...localDoc, accountId });
-                      if (!isCreating) void handleUpdate(localDoc!.id, { accountId });
-                     }}
-                     label="Cuenta contable de la venta"
-                     required
-                     disabled={isInvoiceLocked}
-                   />
               </div>
             </CardContent>
           </Card>
@@ -741,6 +816,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     {localDoc?.currency === 'NIO' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ $ {formatSalesAmount(Number(localDoc?.total || 0) / (localDoc?.exchangeRate || globalRate))}</p>}
                   </div>
                 </div>
+                {!isCreating && String(localDoc?.status || '').toUpperCase() !== 'DRAFT' && (
+                  <div className="flex justify-between items-center border-t border-border/40 pt-3">
+                    <span className="text-sm font-black text-orange-500">Saldo deudor</span>
+                    <span className="text-orange-500 font-black text-lg">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(getInvoiceBalance(localDoc))}</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -903,14 +984,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           <span className="text-xs">Aplicar</span>
                         </span>
                       </label>
-                      <label className="flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
+                      <label className="relative flex-1">
+                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Desc.</span>
                         <Input type="number" min="0" max="100" value={item.discount || ''} onChange={(event) => {
                           const nextItems = [...(localDoc.items || [])];
                           nextItems[idx] = { ...nextItems[idx], discount: Number(event.target.value) || 0 };
                           const recalculated = recalcTotals(nextItems, 0, 0);
                           setLocalDoc({ ...localDoc, ...recalculated });
                           if (!isCreating) void handleUpdate(localDoc!.id, recalculated as any);
-                         }} className="h-8 w-full rounded-md bg-muted/30 text-right text-xs" disabled={isInvoiceLocked} />
+                         }} className="h-8 w-full rounded-md bg-muted/30 pl-12 text-right text-xs" disabled={isInvoiceLocked} />
                       </label>
                     </div>
                   )}
@@ -982,18 +1064,17 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SalesKpiCard title={`Facturado Total (${displayCurrency})`} value={formatConvertedAmount(totalBilledInDisplayCurrency, displayCurrency)} icon={FileText} color="text-primary" bg="bg-primary/10" />
-        <SalesKpiCard title={`Por Cobrar (${displayCurrency})`} value={formatConvertedAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
+        <SalesKpiCard title={`Facturado Total (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(totalBilledInDisplayCurrency, displayCurrency)} icon={FileText} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title={`Por Cobrar (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />
         <SalesKpiCard title="Vencidas" value={data.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length} icon={AlertCircle} color="text-rose-500" bg="bg-rose-500/10" active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(statusFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
-        <SalesKpiCard title={`Cobrado (${displayCurrency})`} value={formatConvertedAmount(paidInDisplayCurrency, displayCurrency)} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />
+        <SalesKpiCard title={`Cobrado (${displayCurrency}${valuationModeSuffix})`} value={formatCurrentAmount(paidInDisplayCurrency, displayCurrency)} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />
       </div>
-
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Control de Facturación</h2>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de recaudos masivos sin fricción.</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/50 mt-1">{showValuationLegend ? `Gestión de recaudos masivos sin fricción · Vista ${valuationModeLabel.toLowerCase()} al tipo de cambio ${globalRate.toFixed(4)}.` : 'Gestión de recaudos masivos sin fricción.'}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="invoices" />
@@ -1021,7 +1102,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         showHorizontalControls
         actionsWidth="w-52"
         fitContent
-        onRowUpdate={async (id, updates) => { await handleUpdate(id, updates); }}
+          onRowUpdate={async (id, updates) => { await handleUpdate(id, updates); }}
+          onRowClick={(row) => setEditingId(row.id)}
         onBulkDelete={async (ids) => {
             await Promise.all(ids.map(id => invoicesService.cancel(id.toString(), 'Anulación masiva')));
             toast.success(`${ids.length} Facturas anuladas`);
@@ -1031,7 +1113,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           bulkActions={() => null}
           actions={(row) => (
               <div className="flex min-w-max items-center justify-end gap-2 pr-1">
-                <Button type="button" title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="relative z-20 size-8 shrink-0 rounded-lg hover:bg-slate-500/10 hover:text-slate-500 transition-colors" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => {
+                <Button type="button" title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="relative z-20 size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
                   void (async () => {
@@ -1042,18 +1124,18 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       toast.error(error?.message || 'No se pudo descargar el PDF');
                     }
                   })();
-                }}><FileDown className="size-4" /></Button>
-                <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-amber-500/10 hover:text-amber-500 transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4" /></Button>
+                }}><FileDown className="size-4 text-muted-foreground" /></Button>
+                <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4 text-muted-foreground" /></Button>
                 {canPerform('SALES_PAYMENTS', 'create') &&
                   !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
                   Number(row.balance ?? row.total ?? 0) > 0 && (
-                  <Button type="button" title="Pagar factura" variant="ghost" size="icon" disabled={payingInvoiceId === row.id} className="size-8 shrink-0 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors" onClick={() => void handlePayInvoice(row)}>
-                    {payingInvoiceId === row.id ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                  <Button type="button" title="Pagar factura" variant="ghost" size="icon" disabled={payingInvoiceId === row.id} className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => void handlePayInvoice(row)}>
+                    {payingInvoiceId === row.id ? <Loader2 className="size-4 text-muted-foreground animate-spin" /> : <CheckCircle2 className="size-4 text-muted-foreground" />}
                   </Button>
                 )}
-                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4 text-muted-foreground" /></Button>
                 {canPerform('SALES_INVOICES', 'delete') && row.status !== 'CANCELLED' && (
-                  <Button title="Cancelar factura" aria-label="Cancelar factura" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>
+                  <Button title="Cancelar factura" aria-label="Cancelar factura" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4 text-muted-foreground" /></Button>
                 )}
               </div>
           )}

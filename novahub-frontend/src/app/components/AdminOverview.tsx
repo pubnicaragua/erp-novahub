@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { 
   Building2, 
@@ -13,40 +12,26 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { tenantsService } from '../services/tenants.service';
-import { subscriptionsService, type SubscriptionRequest } from '../services/subscriptions.service';
+import { masterConsoleService } from '../services/master-console.service';
+import { useTenantQuery } from '../hooks/useTenantQuery';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line 
 } from 'recharts';
 
 export function AdminOverview() {
-  const [tenants, setTenants] = useState<any[]>([]);
-  const [requests, setRequests] = useState<SubscriptionRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [t, r] = await Promise.all([
-          tenantsService.getAll(),
-          subscriptionsService.getAllRequests()
-        ]);
-        setTenants(t);
-        setRequests(r);
-      } catch (error) {
-        console.error('Error fetching admin stats:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+  const { data: overview, isLoading: loading } = useTenantQuery(
+    ['master-console-overview'],
+    (signal) => masterConsoleService.getOverview(signal),
+    { onError: (error) => console.error('Error fetching admin stats:', error) },
+  );
+  const tenants = overview?.tenantsSummary || [];
+  const requests = overview?.pendingRequestDetails || [];
 
   const stats = [
-    { label: 'Empresas Totales', value: tenants.length, icon: Building2, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { label: 'Usuarios en Red', value: tenants.reduce((acc, t) => acc + (t._count?.users || 0), 0), icon: Users, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-    { label: 'Módulos Activos', value: tenants.reduce((acc, t) => acc + (t.subscriptions?.length || 0), 0), icon: Zap, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { label: 'Solicitudes Pendientes', value: requests.filter(r => r.status === 'PENDING').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { label: 'Empresas Totales', value: overview?.totalTenants || 0, icon: Building2, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { label: 'Usuarios en Red', value: overview?.totalUsers || 0, icon: Users, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    { label: 'Módulos Activos', value: tenants.reduce((acc, t) => acc + t.modulesActive, 0), icon: Zap, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { label: 'Solicitudes Pendientes', value: overview?.pendingRequests || 0, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
   ];
 
   return (
@@ -108,7 +93,7 @@ export function AdminOverview() {
               <LineChart data={[
                 { name: 'Ene', tenants: 4, users: 12 },
                 { name: 'Feb', tenants: 7, users: 25 },
-                { name: 'Mar', tenants: tenants.length, users: tenants.reduce((acc, t) => acc + (t._count?.users || 0), 0) },
+                { name: 'Mar', tenants: overview?.totalTenants || 0, users: overview?.totalUsers || 0 },
               ]}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.3} />
                 <XAxis dataKey="name" fontSize={12} stroke="currentColor" opacity={0.5} />
@@ -160,7 +145,7 @@ export function AdminOverview() {
           <Button variant="ghost" className="text-primary font-bold text-xs uppercase tracking-widest">Ver Todas <ArrowUpRight className="size-4 ml-1" /></Button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {requests.filter(r => r.status === 'PENDING').slice(0, 3).map((req) => (
+          {requests.slice(0, 3).map((req) => (
             <Card key={req.id} className="rounded-2xl border-border/50 bg-card/50 hover:bg-card transition-colors group">
               <CardContent className="p-5 flex items-center gap-4">
                 <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
@@ -174,7 +159,7 @@ export function AdminOverview() {
               </CardContent>
             </Card>
           ))}
-          {requests.filter(r => r.status === 'PENDING').length === 0 && (
+          {requests.length === 0 && (
             <div className="col-span-full py-12 text-center border-2 border-dashed border-border/50 rounded-3xl">
               <ShieldCheck className="size-12 text-muted-foreground/20 mx-auto mb-2" />
               <p className="text-sm font-bold text-muted-foreground/40 uppercase tracking-widest leading-none">Todo en orden. No hay solicitudes pendientes.</p>

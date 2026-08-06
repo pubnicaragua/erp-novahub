@@ -7,28 +7,30 @@ import { useCurrency } from '../../contexts/CurrencyContext'
 interface Props { incomes: any[]; expenses: any[]; accounts?: any[] }
 
 export function FinanceGeneralBalanceView({ incomes, expenses, accounts }: Props) {
-  const { displayCurrency, convertAmount } = useCurrency()
-  const sym = displayCurrency === 'USD' ? '$' : 'C$'
-  const fmt = (n: number) => sym + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency()
+  const fmt = (n: number) => formatCurrentAmount(n, displayCurrency)
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate)
 
-  const totalIncome = useMemo(() => incomes.reduce((a, i) => a + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0), [incomes, convertAmount])
-  const totalExpense = useMemo(() => expenses.reduce((a, e) => a + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0), [expenses, convertAmount])
+  const totalIncome = useMemo(() => incomes.reduce((a, i) => a + toDisplayAmount(Number(i.amount ?? i.baseAmount ?? 0), i.currency, i.exchangeRate), 0), [incomes, valuationMode, convertAmount, convertCurrentAmount])
+  const totalExpense = useMemo(() => expenses.reduce((a, e) => a + toDisplayAmount(Number(e.amount ?? e.baseAmount ?? 0), e.currency, e.exchangeRate), 0), [expenses, valuationMode, convertAmount, convertCurrentAmount])
   const netIncome = totalIncome - totalExpense
 
   const assetAccounts = (accounts || []).filter((a: any) => String(a.type || '').toUpperCase() === 'ASSET')
   const liabilityAccounts = (accounts || []).filter((a: any) => String(a.type || '').toUpperCase() === 'LIABILITY')
   const equityAccounts = (accounts || []).filter((a: any) => String(a.type || '').toUpperCase() === 'EQUITY')
-  const totalAssets = assetAccounts.reduce((a: number, acc: any) => a + Number(acc.balance || 0), 0)
-  const totalLiabilities = liabilityAccounts.reduce((a: number, acc: any) => a + Number(acc.balance || 0), 0)
-  const totalEquity = equityAccounts.reduce((a: number, acc: any) => a + Number(acc.balance || 0), 0)
+  const totalAssets = assetAccounts.reduce((a: number, acc: any) => a + toDisplayAmount(Number(acc.balance || 0), acc.currency, acc.exchangeRate), 0)
+  const totalLiabilities = liabilityAccounts.reduce((a: number, acc: any) => a + toDisplayAmount(Number(acc.balance || 0), acc.currency, acc.exchangeRate), 0)
+  const totalEquity = equityAccounts.reduce((a: number, acc: any) => a + toDisplayAmount(Number(acc.balance || 0), acc.currency, acc.exchangeRate), 0)
   const totalLiabilitiesEquity = totalLiabilities + totalEquity + netIncome
   const difference = totalAssets - totalLiabilitiesEquity
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="min-w-0 space-y-6">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <Landmark className="size-5 text-primary" />
-        <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Balance General</h3>
+        <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Balance General{valuationModeSuffix}</h3>
         <Badge variant="outline" className="text-xs">Al {new Date().toLocaleDateString('es-NI')}</Badge>
       </div>
 
@@ -79,9 +81,9 @@ export function FinanceGeneralBalanceView({ incomes, expenses, accounts }: Props
               <p className="text-center py-6 text-xs text-muted-foreground">Sin cuentas de activo configuradas</p>
             ) : (
               assetAccounts.map((acc: any) => (
-                <div key={acc.id} className="flex justify-between py-1.5 border-b border-border/20 text-xs">
-                  <span className="font-mono text-foreground">{acc.code} - {acc.name}</span>
-                  <span className="font-black text-emerald-500">{fmt(Number(acc.balance || 0))}</span>
+                <div key={acc.id} className="flex flex-wrap items-start justify-between gap-2 border-b border-border/20 py-1.5 text-xs">
+                  <span className="min-w-0 break-words font-mono text-foreground">{acc.code} - {acc.name}</span>
+                  <span className="shrink-0 text-right font-black text-emerald-500">{fmt(Number(acc.balance || 0))}</span>
                 </div>
               ))
             )}
@@ -96,9 +98,9 @@ export function FinanceGeneralBalanceView({ incomes, expenses, accounts }: Props
               <p className="text-center py-6 text-xs text-muted-foreground">Sin cuentas de pasivo/patrimonio configuradas</p>
             ) : (
               [...liabilityAccounts, ...equityAccounts].map((acc: any) => (
-                <div key={acc.id} className="flex justify-between py-1.5 border-b border-border/20 text-xs">
-                  <span className="font-mono text-foreground">{acc.code} - {acc.name}</span>
-                  <span className="font-black text-foreground">{fmt(Number(acc.balance || 0))}</span>
+                <div key={acc.id} className="flex flex-wrap items-start justify-between gap-2 border-b border-border/20 py-1.5 text-xs">
+                  <span className="min-w-0 break-words font-mono text-foreground">{acc.code} - {acc.name}</span>
+                  <span className="shrink-0 text-right font-black text-foreground">{fmt(Number(acc.balance || 0))}</span>
                 </div>
               ))
             )}

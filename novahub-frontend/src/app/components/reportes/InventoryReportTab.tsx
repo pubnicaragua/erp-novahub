@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -13,6 +13,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Scale, Warehouse, Tag, ShieldAlert, Gauge, Layers } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
+import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 
@@ -133,47 +134,34 @@ const TH = 'px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wide
 const TD = 'px-3 py-2 text-xs whitespace-nowrap';
 
 export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
-  const { displayCurrency, formatConvertedAmount } = useCurrency();
+  const { displayCurrency, baseCurrency, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource } = useCurrency();
   const { themeConfig } = useTheme();
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
+  const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
+    formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
 
-  const [products, setProducts] = useState<any[]>([]);
-  const [movements, setMovements] = useState<any[]>([]);
-  const [adjustments, setAdjustments] = useState<any[]>([]);
-  const [transfers, setTransfers] = useState<any[]>([]);
-  const [replenishment, setReplenishment] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: reportData, isLoading: loading } = useTenantQuery(['reports', 'inventory'], async (signal) => {
+    const filters = { page: 1, pageSize: 5000, report: true } as const;
+    const [prodRes, movRes, adjRes, trfRes, replRes] = await Promise.all([
+      inventoryService.getProducts(filters, signal),
+      inventoryService.getMovements(filters, signal),
+      inventoryService.getAdjustments(filters, signal),
+      inventoryService.getTransfers(filters, signal),
+      inventoryService.getReplenishmentReport('monthly', signal),
+    ]);
+    return { products: asList(prodRes), movements: asList(movRes), adjustments: asList(adjRes), transfers: asList(trfRes), replenishment: replRes };
+  }, { onError: (e) => toast.error(e.message || 'Error cargando inventario') });
+  const products = reportData?.products || [];
+  const movements = reportData?.movements || [];
+  const adjustments = reportData?.adjustments || [];
+  const transfers = reportData?.transfers || [];
+  const replenishment = reportData?.replenishment || null;
 
   const [riskGroup, setRiskGroup] = useState<string | null>(null);
   const [distMode, setDistMode] = useState<'categoria' | 'bodega' | 'marca' | 'rotacion'>('categoria');
   const [movTab, setMovTab] = useState('movimientos');
   const [valTab, setValTab] = useState('mayor-valor');
   const [rotTab, setRotTab] = useState('mayor-rotacion');
-
-  useEffect(() => {
-    const fetch = async () => {
-      setLoading(true);
-      try {
-        const [prodRes, movRes, adjRes, trfRes, replRes] = await Promise.all([
-          inventoryService.getProducts().catch(() => ({ data: [] })),
-          inventoryService.getMovements({ limit: 10000 }).catch(() => ({ data: [] })),
-          inventoryService.getAdjustments().catch(() => ({ data: [] })),
-          inventoryService.getTransfers().catch(() => ({ data: [] })),
-          inventoryService.getReplenishmentReport('monthly').catch(() => null)
-        ]);
-        setProducts(Array.isArray(prodRes) ? prodRes : (prodRes as any)?.data || []);
-        setMovements(Array.isArray(movRes) ? movRes : (movRes as any)?.data || []);
-        setAdjustments(Array.isArray(adjRes) ? adjRes : (adjRes as any)?.data || []);
-        setTransfers(Array.isArray(trfRes) ? trfRes : (trfRes as any)?.data || []);
-        setReplenishment(replRes || null);
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || "Error cargando inventario");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
-  }, []);
 
   const { start: currentStart, durationDays } = useMemo(() => getRangeDates(dateRange), [dateRange]);
   const rangeLabel = rangeText(dateRange);
@@ -862,7 +850,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           <CardContent>
             <p className="text-xl font-black text-emerald-500">{formatConvertedAmount(valuation.totalValue, 'NIO')}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              {fmtQty(valuation.totalUnits)} unidades · {valuation.productsWithStock} productos con existencia
+              {fmtQty(valuation.totalUnits)} unidades · {valuation.productsWithStock} productos con existencia{valuationModeSuffix ? ` · Vista ${valuationModeLabel.toLowerCase()}` : ''}
             </p>
             {valuation.status === 'PARTIAL' && (
               <p className="text-[10px] font-bold text-amber-500 mt-1">

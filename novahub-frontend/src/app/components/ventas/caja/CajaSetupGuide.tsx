@@ -18,6 +18,7 @@ interface SetupGuideProps {
   selectedRegister: string;
   onSelectRegister: (id: string) => void;
   onRegistersChanged: () => Promise<void> | void;
+  onOpenManageCajas: () => void;
 }
 
 const initialWarehouseForm = { name: '', location: '', type: 'STORE' };
@@ -29,6 +30,7 @@ export function CajaSetupGuide({
   selectedRegister,
   onSelectRegister,
   onRegistersChanged,
+  onOpenManageCajas,
 }: SetupGuideProps) {
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
@@ -87,8 +89,12 @@ export function CajaSetupGuide({
   if (!nextStep) return null;
 
   const openNextStep = () => {
-    if (nextStep === 'register' && registers.length > 0) {
-      onSelectRegister(registers[0].id);
+    if (nextStep === 'register') {
+      if (registers.length > 0) {
+        onSelectRegister(registers[0].id);
+      } else {
+        onOpenManageCajas();
+      }
       return;
     }
     setModal(nextStep);

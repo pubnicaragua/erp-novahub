@@ -14,7 +14,11 @@ import {
   Wallet,
   Building2,
   CircleDollarSign,
-  ShoppingCart
+  ShoppingCart,
+  ChevronDown,
+  Check,
+  Clock3,
+  TrendingUp
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -23,6 +27,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuCheckboxItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -31,6 +36,7 @@ import {
 
 import { useAuth, type Module } from '../contexts/AuthContext';
 import { useNotifications } from '../hooks/useNotifications';
+import { navigateToNotification } from '../utils/notificationNavigation';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { toast } from 'sonner';
@@ -39,6 +45,7 @@ import { Label } from './ui/label';
 import { usersService } from '../services/users.service';
 import { Lock } from 'lucide-react';
 import { TrialCountdownBanner } from './auth/TrialCountdownBanner';
+import { getPasswordError } from '../utils/accountValidation';
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -76,7 +83,7 @@ function getSavedDarkMode() {
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
   const { user, logout } = useAuth();
   const hasPosAccess = user?.enabledModules?.some(m => m === 'RETAIL_POS' || m === 'SALES_POS') ?? false;
-  const { unreadCount, markAllAsRead, notifications } = useNotifications();
+  const { unreadCount, markAsRead, notifications } = useNotifications();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ label: string; description: string; module: string; subModule: string; group: string }[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -103,6 +110,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     { label: 'Plan de Cuentas', description: 'Catálogo de cuentas contables', module: 'contabilidad', subModule: 'cuentas', keywords: ['cuenta', 'contable', 'plan', 'catalogo'], group: 'Contabilidad' },
     { label: 'Asientos Contables', description: 'Diario y asientos contables', module: 'contabilidad', subModule: 'asientos', keywords: ['asiento', 'diario', 'contable'], group: 'Contabilidad' },
     { label: 'Balance General', description: 'Reporte de balance general', module: 'contabilidad', subModule: 'balance-general', keywords: ['balance', 'activo', 'pasivo'], group: 'Contabilidad' },
+    { label: 'Diferencias Cambiarias', description: 'Valoración histórica y actual de saldos en moneda extranjera', module: 'contabilidad', subModule: 'diferencias-cambiarias', keywords: ['moneda', 'cambio', 'tasa', 'ganancia', 'perdida', 'revaluacion'], group: 'Contabilidad' },
     { label: 'Estado de Resultados', description: 'Pérdidas y ganancias', module: 'contabilidad', subModule: 'estado-resultados', keywords: ['resultado', 'ganancia', 'perdida'], group: 'Contabilidad' },
     { label: 'Conciliación Bancaria', description: 'Conciliación de cuentas bancarias', module: 'contabilidad', subModule: 'conciliacion', keywords: ['conciliacion', 'banco'], group: 'Contabilidad' },
     { label: 'Reportes Fiscales', description: 'IVA, IR, INSS, INATEC', module: 'contabilidad', subModule: 'reportes-fiscales', keywords: ['fiscal', 'iva', 'ir', 'inss', 'dgi'], group: 'Contabilidad' },
@@ -153,8 +161,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   const handleChangePassword = async () => {
-    if (newPassword.length < 6) {
-      toast.error('La contraseña debe tener al menos 6 caracteres');
+    const passwordError = getPasswordError(newPassword);
+    if (passwordError) {
+      toast.error(passwordError);
       return;
     }
     if (!user?.id) return;
@@ -204,7 +213,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     };
   }, []);
 
-  const toggleTheme = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const toggleTheme = (event?: React.MouseEvent<HTMLElement>) => {
     const root = document.documentElement;
     const transitionDocument = document as ThemeTransitionDocument;
     // La clase del DOM es la fuente de verdad; así cada clic funciona aunque
@@ -240,9 +249,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       return;
     }
 
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const x = bounds.left + bounds.width / 2;
-    const y = bounds.top + bounds.height / 2;
+    const bounds = event?.currentTarget.getBoundingClientRect();
+    const x = bounds ? bounds.left + bounds.width / 2 : window.innerWidth / 2;
+    const y = bounds ? bounds.top + bounds.height / 2 : window.innerHeight / 2;
     const radius = Math.hypot(
       Math.max(x, window.innerWidth - x),
       Math.max(y, window.innerHeight - y),
@@ -271,7 +280,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     }
   };
 
-  const { currency, toggleCurrency, currencyInteractionEnabled } = useCurrency();
+  const { currency, toggleCurrency, currencyInteractionEnabled, valuationMode, setValuationMode, valuationModeLabel, showValuationLegend, setShowValuationLegend } = useCurrency();
 
   const getRoleBadge = (role: string) => {
     switch (role?.toLowerCase()) {
@@ -285,7 +294,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   return (
     <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <TrialCountdownBanner />
-      <header className="flex h-16 items-center gap-4 border-b border-border bg-background/95 px-4 lg:px-6" >
+      <header className="flex h-16 min-w-0 items-center gap-2 border-b border-border bg-background/95 px-3 sm:gap-3 sm:px-4 lg:gap-4 lg:px-6" >
       {/* Menu Toggle (Mobile) */}
       <Button
         variant="ghost"
@@ -309,7 +318,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       </Button>
 
       {/* Search */}
-      <div className="flex-1 flex items-center gap-4">
+      <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-4">
         {/* Tenancy Indicator */}
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/30 border border-border/50">
           <Building2 className="size-3.5 text-primary" />
@@ -317,7 +326,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           {getRoleBadge(user?.role || '')}
         </div>
 
-        <div className="relative max-w-sm w-full" ref={searchRef}>
+        <div className="relative min-w-0 w-12 shrink-0 transition-[width] duration-200 focus-within:w-48 sm:w-[min(32vw,20rem)] sm:focus-within:w-[min(32vw,20rem)] lg:w-full lg:max-w-sm" ref={searchRef}>
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
@@ -339,7 +348,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                 }, 100);
               }
             }}
-            className="pl-9 pr-4 h-9 bg-muted/20 border-border/40 focus:bg-background"
+            aria-label="Buscar módulos, clientes o facturas"
+            title="Buscar módulos, clientes o facturas"
+            className="h-9 w-full min-w-0 border-border/40 bg-muted/20 pl-9 pr-2 text-xs placeholder:text-transparent focus:bg-background sm:pr-4 sm:placeholder:text-muted-foreground"
           />
           {searchResults.length > 0 && (
             <div className="absolute top-full mt-1 left-0 right-0 bg-popover border border-border rounded-xl shadow-xl z-50 py-2 max-h-80 overflow-y-auto">
@@ -373,7 +384,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         </div>
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-4 ml-auto shrink-0">
+      <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3 lg:gap-4">
         {hasPosAccess && (
           <Button
             variant="outline"
@@ -393,24 +404,70 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           </Button>
         )}
 
-        {/* Currency Switcher */}
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={toggleCurrency} 
-          className="h-9 gap-2 px-3 border-border bg-card hover:bg-muted disabled:opacity-60 disabled:cursor-not-allowed"
-          title={currencyInteractionEnabled ? 'Cambiar Moneda' : 'Cambio de moneda bloqueado por configuración'}
-          disabled={!currencyInteractionEnabled}
-        >
-          {currency === 'USD' ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
-          <span className="text-xs font-bold">{currency}</span>
-        </Button>
+        {/* Currency and valuation view */}
+        <div className="hidden items-center gap-0.5 rounded-xl border border-border bg-card p-0.5 lg:flex" title="Moneda y modo de valoración">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleCurrency}
+            className="h-8 gap-2 rounded-lg px-2.5 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+            title={currencyInteractionEnabled ? 'Cambiar moneda de visualización' : 'Cambio de moneda bloqueado por configuración'}
+            disabled={!currencyInteractionEnabled}
+          >
+            {currency === 'USD' ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
+            <span className="text-xs font-bold">{currency}</span>
+            {showValuationLegend && <span className="hidden text-[9px] font-black uppercase tracking-wider text-muted-foreground xl:inline">{valuationModeLabel}</span>}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-muted" aria-label="Cambiar modo de valoración" title="Cambiar modo de valoración">
+                <ChevronDown className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80 rounded-xl border-border/60 p-2">
+              <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                Vista de importes
+              </DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setValuationMode('HISTORICAL')} className="items-start gap-3 rounded-lg p-3">
+                <Clock3 className="mt-0.5 size-4 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wide">
+                    Histórico
+                    {valuationMode === 'HISTORICAL' && <Check className="size-3.5 text-emerald-500" />}
+                  </span>
+                  <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">Usa la tasa guardada en cada transacción. Recomendado para revisar documentos.</span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setValuationMode('CURRENT')} className="items-start gap-3 rounded-lg p-3">
+                <TrendingUp className="mt-0.5 size-4 shrink-0 text-amber-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wide">
+                    Actual
+                    {valuationMode === 'CURRENT' && <Check className="size-3.5 text-emerald-500" />}
+                  </span>
+                  <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">Convierte saldos en moneda extranjera con la tasa vigente. No modifica la transacción.</span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="my-1.5" />
+              <DropdownMenuCheckboxItem
+                checked={showValuationLegend}
+                onCheckedChange={setShowValuationLegend}
+                className="items-start gap-3 rounded-lg p-3 pl-8"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-black uppercase tracking-wide">Mostrar detalle</span>
+                  <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">Muestra Histórico/Actual y la diferencia cambiaria en los importes.</span>
+                </span>
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
         <Button
           variant="ghost"
           size="icon"
           onClick={toggleTheme}
-          className="h-9 w-9"
+          className="hidden h-9 w-9 lg:inline-flex"
           aria-label={isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
           title={isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
         >
@@ -418,7 +475,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         </Button>
 
         {/* Notifications */}
-        <DropdownMenu onOpenChange={(open) => { if (!open && unreadCount > 0) markAllAsRead() }}>
+        <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
               <Bell className="size-5" />
@@ -442,15 +499,8 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                     key={n.id} 
                     className="flex flex-col items-start gap-1 p-3 cursor-pointer border-b border-border/50 last:border-0" 
                     onClick={() => {
-                      if (n.message?.startsWith('TAREA:')) {
-                        onNavigate('actividades');
-                        window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'actividades', subModule: 'tareas' }}));
-                      } else if (n.message?.startsWith('RECORDATORIO:')) {
-                        onNavigate('actividades');
-                        window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'actividades', subModule: 'recordatorios' }}));
-                      } else {
-                        onNavigate('notificaciones');
-                      }
+                      void markAsRead(n.id);
+                      navigateToNotification(n);
                     }}
                   >
                     <div className="flex items-center gap-2">
@@ -496,7 +546,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               </div>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuContent align="end" className="w-64 max-w-[calc(100vw-1rem)] sm:w-56">
             <DropdownMenuLabel>
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium">{user?.name}</p>
@@ -516,6 +566,39 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               <Lock className="mr-2 size-4 text-primary" />
               <span>Cambiar Contraseña</span>
             </DropdownMenuItem>
+            <div className="lg:hidden">
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!currencyInteractionEnabled}
+                onClick={toggleCurrency}
+                className="gap-2"
+              >
+                {currency === 'USD' ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
+                <span>Moneda: {currency}</span>
+                <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cambiar</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setValuationMode(valuationMode === 'CURRENT' ? 'HISTORICAL' : 'CURRENT')}
+                className="gap-2"
+              >
+                {valuationMode === 'CURRENT' ? <TrendingUp className="size-4 text-amber-500" /> : <Clock3 className="size-4 text-primary" />}
+                <span>Vista: {valuationModeLabel}</span>
+                <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cambiar</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setShowValuationLegend(!showValuationLegend)}
+                className="gap-2"
+              >
+                <span className="size-4 rounded-full border border-current text-center text-[9px] font-black leading-[14px]">{showValuationLegend ? '✓' : ''}</span>
+                <span>Detalle cambiario: {showValuationLegend ? 'Visible' : 'Oculto'}</span>
+                <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cambiar</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={toggleTheme} className="gap-2">
+                {isDark ? <Sun className="size-4 text-amber-500" /> : <Moon className="size-4 text-primary" />}
+                <span>{isDark ? 'Tema claro' : 'Tema oscuro'}</span>
+                <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cambiar</span>
+              </DropdownMenuItem>
+            </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400 focus:bg-red-500/10 transition-colors">
               <LogOut className="mr-2 size-4 text-rose-500" />
@@ -538,16 +621,17 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nueva Contraseña</Label>
               <Input 
                 type="password" 
-                placeholder="Mínimo 6 caracteres" 
+                placeholder="8 caracteres, mayúscula, número y símbolo" 
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="rounded-xl"
+                className={`rounded-xl ${getPasswordError(newPassword) ? 'border-destructive' : ''}`}
               />
+              {getPasswordError(newPassword) && <p className="text-xs text-destructive">{getPasswordError(newPassword)}</p>}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowPasswordModal(false)} disabled={isUpdatingPassword}>Cancelar</Button>
-            <Button onClick={handleChangePassword} disabled={isUpdatingPassword} className="bg-primary text-primary-foreground">
+            <Button onClick={handleChangePassword} disabled={isUpdatingPassword || !!getPasswordError(newPassword)} className="bg-primary text-primary-foreground">
               {isUpdatingPassword ? 'Guardando...' : 'Guardar Contraseña'}
             </Button>
           </DialogFooter>

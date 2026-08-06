@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Palette, RotateCcw, Save, Upload, Eye, Check, Sparkles,
@@ -9,7 +9,7 @@ import {
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings,
-  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy
+  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, MessageSquare
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -36,6 +36,7 @@ import { CountriesView } from './admin/CountriesView';
 import { SucursalesView } from './inventory/SucursalesView';
 import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
+import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -115,7 +116,6 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'FINANCIAL_BALANCE', label: 'Balance General', parent: 'FINANCIAL' },
 
   // Inventario
-  { id: 'INVENTORY_DASHBOARD', label: 'Dashboard', parent: 'INVENTORY' },
   { id: 'INVENTORY_PRODUCTS', label: 'Productos', parent: 'INVENTORY' },
   { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', parent: 'INVENTORY' },
   { id: 'INVENTORY_TRANSFERS', label: 'Transferencias', parent: 'INVENTORY' },
@@ -376,7 +376,6 @@ const PRICING_MODULES = [
 
 export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: string }) {
   const { themeConfig, updateTheme, updateConfig, resetTheme } = useTheme();
-  const updateThemeRef = useRef(updateTheme);
   const { user, canPerform } = useAuth();
   const { refreshRate: refreshCurrencyContext } = useCurrency();
   const scenario = getScenario(user?.role);
@@ -421,9 +420,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [sidebarFgHex, setSidebarFgHex] = useState(() => oklchToApproxHex(themeConfig.colors.sidebarForeground));
   const [primaryFgHex, setPrimaryFgHex] = useState(() => oklchToApproxHex(themeConfig.colors.primaryForeground));
   const [portalPrimaryHex, setPortalPrimaryHex] = useState('#10b981');
-  const [portalBackgroundHex, setPortalBackgroundHex] = useState('#020617');
   const [portalAccentHex, setPortalAccentHex] = useState('#0f172a');
-  const [portalDefaultTheme, setPortalDefaultTheme] = useState<'dark' | 'light'>('dark');
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -437,7 +434,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [activeTab, setActiveTab] = useState(() => ALL_TABS.some(tab => tab.id === initialTab) ? initialTab : 'branding');
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  const currentTab = ALL_TABS.some(tab => tab.id === initialTab) ? initialTab : activeTab;
+  useEffect(() => {
+    setActiveTab(ALL_TABS.some(tab => tab.id === initialTab) ? initialTab : 'branding');
+  }, [initialTab]);
 
   // Security state
   const [twoFaEnabled, setTwoFaEnabled] = useState(false);
@@ -453,83 +452,20 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [exchangeRateAuto, setExchangeRateAuto] = useState(true);
   const [manualRate, setManualRate] = useState('36.50');
   const [currentBackendRate, setCurrentBackendRate] = useState<number | null>(null);
+  const [baseCurrencySetting, setBaseCurrencySetting] = useState<'NIO' | 'USD'>('NIO');
   const [displayCurrencySetting, setDisplayCurrencySetting] = useState<'NIO' | 'USD'>('NIO');
   const [allowCurrencySwitch, setAllowCurrencySwitch] = useState(true);
   const [isSavingCurrency, setIsSavingCurrency] = useState(false);
 
   // New role dialog state (removed unused)
 
-  // Load branding and currency on mount
   const fetchIndustries = async () => {
-    if (!user?.tenantId) return;
     try {
-      const data = await api.get<{ id?: string; code: string; name: string; isDefault: boolean }[]>(`/tenants/${user.tenantId}/industries`);
-      if (data) setIndustryOptions(data);
+      await refetchConfiguration();
     } catch (error) {
       console.error('Error fetching industries:', error);
     }
   };
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      (async () => {
-        try {
-          const b = await brandingService.getCurrent();
-          if (b.primaryColor) setPrimaryHex(b.primaryColor.startsWith('oklch') ? oklchToApproxHex(b.primaryColor) : b.primaryColor);
-          if (b.sidebarColor) setSidebarHex(b.sidebarColor.startsWith('oklch') ? oklchToApproxHex(b.sidebarColor) : b.sidebarColor);
-          if (b.accentColor) setAccentHex(b.accentColor.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : b.accentColor);
-          if (b.portalPrimaryColor) setPortalPrimaryHex(b.portalPrimaryColor);
-          if (b.portalBackgroundColor) setPortalBackgroundHex(b.portalBackgroundColor);
-          if (b.portalAccentColor) setPortalAccentHex(b.portalAccentColor);
-          if (b.portalDefaultTheme) setPortalDefaultTheme(b.portalDefaultTheme === 'light' ? 'light' : 'dark');
-          if (b.companyName) setCompanyName(b.companyName);
-          if (b.logo) setLogoPreview(b.logo);
-          if (b.industry) setCompanyIndustry(b.industry);
-          if (b.whiteLabel !== undefined) setWhiteLabel(b.whiteLabel);
-          updateThemeRef.current(generateThemeFromColor(
-            b.primaryColor?.startsWith('oklch') ? oklchToApproxHex(b.primaryColor) : (b.primaryColor || '#10b981'),
-            b.sidebarColor?.startsWith('oklch') ? oklchToApproxHex(b.sidebarColor) : (b.sidebarColor || '#0c1a12'),
-            b.accentColor?.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : (b.accentColor || '#064e3b'),
-          ));
-        } catch (error) {
-          console.error('Error fetching branding:', error);
-        }
-      })();
-      (async () => {
-        try {
-          const data = await api.get<{
-            rate: number;
-            auto: boolean;
-            baseCurrency?: 'NIO' | 'USD';
-            displayCurrency?: 'NIO' | 'USD';
-            allowCurrencySwitch?: boolean;
-          }>('/tools/exchange-rate');
-          if (data) {
-            setExchangeRateAuto(data.auto);
-            setCurrentBackendRate(data.rate);
-            if (!data.auto) {
-              setManualRate(data.rate.toString());
-            }
-            setDisplayCurrencySetting(data.displayCurrency === 'USD' ? 'USD' : (data.baseCurrency === 'USD' ? 'USD' : 'NIO'));
-            setAllowCurrencySwitch(data.allowCurrencySwitch !== false);
-          }
-        } catch (error) {
-          console.error('Error fetching currency settings:', error);
-        }
-      })();
-      if (user?.tenantId) {
-        (async () => {
-          try {
-            const data = await api.get<{ id?: string; code: string; name: string; isDefault: boolean }[]>(`/tenants/${user.tenantId}/industries`);
-            if (data) setIndustryOptions(data);
-          } catch (error) {
-            console.error('Error fetching industries:', error);
-          }
-        })();
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [user?.tenantId]);
 
   const handleAddIndustry = async () => {
     if (!newIndustryName.trim() || !user?.tenantId) return;
@@ -551,7 +487,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       await api.delete(`/tenants/${user.tenantId}/industries/${id}`);
       toast.success('Industria eliminada');
       await fetchIndustries();
-    } catch {
+    } catch (error) {
       toast.error('Error al eliminar industria');
     }
   };
@@ -563,17 +499,18 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         companyName,
         industry: companyIndustry,
       });
+      await refetchConfiguration();
       toast.success('Información corporativa guardada');
       const raw = sessionStorage.getItem('novahub:implementation-setup-tour');
       if (raw) {
-        try { const ctx = JSON.parse(raw); if (ctx.module === 'configuracion' && ctx.subModule === 'empresa') { sessionStorage.removeItem('novahub:implementation-setup-tour'); window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } })); return; } } catch { /* intentionally empty */ }
+        try { const ctx = JSON.parse(raw); if (ctx.module === 'configuracion' && ctx.subModule === 'empresa') { sessionStorage.removeItem('novahub:implementation-setup-tour'); window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } })); return; } } catch {}
       }
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Error al guardar la información');
     }
   };
 
-  const applyPreset = (preset: ColorPreset) => {
+  const applyPreset = useCallback((preset: ColorPreset) => {
     setPrimaryHex(preset.primary);
     setSidebarHex(preset.sidebar);
     setAccentHex(preset.accent);
@@ -582,7 +519,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setPrimaryFgHex('#ffffff');
     setSidebarFgHex('#f5f5f5');
     setActivePreset(preset.name);
-  };
+  }, []);
 
   const handleSave = async () => {
     try {
@@ -598,6 +535,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         accentColor: accentHex,
         logo: themeConfig.logo || undefined
       });
+      await refetchConfiguration();
 
       toast.success('Marca actualizada correctamente', {
         description: `Los cambios se guardaron para nivel: ${user?.role.toUpperCase()}`,
@@ -640,6 +578,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       }
       updateConfig({ logo: logoUrl });
       await brandingService.update({ logo: logoUrl });
+      await refetchConfiguration();
       toast.success('Logo guardado en Supabase Storage ✓');
     } catch (error) {
       console.error('Logo upload error:', error);
@@ -647,6 +586,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       if (logoPreview) {
         updateConfig({ logo: logoPreview });
         await brandingService.update({ logo: logoPreview }).catch(() => { });
+        await refetchConfiguration();
         toast.success('Logo aplicado localmente');
       } else {
         toast.error('Error al subir el logo');
@@ -657,49 +597,26 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const [roles, setRoles] = useState<RoleManagement[]>([]);
-  const [_enabledModules, setEnabledModules] = useState<string[]>([]);
+  // @ts-ignore
+  const [enabledModules, setEnabledModules] = useState<string[]>([]);
   const [, setIsLoadingModules] = useState(false);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
   const [pendingDeleteRole, setPendingDeleteRole] = useState<RoleManagement | null>(null);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [sucursalModalOpen, setSucursalModalOpen] = useState(false);
 
-  // Pricing state
-  const [pricingData, setPricingData] = useState<ModulePriceItem[]>([]);
-  const [pricingLoading, setPricingLoading] = useState(false);
-  const [pricingSaving, setPricingSaving] = useState(false);
-  const [pricingSearch, setPricingSearch] = useState('');
-  const [pricingEdits, setPricingEdits] = useState<Record<string, number>>({});
-
   const fetchPricing = async () => {
     setPricingLoading(true);
     try {
-      const res = await modulePricingService.getAll();
-      setPricingData(Array.isArray(res) ? res : []);
+      await refetchConfiguration();
     } catch { /* ignore */ }
     finally { setPricingLoading(false); }
   };
 
-  useEffect(() => {
-    if (scenario !== 'superadmin') return;
-    const timer = setTimeout(() => { void fetchPricing(); }, 0);
-    return () => clearTimeout(timer);
-  }, [scenario]);
-
   const fetchRoles = async () => {
     setIsLoadingRoles(true);
     try {
-      console.log('[Config] Fetching roles for tenant:', user?.tenantId);
-      const res = await rolesService.getAll({ clientTenantId: user?.tenantId });
-      let rolesList = Array.isArray(res) ? res : (res as any)?.data || [];
-      
-      console.log('[Config] Roles received:', rolesList.length);
-      
-      if (!user?.isPlatformAdmin) {
-        rolesList = rolesList.filter((r: any) => r.clientTenantId === user?.tenantId);
-      }
-      
-      setRoles(rolesList);
+      await refetchConfiguration();
     } catch (error) {
       console.error('Error fetching roles:', error);
     } finally {
@@ -709,52 +626,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
   const fetchWarehouses = async () => {
     try {
-      const res: any = await api.get('/inventory/warehouses');
-      const list = Array.isArray(res) ? res : (res as any)?.data || [];
-      setWarehouses(list);
+      await refetchConfiguration();
     } catch { /* ignore */ }
   };
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (user?.tenantId && canViewRoles) {
-        (async () => {
-          setIsLoadingRoles(true);
-          try {
-            console.log('[Config] Fetching roles for tenant:', user?.tenantId);
-            const res = await rolesService.getAll({ clientTenantId: user?.tenantId });
-            let rolesList = Array.isArray(res) ? res : (res as any)?.data || [];
-
-            console.log('[Config] Roles received:', rolesList.length);
-
-            if (!user?.isPlatformAdmin) {
-              rolesList = rolesList.filter((r: any) => r.clientTenantId === user?.tenantId);
-            }
-
-            setRoles(rolesList);
-          } catch (error) {
-            console.error('Error fetching roles:', error);
-          } finally {
-            setIsLoadingRoles(false);
-          }
-        })();
-      }
-      if (user?.tenantId) {
-        (async () => {
-          setIsLoadingModules(true);
-          try {
-            const res = await subscriptionsService.getEnabledModules(user.tenantId);
-            setEnabledModules(res);
-          } catch (error) {
-            console.error('Error fetching modules:', error);
-          } finally {
-            setIsLoadingModules(false);
-          }
-        })();
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [user?.tenantId, canViewRoles, user?.isPlatformAdmin]);
 
   const handleSaveCurrencySettings = async () => {
     setIsSavingCurrency(true);
@@ -762,34 +636,108 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       const resp = await api.post<{
         rate: number;
         auto: boolean;
+        baseCurrency?: 'NIO' | 'USD';
         displayCurrency?: 'NIO' | 'USD';
         allowCurrencySwitch?: boolean;
       }>('/tools/exchange-rate', {
         auto: exchangeRateAuto,
         rate: exchangeRateAuto ? undefined : parseFloat(manualRate),
+        baseCurrency: baseCurrencySetting,
         displayCurrency: displayCurrencySetting,
         allowCurrencySwitch,
       });
       if (resp) {
-        setCurrentBackendRate(resp.rate);
+      setCurrentBackendRate(resp.rate);
+        setBaseCurrencySetting(resp.baseCurrency === 'USD' ? 'USD' : 'NIO');
         setDisplayCurrencySetting(resp.displayCurrency === 'USD' ? 'USD' : 'NIO');
         setAllowCurrencySwitch(resp.allowCurrencySwitch !== false);
         await refreshCurrencyContext();
         toast.success('Configuración de moneda actualizada');
         const raw = sessionStorage.getItem('novahub:implementation-setup-tour');
         if (raw) {
-          try { const ctx = JSON.parse(raw); if (ctx.module === 'configuracion' && ctx.subModule === 'currency') { sessionStorage.removeItem('novahub:implementation-setup-tour'); window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } })); return; } } catch { /* intentionally empty */ }
+          try { const ctx = JSON.parse(raw); if (ctx.module === 'configuracion' && ctx.subModule === 'currency') { sessionStorage.removeItem('novahub:implementation-setup-tour'); window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } })); return; } } catch {}
         }
       }
-    } catch {
+    } catch (error) {
       toast.error('Error al guardar configuración de moneda');
     } finally {
       setIsSavingCurrency(false);
     }
   };
 
+  // @ts-ignore
+  const handleToggleModule = async (moduleId: string) => {
+    toast.info('La gestión de módulos se realiza desde la pestaña de Suscripciones para garantizar el registro de auditoría.');
+  };
+
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Partial<ExtendedRoleManagement> | null>(null);
+
+  // Pricing state
+  const [pricingData, setPricingData] = useState<ModulePriceItem[]>([]);
+  const [pricingLoading, setPricingLoading] = useState(false);
+  const [pricingSaving, setPricingSaving] = useState(false);
+  const [pricingSearch, setPricingSearch] = useState('');
+  const [pricingEdits, setPricingEdits] = useState<Record<string, number>>({});
+
+  const { data: configurationData, refetch: refetchConfiguration } = useTenantQuery(
+    ['configuration', user?.tenantId || 'current', scenario, canViewRoles],
+    async (signal) => {
+      const tenantId = user?.tenantId;
+      const [branding, currency, industries, pricing, rolesData, warehouseData, modules] = await Promise.all([
+        brandingService.getCurrent(signal),
+        api.get<any>('/tools/exchange-rate', { signal }),
+        tenantId ? api.get<any>(`/tenants/${tenantId}/industries`, { signal }) : Promise.resolve([]),
+        scenario === 'superadmin' ? modulePricingService.getAll(signal) : Promise.resolve([]),
+        tenantId && canViewRoles ? rolesService.getAll({ clientTenantId: tenantId }, signal) : Promise.resolve([]),
+        tenantId ? api.get<any>('/inventory/warehouses', { signal }) : Promise.resolve([]),
+        tenantId ? subscriptionsService.getEnabledModules(tenantId, undefined, signal) : Promise.resolve([]),
+      ]);
+      return { branding, currency, industries, pricing, roles: rolesData, warehouses: warehouseData, modules };
+    },
+    { enabled: Boolean(user), onError: (error) => toast.error(error.message || 'Error cargando configuración') },
+  );
+
+  useEffect(() => {
+    if (!configurationData) return;
+    const branding = configurationData.branding as any;
+    const currency = configurationData.currency as any;
+    const industries = asList(configurationData.industries);
+    const rolesList = asList(configurationData.roles);
+    const warehouseList = asList(configurationData.warehouses);
+    const pricingList = asList(configurationData.pricing);
+    const modulesList = asList(configurationData.modules);
+
+    if (branding?.primaryColor) setPrimaryHex(branding.primaryColor.startsWith('oklch') ? oklchToApproxHex(branding.primaryColor) : branding.primaryColor);
+    if (branding?.sidebarColor) setSidebarHex(branding.sidebarColor.startsWith('oklch') ? oklchToApproxHex(branding.sidebarColor) : branding.sidebarColor);
+    if (branding?.accentColor) setAccentHex(branding.accentColor.startsWith('oklch') ? oklchToApproxHex(branding.accentColor) : branding.accentColor);
+    if (branding?.portalPrimaryColor) setPortalPrimaryHex(branding.portalPrimaryColor);
+    if (branding?.portalAccentColor) setPortalAccentHex(branding.portalAccentColor);
+    if (branding?.companyName) setCompanyName(branding.companyName);
+    if (branding?.logo) setLogoPreview(branding.logo);
+    if (branding?.industry) setCompanyIndustry(branding.industry);
+    if (branding?.whiteLabel !== undefined) setWhiteLabel(branding.whiteLabel);
+    if (branding) {
+      updateTheme(generateThemeFromColor(
+        branding.primaryColor?.startsWith('oklch') ? oklchToApproxHex(branding.primaryColor) : (branding.primaryColor || '#10b981'),
+        branding.sidebarColor?.startsWith('oklch') ? oklchToApproxHex(branding.sidebarColor) : (branding.sidebarColor || '#0c1a12'),
+        branding.accentColor?.startsWith('oklch') ? oklchToApproxHex(branding.accentColor) : (branding.accentColor || '#064e3b'),
+      ));
+    }
+    if (currency) {
+      setExchangeRateAuto(currency.auto !== false);
+      setCurrentBackendRate(currency.rate ?? null);
+      setBaseCurrencySetting(currency.baseCurrency === 'USD' ? 'USD' : 'NIO');
+      if (currency.auto === false && currency.rate !== undefined) setManualRate(String(currency.rate));
+      setDisplayCurrencySetting(currency.displayCurrency === 'USD' ? 'USD' : (currency.baseCurrency === 'USD' ? 'USD' : 'NIO'));
+      setAllowCurrencySwitch(currency.allowCurrencySwitch !== false);
+    }
+    setIndustryOptions(industries);
+    setPricingData(pricingList);
+    setRoles(rolesList);
+    setWarehouses(warehouseList);
+    setEnabledModules(modulesList);
+  }, [configurationData]);
 
   const handleCreateRole = () => {
     if (!canCreateRoles) {
@@ -853,11 +801,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     try {
       await brandingService.update({
         portalPrimaryColor: portalPrimaryHex,
-        portalBackgroundColor: portalBackgroundHex,
         portalAccentColor: portalAccentHex,
-        portalDefaultTheme,
       });
-      toast.success('Personalización del portal guardada', { description: 'Estos colores son independientes del tema de cada usuario.' });
+      toast.success('Personalización del portal guardada', { description: 'El portal utiliza esta paleta oscura independientemente del tema de cada usuario.' });
     } catch (error) {
       console.error('Error saving public portal branding:', error);
       toast.error('No se pudo guardar la personalización del portal');
@@ -897,7 +843,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
     try {
       // Limpiar el objeto de envío para eliminar campos innecesarios o automáticos
-      const { _id, _count, _createdAt, _updatedAt, ...cleanRole } = editingRole as any;
+      const { id, _count, createdAt, updatedAt, ...cleanRole } = editingRole as any;
       
       const payload = {
         name: cleanRole.name,
@@ -930,7 +876,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
   const togglePermission = (module: string, type: 'read' | 'write' | 'create' | 'edit' | 'delete') => {
     if (!editingRole) return;
-    const newPerms = [...normalizePermissions(editingRole.permissions).map(p => ({ ...p }))];
+    let newPerms = [...normalizePermissions(editingRole.permissions).map(p => ({ ...p }))];
 
     const targetPerm = newPerms.find(p => p.module === module) as any;
     if (!targetPerm) return;
@@ -1020,7 +966,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       </motion.div>
 
       {/* ── TABS ── */}
-      <Tabs value={currentTab} className="space-y-6" onValueChange={setActiveTab}>
+      <Tabs value={activeTab} className="space-y-6" onValueChange={setActiveTab}>
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
           <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-border/40">
             {visibleTabs.map((tab) => {
@@ -1104,20 +1050,11 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               <Card className="border-border/50 shadow-sm">
                 <CardHeader className="border-b border-border/30 bg-muted/10">
                   <CardTitle className="flex items-center gap-2 text-lg font-black"><Globe className="size-5 text-primary" />Personalización del portal del cliente</CardTitle>
-                  <CardDescription>Colores exclusivos del enlace público, independientes del tema de cada usuario.</CardDescription>
+                  <CardDescription>Define el color principal y el color de las tarjetas del enlace público.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-6">
                   <ColorField label="Color principal del portal" description="Botones, importes, enlaces y estados destacados" hexValue={portalPrimaryHex} onHexChange={setPortalPrimaryHex} />
-                  <ColorField label="Fondo del portal" description="Color base de toda la página pública" hexValue={portalBackgroundHex} onHexChange={setPortalBackgroundHex} />
-                  <ColorField label="Color de tarjetas" description="Fondos de encabezados, datos y documentos" hexValue={portalAccentHex} onHexChange={setPortalAccentHex} />
-                  <div className="space-y-2">
-                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Modo inicial</Label>
-                    <select value={portalDefaultTheme} onChange={event => setPortalDefaultTheme(event.target.value === 'light' ? 'light' : 'dark')} className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      <option value="dark">Oscuro</option>
-                      <option value="light">Claro</option>
-                    </select>
-                    <p className="text-xs text-muted-foreground">La persona podrá cambiarlo desde el enlace; esta opción define cómo se abre inicialmente.</p>
-                  </div>
+                  <ColorField label="Color de las tarjetas" description="Fondos del encabezado, datos y documentos" hexValue={portalAccentHex} onHexChange={setPortalAccentHex} />
                   <Button onClick={handleSavePortalBranding} className="rounded-xl gap-2 font-bold"><Save className="size-4" />Guardar portal</Button>
                 </CardContent>
               </Card>
@@ -1804,10 +1741,21 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   <div className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/30">
                     <div>
                       <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Moneda Base Contable</p>
-                      <p className="text-sm font-bold">Córdoba Nicaragüense (NIO)</p>
+                      <p className="text-sm font-bold">{baseCurrencySetting === 'USD' ? 'Dólar estadounidense (USD)' : 'Córdoba Nicaragüense (NIO)'}</p>
                     </div>
-                    <Badge variant="outline" className="text-[9px] font-black uppercase">Fijo</Badge>
+                    <select
+                      value={baseCurrencySetting}
+                      onChange={(e) => setBaseCurrencySetting(e.target.value === 'USD' ? 'USD' : 'NIO')}
+                      className="h-9 rounded-lg border border-input bg-background px-2 text-xs font-black uppercase tracking-widest"
+                      aria-label="Moneda base contable de la empresa"
+                    >
+                      <option value="NIO">NIO</option>
+                      <option value="USD">USD</option>
+                    </select>
                   </div>
+                  <p className="text-[10px] font-semibold text-amber-600">
+                    La moneda base pertenece a esta empresa. Después de registrar movimientos contables no debe cambiarse sin una migración controlada.
+                  </p>
 
                   <div className="p-4 rounded-xl border border-border/30 bg-background/70 space-y-4">
                     <div className="flex items-center justify-between gap-4">

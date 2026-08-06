@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Truck, Plus, Search, Eye, TrendingDown, CheckCircle2, ArrowUpDown, Upload, FileDown, Info, Ban } from 'lucide-react';
+import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, FileDown, Info, Ban, Pencil } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { suppliersService } from '../../services/compras.service';
-import type { Supplier } from '../../types';
+import type { Supplier, EntityStatus } from '../../types';
+import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
@@ -15,23 +16,48 @@ import { useAuth } from '../../contexts/AuthContext';
 import { SupplierHistoryModal } from './SupplierHistoryModal';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 
-interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; }
+interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
-export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewProps) {
+const emptyDraft = () => ({
+  code: '',
+  name: '',
+  contactName: '',
+  email: '',
+  phone: '',
+  address: '',
+  city: '',
+  country: '',
+  status: 'ACTIVE' as EntityStatus,
+});
+
+const isSupplierInactive = (s: Supplier) => s.isActive === false || String((s as any).status || '').toUpperCase() === 'INACTIVE';
+
+export function ProveedoresView({ data, loading, onRefresh, pagination, onSearchChange }: ProveedoresViewProps) {
   const { canPerform } = useAuth();
-  const { formatConvertedAmount } = useCurrency();
+  const { baseCurrency, valuationModeSuffix, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [balanceOrder, setBalanceOrder] = useState<'all' | 'highest' | 'lowest'>('all');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingToggle, setPendingToggle] = useState<Supplier | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState<Supplier | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [draft, setDraft] = useState(emptyDraft());
+  const [saving, setSaving] = useState(false);
 
   const filtered = data.filter(s => {
+    const isActive = s.isActive !== false && String((s as any).status || '').toUpperCase() !== 'INACTIVE';
+    if (statusFilter === 'ACTIVE' && !isActive) return false;
+    if (statusFilter === 'INACTIVE' && isActive) return false;
     const search = searchTerm.toLowerCase();
     return (
       String(s.name || '').toLowerCase().includes(search) ||
@@ -204,7 +230,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
     { key: 'email',       header: 'Email',     editable: canPerform('proveedores', 'edit') },
     { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('proveedores', 'edit') },
     { key: 'balance', header: 'Saldo', width: '170px',
-      render: (val) => <span className="font-black text-rose-500 tabular-nums">{formatConvertedAmount(val || 0, 'NIO')}</span>
+      render: (val) => <span className="font-black text-rose-500 tabular-nums">{formatConvertedAmount(val || 0, baseCurrency)}</span>
     },
     { key: 'status', header: 'Estado', width: '120px', editable: canPerform('proveedores', 'edit'), type: 'select', options: statusOptions,
       render: (val) => {
@@ -238,66 +264,108 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
     }
   };
 
-  const handleAdd = async () => {
+  const handleAdd = () => {
+    setDraft(emptyDraft());
+    setEditingSupplier(null);
+    setCreateOpen(true);
+  };
+
+  const handleOpenEdit = (row: Supplier) => {
+    setEditingSupplier(row);
+    setDraft({
+      code: row.code || '',
+      name: row.name || '',
+      contactName: row.contactName || '',
+      email: row.email || '',
+      phone: row.phone || '',
+      address: row.address || '',
+      city: row.city || '',
+      country: row.country || '',
+      status: String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+    });
+    setEditOpen(true);
+  };
+
+  const buildPayload = () => {
+    const payload: any = {
+      name: draft.name,
+      contactName: draft.contactName || undefined,
+      email: draft.email || undefined,
+      phone: draft.phone || undefined,
+      address: draft.address || undefined,
+      city: draft.city || undefined,
+      country: draft.country || undefined,
+      status: draft.status,
+    };
+    if (!editingSupplier) payload.code = draft.code || undefined;
+    return payload;
+  };
+
+  const handleSave = async () => {
+    if (!draft.name.trim()) {
+      toast.error('El nombre del proveedor es obligatorio');
+      return;
+    }
+    if (draft.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email)) {
+      toast.error('Correo electrónico inválido. Ingresa un email con formato válido (ej: proveedor@correo.com)');
+      return;
+    }
+    setSaving(true);
     try {
-      await suppliersService.create({ name: 'Nuevo Proveedor' });
-      toast.success('Proveedor creado'); onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear proveedor'); }
+      if (editingSupplier) {
+        await suppliersService.update(editingSupplier.id, buildPayload());
+      } else {
+        await suppliersService.create(buildPayload());
+      }
+      toast.success(editingSupplier ? 'Proveedor actualizado' : 'Proveedor creado');
+      setCreateOpen(false);
+      setEditOpen(false);
+      setEditingSupplier(null);
+      onRefresh();
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || e?.message || 'Error al guardar proveedor';
+      toast.error(msg.toLowerCase().includes('email') || msg.toLowerCase().includes('correo') ? 'Correo electrónico inválido. Verifica el formato del email ingresado.' : msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const kpis = [
-    { title: 'Total',     value: data.length,                                                                              icon: Truck,         color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Activos',   value: data.filter(s => (s.status||'').toUpperCase() === 'ACTIVE').length,                       icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Saldo Total', value: formatConvertedAmount(data.reduce((a, s) => a + Number(s.balance||0), 0), 'NIO'),       icon: TrendingDown,  color: 'text-rose-500',    bg: 'bg-rose-500/10'    },
+    { title: 'Total',     value: data.length,                                                                              icon: Truck,         color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Activos',   value: data.filter(s => s.isActive !== false && String((s as any).status || '').toUpperCase() !== 'INACTIVE').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
+    { title: `Saldo Total${valuationModeSuffix}`, value: formatConvertedAmount(data.reduce((a, s) => a + Number(s.balance||0), 0), baseCurrency),       icon: TrendingDown,  color: 'text-rose-500',    bg: 'bg-rose-500/10', kind: 'indicator' as const },
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
-          <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
-            <CardContent className="p-5"><div className="flex items-center gap-4">
-              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p>
-                <p className="text-2xl font-black tabular-nums">{k.value}</p>
-              </div>
-            </div></CardContent>
-          </Card>
+          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}
-        <Card className="bg-card border-border/50 rounded-2xl shadow-sm">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-amber-500/10 text-amber-500">
-                <ArrowUpDown className="size-5" />
-              </div>
-              <div className="flex-1">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Filtro Saldo</p>
-                <Select value={balanceOrder} onValueChange={(value: 'all' | 'highest' | 'lowest') => setBalanceOrder(value)}>
-                  <SelectTrigger className="mt-1 h-9 text-xs">
-                    <SelectValue placeholder="Ordenar por saldo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Sin ordenar</SelectItem>
-                    <SelectItem value="highest">Mayor compra</SelectItem>
-                    <SelectItem value="lowest">Menor compra</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h2 className="text-xl font-black uppercase tracking-tight">Proveedores</h2>
+            <h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Proveedores</h2>
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Directorio de proveedores y aliados</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
+            <PurchaseViewTutorial view="suppliers" />
+            <Select value={balanceOrder} onValueChange={(value: 'all' | 'highest' | 'lowest') => setBalanceOrder(value)}>
+              <SelectTrigger className="h-10 w-full sm:w-44 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                <ArrowUpDown className="mr-2 size-4 shrink-0" />
+                <SelectValue placeholder="Ordenar saldo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Sin ordenar</SelectItem>
+                <SelectItem value="highest">Mayor saldo</SelectItem>
+                <SelectItem value="lowest">Menor saldo</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input placeholder="Buscar proveedor..." className="pl-9 h-10 w-60 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              <Input placeholder="Buscar proveedor..." className="pl-9 h-10 w-60 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} />
             </div>
             {canPerform('proveedores', 'create') && (
               <Button
@@ -315,12 +383,12 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredAndSorted} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+        <EditableDataTable data={filteredAndSorted} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
           onAddRow={canPerform('proveedores', 'create') ? handleAdd : undefined}
           bulkActions={(ids) => (
             <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider"
               onClick={async () => {
-                await Promise.all(ids.map(id => handleUpdate(id, { isActive: false } as any)));
+                await Promise.all(ids.map(id => handleUpdate(id, { isActive: false, status: 'INACTIVE' } as any)));
                 toast.success(`${ids.length} proveedor(es) desactivado(s)`);
                 onRefresh();
               }}
@@ -331,8 +399,11 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
           actions={(row) => (
             <div className="flex gap-1">
               <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierForHistory(row)}><Eye className="size-4" /></Button>
-              {row.isActive !== false && canPerform('proveedores', 'delete') && (
-                <Button title="Desactivar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
+              {canPerform('proveedores', 'edit') && (
+                <Button title="Editar proveedor" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEdit(row)}><Pencil className="size-4" /></Button>
+              )}
+              {canPerform('proveedores', 'delete') && (
+                <Button title={isSupplierInactive(row) ? 'Activar proveedor' : 'Desactivar proveedor'} variant="ghost" size="icon" className={`size-8 rounded-lg ${isSupplierInactive(row) ? 'hover:bg-emerald-500/10 hover:text-emerald-500' : 'hover:bg-rose-500/10 hover:text-rose-500'}`} onClick={() => setPendingToggle(row)}>{isSupplierInactive(row) ? <CheckCircle2 className="size-4" /> : <Ban className="size-4" />}</Button>
               )}
             </div>
           )}
@@ -340,25 +411,28 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
       </div>
 
       <ConfirmDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-        title="¿Desactivar proveedor?"
-        description="El proveedor quedará inactivo y no aparecerá en selecciones futuras."
-        confirmLabel="Desactivar"
-        variant="destructive"
+        open={pendingToggle !== null}
+        onOpenChange={(open) => { if (!open) setPendingToggle(null); }}
+        title={pendingToggle && isSupplierInactive(pendingToggle) ? '¿Activar proveedor?' : '¿Desactivar proveedor?'}
+        description={pendingToggle && isSupplierInactive(pendingToggle)
+          ? 'El proveedor volverá a estar disponible en las operaciones.'
+          : 'El proveedor quedará inactivo y no aparecerá en selecciones futuras.'}
+        confirmLabel={pendingToggle && isSupplierInactive(pendingToggle) ? 'Activar' : 'Desactivar'}
+        variant={pendingToggle && isSupplierInactive(pendingToggle) ? 'default' : 'destructive'}
         loading={deleteLoading}
         onConfirm={async () => {
-          if (!pendingDeleteId) return;
+          if (!pendingToggle) return;
+          const activating = isSupplierInactive(pendingToggle);
           try {
             setDeleteLoading(true);
-            await suppliersService.update(pendingDeleteId, { isActive: false } as any);
-            toast.success('Proveedor desactivado correctamente');
+            await suppliersService.update(pendingToggle.id, { isActive: !activating, status: activating ? 'ACTIVE' : 'INACTIVE' } as any);
+            toast.success(activating ? 'Proveedor activado correctamente' : 'Proveedor desactivado correctamente');
             onRefresh();
           } catch (error: any) {
-            toast.error(`Error al desactivar proveedor: ${error?.response?.data?.message || error?.message || ''}`);
+            toast.error(`Error al ${activating ? 'activar' : 'desactivar'} proveedor: ${error?.response?.data?.message || error?.message || ''}`);
           } finally {
             setDeleteLoading(false);
-            setPendingDeleteId(null);
+            setPendingToggle(null);
           }
         }}
       />
@@ -399,7 +473,7 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
                   Total: <b>{importResult.total}</b> · Creados: <b className="text-emerald-500">{importResult.created}</b> · Omitidos: <b className="text-amber-500">{importResult.skipped}</b>
                 </p>
                 {importResult.errors.length > 0 && (
-                  <div className="mt-2 text-xs text-amber-600 space-y-1">
+                  <div className="mt-2 space-y-1 text-xs text-amber-500">
                     <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
                     {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
                   </div>
@@ -413,6 +487,74 @@ export function ProveedoresView({ data, loading, onRefresh }: ProveedoresViewPro
             <Button onClick={handleImportSuppliers} disabled={importing || !importFile} className="gap-2">
               <Upload className="size-4" /> {importing ? 'Importando...' : 'Importar proveedores'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !saving) setCreateOpen(false); }}>
+        <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,720px)] !flex-col overflow-hidden rounded-3xl p-0">
+          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
+            <DialogTitle className="text-xl font-black uppercase tracking-tight">Nuevo proveedor</DialogTitle>
+            <DialogDescription>Completa los datos del proveedor y sus condiciones de contacto. El código es opcional.</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
+            <section className="space-y-3">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">Si no ingresas un código, el sistema lo asignará automáticamente.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</label><Input value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} placeholder="PRV-000001" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nombre del proveedor" className="h-11 rounded-xl" autoFocus /></div>
+              </div>
+            </section>
+            <section className="space-y-3 border-t border-border/40 pt-5">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Contacto</h3><p className="text-xs text-muted-foreground">Mantén actualizados los datos de contacto del proveedor.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Persona de contacto</label><Input value={draft.contactName} onChange={(e) => setDraft({ ...draft, contactName: e.target.value })} placeholder="Maria Lopez" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Email</label><Input type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder="proveedor@correo.com" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Teléfono</label><Input value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} placeholder="8888-1111" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ciudad</label><Input value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} placeholder="Managua" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</label><Input value={draft.country} onChange={(e) => setDraft({ ...draft, country: e.target.value })} placeholder="Nicaragua" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5 sm:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dirección</label><Input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Calle, número y referencias" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as EntityStatus })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></div>
+              </div>
+            </section>
+          </div>
+          <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7">
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={saving} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
+            <Button onClick={handleSave} disabled={saving} className="w-full rounded-xl font-bold sm:w-auto">{saving ? 'Guardando...' : 'Guardar proveedor'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={(open) => { if (!open && !saving) { setEditOpen(false); setEditingSupplier(null); } }}>
+        <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,720px)] !flex-col overflow-hidden rounded-3xl p-0">
+          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
+            <DialogTitle className="text-xl font-black uppercase tracking-tight">Editar proveedor</DialogTitle>
+            <DialogDescription>Actualiza la información del proveedor.</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
+            <section className="space-y-3">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">El código del proveedor no se puede modificar.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</label><div className="flex h-11 items-center rounded-xl border border-input bg-muted/30 px-3 text-sm text-muted-foreground">{draft.code || '—'}</div></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nombre del proveedor" className="h-11 rounded-xl" autoFocus /></div>
+              </div>
+            </section>
+            <section className="space-y-3 border-t border-border/40 pt-5">
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Contacto</h3><p className="text-xs text-muted-foreground">Mantén actualizados los datos de contacto del proveedor.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Persona de contacto</label><Input value={draft.contactName} onChange={(e) => setDraft({ ...draft, contactName: e.target.value })} placeholder="Maria Lopez" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Email</label><Input type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder="proveedor@correo.com" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Teléfono</label><Input value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} placeholder="8888-1111" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ciudad</label><Input value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} placeholder="Managua" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</label><Input value={draft.country} onChange={(e) => setDraft({ ...draft, country: e.target.value })} placeholder="Nicaragua" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5 sm:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dirección</label><Input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Calle, número y referencias" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as EntityStatus })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></div>
+              </div>
+            </section>
+          </div>
+          <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7">
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
+            <Button onClick={handleSave} disabled={saving} className="w-full rounded-xl font-bold sm:w-auto">{saving ? 'Guardando...' : 'Guardar cambios'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

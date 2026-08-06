@@ -1,4 +1,5 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   TrendingUp, TrendingDown, DollarSign, Landmark, BarChart3, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
@@ -8,9 +9,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { invoicesService } from '../../services/ventas.service';
 import { supplierInvoicesService } from '../../services/compras.service';
-import { contabilidadService } from '../../services/contabilidad.service';
+import { accountsService } from '../../services/finanzas.service';
 import { toast } from 'sonner';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme';
 
@@ -25,51 +27,88 @@ interface Props {
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899']
 
+const toList = (response: any) => Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
+
 export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, accounts, onNavigate }: Props) {
-  const { displayCurrency, convertAmount } = useCurrency();
+  const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { user } = useAuth();
+  const tenantKey = user?.clientTenantId || user?.tenantId || 'current';
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
 
-  const [salesInvoices, setSalesInvoices] = useState<any[]>([]);
-  const [supplierInvoices, setSupplierInvoices] = useState<any[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const salesInvoicesQuery = useQuery({
+    queryKey: ['finance', 'sales-invoices', tenantKey],
+    queryFn: ({ signal }) => invoicesService.getAll({ page: 1, pageSize: 200 }, signal),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const supplierInvoicesQuery = useQuery({
+    queryKey: ['finance', 'supplier-invoices', tenantKey],
+    queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const chartAccountsQuery = useQuery({
+    queryKey: ['finance', 'accounts', tenantKey],
+    queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal),
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const salesInvoices = toList(salesInvoicesQuery.data);
+  const supplierInvoices = toList(supplierInvoicesQuery.data);
+  const bankAccounts = toList(chartAccountsQuery.data).filter((a: any) =>
+    ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) ||
+    String(a.name || '').toUpperCase().includes('CAJA') ||
+    String(a.name || '').toUpperCase().includes('BANCO')
+  );
 
-  useEffect(() => {
-    invoicesService.getAll().then((res: any) => setSalesInvoices(res?.data || res || [])).catch(() => {});
-    supplierInvoicesService.getAll().then((res: any) => setSupplierInvoices(res?.data || res || [])).catch(() => {});
-    contabilidadService.getChartOfAccounts().then((res: any) => {
-      const all = res?.data || res || [];
-      setBankAccounts(all.filter((a: any) => ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) || String(a.name || '').toUpperCase().includes('CAJA') || String(a.name || '').toUpperCase().includes('BANCO')));
-    }).catch(() => {});
-  }, []);
-
-  const totalIncome = useMemo(() => incomes.reduce((a, i) => a + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0), [incomes, convertAmount]);
-  const totalExpense = useMemo(() => expenses.reduce((a, e) => a + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0), [expenses, convertAmount]);
+  const cv = (item: any) => {
+    const amount = Number(item.amount ?? item.baseAmount ?? 0);
+    return valuationMode === 'CURRENT'
+      ? convertCurrentAmount(amount, item.currency)
+      : convertAmount(amount, item.currency, item.exchangeRate);
+  };
+  const docBalance = (item: any) => {
+    const amount = Number(item.balance ?? item.balanceDue ?? (Number(item.total || 0) - Number(item.amountPaid || 0)));
+    return valuationMode === 'CURRENT'
+      ? convertCurrentAmount(amount, item.currency)
+      : convertAmount(amount, item.currency, item.exchangeRate);
+  };
+  const totalIncome = useMemo(() => incomes.reduce((a, i) => a + cv(i), 0), [incomes, valuationMode, convertAmount, convertCurrentAmount]);
+  const totalExpense = useMemo(() => expenses.reduce((a, e) => a + cv(e), 0), [expenses, valuationMode, convertAmount, convertCurrentAmount]);
   const netCashFlow = totalIncome - totalExpense;
   const marginPct = totalIncome > 0 ? ((netCashFlow / totalIncome) * 100) : 0;
 
   const pendingSalesInvoices = useMemo(() => salesInvoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' }), [salesInvoices]);
   const pendingSupplierInvoices = useMemo(() => supplierInvoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' }), [supplierInvoices]);
-  const totalCxc = useMemo(() => pendingSalesInvoices.reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [pendingSalesInvoices]);
-  const totalCxp = useMemo(() => pendingSupplierInvoices.reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [pendingSupplierInvoices]);
+  const totalCxc = useMemo(() => pendingSalesInvoices.reduce((a, inv: any) => a + docBalance(inv), 0), [pendingSalesInvoices, valuationMode, convertAmount, convertCurrentAmount]);
+  const totalCxp = useMemo(() => pendingSupplierInvoices.reduce((a, inv: any) => a + docBalance(inv), 0), [pendingSupplierInvoices, valuationMode, convertAmount, convertCurrentAmount]);
   const cxcOverdue = useMemo(() => pendingSalesInvoices.filter((inv: any) => {
     const due = inv.dueDate ? new Date(inv.dueDate) : null;
-    return due && due < new Date() && Number(inv.balanceDue || inv.total || 0) > 0;
-  }).reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [pendingSalesInvoices]);
+    return due && due < new Date() && docBalance(inv) > 0;
+  }).reduce((a, inv: any) => a + docBalance(inv), 0), [pendingSalesInvoices, valuationMode, convertAmount, convertCurrentAmount]);
   const cxpOverdue = useMemo(() => pendingSupplierInvoices.filter((inv: any) => {
     const due = inv.dueDate ? new Date(inv.dueDate) : null;
-    return due && due < new Date() && Number(inv.balanceDue || inv.total || 0) > 0;
-  }).reduce((a, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0), [pendingSupplierInvoices]);
-  const bankBalance = useMemo(() => bankAccounts.reduce((a, acc: any) => a + Number(acc.balance || 0), 0), [bankAccounts]);
+    return due && due < new Date() && docBalance(inv) > 0;
+  }).reduce((a, inv: any) => a + docBalance(inv), 0), [pendingSupplierInvoices, valuationMode, convertAmount, convertCurrentAmount]);
+  const bankBalance = useMemo(() => bankAccounts.reduce((a, acc: any) => a + (valuationMode === 'CURRENT'
+    ? convertCurrentAmount(Number(acc.balance || 0), acc.currency)
+    : convertAmount(Number(acc.balance || 0), acc.currency, acc.exchangeRate)), 0), [bankAccounts, valuationMode, convertAmount, convertCurrentAmount]);
 
   const activeRecurringExpenses = useMemo(() => recurringExpenses.filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringExpenses]);
   const activeRecurringIncomes = useMemo(() => (recurringIncomes || []).filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringIncomes]);
   const monthlyRecurring = useMemo(() =>
-    activeRecurringExpenses.reduce((a, r) => a + convertAmount(r.amount || 0, r.currency, r.exchangeRate), 0),
-    [activeRecurringExpenses, convertAmount]
+    activeRecurringExpenses.reduce((a, r) => a + cv(r), 0),
+    [activeRecurringExpenses, valuationMode, convertAmount, convertCurrentAmount]
   );
   const monthlyRecurringIncome = useMemo(() =>
-    activeRecurringIncomes.reduce((a, r) => a + convertAmount(r.amount || 0, r.currency, r.exchangeRate), 0),
-    [activeRecurringIncomes, convertAmount]
+    activeRecurringIncomes.reduce((a, r) => a + cv(r), 0),
+    [activeRecurringIncomes, valuationMode, convertAmount, convertCurrentAmount]
   );
   const next7d = monthlyRecurring * (7 / 30);
   const next15d = monthlyRecurring * (15 / 30);
@@ -80,19 +119,19 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
 
   const monthlyData = useMemo(() => {
     const months: Record<string, { income: number; expense: number; net: number }> = {};
-    for (const i of incomes) { const m = i.date ? i.date.substring(0, 7) : 'unknown'; months[m] = months[m] || { income: 0, expense: 0, net: 0 }; months[m].income += convertAmount(i.amount || 0, i.currency, i.exchangeRate); }
-    for (const e of expenses) { const m = e.date ? e.date.substring(0, 7) : 'unknown'; months[m] = months[m] || { income: 0, expense: 0, net: 0 }; months[m].expense += convertAmount(e.amount || 0, e.currency, e.exchangeRate); }
+    for (const i of incomes) { const m = i.date ? i.date.substring(0, 7) : 'unknown'; months[m] = months[m] || { income: 0, expense: 0, net: 0 }; months[m].income += cv(i); }
+    for (const e of expenses) { const m = e.date ? e.date.substring(0, 7) : 'unknown'; months[m] = months[m] || { income: 0, expense: 0, net: 0 }; months[m].expense += cv(e); }
     return Object.entries(months).sort(([a], [b]) => a.localeCompare(b)).map(([month, d]) => ({ month, ...d, net: d.income - d.expense }));
-  }, [incomes, expenses, convertAmount]);
+  }, [incomes, expenses, valuationMode, convertAmount, convertCurrentAmount]);
 
   const agingData = useMemo(() => {
     const ranges = [{ label: '0-30 días', min: 0, max: 30 }, { label: '31-60 días', min: 31, max: 60 }, { label: '61-90 días', min: 61, max: 90 }, { label: '+90 días', min: 91, max: Infinity }];
     return ranges.map(r => {
-      const cxcAmt = pendingSalesInvoices.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= r.min && days <= r.max && Number(inv.balanceDue || inv.total || 0) > 0; }).reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0);
-      const cxpAmt = pendingSupplierInvoices.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= r.min && days <= r.max && Number(inv.balanceDue || inv.total || 0) > 0; }).reduce((a: number, inv: any) => a + Number(inv.balanceDue || inv.total || 0), 0);
+      const cxcAmt = pendingSalesInvoices.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= r.min && days <= r.max && docBalance(inv) > 0; }).reduce((a: number, inv: any) => a + docBalance(inv), 0);
+      const cxpAmt = pendingSupplierInvoices.filter((inv: any) => { const due = inv.dueDate ? new Date(inv.dueDate) : null; if (!due) return false; const days = Math.floor((new Date().getTime() - due.getTime()) / (1000 * 60 * 60 * 24)); return days >= r.min && days <= r.max && docBalance(inv) > 0; }).reduce((a: number, inv: any) => a + docBalance(inv), 0);
       return { label: r.label, cxc: cxcAmt, cxp: cxpAmt };
     });
-  }, [pendingSalesInvoices, pendingSupplierInvoices]);
+  }, [pendingSalesInvoices, pendingSupplierInvoices, valuationMode, convertAmount, convertCurrentAmount]);
 
   const projectData = useMemo(() => {
     const last = monthlyData.length > 0 ? monthlyData[monthlyData.length - 1] : null;
@@ -102,26 +141,27 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
 
   const categoryData = useMemo(() => {
     const cats: Record<string, number> = {};
-    for (const e of expenses) { const cat = e.category || 'OTROS'; cats[cat] = (cats[cat] || 0) + convertAmount(e.amount || 0, e.currency, e.exchangeRate); }
+    for (const e of expenses) { const cat = e.category || 'OTROS'; cats[cat] = (cats[cat] || 0) + cv(e); }
     return Object.entries(cats).sort(([, a], [, b]) => b - a).slice(0, 6).map(([name, value]) => ({ name, value }));
-  }, [expenses, convertAmount]);
+  }, [expenses, valuationMode, convertAmount, convertCurrentAmount]);
 
-  const fmt = (n: number) => sym + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (n: number) => formatCurrentAmount(n, displayCurrency);
   const fmtShort = (n: number) => {
-    if (Math.abs(n) >= 1_000_000) return sym + (n / 1_000_000).toFixed(1) + 'M';
-    if (Math.abs(n) >= 1_000) return sym + (n / 1_000).toFixed(1) + 'K';
-    return sym + n.toLocaleString(undefined, { minimumFractionDigits: 0 });
+    const displayed = n;
+    if (Math.abs(displayed) >= 1_000_000) return sym + (displayed / 1_000_000).toFixed(1) + 'M';
+    if (Math.abs(displayed) >= 1_000) return sym + (displayed / 1_000).toFixed(1) + 'K';
+    return sym + displayed.toLocaleString(undefined, { minimumFractionDigits: 0 });
   };
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-        <KpiCard icon={Landmark} label="Saldo Disponible" value={fmt(bankBalance)} onClick={() => onNavigate?.('caja-bancos')} />
-        <KpiCard icon={TrendingUp} label="Ingresos Cobrados" value={fmt(totalIncome)} onClick={() => onNavigate?.('ingresos')} />
-        <KpiCard icon={TrendingDown} label="Pagos Realizados" value={fmt(totalExpense)} onClick={() => onNavigate?.('gastos')} />
-        <KpiCard icon={DollarSign} label="Flujo Neto" value={fmt(netCashFlow)} />
-        <KpiCard icon={BarChart3} label="Total por Cobrar" value={fmt(totalCxc)} sub={`${cxcOverdue > 0 ? fmt(cxcOverdue) + ' vencido' : 'Sin vencidos'}`} onClick={() => onNavigate?.('cuentas-cobrar')} />
-        <KpiCard icon={BarChart3} label="Total por Pagar" value={fmt(totalCxp)} sub={`${cxpOverdue > 0 ? fmt(cxpOverdue) + ' vencido' : 'Sin vencidos'}`} onClick={() => onNavigate?.('cuentas-pagar')} />
+    <div className="min-w-0 space-y-6">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <KpiCard icon={Landmark} label={`Saldo Disponible${valuationModeSuffix}`} value={fmt(bankBalance)} onClick={() => onNavigate?.('caja-bancos')} />
+        <KpiCard icon={TrendingUp} label={`Ingresos Cobrados${valuationModeSuffix}`} value={fmt(totalIncome)} onClick={() => onNavigate?.('ingresos')} />
+        <KpiCard icon={TrendingDown} label={`Pagos Realizados${valuationModeSuffix}`} value={fmt(totalExpense)} onClick={() => onNavigate?.('gastos')} />
+        <KpiCard icon={DollarSign} label={`Flujo Neto${valuationModeSuffix}`} value={fmt(netCashFlow)} />
+        <KpiCard icon={BarChart3} label={`Total por Cobrar${valuationModeSuffix}`} value={fmt(totalCxc)} sub={`${cxcOverdue > 0 ? fmt(cxcOverdue) + ' vencido' : 'Sin vencidos'}`} onClick={() => onNavigate?.('cuentas-cobrar')} />
+        <KpiCard icon={BarChart3} label={`Total por Pagar${valuationModeSuffix}`} value={fmt(totalCxp)} sub={`${cxpOverdue > 0 ? fmt(cxpOverdue) + ' vencido' : 'Sin vencidos'}`} onClick={() => onNavigate?.('cuentas-pagar')} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -238,7 +278,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                       <p className="text-[10px] text-muted-foreground truncate">{inc.category} · {inc.date ? new Date(inc.date).toLocaleDateString('es-NI') : ''}</p>
                     </div>
                   </div>
-                  <span className="text-xs font-black text-emerald-500 shrink-0 ml-2">{fmt(convertAmount(inc.amount || 0, inc.currency, inc.exchangeRate))}</span>
+                  <span className="text-xs font-black text-emerald-500 shrink-0 ml-2">{fmt(cv(inc))}</span>
                 </div>
               ))}
               {incomes.length > 5 && (
@@ -271,7 +311,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                       <p className="text-[10px] text-muted-foreground truncate">{exp.category} · {exp.date ? new Date(exp.date).toLocaleDateString('es-NI') : ''}</p>
                     </div>
                   </div>
-                  <span className="text-xs font-black text-rose-500 shrink-0 ml-2">{fmt(convertAmount(exp.amount || 0, exp.currency, exp.exchangeRate))}</span>
+                  <span className="text-xs font-black text-rose-500 shrink-0 ml-2">{fmt(cv(exp))}</span>
                 </div>
               ))}
               {expenses.length > 5 && (

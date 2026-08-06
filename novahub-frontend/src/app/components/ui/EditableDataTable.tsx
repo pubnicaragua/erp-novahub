@@ -9,7 +9,7 @@ import {
 } from './table';
 import { Input } from './input';
 import { cn } from './utils';
-import { Pencil, Trash2, Copy, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Pencil, Trash2, Copy, Eraser, MoreHorizontal, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { motion, AnimatePresence } from 'motion/react';
@@ -40,6 +40,9 @@ interface EditableDataTableProps<T> {
   idField?: keyof T;
   isLoading?: boolean;
   actions?: (row: T) => React.ReactNode;
+  onRowClick?: (row: T) => void;
+  onRowDoubleClick?: (row: T) => void;
+  editOnPencilOnly?: boolean;
   showSelection?: boolean;
   bulkActions?: (selectedIds: (string | number)[]) => React.ReactNode;
   showClearSelection?: boolean;
@@ -61,8 +64,13 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   idField = 'id' as keyof T,
   isLoading,
   actions,
+  onRowClick,
+  onRowDoubleClick,
+  editOnPencilOnly = false,
   showSelection = true,
   bulkActions,
+  showClearSelection = true,
+  onAddRow,
   pagination,
   actionsWidth = 'w-32',
   fitContent = false,
@@ -81,13 +89,39 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [bulkDuplicateLoading, setBulkDuplicateLoading] = useState(false);
   const [mobileActionsRow, setMobileActionsRow] = useState<T | null>(null);
+  const rowClickTimerRef = useRef<number | null>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const pointerInsideTable = useRef(false);
+  const scrollAnimationRef = useRef<number | null>(null);
+  const [focusedCell, setFocusedCell] = useState({ rowIndex: 0, colIndex: 0 });
   const [horizontalScroll, setHorizontalScroll] = useState({ left: false, right: false });
   const actionColumnWidth = (() => {
     const match = /^w-(\d+)$/.exec(actionsWidth);
     return match ? Number(match[1]) * 4 : 128;
   })();
+  const handleRowInteraction = useCallback((event: React.MouseEvent, row: T, doubleClick = false) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('button, input, select, textarea')) return;
+    if (!doubleClick && target.closest('[data-row-click-exempt="true"]')) return;
+
+    if (doubleClick) {
+      if (rowClickTimerRef.current !== null) window.clearTimeout(rowClickTimerRef.current);
+      rowClickTimerRef.current = null;
+      onRowDoubleClick?.(row);
+      return;
+    }
+
+    if (onRowDoubleClick) {
+      if (rowClickTimerRef.current !== null) window.clearTimeout(rowClickTimerRef.current);
+      rowClickTimerRef.current = window.setTimeout(() => {
+        rowClickTimerRef.current = null;
+        onRowClick?.(row);
+      }, 220);
+      return;
+    }
+
+    onRowClick?.(row);
+  }, [onRowClick, onRowDoubleClick]);
   const tableMinWidth = fitContent
     ? columns.reduce((total, column) => total + (Number.parseInt(String(column.width || ''), 10) || 140), 0) + (showSelection ? 48 : 0) + actionColumnWidth
     : undefined;
@@ -108,20 +142,24 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     return [...new Set(boundaries)].sort((a, b) => a - b);
   }, [columns, showSelection]);
 
-  const [prevInitialData, setPrevInitialData] = useState(initialData);
-  if (prevInitialData !== initialData) {
-    setPrevInitialData(initialData);
+  useEffect(() => {
     setData(initialData);
-  }
+  }, [initialData]);
 
   useEffect(() => {
     if (!showHorizontalControls || layoutMode === 'cards') return;
     const element = tableScrollRef.current;
     if (!element) return;
-    const updateScrollState = () => setHorizontalScroll({
-      left: element.scrollLeft > 4,
-      right: element.scrollLeft + element.clientWidth < element.scrollWidth - 4,
-    });
+    const scrollStateRef = { current: horizontalScroll };
+    const updateScrollState = () => {
+      const nextState = {
+        left: element.scrollLeft > 4,
+        right: element.scrollLeft + element.clientWidth < element.scrollWidth - 4,
+      };
+      if (nextState.left === scrollStateRef.current.left && nextState.right === scrollStateRef.current.right) return;
+      scrollStateRef.current = nextState;
+      setHorizontalScroll(nextState);
+    };
     updateScrollState();
     element.addEventListener('scroll', updateScrollState, { passive: true });
     const observer = new ResizeObserver(updateScrollState);
@@ -132,9 +170,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       observer.disconnect();
       window.removeEventListener('resize', updateScrollState);
     };
-  }, [columns.length, data.length, layoutMode, showHorizontalControls, tableMinWidth]);
+  }, [columns.length, data.length, horizontalScroll, layoutMode, showHorizontalControls, tableMinWidth]);
 
-  const scrollTable = useCallback((direction: 'left' | 'right') => {
+  const scrollTable = (direction: 'left' | 'right') => {
     const element = tableScrollRef.current;
     if (!element) return;
     const targets = getColumnScrollTargets();
@@ -142,33 +180,28 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     const nextPosition = direction === 'right'
       ? targets.find((target) => target > currentPosition + 4) ?? targets[targets.length - 1]
       : [...targets].reverse().find((target) => target < currentPosition - 4) ?? targets[0];
-    element.scrollTo({ left: nextPosition, behavior: 'smooth' });
-  }, [getColumnScrollTargets]);
-
-  useEffect(() => {
-    if (!showHorizontalControls || layoutMode === 'cards') return;
-    const handleWindowKeyDown = (event: KeyboardEvent) => {
-      const element = tableScrollRef.current;
-      const target = event.target as HTMLElement | null;
-      const tableHasFocus = Boolean(element && document.activeElement && element.contains(document.activeElement));
-      if (!element || (!pointerInsideTable.current && !tableHasFocus)) return;
-      if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return;
-      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-      event.preventDefault();
-      scrollTable(event.key === 'ArrowRight' ? 'right' : 'left');
+    if (scrollAnimationRef.current !== null) cancelAnimationFrame(scrollAnimationRef.current);
+    const startPosition = element.scrollLeft;
+    const distance = nextPosition - startPosition;
+    if (Math.abs(distance) < 1) return;
+    const startTime = performance.now();
+    const duration = 170;
+    const animate = (now: number) => {
+      const progress = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      element.scrollLeft = startPosition + distance * eased;
+      if (progress < 1) {
+        scrollAnimationRef.current = requestAnimationFrame(animate);
+      } else {
+        scrollAnimationRef.current = null;
+      }
     };
-    window.addEventListener('keydown', handleWindowKeyDown);
-    return () => window.removeEventListener('keydown', handleWindowKeyDown);
-  }, [layoutMode, showHorizontalControls, scrollTable]);
-
-  const handleTableKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement;
-    if (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      event.preventDefault();
-      scrollTable(event.key === 'ArrowRight' ? 'right' : 'left');
-    }
+    scrollAnimationRef.current = requestAnimationFrame(animate);
   };
+
+  useEffect(() => () => {
+    if (scrollAnimationRef.current !== null) cancelAnimationFrame(scrollAnimationRef.current);
+  }, []);
 
   useEffect(() => {
     if (editingCell && inputRef.current) {
@@ -180,13 +213,49 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const handleCellClick = (rowId: string | number, colKey: string, value: any, editable?: boolean) => {
     if (!editable) return;
     setEditingCell({ rowId, colKey });
-    setEditValue(value);
+    // Empty nullable fields must still mount as controlled inputs.
+    setEditValue(value ?? '');
+  };
+
+  const focusGridCell = useCallback((rowIndex: number, colIndex: number) => {
+    if (!data.length || !columns.length) return;
+    const nextRow = Math.max(0, Math.min(rowIndex, data.length - 1));
+    const nextCol = Math.max(0, Math.min(colIndex, columns.length - 1));
+    setFocusedCell({ rowIndex: nextRow, colIndex: nextCol });
+    requestAnimationFrame(() => {
+      const cell = tableScrollRef.current?.querySelector<HTMLElement>(`[data-grid-row-index="${nextRow}"][data-grid-col-index="${nextCol}"]`);
+      cell?.focus({ preventScroll: true });
+      cell?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
+    });
+  }, [columns.length, data.length]);
+
+  const moveGridFocus = useCallback((key: string) => {
+    if (!data.length || !columns.length) return;
+    let { rowIndex, colIndex } = focusedCell;
+    if (key === 'ArrowLeft') colIndex = Math.max(0, colIndex - 1);
+    if (key === 'ArrowRight') colIndex = Math.min(columns.length - 1, colIndex + 1);
+    if (key === 'ArrowUp') rowIndex = Math.max(0, rowIndex - 1);
+    if (key === 'ArrowDown') rowIndex = Math.min(data.length - 1, rowIndex + 1);
+    focusGridCell(rowIndex, colIndex);
+  }, [columns.length, data.length, focusedCell, focusGridCell]);
+
+  const handleTableKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(target.tagName) || target.isContentEditable) return;
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+      event.preventDefault();
+      moveGridFocus(event.key);
+    }
   };
 
   const handleSave = async (rowId: string | number, colKey: string, valueToSave?: any) => {
     if (!editingCell && valueToSave === undefined) return;
     
-    const value = valueToSave !== undefined ? valueToSave : editValue;
+    const column = columns.find((item) => String(item.key) === colKey);
+    const rawValue = valueToSave !== undefined ? valueToSave : editValue;
+    const value = column?.type === 'number' && rawValue !== '' && rawValue !== null
+      ? Number(rawValue)
+      : rawValue;
     const originalRow = data.find(r => r[idField] === rowId);
     
     if (!originalRow || originalRow[colKey] === value) {
@@ -275,6 +344,28 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     setData(newData);
     toast.success(`Sincronizadas ${updatedCount} filas desde Excel`);
   }, [data, columns, onRowUpdate, idField]);
+
+  const handleAddNewRow = () => {
+    if (onAddRow) {
+      onAddRow();
+    } else {
+      const newId = `new-${Math.random().toString(36).substr(2, 9)}`;
+      const newRow = { [idField]: newId } as any;
+      // Initialize with empty strings for all keys in columns
+      columns.forEach(col => {
+        newRow[col.key as string] = '';
+      });
+      setData(prev => [...prev, newRow as T]);
+      setDraftRows(prev => new Set(prev).add(newId));
+      
+      // Auto-focus first editable cell of new row
+      const firstEditable = columns.find(c => c.editable);
+      if (firstEditable) {
+        setEditingCell({ rowId: newId, colKey: firstEditable.key as string });
+        setEditValue('');
+      }
+    }
+  };
 
   const handleBulkDuplicate = async () => {
     if (!onBulkDuplicate || selectedIds.size === 0) return;
@@ -368,7 +459,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           tabIndex={0}
           onKeyDownCapture={handleTableKeyDown}
           onMouseDown={() => tableScrollRef.current?.focus({ preventScroll: true })}
-          aria-label="Tabla desplazable. Usa las flechas izquierda y derecha del teclado para moverte."
+          aria-label="Tabla navegable. Usa las flechas para moverte entre filas y columnas."
           className="w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
         <Table
@@ -407,7 +498,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((row) => {
+            {data.map((row, rowIndex) => {
               const rowId = row[idField];
               const isDraft = draftRows.has(rowId);
               const isSelected = selectedIds.has(rowId);
@@ -415,8 +506,11 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               return (
                 <TableRow 
                   key={rowId} 
+                  onClick={(event) => handleRowInteraction(event, row)}
+                  onDoubleClick={(event) => handleRowInteraction(event, row, true)}
                   className={cn(
-                    "group h-14 transition-all duration-300", 
+                    "group/row h-14 transition-all duration-300",
+                    (onRowClick || onRowDoubleClick) && !editOnPencilOnly && "cursor-pointer",
                     isSelected ? "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/20"
                   )}
                 >
@@ -428,7 +522,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       />
                     </TableCell>
                   )}
-                  {columns.map((col) => {
+                  {columns.map((col, colIndex) => {
                     const colKey = col.key as string;
                     const value = row[colKey];
                     const isEditing = editingCell?.rowId === rowId && editingCell?.colKey === colKey;
@@ -436,15 +530,28 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                     return (
                       <TableCell 
                         key={colKey}
-                        onClick={() => handleCellClick(rowId, colKey, value, col.editable)}
+                        data-row-click-exempt={col.editable && !editOnPencilOnly ? 'true' : undefined}
+                        tabIndex={focusedCell.rowIndex === rowIndex && focusedCell.colIndex === colIndex ? 0 : -1}
+                        data-grid-row-index={rowIndex}
+                        data-grid-col-index={colIndex}
+                        onFocus={() => setFocusedCell({ rowIndex, colIndex })}
+                        onClick={() => {
+                          focusGridCell(rowIndex, colIndex);
+                          if (!editOnPencilOnly) handleCellClick(rowId, colKey, value, col.editable);
+                        }}
                         className={cn(
-                          "relative cursor-cell group h-14 min-w-0",
+                          "relative group/cell h-14 min-w-0",
+                          editOnPencilOnly ? "cursor-default" : "cursor-cell",
                           col.editable && "hover:bg-primary/5 transition-colors",
-                          isEditing && "p-0"
+                          isEditing && "p-0",
+                          focusedCell.rowIndex === rowIndex && focusedCell.colIndex === colIndex && !isEditing && "ring-1 ring-inset ring-primary/50"
                         )}
                       >
                         {isEditing ? (
-                          <div className="absolute inset-0 z-10 p-1 flex items-center bg-background border-2 border-primary shadow-xl">
+                          <div
+                            className="absolute inset-0 z-10 flex items-center bg-background border-2 border-primary p-1 shadow-xl"
+                            onClick={(event) => event.stopPropagation()}
+                          >
                             {col.type === 'select' ? (
                               <select
                                 value={editValue ?? ''}
@@ -465,7 +572,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                               <Input
                                 ref={inputRef}
                                 type={col.type === 'datetime-local' ? 'datetime-local' : col.type === 'date' ? 'date' : col.type === 'number' ? 'number' : 'text'}
-                                value={editValue}
+                                value={editValue ?? ''}
                                 onChange={(e) => setEditValue(e.target.value)}
                                 onBlur={() => handleSave(rowId, colKey)}
                                 onKeyDown={(e) => handleKeyDown(e, rowId, colKey)}
@@ -485,7 +592,24 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                               </span>
                             )}
                             {col.editable && (
-                              <Pencil className="size-3 ml-auto opacity-0 group-hover:opacity-30 transition-opacity text-primary" />
+                              editOnPencilOnly ? (
+                                <button
+                                  type="button"
+                                  title="Editar campo"
+                                  aria-label={`Editar ${col.header}`}
+                                  className="pointer-events-none ml-auto inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-primary opacity-0 transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 hover:bg-primary/10"
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    handleCellClick(rowId, colKey, value, col.editable);
+                                  }}
+                                >
+                                  <Pencil className="size-3" />
+                                </button>
+                              ) : (
+                                <Pencil className="ml-auto size-3 opacity-0 transition-opacity group-hover:opacity-30 text-primary" />
+                              )
                             )}
                           </div>
                         )}
@@ -535,8 +659,11 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             <motion.article
               key={rowId}
               layout
+              onClick={(event) => handleRowInteraction(event, row)}
+              onDoubleClick={(event) => handleRowInteraction(event, row, true)}
               className={cn(
                 'overflow-hidden rounded-2xl border border-border/50 bg-card/70 shadow-sm',
+                (onRowClick || onRowDoubleClick) && !editOnPencilOnly && 'cursor-pointer',
                 isSelected && 'border-primary/50 bg-primary/5'
               )}
             >
@@ -599,7 +726,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       </div>
 
       {pagination && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground" data-tour="sales-list-pagination">
           <div className="flex items-center gap-2">
             <span>Mostrar</span>
             <select

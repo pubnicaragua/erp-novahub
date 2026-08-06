@@ -5,9 +5,9 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { recurringExpensesService, suppliersService } from '../../services/compras.service';
-import { accountsService } from '../../services/finanzas.service';
+import { recurringExpensesService } from '../../services/compras.service';
 import type { RecurringExpense, Supplier, Account } from '../../types';
+import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -15,8 +15,11 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
+import { PurchaseKpiCard } from './PurchaseKpiCard';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
-interface Props { data: RecurringExpense[]; loading: boolean; onRefresh: () => void; }
+interface Props { data: RecurringExpense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
 const freqOpts = [
   { label: 'Semanal',    value: 'weekly' },  
@@ -31,10 +34,13 @@ const statusOpts = [
   { label: 'Finalizado', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
+interface PropsWithCatalog extends Props { accountCatalog?: Account[]; }
+
+export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], pagination, onSearchChange }: PropsWithCatalog) {
   const { canPerform } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -44,16 +50,9 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
   const [localDoc, setLocalDoc] = useState<Partial<RecurringExpense> | null>(null);
 
   useEffect(() => {
-    suppliersService.getAll().then(res => {
-      const list = Array.isArray(res) ? res : (res as any).data || [];
-      setSuppliers(list);
-    }).catch();
-
-    accountsService.getAll().then(res => {
-      const list = Array.isArray(res) ? res : (res as any).data || [];
-      setAccounts(list);
-    }).catch();
-  }, []);
+    setSuppliers(supplierCatalog);
+    setAccounts(accountCatalog);
+  }, [supplierCatalog, accountCatalog]);
 
   const openEditor = (id: string | null) => {
     setEditingId(id);
@@ -77,16 +76,18 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
     }
   };
 
-  const filtered = data.filter(e => (e.description||'').toLowerCase().includes(searchTerm.toLowerCase()));
+  const filtered = data.filter(e => {
+    const status = String(e.status || '').toUpperCase();
+    if (statusFilter !== 'ALL' && status !== statusFilter) return false;
+    return (e.description||'').toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   const columns: ColumnDef<RecurringExpense>[] = [
     { key: 'description', header: 'Descripción', editable: canPerform('PURCHASES_EXPENSES_REC', 'edit') },
 
     { key: 'amount',      header: 'Monto',       width: '130px',
       render: (val, row) => (
-        <span className="font-black tabular-nums text-rose-500">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-        </span>
+        <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-rose-500" />
       ) },
     { key: 'frequency',   header: 'Frecuencia',  width: '120px', editable: canPerform('PURCHASES_EXPENSES_REC', 'edit'), type: 'select', options: freqOpts,
       render: (val) => <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{freqMap[(val||'').toLowerCase()]||val}</Badge> },
@@ -121,7 +122,6 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
   const handleSaveDoc = async () => {
     if (!localDoc?.description) return toast.error('La descripción es obligatoria');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
-    if (!localDoc?.accountId) return toast.error('Debe seleccionar una cuenta contable');
     
     // Clean data
     const cleanedDoc = {
@@ -183,7 +183,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
           <Card className="rounded-2xl border-border/50 col-span-2">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalles del Servicio/Concepto</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                 <div className="md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Descripción / Nombre</p>
                   <Input 
@@ -207,14 +207,10 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <p className="text-[10px] text-muted-foreground mb-1 font-black uppercase text-primary">Cuenta Contable (Egreso)</p>
-                  <Combobox 
-                    disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
-                    options={accounts.filter(a => a.type?.toLowerCase() === 'expense' || a.type?.toLowerCase() === 'asset').map(a => ({ label: `${a.code} - ${a.name}`, value: a.id, description: a.type }))}
-                    value={localDoc.accountId || ''}
-                    onChange={(val) => setLocalDoc({ ...localDoc, accountId: val })}
-                    placeholder="Seleccionar Cuenta de Gasto..."
-                  />
+                  <p className="text-[10px] text-muted-foreground mb-1 font-black uppercase text-primary">Cuenta contable</p>
+                  <div className="flex h-8 items-center rounded-md border border-primary/20 bg-primary/5 px-2 text-[10px] font-bold text-primary">
+                    Se aplica la cuenta global de Gastos configurada en Contabilidad
+                  </div>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha de Inicio</p>
@@ -317,45 +313,44 @@ export function GastosRecurrentesView({ data, loading, onRefresh }: Props) {
     );
   }
 
+  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
+    ? convertCurrentAmount(amount, currency)
+    : convertAmount(amount, currency, rate || globalRate);
   const monthly = data
     .filter(e => (e.frequency || '').toUpperCase() === 'MONTHLY')
-    .reduce((acc, e) => acc + convertAmount(e.amount || 0, e.currency, e.exchangeRate), 0);
+    .reduce((acc, e) => acc + toDisplayAmount(Number(e.amount ?? e.baseAmount ?? 0), e.currency, e.exchangeRate), 0);
   const kpis = [
-    { title: 'Total Recurrentes', value: data.length,                                                            icon: CalendarClock, color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
-    { title: 'Activos',           value: data.filter(e => (e.status||'').toUpperCase() === 'ACTIVE').length,     icon: RotateCcw,     color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Total Recurrentes', value: data.length,                                                            icon: CalendarClock, color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Activos',           value: data.filter(e => (e.status||'').toUpperCase() === 'ACTIVE').length,     icon: RotateCcw,     color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
     {
-      title: `Est. Mensual (${displayCurrency})`,
-      value: `${displayCurrency === 'USD' ? '$' : 'C$'} ${monthly.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      title: `Est. Mensual (${displayCurrency}${valuationModeSuffix})`,
+      value: formatCurrentAmount(monthly, displayCurrency),
       icon: TrendingDown,
       color: 'text-rose-500',
-      bg: 'bg-rose-500/10',
+      bg: 'bg-rose-500/10', kind: 'indicator' as const,
     },
-    { title: 'Pendientes',        value: data.filter(e => (e.status||'').toUpperCase() === 'PAUSED').length,     icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10'   },
+    { title: 'Pausados',        value: data.filter(e => (e.status||'').toUpperCase() === 'PAUSED').length,     icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10', kind: 'filter' as const, filter: 'PAUSED' as const },
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
-          <Card key={i} className="bg-card border-border/50 rounded-2xl shadow-sm">
-            <CardContent className="p-5"><div className="flex items-center gap-4">
-              <div className={cn('p-3 rounded-xl', k.bg, k.color)}><k.icon className="size-5" /></div>
-              <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{k.title}</p><p className="text-2xl font-black tabular-nums">{k.value}</p></div>
-            </div></CardContent>
-          </Card>
+          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Gastos Recurrentes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Compromisos fijos periódicos</p></div>
-          <div className="flex items-center gap-3">
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos Recurrentes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Compromisos fijos periódicos</p></div>
+          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
+            <PurchaseViewTutorial view="recurring-expenses" />
+            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_EXPENSES_REC', 'create') && (
               <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Recurrente</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
           onBulkDelete={canPerform('PURCHASES_EXPENSES_REC', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {

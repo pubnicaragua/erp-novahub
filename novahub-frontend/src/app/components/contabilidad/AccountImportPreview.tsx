@@ -23,7 +23,7 @@ const fieldClass = 'h-9 w-full min-w-0 rounded-lg border-border/70 bg-background
 
 export function AccountImportPreview({ rows, errors, fileName, isSidebarCollapsed, importing, progress, onRowUpdate, onBack, onConfirm }: AccountImportPreviewProps) {
   return (
-    <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-4 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
+    <div className={`accounting-module fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
       <div className="mx-auto flex min-h-0 w-full max-w-[1900px] flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4">
           <div className="min-w-0">
@@ -43,7 +43,7 @@ export function AccountImportPreview({ rows, errors, fileName, isSidebarCollapse
           <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Códigos únicos por empresa</Badge><Badge variant="secondary">Importación repetible</Badge><Badge variant="secondary">Jerarquía por código padre</Badge></div>
         </div>
 
-        <HorizontalTableScroller className="min-h-0 flex-1" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
+        <HorizontalTableScroller className="hidden min-h-0 flex-1 sm:block" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="overflow-visible" containerStyle={{ width: '2200px', minWidth: '2200px', maxWidth: 'none' }} className="w-[2200px] min-w-[2200px]">
             <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
               <TableRow>
@@ -80,6 +80,37 @@ export function AccountImportPreview({ rows, errors, fileName, isSidebarCollapse
           </Table>
           {!rows.length && <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene cuentas válidas.</div>}
         </HorizontalTableScroller>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto sm:hidden">
+          {rows.length === 0 ? (
+            <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene cuentas válidas.</div>
+          ) : rows.map((row, index) => (
+            <div key={`${row.codigo}-${index}`} className="rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
+              <div className="flex items-start gap-2">
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+                  <CheckCircle2 className="size-4 text-emerald-500" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Código</p>
+                  <Input className={`${fieldClass} font-mono`} value={row.codigo} onChange={(event) => onRowUpdate(index, 'codigo', event.target.value)} disabled={importing} />
+                </div>
+                <div className="min-w-0 flex-[1.6] space-y-1">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Nombre</p>
+                  <Input className={fieldClass} value={row.nombre} onChange={(event) => onRowUpdate(index, 'nombre', event.target.value)} disabled={importing} />
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Tipo</span><Input className={fieldClass} value={row.tipo_cuenta} onChange={(event) => onRowUpdate(index, 'tipo_cuenta', event.target.value)} disabled={importing} /></label>
+                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Moneda</span><Input className={fieldClass} value={row.moneda} onChange={(event) => onRowUpdate(index, 'moneda', event.target.value.toUpperCase())} disabled={importing} /></label>
+                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Subtipo</span><Input className={fieldClass} value={row.subtipo} onChange={(event) => onRowUpdate(index, 'subtipo', event.target.value)} disabled={importing} /></label>
+                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Tipo detalle</span><Input className={fieldClass} value={row.tipo_detalle} onChange={(event) => onRowUpdate(index, 'tipo_detalle', event.target.value)} disabled={importing} /></label>
+                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Código padre</span><Input className={`${fieldClass} font-mono`} value={row.codigo_padre} onChange={(event) => onRowUpdate(index, 'codigo_padre', event.target.value)} disabled={importing} /></label>
+                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Permite manual</span><Input className={`${fieldClass} text-center`} value={row.permite_manual} onChange={(event) => onRowUpdate(index, 'permite_manual', event.target.value)} disabled={importing} /></label>
+                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Activa</span><Input className={`${fieldClass} text-center`} value={row.activa} onChange={(event) => onRowUpdate(index, 'activa', event.target.value)} disabled={importing} /></label>
+              </div>
+              <label className="mt-2 block space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Notas</span><Input className={fieldClass} value={row.notas} onChange={(event) => onRowUpdate(index, 'notas', event.target.value)} disabled={importing} /></label>
+            </div>
+          ))}
+        </div>
 
         {errors.length > 0 && (
           <div className="max-h-28 overflow-auto rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-rose-600">

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Tag
 } from 'lucide-react';
@@ -17,6 +18,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 const ACCOUNT_TYPES = [
   { value: 'ASSET', label: 'Activo' },
@@ -27,9 +29,7 @@ const ACCOUNT_TYPES = [
 ];
 
 export function CategoriasGastosView() {
-  const [categories, setCategories] = useState<any[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -38,29 +38,17 @@ export function CategoriasGastosView() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({ code: '', name: '', description: '', accountId: '', isActive: true });
 
-  useEffect(() => { loadData(); }, [filterType]);
-
-  async function loadData() {
-    setLoading(true);
-    try {
-      const [cats, accts] = await Promise.all([
-        contabilidadService.getExpenseCategories(filterType || undefined),
-        contabilidadService.getChartOfAccounts(),
-      ]);
-      const flat: any[] = [];
-      function flatten(nodes: any[]) {
-        for (const n of nodes) {
-          flat.push(n);
-          if (n.children) flatten(n.children);
-        }
-      }
-      flatten(accts);
-      setCategories(cats);
-      setAccounts(flat);
-    } catch {
-      toast.error('Error al cargar categorías');
-    } finally { setLoading(false); }
-  }
+  const categoriesQuery = useAccountingQuery<any[]>(['expense-categories', filterType], async (signal) => accountingList(await contabilidadService.getExpenseCategories(filterType || undefined, signal)));
+  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
+  const categories = categoriesQuery.data || [];
+  const accounts = useMemo(() => {
+    const flat: any[] = [];
+    const flatten = (nodes: any[]) => nodes.forEach(n => { const { children, ...rest } = n; flat.push(rest); if (children) flatten(children); });
+    flatten(accountsQuery.data || []);
+    return flat;
+  }, [accountsQuery.data]);
+  const loading = categoriesQuery.isLoading || accountsQuery.isLoading;
+  const loadData = () => { categoriesQuery.refetch(); accountsQuery.refetch(); };
 
   function openCreate() {
     setEditing(null);
@@ -89,7 +77,7 @@ export function CategoriasGastosView() {
         toast.success('Categoría creada');
       }
       setDialogOpen(false);
-      loadData();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al guardar');
     } finally { setSaving(false); }
@@ -105,7 +93,7 @@ export function CategoriasGastosView() {
       await contabilidadService.deleteExpenseCategory(pendingDeleteId);
       toast.success('Categoría eliminada');
       setPendingDeleteId(null);
-      loadData();
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al eliminar');
     }
@@ -123,9 +111,9 @@ export function CategoriasGastosView() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+    <div className="min-w-0 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Tag className="size-5 text-primary" />
           <h2 className="text-xl font-black uppercase tracking-tight">Categorías de Gastos</h2>
           <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-black">{categories.length}</Badge>
@@ -137,8 +125,8 @@ export function CategoriasGastosView() {
 
       <Separator />
 
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
+        <div className="relative col-span-2 min-w-0 flex-1 sm:max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
             placeholder="Buscar categoría..."
@@ -148,7 +136,7 @@ export function CategoriasGastosView() {
           />
         </div>
         <Select value={filterType} onValueChange={v => setFilterType(v)}>
-          <SelectTrigger className="w-44 rounded-xl text-xs font-bold">
+          <SelectTrigger className="w-full rounded-xl text-xs font-bold sm:w-44">
             <SelectValue placeholder="Tipo de cuenta" />
           </SelectTrigger>
           <SelectContent>
@@ -163,8 +151,9 @@ export function CategoriasGastosView() {
         </Button>
       </div>
 
-      <Card className="border-border/50 shadow-sm rounded-2xl overflow-hidden">
+      <Card className="overflow-hidden rounded-2xl border-border/50 shadow-sm">
         <CardContent className="p-0">
+          <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border/40 bg-muted/20">
@@ -215,6 +204,15 @@ export function CategoriasGastosView() {
               ))}
             </tbody>
           </table>
+          </div>
+          <div className="space-y-2 p-3 md:hidden">
+            {filtered.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Sin categorías</p> : filtered.map(cat => (
+              <div key={cat.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
+                <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-mono font-bold text-muted-foreground">{cat.code}</p><p className="break-words text-xs font-semibold">{cat.name}</p><p className="mt-1 break-words text-[10px] font-mono text-muted-foreground">{cat.account?.code} - {cat.account?.name}</p></div><Badge className="shrink-0 text-[9px]">{cat.isActive ? 'Activo' : 'Inactivo'}</Badge></div>
+                <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/20 pt-2"><p className="min-w-0 break-words text-[10px] text-muted-foreground">{cat.description || 'Sin descripción'}</p><div className="shrink-0"><Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(cat)}><Pencil className="size-3.5" /></Button><Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(cat.id)}><Trash2 className="size-3.5" /></Button></div></div>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -229,7 +227,7 @@ export function CategoriasGastosView() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-xs font-bold">Código *</Label>
                 <Input
@@ -256,7 +254,7 @@ export function CategoriasGastosView() {
                   <SelectValue placeholder="Seleccionar cuenta" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.filter(a => a.isActive).map(a => (
+                  {accounts.filter(a => a.isActive !== false && a.acceptsPostings !== false).map(a => (
                     <SelectItem key={a.id} value={a.id} className="text-xs font-mono">
                       {a.code} - {a.name}
                     </SelectItem>

@@ -10,6 +10,7 @@ import { hrService } from '../../services/hr.service';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
 const BENEFIT_TYPE_COLORS: Record<string, string> = {
   HEALTH: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
@@ -34,7 +35,7 @@ const EMPTY_FORM = { name: '', description: '', type: 'OTHER', cost: '', isActiv
 
 export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
-  const { displayCurrency, convertAmount, formatConvertedAmount } = useCurrency();
+  const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [addingNew, setAddingNew] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<any>(EMPTY_FORM);
@@ -73,7 +74,11 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
 
   const totalCost = benefits.reduce((sum: number, b: any) => {
     const count = b.employeeBenefits?.length || b.assignments?.length || 0;
-    return sum + convertAmount((Number(b.cost) || 0) * count, b.currency || 'USD');
+    const cost = Number(b.cost ?? b.baseCost ?? 0);
+    const displayed = valuationMode === 'CURRENT'
+      ? convertCurrentAmount(cost, b.currency || 'USD')
+      : convertAmount(cost, b.currency || 'USD', b.exchangeRate);
+    return sum + displayed * count;
   }, 0);
 
   return (
@@ -84,7 +89,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
           <div className="flex gap-4 text-sm text-muted-foreground">
             <span><strong className="text-foreground">{benefits.length}</strong> beneficios</span>
             <span className="text-muted-foreground/40">·</span>
-            <span>Costo total: <strong className="text-foreground">{formatConvertedAmount(totalCost, displayCurrency)}/mes</strong></span>
+            <span>Costo total{valuationModeSuffix}: <strong className="text-foreground">{formatCurrentAmount(totalCost, displayCurrency)}/mes</strong></span>
           </div>
         </div>
         {!addingNew && canPerform('HR_BENEFITS', 'create') && (
@@ -236,7 +241,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                           {benefit.cost && (
                             <div className="flex items-center gap-1">
                               <DollarSign className="size-3 text-emerald-500" />
-                              <span className="font-bold text-foreground">{formatConvertedAmount(Number(benefit.cost), benefit.currency || 'USD')}<span className="font-normal text-muted-foreground">/mes</span></span>
+                              <CurrencyValuationAmount amount={Number(benefit.cost ?? benefit.baseCost ?? 0)} sourceCurrency={benefit.currency || 'USD'} sourceExchangeRate={benefit.exchangeRate} className="font-bold text-foreground" /><span className="font-normal text-muted-foreground">/mes</span>
                             </div>
                           )}
                           <div className="flex items-center gap-1">

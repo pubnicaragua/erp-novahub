@@ -38,6 +38,8 @@ const supabase = supabaseUrl && supabaseAnonKey
       auth: { persistSession: false, autoRefreshToken: false },
     })
   : null;
+const storageUrlCache = new Map<string, { value: string; expiresAt: number } | Promise<string>>();
+const STORAGE_URL_CACHE_TTL_MS = 5 * 60_000;
 
 function getUploadMimeType(file: File) {
   const extension = file.name.split('.').pop()?.toLowerCase();
@@ -121,8 +123,17 @@ export const storageService = {
 
   async resolveUrl(uri?: string | null): Promise<string> {
     if (!uri || !uri.startsWith('storage://')) return uri || '';
-    const result = await api.post<{ url: string }>('/storage/resolve', { uri });
-    return result.url;
+    const cached = storageUrlCache.get(uri);
+    if (cached) {
+      if (cached instanceof Promise) return cached;
+      if (cached.expiresAt > Date.now()) return cached.value;
+      storageUrlCache.delete(uri);
+    }
+    const pending = api.post<{ url: string }>('/storage/resolve', { uri }).then((result) => result.url);
+    storageUrlCache.set(uri, pending);
+    pending.then((value) => storageUrlCache.set(uri, { value, expiresAt: Date.now() + STORAGE_URL_CACHE_TTL_MS }))
+      .catch(() => storageUrlCache.delete(uri));
+    return pending;
   },
 
   async deleteFile(uri: string): Promise<void> {
@@ -143,11 +154,12 @@ export async function resolveStorageReferences<T>(value: T): Promise<T> {
     return (await Promise.all(value.map(item => resolveStorageReferences(item)))) as T;
   }
   if (value && typeof value === 'object') {
-    const entries: [string, unknown][] = [];
-    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-      if (typeof item === 'string' && item.startsWith('storage://')) entries.push([`${key}StorageUri`, item]);
-      entries.push([key, await resolveStorageReferences(item)]);
-    }
+    const entries = (await Promise.all(Object.entries(value as Record<string, unknown>).map(async ([key, item]) => {
+      const resolvedEntries: [string, unknown][] = [];
+      if (typeof item === 'string' && item.startsWith('storage://')) resolvedEntries.push([`${key}StorageUri`, item]);
+      resolvedEntries.push([key, await resolveStorageReferences(item)]);
+      return resolvedEntries;
+    }))).flat();
     return Object.fromEntries(entries) as T;
   }
   return value;

@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
-import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw, Umbrella } from 'lucide-react';
+import React from 'react';
+import { useState, useEffect } from 'react';
+import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw, Umbrella, Sun, Cloud, CalendarDays } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Card, CardContent } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { Separator } from '../ui/separator';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -12,6 +15,7 @@ import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';
 import type { AbsenceType, VacationBalance } from '../../types';
 import { PromptDialog } from '../ui/PromptDialog';
+import { useQuery } from '@tanstack/react-query';
 
 export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
@@ -27,21 +31,15 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     reason: '',
   });
 
-  const [vacationBalance, setVacationBalance] = useState<VacationBalance | null>(null);
-  const [balanceLoading, setBalanceLoading] = useState(false);
-  const [absenceTypes, setAbsenceTypes] = useState<AbsenceType[]>([]);
   const [pendingRejectId, setPendingRejectId] = useState<string | null>(null);
 
-  const [prevDateKey, setPrevDateKey] = useState('');
-  const dateKey = `${newRequest.startDate}|${newRequest.endDate}`;
-  if (prevDateKey !== dateKey) {
-    setPrevDateKey(dateKey);
+  useEffect(() => {
     if (newRequest.startDate && newRequest.endDate) {
       const start = new Date(newRequest.startDate);
       const end = new Date(newRequest.endDate);
       if (start <= end) {
         let count = 0;
-        const cur = new Date(start);
+        let cur = new Date(start);
         while (cur <= end) {
           if (cur.getDay() !== 0) count++; // 0 is Sunday
           cur.setDate(cur.getDate() + 1);
@@ -49,41 +47,39 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
         setNewRequest(prev => ({ ...prev, days: count }));
       }
     }
-  }
+  }, [newRequest.startDate, newRequest.endDate]);
 
-  const loadVacationBalance = useCallback(async () => {
-    if (!newRequest.employeeId) { setVacationBalance(null); return; }
-    try {
-      setBalanceLoading(true);
-      const res = await hrService.getVacationBalance(newRequest.employeeId, new Date().getFullYear()) as any;
-      setVacationBalance(res || null);
-    } catch { setVacationBalance(null); }
-    finally { setBalanceLoading(false); }
-  }, [newRequest.employeeId]);
-
-  const loadAbsenceTypes = useCallback(async () => {
-    try {
-      const res = await hrService.getAbsenceTypes() as any;
-      setAbsenceTypes(Array.isArray(res) ? res : res?.data || []);
-    } catch { /* intentionally empty */ }
-  }, []);
-
-  useEffect(() => {
-    const t1 = window.setTimeout(loadVacationBalance, 0);
-    const t2 = window.setTimeout(loadAbsenceTypes, 0);
-    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
-  }, [loadVacationBalance, loadAbsenceTypes]);
+  const currentYear = new Date().getFullYear();
+  const balanceQuery = useQuery({
+    queryKey: ['hr', 'vacation-balance', newRequest.employeeId, currentYear],
+    queryFn: ({ signal }) => hrService.getVacationBalance(newRequest.employeeId, currentYear, signal) as any,
+    enabled: Boolean(newRequest.employeeId),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const absenceTypesQuery = useQuery({
+    queryKey: ['hr', 'absence-types'],
+    queryFn: ({ signal }) => hrService.getAbsenceTypes(signal) as any,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const vacationBalance = (balanceQuery.data || null) as VacationBalance | null;
+  const balanceLoading = balanceQuery.isFetching;
+  const absenceTypes = (Array.isArray(absenceTypesQuery.data) ? absenceTypesQuery.data : absenceTypesQuery.data?.data || []) as AbsenceType[];
 
   const handleRecalcVacation = async () => {
     if (!newRequest.employeeId) return;
     try {
-      setBalanceLoading(true);
-      const res = await hrService.recalcVacationBalance(newRequest.employeeId, new Date().getFullYear()) as any;
-      setVacationBalance(res || null);
+      await hrService.recalcVacationBalance(newRequest.employeeId, currentYear);
+      await balanceQuery.refetch();
       toast.success('Saldo de vacaciones recalculado');
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al recalcular');
-    } finally { setBalanceLoading(false); }
+    }
   };
 
   const handleCreateRequest = async () => {
@@ -145,6 +141,10 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [pageSize]);
 
   const totalPages = Math.ceil(leaveRequests.length / pageSize);
   const paginatedRequests = leaveRequests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -493,7 +493,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
             <div className="flex items-center gap-2">
               <span>Mostrar</span>
-              <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
+              <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
                 {PAGE_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
               </select>
               <span>por página</span>
