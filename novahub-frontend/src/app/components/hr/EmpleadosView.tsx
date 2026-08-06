@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Send, CheckCircle2, XCircle, History, Ban, Download, Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Button } from '../ui/button';
@@ -17,6 +17,7 @@ import { Badge } from '../ui/badge';
 import { cn } from '../ui/utils';
 import { Textarea } from '../ui/textarea';
 import { EmployeeImportPreview, type EmployeeImportResult, type EmployeeImportRow } from './EmployeeImportPreview';
+import { pendingUserCreate } from '../../utils/pendingUserCreate';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh, isSidebarCollapsed = false }: any) {
   const { canPerform } = useAuth();
@@ -570,6 +571,13 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
     setNewRows([...newRows, newRow]);
   };
 
+  useEffect(() => {
+    if (pendingUserCreate.returnToUserModal) {
+      handleAddRow();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleSaveNewRow = async (tempId: string) => {
     const row = newRows.find(r => r.tempId === tempId);
     if (!row) return;
@@ -620,10 +628,20 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         contractType: row.contractType || 'FULL_TIME',
       };
 
-      await hrService.createEmployee(employeeData);
+      const createdResponse: any = await hrService.createEmployee(employeeData);
       toast.success('Empleado creado correctamente');
       setNewRows(newRows.filter(r => r.tempId !== tempId));
       onRefresh();
+
+      if (pendingUserCreate.returnToUserModal) {
+        const created = createdResponse?.data || createdResponse;
+        if (created?.id) {
+          pendingUserCreate.returnToUserModal = true;
+          pendingUserCreate.returnToEmployeeId = created.id;
+          pendingUserCreate.returnEmployee = { name: `${row.firstName.trim()} ${row.lastName.trim()}`.trim(), email: row.email.trim() };
+          window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'suscripciones' } }));
+        }
+      }
     } catch (error: any) {
       const msg = error?.response?.data?.message || 'Error al crear empleado';
       toast.error(Array.isArray(msg) ? msg[0] : msg);

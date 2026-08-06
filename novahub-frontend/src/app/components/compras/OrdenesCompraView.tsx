@@ -807,17 +807,45 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
 
   if (importPreviewOpen) {
     return (
-      <PurchaseImportPreview
-        rows={importData}
-        fileName={importFileName}
-        isSidebarCollapsed={isSidebarCollapsed}
-        importing={importing}
-        progress={importProgress}
-        onRowUpdate={handlePurchaseImportRowUpdate}
-        onDownloadErrors={handleDownloadPurchaseImportErrors}
-        onConfirm={handlePurchaseImportConfirm}
-        onBack={() => { setImportPreviewOpen(false); setImportModalOpen(true); }}
-      />
+      <>
+        <PurchaseImportPreview
+          rows={importData}
+          fileName={importFileName}
+          isSidebarCollapsed={isSidebarCollapsed}
+          importing={importing}
+          progress={importProgress}
+          onRowUpdate={handlePurchaseImportRowUpdate}
+          onDownloadErrors={handleDownloadPurchaseImportErrors}
+          onConfirm={handlePurchaseImportConfirm}
+          onBack={() => { setImportPreviewOpen(false); setImportModalOpen(true); }}
+        />
+        <Dialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
+          <DialogContent className="max-w-md rounded-2xl">
+            <DialogHeader>
+              <DialogTitle>Agregar productos a la orden</DialogTitle>
+              <DialogDescription>Los productos válidos se agregarán a la orden actual. Después pulsa Guardar para persistir la orden. Escribe IMPORTAR para confirmar.</DialogDescription>
+            </DialogHeader>
+            <Input value={importConfirmText} onChange={(event) => setImportConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setImportConfirmOpen(false)} disabled={importing}>Cancelar</Button>
+              <Button onClick={handleFinalPurchaseImport} disabled={importConfirmText !== 'IMPORTAR' || importing}>Agregar productos</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={importResults !== null} onOpenChange={(open) => { if (!open) setImportResults(null); }}>
+          <DialogContent className="max-w-lg rounded-2xl">
+            <DialogHeader>
+              <DialogTitle>Productos agregados</DialogTitle>
+              <DialogDescription>Los ítems ya están dentro de esta orden de compra, pero todavía debes guardarla.</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3 text-center">
+              <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-emerald-500">{importResults?.success || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Ítems agregados</p></div>
+              <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-amber-500">{importResults?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Filas omitidas</p></div>
+            </div>
+            <DialogFooter><Button className="w-full" onClick={() => setImportResults(null)}>Volver a la orden</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
