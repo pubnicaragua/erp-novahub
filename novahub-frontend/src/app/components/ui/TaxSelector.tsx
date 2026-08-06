@@ -108,7 +108,7 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
                 onItemChange('taxRate', entry.rate)
                 const base = entry.baseCalculation === 'LINE_TOTAL' ? lineTotal : item.taxBase || lineTotal
                 onItemChange('taxBase', base)
-                onItemChange('taxAmount', calcTaxAmount(base))
+                onItemChange('taxAmount', base * Number(entry.rate) / 100)
               }
             }}
           />

@@ -1,6 +1,7 @@
 export interface NotificationNavigation {
   module: string;
   subModule?: string;
+  filter?: string;
 }
 
 type NotificationLike = {
@@ -29,7 +30,8 @@ const normalizeNavigation = (value: unknown): NotificationNavigation | null => {
   const module = String(navigation.module || '').trim();
   if (!module) return null;
   const subModule = String(navigation.subModule || '').trim();
-  return subModule ? { module, subModule } : { module };
+  const filter = navigation.filter ? String(navigation.filter) : undefined;
+  return { module, subModule: subModule || undefined, filter };
 };
 
 export function getNotificationNavigation(notification: NotificationLike): NotificationNavigation {
@@ -57,5 +59,8 @@ export function getNotificationNavigation(notification: NotificationLike): Notif
 
 export function navigateToNotification(notification: NotificationLike) {
   const navigation = getNotificationNavigation(notification);
-  window.dispatchEvent(new CustomEvent('navigate-module', { detail: navigation }));
+  const metadata = asRecord(notification.metadata);
+  const filter = asRecord(metadata.navigation || metadata)?.filter;
+  const detail = filter ? { ...navigation, filter } : navigation;
+  window.dispatchEvent(new CustomEvent('navigate-module', { detail }));
 }

@@ -11,6 +11,7 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { billsService, purchaseOrdersService, paymentsService, expensesService } from '../../services/compras.service';
 import { TaxDetail } from '../ui/TaxSelector';
+import { isTaxExempt } from '../../utils/taxUtils';
 import type { SupplierInvoice, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -46,6 +47,15 @@ const statusOpts = [
   { label: 'Vencida',     value: 'OVERDUE',  color: 'bg-rose-500/10 text-rose-500' },
   { label: 'Reembolsada', value: 'REFUNDED', color: 'bg-muted/30 text-muted-foreground/50' },
 ];
+
+function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: number } {
+  const tt = (item.taxType || 'GRAVADO').toUpperCase();
+  if (isTaxExempt(tt)) return { taxBase: 0, taxRate: 0, taxAmount: 0 };
+  const lineTotal = Number(item.quantity || 0) * Number(item.unitPrice || 0);
+  const taxRate = Number(item.taxRate) || 15;
+  const taxBase = Number(item.taxBase) || lineTotal;
+  return { taxRate, taxBase, taxAmount: (taxBase * taxRate) / 100 };
+}
 
 export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], accountCatalog = [], purchaseReceiptCatalog = [], pagination, onSearchChange, onStatusChange }: Props) {
   const { canPerform, user } = useAuth();
@@ -419,8 +429,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           quantity: Number(it.quantity || 0),
           unitPrice: Number(it.unitPrice || 0),
           taxType: it.taxType || 'GRAVADO',
-          taxRate: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxRate || 15),
-          taxBase: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxBase || 0),
+          taxRate: isTaxExempt(it.taxType) ? 0 : Number(it.taxRate || 15),
+          taxBase: isTaxExempt(it.taxType) ? 0 : Number(it.taxBase || 0),
           taxAmount: Number(it.taxAmount || 0),
           withholdingType: it.withholdingType || 'NONE',
           withholdingRate: Number(it.withholdingRate || 0),
@@ -506,15 +516,20 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     const newItems = [...(localDoc.items || [])];
     newItems[idx] = { ...newItems[idx], [field]: value };
     
-    if (['quantity', 'unitPrice', 'taxType', 'taxRate', 'withholdingType', 'withholdingRate'].includes(field)) {
+    if (['quantity', 'unitPrice', 'taxType', 'taxRate', 'taxBase', 'taxAmount', 'withholdingType', 'withholdingRate'].includes(field)) {
        const q = Number(newItems[idx].quantity || 0);
        const p = Number(newItems[idx].unitPrice || 0);
        const sub = q * p;
        const tt = (newItems[idx].taxType || 'GRAVADO').toUpperCase();
-       if (tt === 'EXENTO' || tt === 'NO_GRAVADO') {
+       if (isTaxExempt(tt)) {
          newItems[idx].taxRate = 0;
          newItems[idx].taxBase = 0;
          newItems[idx].taxAmount = 0;
+       } else {
+         const tax = calcItemTax(newItems[idx]);
+         newItems[idx].taxRate = tax.taxRate;
+         newItems[idx].taxBase = tax.taxBase;
+         newItems[idx].taxAmount = tax.taxAmount;
        }
        const wt = (newItems[idx].withholdingType || 'NONE').toUpperCase();
        if (wt === 'NONE') {
@@ -529,12 +544,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const calculateTotals = (items: any[]) => {
     const subtotal = items.reduce((acc, it) => acc + (Number(it.quantity||0) * Number(it.unitPrice||0)), 0);
     const taxAmount = items.reduce((acc, it) => {
-      const tt = (it.taxType || 'GRAVADO').toUpperCase();
-      if (tt !== 'GRAVADO') return acc + 0;
-      const lineTotal = Number(it.quantity||0) * Number(it.unitPrice||0);
-      const base = Number(it.taxBase) || lineTotal;
-      const rate = Number(it.taxRate) || 15;
-      return acc + (base * rate / 100);
+      return acc + calcItemTax(it).taxAmount;
     }, 0);
     const withholdingTotal = items.reduce((acc, it) => {
       const wt = (it.withholdingType || 'NONE').toUpperCase();
@@ -684,8 +694,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                           unitPrice: Number(it.unitPrice || 0),
                           productId: it.productId || null,
                           taxType: it.taxType || 'GRAVADO',
-                          taxRate: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxRate || 15),
-                          taxBase: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxBase || 0),
+                          taxRate: isTaxExempt(it.taxType) ? 0 : Number(it.taxRate || 15),
+                          taxBase: isTaxExempt(it.taxType) ? 0 : Number(it.taxBase || 0),
                           taxAmount: Number(it.taxAmount || 0),
                           withholdingType: it.withholdingType || 'NONE',
                           withholdingRate: Number(it.withholdingRate || 0),
@@ -868,7 +878,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     <span className="text-sm font-black tabular-nums">
                       {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.quantity * item.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
-                    {(item.taxType && item.taxType !== 'EXENTO' && item.taxType !== 'EXONERADO' && item.taxType !== 'NO_SUJETO' && item.taxType !== '') && (
+                    {(item.taxType && !isTaxExempt(item.taxType) && item.taxType !== '') && (
                       <>
                         <span className="text-[9px] font-black uppercase tracking-widest text-rose-500/60">IVA</span>
                         <span className="text-xs font-black tabular-nums text-rose-500">

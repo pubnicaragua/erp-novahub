@@ -10,6 +10,7 @@ import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
 import { Combobox } from '../ui/Combobox';
 import { TaxDetail } from '../ui/TaxSelector';
+import { isTaxExempt } from '../../utils/taxUtils';
 import { purchaseOrdersService } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
 import type { PurchaseOrder, Supplier } from '../../types';
@@ -42,6 +43,7 @@ interface Props {
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   onStatusChange?: (value: string) => void;
+  initialStatus?: string;
 }
 
 const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -184,7 +186,16 @@ const statusOpts = [
   { label: 'Cancelada',  value: 'CANCELLED',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange }: Props) {
+function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: number } {
+  const tt = (item.taxType || 'GRAVADO').toUpperCase();
+  if (isTaxExempt(tt)) return { taxBase: 0, taxRate: 0, taxAmount: 0 };
+  const lineTotal = Number(item.quantity || 0) * Number(item.unitPrice || 0);
+  const taxRate = Number(item.taxRate) || 15;
+  const taxBase = Number(item.taxBase) || lineTotal;
+  return { taxRate, taxBase, taxAmount: (taxBase * taxRate) / 100 };
+}
+
+export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, initialStatus }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -219,6 +230,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     setProducts(productCatalog);
     setCategories(productCategories);
   }, [supplierCatalog, productCatalog, productCategories]);
+
+  useEffect(() => {
+    if (initialStatus) setStatusFilter(initialStatus);
+  }, [initialStatus]);
 
   const findImportProduct = (sku: unknown) => {
     const normalized = String(sku || '').trim().toLowerCase();
@@ -485,7 +500,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filtered = data.filter(o => {
-    if (statusFilter !== 'ALL' && (o.status || '').toUpperCase() !== statusFilter) return false;
+    if (statusFilter === 'TO_APPROVE') {
+      if (!['PENDING', 'DRAFT'].includes((o.status || '').toUpperCase())) return false;
+    } else if (statusFilter !== 'ALL' && (o.status || '').toUpperCase() !== statusFilter) {
+      return false;
+    }
     if (!normalizedSearchTerm) return true;
     const haystack = [
       o.number,
@@ -585,8 +604,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         quantity: Number(it.quantity || 0),
         unitPrice: Number(it.unitPrice || 0),
         taxType: it.taxType || 'GRAVADO',
-        taxRate: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxRate || 15),
-        taxBase: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxBase || 0),
+        taxRate: isTaxExempt(it.taxType) ? 0 : Number(it.taxRate || 15),
+        taxBase: isTaxExempt(it.taxType) ? 0 : Number(it.taxBase || 0),
         taxAmount: Number(it.taxAmount || 0),
         withholdingType: it.withholdingType || 'NONE',
         withholdingRate: Number(it.withholdingRate || 0),
@@ -653,12 +672,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const calculateTotals = (items: any[]) => {
     const subtotal = items.reduce((acc, it) => acc + (Number(it.quantity||0) * Number(it.unitPrice||0)), 0);
     const taxAmount = items.reduce((acc, it) => {
-      const tt = (it.taxType || 'GRAVADO').toUpperCase();
-      if (tt !== 'GRAVADO') return acc + 0;
-      const lineTotal = Number(it.quantity||0) * Number(it.unitPrice||0);
-      const base = Number(it.taxBase) || lineTotal;
-      const rate = Number(it.taxRate) || 15;
-      return acc + (base * rate / 100);
+      return acc + calcItemTax(it).taxAmount;
     }, 0);
     const withholdingTotal = items.reduce((acc, it) => {
       const wt = (it.withholdingType || 'NONE').toUpperCase();
@@ -689,15 +703,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         newItems[idx].stock = undefined;
       }
 
-      if (['quantity', 'unitPrice', 'taxType', 'taxRate', 'withholdingType', 'withholdingRate'].includes(field)) {
+      if (['quantity', 'unitPrice', 'taxType', 'taxRate', 'taxBase', 'taxAmount', 'withholdingType', 'withholdingRate'].includes(field)) {
         const q = Number(newItems[idx].quantity || 0);
         const p = Number(newItems[idx].unitPrice || 0);
         const sub = q * p;
         const tt = (newItems[idx].taxType || 'GRAVADO').toUpperCase();
-        if (tt === 'EXENTO' || tt === 'NO_GRAVADO') {
+        if (isTaxExempt(tt)) {
           newItems[idx].taxRate = 0;
           newItems[idx].taxBase = 0;
           newItems[idx].taxAmount = 0;
+        } else {
+          const tax = calcItemTax(newItems[idx]);
+          newItems[idx].taxRate = tax.taxRate;
+          newItems[idx].taxBase = tax.taxBase;
+          newItems[idx].taxAmount = tax.taxAmount;
         }
         const wt = (newItems[idx].withholdingType || 'NONE').toUpperCase();
         if (wt === 'NONE') {
@@ -1195,7 +1214,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     <span className="text-sm font-black tabular-nums">
                       {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.quantity * item.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
-                    {(item.taxType && item.taxType !== 'EXENTO' && item.taxType !== 'EXONERADO' && item.taxType !== 'NO_SUJETO' && item.taxType !== '') && (
+                    {item.taxType && !isTaxExempt(item.taxType) && item.taxType !== '' && (
                       <>
                         <span className="text-[9px] font-black uppercase tracking-widest text-rose-500/60">IVA</span>
                         <span className="text-xs font-black tabular-nums text-rose-500">
@@ -1361,7 +1380,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   );
   const kpis = [
     { title: 'Total Ordenes',   value: data.length,                                                                     icon: ClipboardList, color: 'text-blue-500',    bg: 'bg-blue-500/10',    filter: 'ALL' },
-    { title: 'Por Aprobar',     value: data.filter(o => (o.status||'').toUpperCase() === 'PENDING').length,                 icon: Clock,         color: 'text-amber-500',  bg: 'bg-amber-500/10',    filter: 'PENDING' },
+    { title: 'Por Aprobar',     value: data.filter(o => ['PENDING','DRAFT'].includes((o.status||'').toUpperCase())).length, icon: Clock, color: 'text-amber-500',  bg: 'bg-amber-500/10',    filter: 'TO_APPROVE' },
     { title: 'Aprobadas',       value: data.filter(o => (o.status||'').toUpperCase() === 'APPROVED').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10',  filter: 'APPROVED' },
     {
       title: `Monto Total (${displayCurrency}${valuationModeSuffix})`,
@@ -1376,7 +1395,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
-          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.filter ? 'filter' : 'indicator'} active={k.filter ? statusFilter === k.filter : false} onClick={k.filter ? () => { const next = statusFilter === k.filter ? 'ALL' : k.filter; setStatusFilter(next); onStatusChange?.(next); } : undefined} />
+          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.filter ? 'filter' : 'indicator'} active={k.filter ? statusFilter === k.filter : false} onClick={k.filter ? () => { const next = statusFilter === k.filter ? 'ALL' : k.filter; setStatusFilter(next); onStatusChange?.(next === 'TO_APPROVE' ? 'ALL' : next); } : undefined} />
         ))}
       </div>
       <div className="flex flex-col gap-4">

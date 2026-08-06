@@ -9,6 +9,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
+import { isTaxExempt } from '../../utils/taxUtils';
 import { purchaseOrdersService, purchaseReceiptsService } from '../../services/compras.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { inventoryService } from '../../services/inventario.service';
@@ -441,8 +442,8 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
                       unitPrice: Number(it.unitPrice || 0),
                       productId: it.productId || null,
                       taxType: it.taxType || 'GRAVADO',
-                      taxRate: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxRate || 15),
-                      taxBase: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : Number(it.taxBase || 0),
+                      taxRate: isTaxExempt(it.taxType) ? 0 : Number(it.taxRate || 15),
+                      taxBase: isTaxExempt(it.taxType) ? 0 : Number(it.taxBase || 0),
                       taxAmount: Number(it.taxAmount || 0),
                       withholdingType: it.withholdingType || 'NONE',
                       withholdingRate: Number(it.withholdingRate || 0),

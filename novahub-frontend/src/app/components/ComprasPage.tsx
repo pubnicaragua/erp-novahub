@@ -4,7 +4,7 @@ import {
   ShoppingCart, Truck, Wallet, CalendarClock,
   ClipboardList, PackageCheck, FileInput, RotateCcw,
   Banknote, BadgeDollarSign,
-  ClipboardPen,
+  ClipboardPen, X,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
@@ -107,6 +107,13 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const [statusState, setStatusState] = useState<Record<string, string>>({});
   const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
 
+  const [ordersPrefilter, setOrdersPrefilter] = useState<string | undefined>(undefined);
+  const bannerStorageKey = `compras-orders-banner-dismissed:${tenantKey}`;
+  const bannerIdsKey = `compras-orders-banner-ids:${tenantKey}`;
+  const [bannerDismissed, setBannerDismissed] = useState<boolean>(() => {
+    try { return localStorage.getItem(bannerStorageKey) === '1'; } catch { return false; }
+  });
+
   const pageFor = (section: string) => paginationState[section] || { page: 1, pageSize: 50 as SalesPageSize };
   const updatePage = (section: string, page: number) => setPaginationState((current) => ({
     ...current,
@@ -144,6 +151,19 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   useEffect(() => {
     if (activeSubModule) setActiveSection(normalize(activeSubModule));
   }, [activeSubModule]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as any;
+      if (detail?.module === 'compras' && detail?.subModule === 'ordenes-compra' && detail?.filter === 'TO_APPROVE') {
+        setActiveSection('ordenes');
+        setStatusState((s) => ({ ...s, ordenes: 'ALL' }));
+        setOrdersPrefilter('TO_APPROVE');
+      }
+    };
+    window.addEventListener('navigate-module', handler);
+    return () => window.removeEventListener('navigate-module', handler);
+  }, []);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -383,6 +403,41 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
     solicitudes: filterByBranch(data.solicitudes),
   };
 
+  const pendingOrderIds = useMemo(
+    () => (filteredData.ordenes as PurchaseOrder[])
+      .filter((o) => ['PENDING', 'DRAFT'].includes((o.status || '').toUpperCase()))
+      .map((o) => o.id),
+    [filteredData.ordenes],
+  );
+
+  useEffect(() => {
+    if (!bannerDismissed || pendingOrderIds.length === 0) return;
+    let stored: string[] = [];
+    try {
+      stored = JSON.parse(localStorage.getItem(bannerIdsKey) || '[]');
+    } catch { stored = []; }
+    if (pendingOrderIds.some((id) => !stored.includes(id))) {
+      setBannerDismissed(false);
+      try { localStorage.removeItem(bannerIdsKey); } catch { /* ignore */ }
+    }
+  }, [pendingOrderIds, bannerDismissed, bannerIdsKey]);
+
+  const dismissOrdersBanner = () => {
+    setBannerDismissed(true);
+    try {
+      localStorage.setItem(bannerStorageKey, '1');
+      localStorage.setItem(bannerIdsKey, JSON.stringify(pendingOrderIds));
+    } catch { /* ignore */ }
+  };
+
+  const openOrdersToApprove = () => {
+    setActiveSection('ordenes');
+    setStatusState((s) => ({ ...s, ordenes: 'ALL' }));
+    setOrdersPrefilter('TO_APPROVE');
+  };
+
+  const showOrdersBanner = pendingOrderIds.length > 0 && !bannerDismissed;
+
   return (
     <div className="purchases-module flex min-w-0 flex-1 overflow-x-hidden bg-background w-full">
       <main className="min-w-0 max-w-full flex-1 relative overflow-x-hidden">
@@ -411,6 +466,25 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
             <BranchScopeFilter className="ml-auto" showLabel={false} />
           </div>
           <CurrencyValuationBanner className="mb-5" />
+
+          {showOrdersBanner && (
+            <div className="mb-5 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <button type="button" onClick={openOrdersToApprove} className="flex items-center gap-2 text-left">
+                <ClipboardList className="size-5 shrink-0 text-amber-500" />
+                <p className="text-xs font-black uppercase tracking-widest text-amber-600">
+                  Hay {pendingOrderIds.length} orden(es) de compra por aprobar
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={dismissOrdersBanner}
+                aria-label="Quitar aviso"
+                className="ml-auto rounded-lg p-1 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-500"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          )}
 
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); }}>
         <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
@@ -453,7 +527,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                     {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={filteredData.proveedores} pagination={pagination.proveedores} onSearchChange={(value) => updateSearch('proveedores', value)} />}
                     {section.id === 'gastos'        && <GastosView         {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} />}
                     {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={accountCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
-                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} supplierCatalog={supplierCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
+                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} supplierCatalog={supplierCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
                      {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} onConvertToInvoice={handleConvertToInvoice} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
                    {section.id === 'facturas-prov' && (
                      <FacturasProveedorView
