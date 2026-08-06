@@ -38,6 +38,7 @@ import type { JournalEntry } from '../../types';
 import type { ChartAccount } from '../../types/accounting';
 import { useAuth } from '../../contexts/AuthContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { REFERENCE_TYPES, referenceTypeLabel } from '../../utils/accountingLabels';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -47,23 +48,6 @@ const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'o
   voided: 'destructive',
   VOIDED: 'destructive',
 };
-
-const REFERENCE_TYPES = [
-  { label: 'Factura Cliente', value: 'INVOICE' },
-  { label: 'Factura Proveedor', value: 'SUPPLIER_INVOICE' },
-  { label: 'Pago Cliente', value: 'PAYMENT' },
-  { label: 'Pago Proveedor', value: 'PAYMENT_MADE' },
-  { label: 'Nota Crédito', value: 'CREDIT_NOTE' },
-  { label: 'Nota Débito', value: 'DEBIT_NOTE' },
-  { label: 'Nómina', value: 'PAYROLL' },
-  { label: 'Gasto', value: 'EXPENSE' },
-  { label: 'Otro', value: 'OTHER' },
-];
-
-function referenceTypeLabel(value?: string) {
-  if (!value) return '—';
-  return REFERENCE_TYPES.find((r) => r.value === value)?.label || value;
-}
 
 type JournalLineInput = {
   id: string;
@@ -75,6 +59,16 @@ type JournalLineInput = {
 
 function formatCurrency(n: number): string {
   return new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+}
+
+function formatAccountingDate(value?: string | Date | null): string {
+  if (!value) return '—';
+  const raw = String(value);
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|$)/);
+  if (match) {
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString('es-NI');
+  }
+  return new Date(raw).toLocaleDateString('es-NI');
 }
 
 function emptyLine(): JournalLineInput {
@@ -619,7 +613,7 @@ export function DiarioView() {
                   return (
                     <div key={j.id} className="grid min-w-0 cursor-pointer items-center gap-0 px-3 py-2 transition-colors hover:bg-muted/40" style={{ gridTemplateColumns: journalGridCols }} onClick={() => handleView(j)}>
                       <span className="truncate px-1 font-mono text-xs font-bold">{j.number}</span>
-                      <span className="truncate px-1 text-xs">{new Date(j.date).toLocaleDateString('es-NI')}</span>
+                      <span className="truncate px-1 text-xs">{formatAccountingDate(j.date)}</span>
                       <span className="min-w-0 truncate px-1 text-xs" title={j.description}>{j.description}</span>
                       <span className="px-1">
                         <Badge variant={STATUS_COLORS[statusKey] || 'outline'} className="text-[10px] font-black uppercase tracking-wider">
@@ -657,7 +651,7 @@ export function DiarioView() {
                           </div>
                           <p className="mt-1.5 truncate text-sm font-bold" title={j.description}>{j.description}</p>
                           <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                            {new Date(j.date).toLocaleDateString('es-NI')}
+                            {formatAccountingDate(j.date)}
                           </p>
                         </div>
                         {renderJournalActions(j)}
@@ -733,7 +727,7 @@ export function DiarioView() {
                         </p>
                       </div>
                       <Badge variant="outline" className="shrink-0">
-                        {new Date(viewJournal.date).toLocaleDateString('es-NI')}
+                        {formatAccountingDate(viewJournal.date)}
                       </Badge>
                     </div>
                   </div>
@@ -741,7 +735,7 @@ export function DiarioView() {
                   <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-4 2xl:grid-cols-3">
                     <div className="min-w-0 space-y-1">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Fecha</p>
-                      <p className="text-sm font-semibold">{new Date(viewJournal.date).toLocaleDateString('es-NI')}</p>
+                      <p className="text-sm font-semibold">{formatAccountingDate(viewJournal.date)}</p>
                     </div>
                     <div className="min-w-0 space-y-1">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Estado</p>
@@ -805,28 +799,33 @@ export function DiarioView() {
                       </div>
                     ) : (
                       <div className="overflow-hidden rounded-xl border border-border/60">
+                        <div className="grid grid-cols-[minmax(0,1fr)_minmax(92px,auto)_minmax(92px,auto)] items-center gap-3 border-b border-border/60 bg-muted/30 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                          <span>Cuenta / concepto</span>
+                          <span className="text-right text-emerald-600">Debe</span>
+                          <span className="text-right text-rose-500">Haber</span>
+                        </div>
                         <div className="divide-y divide-border/60">
                           {viewJournal.lines.map((line) => (
-                            <div key={line.id} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-3 py-3">
-                              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted/60">
-                                {line.debit > 0 ? <ArrowDownLeft className="size-3.5 text-emerald-600" /> : <ArrowUpRight className="size-3.5 text-rose-500" />}
-                              </div>
+                            <div key={line.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(92px,auto)_minmax(92px,auto)] items-center gap-3 px-3 py-3">
                               <div className="min-w-0">
-                                <p className="truncate text-xs font-semibold" title={line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}>
-                                  {line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}
-                                </p>
-                                {line.description && <p className="mt-1 truncate text-[10px] text-muted-foreground" title={line.description}>{line.description}</p>}
+                                <div className="flex min-w-0 items-start gap-2">
+                                  <div className={cn('mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg', line.debit > 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10')}>
+                                    {line.debit > 0 ? <ArrowDownLeft className="size-3.5 text-emerald-600" /> : <ArrowUpRight className="size-3.5 text-rose-500" />}
+                                  </div>
+                                  <p className="min-w-0 truncate text-xs font-semibold" title={line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}>
+                                    {line.account ? `${line.account.code} - ${line.account.name}` : line.accountId}
+                                  </p>
+                                </div>
+                                {line.description && <p className="ml-8 mt-1 truncate text-[10px] text-muted-foreground" title={line.description}>{line.description}</p>}
                               </div>
-                              <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">
-                                {line.debit > 0 && <p className="text-emerald-600">Débito {formatCurrency(line.debit)}</p>}
-                                {line.credit > 0 && <p className="text-rose-500">Crédito {formatCurrency(line.credit)}</p>}
-                              </div>
+                              <p className="text-right font-mono text-[11px] font-bold tabular-nums text-emerald-600">{line.debit > 0 ? formatCurrency(line.debit) : '—'}</p>
+                              <p className="text-right font-mono text-[11px] font-bold tabular-nums text-rose-500">{line.credit > 0 ? formatCurrency(line.credit) : '—'}</p>
                             </div>
                           ))}
                         </div>
                         <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-muted/30 px-3 py-2.5 font-mono text-[11px] font-black tabular-nums">
                           <span className="uppercase tracking-wider text-muted-foreground">Totales</span>
-                          <span className="text-right"><span className="text-emerald-600">D {formatCurrency(viewJournal.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0)}</span> · <span className="text-rose-500">C {formatCurrency(viewJournal.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0)}</span></span>
+                          <span className="text-right"><span className="text-emerald-600">Debe {formatCurrency(viewJournal.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0)}</span> · <span className="text-rose-500">Haber {formatCurrency(viewJournal.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0)}</span></span>
                         </div>
                       </div>
                     )}

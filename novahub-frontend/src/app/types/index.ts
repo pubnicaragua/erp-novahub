@@ -188,6 +188,11 @@ export interface SalesOrder {
   invoiceNumber?: string;
   invoicedAt?: string;
   invoicedBy?: { id?: string; name?: string };
+  paymentId?: string;
+  paymentNumber?: string;
+  paymentDate?: string;
+  paymentStatus?: string;
+  paymentAmount?: number;
   sellerEmployeeId?: string;
   sellerEmployee?: { id?: string; firstName?: string; lastName?: string };
   commissionType?: 'PERCENTAGE' | 'FIXED';
@@ -238,6 +243,8 @@ export interface Invoice {
   accountId?: string;
   registerId?: string | null;
   sessionId?: string | null;
+  sourceType?: 'SALES_ORDER' | 'CASH_SALE' | 'RECURRING' | 'DIRECT' | string;
+  sourceLabel?: string | null;
   status: PaymentStatus;
   notes?: string;
   sellerEmployeeId?: string | null;
@@ -324,6 +331,8 @@ export interface PaymentReceived {
   customer?: Customer;
   invoiceId?: string;
   invoice?: Invoice;
+  sourceType?: 'SALES_ORDER' | 'CASH_SALE' | string;
+  sourceLabel?: string | null;
   date: string;
   amount: number;
   currency: Currency;

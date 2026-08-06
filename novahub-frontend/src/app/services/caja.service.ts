@@ -18,8 +18,6 @@ export interface CashRegister {
   location?: string;
   isActive: boolean;
   branchId?: string;
-  accountId?: string | null;
-  account?: { id: string; code: string; name: string } | null;
   warehouse?: any;
   hasActiveSession?: boolean;
   resolvedWarehouseId?: string | null;
@@ -128,7 +126,6 @@ export interface PosInvoice {
   number: string;
   customerId?: string;
   customCustomerName?: string;
-  accountId?: string | null;
   registerId?: string | null;
   sessionId?: string | null;
   date: string;
@@ -160,7 +157,6 @@ export interface PosPaymentLine {
   method: PosPaymentMethod;
   amount: number;
   reference?: string;
-  accountId?: string;
 }
 
 export interface DashboardKPIs {
@@ -235,10 +231,10 @@ export const cajaService = {
   getRegisterAvailability: () =>
     api.get<CashRegisterAvailability>('/caja/registers/status'),
 
-  createRegister: (data: { name: string; code: string; location?: string; branchId?: string; accountId?: string }) =>
+  createRegister: (data: { name: string; code: string; location?: string; branchId?: string }) =>
     api.post<CashRegister>('/caja/registers', data),
 
-  updateRegister: (id: string, data: { name?: string; code?: string; location?: string; isActive?: boolean; branchId?: string; accountId?: string }) =>
+  updateRegister: (id: string, data: { name?: string; code?: string; location?: string; isActive?: boolean; branchId?: string }) =>
     api.put<CashRegister>(`/caja/registers/${id}`, data),
 
   deleteRegister: (id: string) =>

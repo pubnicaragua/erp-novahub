@@ -25,6 +25,8 @@ interface ComboboxProps {
   onChange: (value: string) => void
   placeholder?: string
   emptyMessage?: string
+  searchPlaceholder?: string
+  maxVisibleOptions?: number
   className?: string
   disabled?: boolean
 }
@@ -35,6 +37,8 @@ export function Combobox({
   onChange,
   placeholder = "Seleccionar...",
   emptyMessage = "No se encontraron resultados.",
+  searchPlaceholder,
+  maxVisibleOptions = 100,
   className,
   disabled = false,
 }: ComboboxProps) {
@@ -44,11 +48,11 @@ export function Combobox({
 
   const visibleOptions = React.useMemo(() => {
     const query = search.trim().toLowerCase()
-    if (!query) return options.slice(0, 100)
+    if (!query) return options.slice(0, maxVisibleOptions)
     return options
       .filter((option) => `${option.label} ${option.description || ''}`.toLowerCase().includes(query))
-      .slice(0, 100)
-  }, [options, search])
+      .slice(0, maxVisibleOptions)
+  }, [maxVisibleOptions, options, search])
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) setSearch('')
@@ -82,7 +86,7 @@ export function Combobox({
       </PopoverTrigger>
       <PopoverContent className="w-full p-0" align="start">
         <Command shouldFilter={false}>
-          <CommandInput value={search} onValueChange={setSearch} placeholder={placeholder} className="h-8 text-xs" />
+          <CommandInput value={search} onValueChange={setSearch} placeholder={searchPlaceholder || placeholder} className="h-8 text-xs" />
           <CommandList>
             <CommandEmpty className="text-xs py-2">{emptyMessage}</CommandEmpty>
             <CommandGroup>

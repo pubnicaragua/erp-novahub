@@ -58,6 +58,24 @@ const statusOptions = [
   { label: 'Parcial', value: 'PARTIAL', color: 'bg-blue-500/10 text-blue-500' },
 ];
 
+const getInvoiceSourceBadge = (invoice: Partial<Invoice> | null | undefined) => {
+  const sourceType = String(invoice?.sourceType || '').toUpperCase();
+  if (sourceType === 'CASH_SALE' || invoice?.registerId || invoice?.sessionId) {
+    return { label: 'Desde Facturación por Caja', className: 'bg-cyan-500/10 text-cyan-500' };
+  }
+  if (sourceType === 'SALES_ORDER' || invoice?.salesOrderId) {
+    return { label: 'Desde Orden de Venta', className: 'bg-orange-500/10 text-orange-500' };
+  }
+  if (
+    sourceType === 'RECURRING' ||
+    String(invoice?.number || '').toUpperCase().startsWith('FAC-REC-') ||
+    String(invoice?.notes || '').toLowerCase().includes('desde recurrente')
+  ) {
+    return { label: 'Desde Factura Recurrente', className: 'bg-purple-500/10 text-purple-500' };
+  }
+  return null;
+};
+
 export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: FacturasViewProps) {
   const {
     exchangeRate: globalRate,
@@ -264,7 +282,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       return;
     }
 
-    const amount = Number(invoice.balance ?? invoice.total ?? 0);
+    const amount = invoiceStatus === 'DRAFT'
+      ? Math.max(0, Number(invoice.total || 0) - Number(invoice.amountPaid || 0))
+      : getInvoiceBalance(invoice);
     if (amount <= 0) {
       toast.error('La factura no tiene saldo pendiente');
       return;
@@ -484,7 +504,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const getInvoiceBalance = (invoice: Partial<Invoice>) => {
     const status = String(invoice.status || '').toUpperCase();
     if (status === 'DRAFT' || status === 'CANCELLED') return 0;
-    return Math.max(0, Number(invoice.balance ?? invoice.total ?? 0));
+    const total = Number(invoice.total);
+    const amountPaid = Number(invoice.amountPaid || 0);
+    if (Number.isFinite(total)) {
+      // `total` ya incluye subtotal, impuestos (incluido IVA), descuentos y
+      // retenciones. El saldo no debe depender del campo persistido `balance`.
+      return Math.max(0, Number((total - amountPaid).toFixed(2)));
+    }
+    return Math.max(0, Number(invoice.balance || 0));
   };
 
   const formatInvoiceAmount = (amount: number, currency?: string, rate?: number) => (
@@ -506,7 +533,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       key: 'number',
       header: 'Nº Factura',
       width: '140px',
-      render: (val, row) => <span className="text-xs font-black font-mono text-primary cursor-pointer hover:underline" onClick={() => setEditingId(row.id)}>{val}</span>
+      render: (val, row) => {
+        const source = getInvoiceSourceBadge(row);
+        return (
+          <div className="flex min-w-0 flex-col items-start gap-1">
+            <span className="text-xs font-black font-mono text-primary cursor-pointer hover:underline" onClick={() => setEditingId(row.id)}>{val}</span>
+            {source && <Badge className={cn('border-none px-1.5 py-0 text-[8px] font-black', source.className)}>{source.label}</Badge>}
+          </div>
+        );
+      }
     },
     {
       key: 'customer',
@@ -526,7 +561,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           "text-xs font-bold",
           (row.status || '').toUpperCase() === 'OVERDUE' ? 'text-rose-500' : 'text-muted-foreground'
         )}>
-          {new Date(val).toLocaleDateString()}
+          {formatDateSafe(val)}
         </span>
       )
     },
@@ -556,7 +591,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     },
     {
       key: 'balance',
-      header: 'Saldo deudor',
+      header: 'Saldo pendiente',
       width: '150px',
       render: (_val, row) => {
         const balance = getInvoiceBalance(row);
@@ -567,7 +602,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               "text-[13px] font-black tabular-nums",
               balance > 0 ? "text-orange-500" : "text-emerald-500"
             )}>
-              {formatInvoiceAmount(balance, row.currency, row.exchangeRate)}
+              <span title="Total de la factura, incluido el IVA, menos pagos y aplicaciones">
+                {formatInvoiceAmount(balance, row.currency, row.exchangeRate)}
+              </span>
             </span>
             {showValuationLegend && <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
               {valuationModeLabel}
@@ -629,7 +666,13 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Nueva Factura' : `Factura ${localDoc?.number}`}</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Nueva Factura' : `Factura ${localDoc?.number}`}</h2>
+                {!isCreating && (() => {
+                  const source = getInvoiceSourceBadge(localDoc);
+                  return source ? <Badge className={cn('border-none px-2 py-0.5 text-[8px] font-black', source.className)}>{source.label}</Badge> : null;
+                })()}
+              </div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Completar datos para crear factura' : 'Detalle de la factura'}</p>
             </div>
           </div>
@@ -818,8 +861,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 </div>
                 {!isCreating && String(localDoc?.status || '').toUpperCase() !== 'DRAFT' && (
                   <div className="flex justify-between items-center border-t border-border/40 pt-3">
-                    <span className="text-sm font-black text-orange-500">Saldo deudor</span>
-                    <span className="text-orange-500 font-black text-lg">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(getInvoiceBalance(localDoc))}</span>
+                    <div>
+                      <span className="text-sm font-black text-orange-500">Saldo pendiente</span>
+                      <p className="text-[10px] text-muted-foreground">Total incluido IVA − pagos aplicados</p>
+                    </div>
+                    <span className="text-orange-500 font-black text-lg" title="Total incluido IVA menos pagos aplicados">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(getInvoiceBalance(localDoc))}</span>
                   </div>
                 )}
               </div>
@@ -1128,7 +1174,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4 text-muted-foreground" /></Button>
                 {canPerform('SALES_PAYMENTS', 'create') &&
                   !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
-                  Number(row.balance ?? row.total ?? 0) > 0 && (
+                  getInvoiceBalance(row) > 0 && (
                   <Button type="button" title="Pagar factura" variant="ghost" size="icon" disabled={payingInvoiceId === row.id} className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => void handlePayInvoice(row)}>
                     {payingInvoiceId === row.id ? <Loader2 className="size-4 text-muted-foreground animate-spin" /> : <CheckCircle2 className="size-4 text-muted-foreground" />}
                   </Button>

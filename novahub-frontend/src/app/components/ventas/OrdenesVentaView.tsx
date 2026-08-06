@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Plus, Search, TrendingUp, Clock, ArrowRightCircle, Package, Eye, Ban, ChevronLeft, Trash2
+  ClipboardList, Plus, Search, TrendingUp, Clock, ArrowRightCircle, Package, Eye, Ban, ChevronLeft, Trash2, Settings2, Check
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -15,6 +15,7 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -63,6 +64,12 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<SalesOrder | null>(null);
+  const [columnConfigOpen, setColumnConfigOpen] = useState(false);
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>([
+    'number', 'customer', 'itemCount', 'total', 'status', 'date',
+    'invoiceNumber', 'invoicedAt', 'invoicedBy',
+  ]);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
   const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
@@ -401,7 +408,41 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     },
     { key: 'invoiceNumber', header: 'Factura relacionada', render: (val, row) => <span className="text-xs font-mono font-bold text-primary">{val || row.invoiceId || '—'}</span> },
     { key: 'invoicedAt', header: 'Fecha facturación', render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '—'}</span> },
-    { key: 'invoicedBy', header: 'Facturado por', render: (_val, row) => <span className="text-xs text-muted-foreground">{row.invoicedBy?.name || '—'}</span> }
+    { key: 'invoicedBy', header: 'Facturado por', render: (_val, row) => <span className="text-xs text-muted-foreground">{row.invoicedBy?.name || '—'}</span> },
+    { key: 'paymentNumber', header: 'Pago relacionado', render: (val, row) => <span className="text-xs font-mono font-bold text-emerald-500">{val || (row.invoiceId ? 'Pendiente' : '—')}</span> },
+    { key: 'paymentDate', header: 'Fecha pago', render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '—'}</span> },
+    {
+      key: 'paymentStatus',
+      header: 'Estado pago',
+      render: (val, row) => {
+        const status = String(val || '').toUpperCase();
+        const labels: Record<string, string> = { PAID: 'Pagada', PARTIAL: 'Parcial', PENDING: 'Pendiente', OVERDUE: 'Vencida' };
+        return row.invoiceId ? (
+          <Badge variant="outline" className={cn(
+            'whitespace-nowrap border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-wider shadow-none',
+            status === 'PAID' ? 'bg-emerald-500/10 text-emerald-500' : status === 'PARTIAL' ? 'bg-orange-500/10 text-orange-500' : 'bg-muted/20 text-muted-foreground',
+          )}>
+            {labels[status] || status || 'Pendiente'}
+          </Badge>
+        ) : <span className="text-xs text-muted-foreground">—</span>;
+      },
+    },
+  ];
+
+  const visibleColumns = columns.filter((column) => visibleColumnKeys.includes(String(column.key)));
+  const columnOptions = [
+    { key: 'number', label: 'Número de orden' },
+    { key: 'customer', label: 'Cliente' },
+    { key: 'itemCount', label: 'Artículos' },
+    { key: 'total', label: 'Monto total' },
+    { key: 'status', label: 'Estado de la orden' },
+    { key: 'date', label: 'Fecha compromiso' },
+    { key: 'invoiceNumber', label: 'Factura relacionada' },
+    { key: 'invoicedAt', label: 'Fecha facturación' },
+    { key: 'invoicedBy', label: 'Facturado por' },
+    { key: 'paymentNumber', label: 'Pago relacionado' },
+    { key: 'paymentDate', label: 'Fecha de pago' },
+    { key: 'paymentStatus', label: 'Estado de pago' },
   ];
 
   const confirmedAmountInDisplayCurrency = data
@@ -921,6 +962,22 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
             </div>
+            <Button
+              variant="outline"
+              onClick={() => setColumnConfigOpen(true)}
+              className="h-10 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest"
+            >
+              <Settings2 className="mr-2 size-4" /> Columnas <span className="ml-1 text-muted-foreground">{visibleColumns.length}</span>
+            </Button>
+            <select
+              value={layoutMode}
+              onChange={(event) => setLayoutMode(event.target.value as 'table' | 'cards')}
+              aria-label="Elegir distribución de órdenes"
+              className="h-10 w-32 rounded-xl border border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary"
+            >
+              <option value="table">Lista</option>
+              <option value="cards">Tarjetas</option>
+            </select>
             {canPerform('SALES_ORDERS', 'create') && (
               <Button onClick={handleAddOrder} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Orden
@@ -934,7 +991,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           showHorizontalControls
           actionsWidth="w-44"
           fitContent
-          columns={columns}
+          columns={visibleColumns}
+          layoutMode={layoutMode}
           onRowUpdate={handleUpdate}
           onRowClick={(row) => setEditingId(row.id)}
           isLoading={loading}
@@ -980,6 +1038,40 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
            )}
          />
        </div>
+
+      <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
+            <DialogDescription>Elige qué información quieres ver en la lista o en las tarjetas de órdenes de venta.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {columnOptions.map((option) => {
+              const active = visibleColumnKeys.includes(option.key);
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setVisibleColumnKeys((current) => active
+                    ? (current.length > 1 ? current.filter((key) => key !== option.key) : current)
+                    : [...current, option.key])}
+                  className={cn(
+                    'flex min-h-11 items-center justify-between rounded-xl border px-3 text-left text-xs font-bold transition-colors',
+                    active ? 'border-primary bg-primary/10 text-foreground' : 'border-border/60 bg-muted/10 text-muted-foreground hover:border-primary/50',
+                  )}
+                >
+                  <span>{option.label}</span>
+                  {active && <Check className="size-4 text-primary" />}
+                </button>
+              );
+            })}
+          </div>
+          <DialogFooter className="flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setVisibleColumnKeys(columnOptions.map((option) => option.key))}>Mostrar todas</Button>
+            <Button onClick={() => setColumnConfigOpen(false)}>Aplicar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={pendingCancelId !== null}

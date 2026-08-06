@@ -48,6 +48,19 @@ const normalizeListResponse = (response: any) => {
   return [];
 };
 
+function sortByRecentRegistration(items: any[]): any[] {
+  return [...items].sort((left, right) => {
+    const leftCreatedAt = new Date(left?.createdAt || left?.date || 0).getTime();
+    const rightCreatedAt = new Date(right?.createdAt || right?.date || 0).getTime();
+    if (rightCreatedAt !== leftCreatedAt) return rightCreatedAt - leftCreatedAt;
+
+    const leftDate = new Date(left?.date || 0).getTime();
+    const rightDate = new Date(right?.date || 0).getTime();
+    if (rightDate !== leftDate) return rightDate - leftDate;
+    return String(right?.id || '').localeCompare(String(left?.id || ''));
+  });
+}
+
 export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPageProps) {
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
@@ -181,8 +194,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
   ].filter(Boolean) as Array<{ isLoading: boolean; isError: boolean }>;
   const loading = activeQueries.some(query => query.isLoading);
 
-  const fIncomes = filterByDate(filterByBranch(incomes));
-  const fExpenses = filterByDate(filterByBranch(expenses));
+  const fIncomes = sortByRecentRegistration(filterByDate(filterByBranch(incomes)));
+  const fExpenses = sortByRecentRegistration(filterByDate(filterByBranch(expenses)));
   const fRecurringExpenses = filterByDate(filterByBranch(recurringExpenses)).filter((r: any) => Number(r.amount) > 0);
   const fRecurringIncomes = filterByDate(filterByBranch(recurringIncomes)).filter((r: any) => Number(r.amount) > 0);
   const fAccounts = filterByDate(filterByBranch(accounts));

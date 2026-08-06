@@ -15,6 +15,7 @@ import { Switch } from '../ui/switch'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
+import { Combobox } from '../ui/Combobox'
 import { toast } from 'sonner'
 import { ChevronDown, ChevronUp, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react'
 import { BankAccountsView } from './BankAccountsView'
@@ -48,6 +49,9 @@ type AccountInfo = {
   code: string
   name: string
   type: string
+  subtype?: string
+  parentId?: string | null
+  isLeaf?: boolean
   isActive?: boolean
   acceptsPostings?: boolean
 }
@@ -65,9 +69,8 @@ type ModuleField = {
 const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; description: string; fields: ModuleField[] }[] = [
   {
     id: 'invoice', label: 'Facturas de Venta', icon: FileText,
-    description: 'Cuando la factura queda pagada, se registra la venta con estas cuentas',
+    description: 'Cuando la factura queda pagada, se registra una sola vez contra el cobro real',
     fields: [
-      { key: 'receivable', label: 'Cuenta por Cobrar', side: 'debit', description: 'Se debita el total de la factura', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
       { key: 'income', label: 'Ingresos', side: 'credit', description: 'Se acredita el subtotal (sin IVA)', defaultCode: '4000', defaultName: 'Ingresos Operativos', defaultType: 'INCOME' },
       { key: 'ivaPayable', label: 'IVA por Pagar', side: 'credit', description: 'Se acredita el IVA', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
     ],
@@ -82,6 +85,19 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
       { key: 'check', label: 'Cheques', side: 'debit', description: 'Se debita la cuenta configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
       { key: 'other', label: 'Otros medios de cobro', side: 'debit', description: 'Se debita la cuenta para otros medios de cobro', defaultCode: '1090', defaultName: 'Otros Medios de Cobro', defaultType: 'ASSET' },
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita la cuenta por cobrar', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
+    ],
+  },
+  {
+    id: 'cashSale', label: 'Facturación por Caja', icon: Wallet,
+    description: 'Venta POS pagada en el momento → medios de cobro + Ingresos + IVA',
+    fields: [
+      { key: 'cash', label: 'Efectivo / Caja', side: 'debit', description: 'Se debita la cuenta global de efectivo para Facturación por Caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
+      { key: 'card', label: 'Tarjetas', side: 'debit', description: 'Se debita la cuenta POS configurada para tarjetas', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
+      { key: 'transfer', label: 'Transferencias', side: 'debit', description: 'Se debita la cuenta POS configurada para transferencias', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
+      { key: 'check', label: 'Cheques', side: 'debit', description: 'Se debita la cuenta POS configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
+      { key: 'other', label: 'Otros medios de cobro', side: 'debit', description: 'Se debita la cuenta POS para otros medios', defaultCode: '1090', defaultName: 'Otros Medios de Cobro', defaultType: 'ASSET' },
+      { key: 'income', label: 'Ingresos por Ventas', side: 'credit', description: 'Se acredita el subtotal de la venta POS', defaultCode: '4000', defaultName: 'Ingresos por Ventas', defaultType: 'INCOME' },
+      { key: 'ivaPayable', label: 'IVA por Pagar', side: 'credit', description: 'Se acredita el IVA de la venta POS', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
     ],
   },
   {
@@ -194,7 +210,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
 ]
 
-const SALES_MODULE_IDS = new Set(['invoice', 'payment', 'saleReturn', 'creditNote', 'cashRegister'])
+const SALES_MODULE_IDS = new Set(['invoice', 'payment', 'cashSale', 'saleReturn', 'creditNote', 'cashRegister'])
 
 const ACCOUNTING_MODULE_GROUPS = [
   {
@@ -238,58 +254,117 @@ const getDefaultAccountMappings = () => Object.fromEntries(
   BUILTIN_MODULES.map(module => [module.id, Object.fromEntries(module.fields.map(field => [field.key, field.defaultCode]))]),
 )
 
-function AccountCodeInput({ code, field, allAccounts, onChange }: {
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  ASSET: 'Activo',
+  LIABILITY: 'Pasivo',
+  EQUITY: 'Patrimonio',
+  INCOME: 'Ingreso',
+  EXPENSE: 'Gasto',
+}
+
+const accountTypeLabel = (type?: string) => ACCOUNT_TYPE_LABELS[String(type || '').toUpperCase()] || 'Tipo no definido'
+
+type AccountOptionState = {
+  disabled: boolean
+  label: string
+  className: string
+}
+
+type AccountOption = AccountInfo & {
+  disabled: boolean
+  optionState: AccountOptionState
+}
+
+function getAccountOptionStateForType(account: AccountInfo, expectedType: ModuleField['defaultType']): AccountOptionState {
+  if (account.isActive === false) return { disabled: true, label: 'Inactiva', className: 'text-red-500' }
+  if (account.acceptsPostings === false) return { disabled: true, label: 'Activa · No contabilizable', className: 'text-red-500' }
+  if (account.isLeaf === false) return { disabled: true, label: 'Activa · Agrupadora', className: 'text-red-500' }
+  if (String(account.type).toUpperCase() !== expectedType) {
+    return { disabled: true, label: `Activa · Es ${accountTypeLabel(account.type)}`, className: 'text-amber-500' }
+  }
+  return { disabled: false, label: 'Activa · Disponible', className: 'text-emerald-600' }
+}
+
+function getAccountOptionState(account: AccountInfo, field: ModuleField) {
+  return getAccountOptionStateForType(account, field.defaultType)
+}
+
+function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
   code: string
   field: ModuleField
-  allAccounts: AccountInfo[]
+  account?: AccountInfo
+  accountOptions: AccountOption[]
   onChange: (val: string) => void
 }) {
-  const account = allAccounts.find(a => a.code === code)
-  const accountUnavailable = Boolean(account && (account.isActive === false || account.acceptsPostings === false))
-  const accountOptions: Array<AccountInfo & { disabled?: boolean }> = [
-    ...allAccounts
-      .map(accountOption => ({
-        ...accountOption,
-        disabled: accountOption.isActive === false || accountOption.acceptsPostings === false,
-      }))
-      .sort((left, right) => Number(Boolean(left.disabled)) - Number(Boolean(right.disabled)) || left.code.localeCompare(right.code)),
-    ...(!account && code ? [{ id: `configured-${code}`, code, name: 'Cuenta configurada no encontrada', type: '', disabled: true }] : []),
-  ]
+  const accountState = account ? getAccountOptionState(account, field) : null
+  const accountUnavailable = Boolean(accountState?.disabled)
+  const accountTypeMismatch = Boolean(account && String(account.type).toUpperCase() !== field.defaultType)
+  const accountIsGroup = account?.isLeaf === false
+  const accountSelectOptions = useMemo(() => {
+    const options = accountOptions.map(accountOption => ({
+      value: accountOption.code,
+      label: `${accountOption.code} · ${accountOption.name}`,
+      description: `${accountTypeLabel(accountOption.type)} · ${accountOption.optionState.label}`,
+      disabled: accountOption.disabled,
+    }))
+
+    // Mantiene visible una configuración antigua aunque la cuenta ya no exista
+    // en el catálogo, sin convertirla en una opción seleccionable.
+    if (code && !options.some(option => option.value === code)) {
+      options.push({
+        value: code,
+        label: `${code} · Cuenta configurada no encontrada`,
+        description: 'No encontrada en el plan de cuentas',
+        disabled: true,
+      })
+    }
+
+    return options
+  }, [accountOptions, code])
+
   return (
     <div className="min-w-0 space-y-1.5 rounded-xl border border-border/40 bg-background/60 p-3">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${field.side === 'debit' ? 'bg-orange-500/10 text-orange-600' : 'bg-blue-500/10 text-blue-600'}`}>
-          {field.side === 'debit' ? 'Debe' : 'Haber'}
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${field.side === 'debit' ? 'bg-orange-500/10 text-orange-600' : 'bg-blue-500/10 text-blue-600'}`}>
+            {field.side === 'debit' ? 'Debe' : 'Haber'}
+          </span>
+          <span className="min-w-0 truncate text-[11px] font-bold">{field.label}</span>
+        </div>
+        <span className="shrink-0 rounded-md border border-border/40 px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">
+          Espera: {accountTypeLabel(field.defaultType)}
         </span>
-        <span className="min-w-0 truncate text-[11px] font-bold">{field.label}</span>
       </div>
-      <Select value={code || ''} onValueChange={onChange}>
-        <SelectTrigger className="h-9 w-full min-w-0 text-xs">
-          <SelectValue placeholder={`Seleccionar ${field.label.toLowerCase()}`} />
-        </SelectTrigger>
-        <SelectContent className="max-h-72">
-          {accountOptions.map(accountOption => (
-            <SelectItem key={`${field.key}-${accountOption.id}`} value={accountOption.code} disabled={Boolean(accountOption.disabled) || accountOption.id.startsWith('configured-')}>
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="shrink-0 font-mono">{accountOption.code}</span>
-                <span className="min-w-0 truncate">· {accountOption.name}</span>
-                <span className={`ml-auto shrink-0 text-[9px] font-bold ${accountOption.disabled ? 'text-red-500' : 'text-emerald-600'}`}>
-                  {accountOption.isActive === false ? 'Inactiva' : accountOption.acceptsPostings === false ? 'No contabilizable' : 'Activa'}
-                </span>
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground">
+        <span>Referencia: <span className="font-mono font-bold">{field.defaultCode}</span> · {field.defaultName}</span>
+        <span>La cuenta elegida debe ser de detalle y aceptar movimientos.</span>
+      </div>
+      <Combobox
+        options={accountSelectOptions}
+        value={code || ''}
+        onChange={onChange}
+        placeholder={`Seleccionar ${field.label.toLowerCase()}`}
+        searchPlaceholder="Buscar por código o nombre..."
+        maxVisibleOptions={500}
+        className="h-9 text-xs"
+        emptyMessage="No se encontraron cuentas con ese código o nombre."
+      />
       <div className="flex min-w-0 items-center justify-between gap-2">
         {account ? (
-          <span className={`min-w-0 truncate text-[10px] font-semibold ${accountUnavailable ? 'text-red-500' : 'text-emerald-600'}`}>
-            {account.code} · {account.name}{accountUnavailable ? ' · No seleccionable' : ''}
+          <span className={`min-w-0 truncate text-[10px] font-semibold ${accountTypeMismatch || accountUnavailable ? (accountTypeMismatch ? 'text-amber-500' : 'text-red-500') : 'text-emerald-600'}`} title={`${account.code} · ${account.name}`}>
+            {account.code} · {account.name}
+            {accountTypeMismatch
+              ? ` · Tipo incorrecto: ${accountTypeLabel(account.type)}; se espera ${accountTypeLabel(field.defaultType)}`
+              : accountIsGroup
+                ? ' · Cuenta agrupadora: selecciona una cuenta de detalle'
+                : accountUnavailable
+                  ? ` · ${accountState?.label || 'No seleccionable'}`
+                  : ' · Disponible'}
           </span>
         ) : code ? (
           <span className="text-[10px] text-red-500">La cuenta no existe en el plan</span>
         ) : (
-          <span className="text-[10px] text-muted-foreground">Predeterminada: {field.defaultCode}</span>
+          <span className="text-[10px] text-muted-foreground">Sugerida: {field.defaultCode} · {accountTypeLabel(field.defaultType)}</span>
         )}
       </div>
       <p className="text-[9px] leading-tight text-muted-foreground">{field.description}</p>
@@ -328,6 +403,9 @@ export function ConfiguracionContableView() {
         code: item.code,
         name: item.name,
         type: item.type,
+        subtype: item.subtype,
+        parentId: item.parentId,
+        isLeaf: !(item.children?.length),
         isActive: item.isActive,
         acceptsPostings: item.acceptsPostings,
       })
@@ -339,9 +417,7 @@ export function ConfiguracionContableView() {
 
   const [accountMappingsExpanded, setAccountMappingsExpanded] = useState(false)
   const [salesExpanded, setSalesExpanded] = useState(true)
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    new Set(ACCOUNTING_MODULE_GROUPS.map(group => group.id)),
-  )
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const res = configQuery.data
@@ -370,6 +446,21 @@ export function ConfiguracionContableView() {
   const loadConnections = () => connectionsQuery.refetch()
 
   const handleSave = async () => {
+    const moduleDefinitions = [
+      ...BUILTIN_MODULES,
+      ...customModules.map(module => ({ id: module.id, label: module.label, fields: module.fields })),
+    ]
+    const invalidMappings = moduleDefinitions.flatMap(module => module.fields.flatMap(field => {
+      const code = accountMappings[module.id]?.[field.key] || field.defaultCode
+      const account = allAccounts.find(item => item.code === code)
+      if (!account) return []
+      const state = getAccountOptionState(account, field)
+      return state.disabled ? [`${module.label}: ${field.label} (${state.label})`] : []
+    }))
+    if (invalidMappings.length > 0) {
+      toast.error(`Corrige las cuentas no seleccionables antes de guardar: ${invalidMappings.slice(0, 2).join(' · ')}`)
+      return
+    }
     setSaving(true)
     try {
       const payload = { autoGenEnabled, defaultCurrency, taxRate, industry, accountMappings, customModules }
@@ -512,6 +603,20 @@ export function ConfiguracionContableView() {
     return [...builtins, ...customs]
   }, [customModules])
 
+  const accountsByCode = useMemo(() => new Map(allAccounts.map(account => [account.code, account])), [allAccounts])
+  const accountOptionsByType = useMemo(() => {
+    const expectedTypes = new Set(allModuleDefs.flatMap(module => module.fields.map(field => field.defaultType)))
+    return Object.fromEntries(Array.from(expectedTypes).map(expectedType => [
+      expectedType,
+      allAccounts
+        .map(account => {
+          const optionState = getAccountOptionStateForType(account, expectedType)
+          return { ...account, disabled: optionState.disabled, optionState }
+        })
+        .sort((left, right) => Number(left.disabled) - Number(right.disabled) || left.code.localeCompare(right.code)),
+    ])) as Record<string, AccountOption[]>
+  }, [allAccounts, allModuleDefs])
+
   const salesModuleDefs = useMemo(() => allModuleDefs.filter(mod => SALES_MODULE_IDS.has(mod.id)), [allModuleDefs])
   const otherModuleDefs = useMemo(() => allModuleDefs.filter(mod => !SALES_MODULE_IDS.has(mod.id)), [allModuleDefs])
   const groupedOtherModules = useMemo(() => {
@@ -564,7 +669,8 @@ export function ConfiguracionContableView() {
               key={field.key}
               code={modMapping[field.key] || field.defaultCode}
               field={field}
-              allAccounts={allAccounts}
+              account={accountsByCode.get(modMapping[field.key] || field.defaultCode)}
+              accountOptions={accountOptionsByType[field.defaultType] || []}
               onChange={value => updateMapping(mod.id, field.key, value)}
             />
           ))}
@@ -709,7 +815,7 @@ export function ConfiguracionContableView() {
           </div>
         </CardHeader>
         <CardContent className="px-5 pb-4 space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(300px,0.9fr)] md:items-start">
             <div className="space-y-2">
               <Label className="text-xs font-bold">Moneda por Defecto</Label>
               <Select value={defaultCurrency} onValueChange={setDefaultCurrency}>
@@ -734,7 +840,7 @@ export function ConfiguracionContableView() {
               />
               <p className="text-[9px] text-muted-foreground">Nicaragua: 15%</p>
             </div>
-            <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.04] px-3 py-2 md:min-w-[260px] md:justify-self-start">
+            <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.04] px-3 py-2 md:mt-6 md:w-full">
               <BookOpen className="size-4 shrink-0 text-primary" />
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-tight">Asientos automáticos</p>
@@ -872,7 +978,8 @@ export function ConfiguracionContableView() {
                       key={field.key}
                       code={modMapping[field.key] || field.defaultCode}
                       field={field}
-                      allAccounts={allAccounts}
+                      account={accountsByCode.get(modMapping[field.key] || field.defaultCode)}
+                      accountOptions={accountOptionsByType[field.defaultType] || []}
                       onChange={value => updateMapping(mod.id, field.key, value)}
                     />
                   ))}

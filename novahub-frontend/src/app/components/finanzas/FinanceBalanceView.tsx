@@ -33,6 +33,19 @@ interface FinanceBalanceViewProps {
 
 type ViewType = 'general' | 'solo-ingresos' | 'solo-gastos' | 'recurrentes';
 
+function sortByRecentRegistration(items: any[]): any[] {
+  return [...items].sort((left, right) => {
+    const leftCreatedAt = new Date(left?.createdAt || left?.date || 0).getTime();
+    const rightCreatedAt = new Date(right?.createdAt || right?.date || 0).getTime();
+    if (rightCreatedAt !== leftCreatedAt) return rightCreatedAt - leftCreatedAt;
+
+    const leftDate = new Date(left?.date || 0).getTime();
+    const rightDate = new Date(right?.date || 0).getTime();
+    if (rightDate !== leftDate) return rightDate - leftDate;
+    return String(right?.id || '').localeCompare(String(left?.id || ''));
+  });
+}
+
 export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurringExpenses }: FinanceBalanceViewProps) {
   const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { user } = useAuth();
@@ -52,8 +65,8 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
     });
   };
 
-  const fIncomes = useMemo(() => filterByDate(incomes), [incomes, dateRange]);
-  const fExpenses = useMemo(() => filterByDate(expenses), [expenses, dateRange]);
+  const fIncomes = useMemo(() => sortByRecentRegistration(filterByDate(incomes)), [incomes, dateRange]);
+  const fExpenses = useMemo(() => sortByRecentRegistration(filterByDate(expenses)), [expenses, dateRange]);
   const fRecInc = useMemo(() => filterByDate(recurringIncomes), [recurringIncomes, dateRange]);
   const fRecExp = useMemo(() => filterByDate(recurringExpenses), [recurringExpenses, dateRange]);
 
@@ -138,8 +151,8 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
   const COLORS = ['#10b981','#f59e0b','#6366f1','#ec4899','#14b8a6','#8b5cf6','#ef4444','#3b82f6'];
 
   // ─── Last 5 items ──────────────────────────────────
-  const lastIncomes = useMemo(() => [...fIncomes].sort((a,b) => new Date(b.date||b.createdAt).getTime() - new Date(a.date||a.createdAt).getTime()).slice(0,5), [fIncomes]);
-  const lastExpenses = useMemo(() => [...fExpenses].sort((a,b) => new Date(b.date||b.createdAt).getTime() - new Date(a.date||a.createdAt).getTime()).slice(0,5), [fExpenses]);
+  const lastIncomes = useMemo(() => sortByRecentRegistration(fIncomes).slice(0,5), [fIncomes]);
+  const lastExpenses = useMemo(() => sortByRecentRegistration(fExpenses).slice(0,5), [fExpenses]);
 
   const viewButtons: { value: ViewType; label: string }[] = [
     { value: 'general', label: 'General' },

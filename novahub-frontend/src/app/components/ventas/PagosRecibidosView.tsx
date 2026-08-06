@@ -20,6 +20,7 @@ import { formatSalesAmount } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
+import { cn } from '../ui/utils';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -132,6 +133,23 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     { key: 'number', header: 'ID Pago', width: '120px', render: (val) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val}</span> },
     { key: 'customer', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
     { key: 'reference', header: 'Referencia / Factura', render: (val, row) => <span className="text-xs font-bold text-primary">{row.invoice?.number || val || 'Anticipo'}</span> },
+    {
+      key: 'sourceType', header: 'Origen', width: '180px', render: (_val, row) => {
+        if (!row.invoice?.number) return <span className="text-xs text-muted-foreground">Sin factura</span>;
+        const isCashSale = String(row.sourceType || row.invoice.sourceType || '').toUpperCase() === 'CASH_SALE'
+          || Boolean(row.invoice.registerId || row.invoice.sessionId);
+        return (
+          <Badge
+            className={cn(
+              'border-none px-2 py-0.5 text-[9px] font-black',
+              isCashSale ? 'bg-cyan-500/10 text-cyan-500' : 'bg-orange-500/10 text-orange-500',
+            )}
+          >
+            {isCashSale ? 'Facturación por caja' : 'Factura normal'}
+          </Badge>
+        );
+      }
+    },
     { key: 'date', header: 'Fecha', render: (val) => {
       if (!val) return <span className="text-xs text-muted-foreground">N/A</span>;
       const clean = String(val).includes('T') ? String(val).split('T')[0] : String(val);

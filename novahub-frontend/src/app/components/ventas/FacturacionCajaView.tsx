@@ -17,6 +17,7 @@ import { ProductThumbnail } from '../ui/ProductImage';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../ui/utils';
 import {
   cajaService,
@@ -290,6 +291,7 @@ interface FacturacionCajaViewProps {
 export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCajaViewProps) {
   const { formatConvertedAmount: formatCurrency } = useCurrency();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [registerAvailability, setRegisterAvailability] = useState<CashRegisterAvailability | null>(null);
   const [products, setProducts] = useState<PosProduct[]>([]);
@@ -679,10 +681,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       toast.error(missingPriceMessage);
       return;
     }
-    if (!selectedRegister?.accountId) {
-      toast.error('Configura la cuenta contable de la caja antes de cobrar');
-      return;
-    }
     setPayments([{ method: 'CASH', amount: 0 }]);
     setPaymentCurrency('NIO');
     setCreatedInvoice(null);
@@ -746,6 +744,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       checkoutIdempotencyKey.current = idempotencyKey;
       const createdResponse = await cajaService.createInvoice(checkoutPayload, idempotencyKey);
       const created = (createdResponse as any)?.data || createdResponse;
+
+      // Una venta POS crea factura, pago recibido, ingreso financiero y un
+      // único asiento contable dentro de la misma transacción. Invalidamos
+      // todos los consumidores para que no sigan mostrando una instantánea
+      // anterior mientras conservan su staleTime local.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['sales'] }),
+        queryClient.invalidateQueries({ queryKey: ['finance'] }),
+        queryClient.invalidateQueries({ queryKey: ['accounting'] }),
+      ]);
 
       toast.success('Factura emitida exitosamente');
       setCreatedInvoice(created);
@@ -939,7 +947,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                 <h3 className="text-sm font-black uppercase tracking-tight mb-4 flex items-center gap-2">
                   <Receipt className="size-4 text-primary" /> Configuración de Emisión
                 </h3>
-                <SalesAccountingLegend flow="pos" paymentMethod={payments[0]?.method} cashAccount={selectedRegister?.account} />
+                <SalesAccountingLegend flow="pos" paymentMethod={payments[0]?.method} />
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1.5" data-tour="pos-register">
                     <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Caja Operativa</Label>
