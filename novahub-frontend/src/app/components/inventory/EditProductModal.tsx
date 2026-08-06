@@ -7,7 +7,7 @@ import { ProductImagePicker } from '../ui/ProductImage';
 import { inventoryService } from '../../services/inventario.service';
 import { storageService } from '../../services/storage.service';
 import { toast } from 'sonner';
-import { Package, Check, Plus, Trash2 } from 'lucide-react';
+import { Package, Check } from 'lucide-react';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 
 interface EditProductModalProps {
@@ -26,66 +26,69 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
   const isService = itemType === 'SERVICE' || String(product?.itemType || product?.type || '').toUpperCase() === 'SERVICE';
 
   useEffect(() => {
-    if (product) {
-      const stockLevels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
-      const warehouseCatalogs = Array.isArray(product.warehouseCatalogs) ? product.warehouseCatalogs : [];
-      const allocationIds = Array.from(new Set([
-        ...stockLevels.map((level: any) => level.warehouseId).filter(Boolean),
-        ...warehouseCatalogs.map((catalog: any) => catalog.warehouseId).filter(Boolean),
-      ]));
-      const initialAllocations = allocationIds.length > 0
-        ? allocationIds.map((warehouseId: string, i: number) => {
-            const sl = stockLevels.find((level: any) => level.warehouseId === warehouseId);
-            return {
-              id: `alloc-edit-${Date.now()}-${i}`,
-              warehouseId,
-              quantity: Number(sl?.quantity || 0),
-              minStock: Number(sl?.minStock ?? product.minStock ?? 0),
-              maxStock: Number(sl?.maxStock ?? product.maxStock ?? 0),
-              originalQuantity: Number(sl?.quantity || 0),
-              originalMinStock: Number(sl?.minStock ?? product.minStock ?? 0),
-              originalMaxStock: Number(sl?.maxStock ?? product.maxStock ?? 0),
-            };
-          })
-        : [{
-            id: `alloc-edit-${Date.now()}-0`,
-            warehouseId: '',
-            quantity: Number(product.stock || 0),
-            minStock: Number(product.minStock || 0),
-            maxStock: Number(product.maxStock || 0),
-            originalQuantity: Number(product.stock || 0),
-            originalMinStock: Number(product.minStock || 0),
-            originalMaxStock: Number(product.maxStock || 0),
-          }];
-      setDraft({
-        id: product.id,
-        code: product.code,
-        name: product.name,
-        categoryId: product.categoryId || '',
-        priceCurrency: baseCurrency || 'NIO',
-        salePrice: Number(product.salePrice) || 0,
-        costPrice: Number(product.costPrice) || 0,
-        trackSerialNumbers: Boolean(
-          product.trackSerialNumbers ||
-          product.serialTracking ||
-          product.serialNumberTracking ||
-          String(product.trackingType || '').toUpperCase() === 'SERIAL',
-        ),
-        itemType: (product.itemType || 'PRODUCT').toUpperCase(),
-        minStock: Number(product.minStock) || 0,
-        maxStock: Number(product.maxStock) || 0,
-        unit: product.unit || 'unidad',
-        initialAllocations,
-        imageUrl: product.imageUrl,
-        imageStorageUri: product.imageUrlStorageUri || (String(product.imageUrl || '').startsWith('storage://') ? product.imageUrl : undefined),
-        imageFile: null,
-        imagePreviewUrl: '',
-        removeImage: false
-      });
-    } else {
-      setDraft(null);
-    }
-  }, [product]);
+    const timer = setTimeout(() => {
+      if (product) {
+        const stockLevels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
+        const warehouseCatalogs = Array.isArray(product.warehouseCatalogs) ? product.warehouseCatalogs : [];
+        const allocationIds = Array.from(new Set([
+          ...stockLevels.map((level: any) => level.warehouseId).filter(Boolean),
+          ...warehouseCatalogs.map((catalog: any) => catalog.warehouseId).filter(Boolean),
+        ]));
+        const initialAllocations = allocationIds.length > 0
+          ? allocationIds.map((warehouseId: string, i: number) => {
+              const sl = stockLevels.find((level: any) => level.warehouseId === warehouseId);
+              return {
+                id: `alloc-edit-${Date.now()}-${i}`,
+                warehouseId,
+                quantity: Number(sl?.quantity || 0),
+                minStock: Number(sl?.minStock ?? product.minStock ?? 0),
+                maxStock: Number(sl?.maxStock ?? product.maxStock ?? 0),
+                originalQuantity: Number(sl?.quantity || 0),
+                originalMinStock: Number(sl?.minStock ?? product.minStock ?? 0),
+                originalMaxStock: Number(sl?.maxStock ?? product.maxStock ?? 0),
+              };
+            })
+          : [{
+              id: `alloc-edit-${Date.now()}-0`,
+              warehouseId: '',
+              quantity: Number(product.stock || 0),
+              minStock: Number(product.minStock || 0),
+              maxStock: Number(product.maxStock || 0),
+              originalQuantity: Number(product.stock || 0),
+              originalMinStock: Number(product.minStock || 0),
+              originalMaxStock: Number(product.maxStock || 0),
+            }];
+        setDraft({
+          id: product.id,
+          code: product.code,
+          name: product.name,
+          categoryId: product.categoryId || '',
+          priceCurrency: baseCurrency || 'NIO',
+          salePrice: Number(product.salePrice) || 0,
+          costPrice: Number(product.costPrice) || 0,
+          trackSerialNumbers: Boolean(
+            product.trackSerialNumbers ||
+            product.serialTracking ||
+            product.serialNumberTracking ||
+            String(product.trackingType || '').toUpperCase() === 'SERIAL',
+          ),
+          itemType: (product.itemType || 'PRODUCT').toUpperCase(),
+          minStock: Number(product.minStock) || 0,
+          maxStock: Number(product.maxStock) || 0,
+          unit: product.unit || 'unidad',
+          initialAllocations,
+          imageUrl: product.imageUrl,
+          imageStorageUri: product.imageUrlStorageUri || (String(product.imageUrl || '').startsWith('storage://') ? product.imageUrl : undefined),
+          imageFile: null,
+          imagePreviewUrl: '',
+          removeImage: false
+        });
+      } else {
+        setDraft(null);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [product, baseCurrency]);
 
   if (!draft) return null;
 
@@ -97,20 +100,6 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
     setDraft((prev: any) => ({
       ...prev,
       initialAllocations: prev.initialAllocations.map((a: any) => a.id === id ? { ...a, ...updates } : a)
-    }));
-  };
-
-  const addAllocation = () => {
-    setDraft((prev: any) => ({
-      ...prev,
-      initialAllocations: [...prev.initialAllocations, { id: `alloc-new-${Date.now()}`, warehouseId: '', quantity: 0, minStock: 0, maxStock: 0 }]
-    }));
-  };
-
-  const removeAllocation = (id: string) => {
-    setDraft((prev: any) => ({
-      ...prev,
-      initialAllocations: prev.initialAllocations.filter((a: any) => a.id !== id)
     }));
   };
 

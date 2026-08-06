@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Headphones, TicketIcon, Users, BookOpen, CircleHelp } from 'lucide-react';
 import { cn } from './ui/utils';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { motion, AnimatePresence } from 'motion/react';
 import { TicketsView } from './support/TicketsView';
 import { Ticket } from '../types';
@@ -65,13 +65,13 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarColla
   const [loading, setLoading] = useState(true);
   const [showTutorial, setShowTutorial] = useState(false);
 
-  const normalizeList = <T,>(response: any): T[] => {
+  const normalizeList = useCallback(<T,>(response: any): T[] => {
     if (Array.isArray(response)) return response as T[];
     if (Array.isArray(response?.data)) return response.data as T[];
     return [];
-  };
+  }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [ticketsRes, kbRes, agentsRes] = await Promise.allSettled([
@@ -94,17 +94,20 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarColla
     } finally {
       setLoading(false);
     }
-  };
+  }, [normalizeList]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const timer = window.setTimeout(fetchData, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchData]);
 
-  useEffect(() => {
+  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
+  if (prevSubModule !== activeSubModule) {
+    setPrevSubModule(activeSubModule);
     if (activeSubModule && activeSubModule !== activeTab) {
       setActiveTab(activeSubModule);
     }
-  }, [activeSubModule]);
+  }
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);

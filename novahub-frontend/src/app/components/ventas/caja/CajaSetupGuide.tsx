@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Banknote, CheckCircle2, Loader2, Store, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../ui/button';
@@ -39,7 +39,7 @@ export function CajaSetupGuide({
   const [branchForm, setBranchForm] = useState(initialBranchForm);
   const [registerForm, setRegisterForm] = useState(initialRegisterForm);
 
-  const loadSetupData = async () => {
+  const loadSetupData = useCallback(async () => {
     setLoading(true);
     try {
       const [warehouseRes, branchRes] = await Promise.all([
@@ -58,11 +58,12 @@ export function CajaSetupGuide({
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadSetupData();
-  }, []);
+    const timer = window.setTimeout(loadSetupData, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadSetupData]);
 
   const nextStep = useMemo<SetupModal>(() => {
     if (warehouses.length === 0) return 'warehouse';

@@ -1,4 +1,3 @@
-import { cn } from './ui/utils';
 import { AsesoriaLegalView } from './support/AsesoriaLegalView';
 
 interface AsesoriaLegalPageProps {

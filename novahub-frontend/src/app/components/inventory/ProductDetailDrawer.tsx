@@ -196,58 +196,63 @@ export function ProductDetailDrawer({
   const [expandedImageOpen, setExpandedImageOpen] = useState(false);
 
   // ------------------------------------------------------------------
-  // Fetch del detalle completo cuando se abre el drawer
+  // Resetear tab a 'general' cada vez que cambia el producto
   // ------------------------------------------------------------------
-  useEffect(() => {
+  const [prevProductId, setPrevProductId] = useState(productId);
+  if (productId !== prevProductId) {
+    setPrevProductId(productId);
+    setActiveTab('general');
     if (!productId) {
       setDetail(null);
       setKardexMovements(null);
       setError(null);
-      return;
     }
+  }
+
+  // ------------------------------------------------------------------
+  // Fetch del detalle completo cuando se abre el drawer
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (!productId) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
 
-    (async () => {
-      try {
-        // Fetch del producto completo
-        const resp: any = await inventoryService.getProduct(productId);
-        const product = resp?.data?.data || resp?.data || resp;
-        if (cancelled) return;
-        setDetail(product);
-
-        // Intentar traer movimientos frescos para el kardex
+      (async () => {
         try {
-          const movResp: any = await inventoryService.getMovements({ limit: 200 });
-          const list = Array.isArray(movResp) ? movResp : movResp?.data?.data || movResp?.data || [];
-          if (!cancelled) setKardexMovements(Array.isArray(list) ? list : []);
-        } catch {
-          // Si falla, dejamos que se use el fallback desde props
-          if (!cancelled) setKardexMovements([]);
+          // Fetch del producto completo
+          const resp: any = await inventoryService.getProduct(productId);
+          const product = resp?.data?.data || resp?.data || resp;
+          if (cancelled) return;
+          setDetail(product);
+
+          // Intentar traer movimientos frescos para el kardex
+          try {
+            const movResp: any = await inventoryService.getMovements({ limit: 200 });
+            const list = Array.isArray(movResp) ? movResp : movResp?.data?.data || movResp?.data || [];
+            if (!cancelled) setKardexMovements(Array.isArray(list) ? list : []);
+          } catch {
+            // Si falla, dejamos que se use el fallback desde props
+            if (!cancelled) setKardexMovements([]);
+          }
+        } catch (e: any) {
+          if (!cancelled) {
+            // El snapshot de la tabla sigue siendo suficiente para mostrar el detalle
+            // cuando falla la consulta complementaria. No tapar la vista con un error.
+            if (!productSnapshot) setError(e?.message || 'No se pudo cargar el producto');
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
         }
-      } catch (e: any) {
-        if (!cancelled) {
-          // El snapshot de la tabla sigue siendo suficiente para mostrar el detalle
-          // cuando falla la consulta complementaria. No tapar la vista con un error.
-          if (!productSnapshot) setError(e?.message || 'No se pudo cargar el producto');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+      })();
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [productId]);
-
-  // ------------------------------------------------------------------
-  // Resetear tab a 'general' cada vez que cambia el producto
-  // ------------------------------------------------------------------
-  useEffect(() => {
-    setActiveTab('general');
   }, [productId]);
 
   // ------------------------------------------------------------------

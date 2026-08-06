@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   FileOutput, Plus, Search, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, ShieldCheck, FileDown
 } from 'lucide-react';
@@ -59,14 +59,17 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
   const [isCreating, setIsCreating] = useState(false);
 
-  useEffect(() => {
-    if (editingId) {
-      const r = data.find(x => x.id === editingId);
-      if (r) setLocalDoc(JSON.parse(JSON.stringify(r)));
-    } else if (!isCreating) {
-      setLocalDoc(null);
-    }
-  }, [editingId]);
+  const startEdit = (id: string) => {
+    const r = data.find(x => x.id === id);
+    setEditingId(id);
+    setLocalDoc(r ? JSON.parse(JSON.stringify(r)) : null);
+  };
+
+  const closeEditor = () => {
+    setEditingId(null);
+    setIsCreating(false);
+    setLocalDoc(null);
+  };
 
   const filtered = data.filter(r =>
     (statusFilter === 'ALL' || String(r.status || '').toUpperCase() === statusFilter) &&
@@ -165,7 +168,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             "text-xs font-black font-mono text-primary",
             canPerform('SALES_RETURNS', 'edit') ? "cursor-pointer hover:underline" : "cursor-default"
           )} 
-          onClick={() => canPerform('SALES_RETURNS', 'edit') && setEditingId(row.id)}
+          onClick={() => canPerform('SALES_RETURNS', 'edit') && startEdit(row.id)}
         >
           {val}
         </span>
@@ -193,7 +196,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setIsCreating(false); setLocalDoc(null); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
+            <Button variant="ghost" size="icon" onClick={closeEditor} className="rounded-full"><ChevronLeft className="size-5" /></Button>
             <div>
               <h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Nueva Devolución' : `Devolución ${localDoc?.number}`}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Registrar nueva devolución' : 'Detalle de la devolución'}</p>
@@ -203,9 +206,9 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             {canPerform('SALES_RETURNS', 'edit') && (
               <>
                 {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => { await salesReturnsService.delete(localDoc.id); setEditingId(null); onRefresh(); }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
+                  onClick={async () => { await salesReturnsService.delete(localDoc.id); setEditingId(null); setLocalDoc(null); onRefresh(); }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
                 {canApprove && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => { handleApprove(localDoc.id); setEditingId(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar Devolución</Button>}
+                  onClick={() => { handleApprove(localDoc.id); setEditingId(null); setLocalDoc(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar Devolución</Button>}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   {isCreating ? 'Registrar Devolución' : 'Guardar Cambios'}
                 </Button>
@@ -343,7 +346,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                  <Button title="Aprobar Devolución" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
                )}
                <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
-               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => startEdit(row.id)}><Eye className="size-4" /></Button>
                {canPerform('SALES_RETURNS', 'delete') && (
                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                )}

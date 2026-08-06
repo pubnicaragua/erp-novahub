@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import {
-  TrendingUp, TrendingDown, DollarSign, Landmark,
-  AlertTriangle, CalendarClock, BarChart3, ArrowUpRight, ArrowDownRight, Wallet,
+  TrendingUp, TrendingDown, DollarSign, Landmark, BarChart3, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, ComposedChart, Line, Legend, Cell,

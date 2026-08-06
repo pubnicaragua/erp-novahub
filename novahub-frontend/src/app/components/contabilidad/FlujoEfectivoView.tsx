@@ -93,7 +93,13 @@ export function FlujoEfectivoView() {
   }, [dateFrom, dateTo]);
 
   useEffect(() => {
-    if (dateFrom && dateTo) fetchData();
+    if (dateFrom && dateTo) {
+      const load = async () => {
+        setLoading(true);
+        await fetchData();
+      };
+      load();
+    }
   }, [fetchData]);
 
   const fmt = (n: number) => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Camera, ImagePlus, Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "./utils";
@@ -36,8 +36,11 @@ export function ProductThumbnail({
   className,
 }: ProductThumbnailProps) {
   const [failed, setFailed] = useState(false);
-
-  useEffect(() => setFailed(false), [src]);
+  const [prevSrc, setPrevSrc] = useState(src);
+  if (prevSrc !== src) {
+    setPrevSrc(src);
+    setFailed(false);
+  }
 
   return (
     <div

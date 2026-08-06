@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Download, FileSpreadsheet, Pencil, Plus, Save, Settings2, Square, SquareCheckBig, Upload, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Download, FileSpreadsheet, Pencil, Plus, Settings2, Square, SquareCheckBig, Upload, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -186,9 +186,9 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
     gcTime: 5 * 60_000,
     placeholderData: keepPreviousData,
   });
-  const lists = matrixQuery.data?.lists || [];
-  const matrixItems: PriceListItem[] = matrixQuery.data?.items || [];
-  const matrixProducts = matrixQuery.data?.products || [];
+  const lists = useMemo(() => matrixQuery.data?.lists || [], [matrixQuery.data]);
+  const matrixItems = useMemo(() => (matrixQuery.data?.items || []) as PriceListItem[], [matrixQuery.data]);
+  const matrixProducts = useMemo(() => matrixQuery.data?.products || [], [matrixQuery.data]);
   const [visibleListIds, setVisibleListIds] = useState<string[]>([]);
   const [displayCurrency, setDisplayCurrency] = useState<'NIO' | 'USD'>(baseCurrency === 'USD' ? 'USD' : 'NIO');
   const [paginationEnabled, setPaginationEnabled] = useState(false);
@@ -210,7 +210,7 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
   const [importResult, setImportResult] = useState<PriceImportResult | null>(null);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importFile, setImportFile] = useState('');
-  const [importScopeIds, setImportScopeIds] = useState<string[]>([]);
+  const [_importScopeIds, setImportScopeIds] = useState<string[]>([]);
   const [importCurrency, setImportCurrency] = useState(baseCurrency === 'USD' ? 'USD' : 'NIO');
   const [importRate, setImportRate] = useState<number>(Number(exchangeRate || 1));
   const [newListOpen, setNewListOpen] = useState(false);
@@ -256,20 +256,28 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
   useEffect(() => {
     if (matrixQuery.isError) toast.error((matrixQuery.error as any)?.message || 'No se pudo cargar la matriz de precios');
   }, [matrixQuery.isError, matrixQuery.error]);
-  useEffect(() => {
-    const available = lists.map((list) => list.id);
-    if (!available.length) return;
-    setVisibleListIds((current) => current.length ? [...current.filter((id) => available.includes(id)), ...available.filter((id) => !current.includes(id))] : available);
-  }, [lists]);
-  useEffect(() => {
+  const [prevLists, setPrevLists] = useState(lists);
+  if (prevLists !== lists && lists.length) {
+    setPrevLists(lists);
+    setVisibleListIds((current) => current.length ? [...current.filter((id) => lists.some((list) => list.id === id)), ...lists.filter((list) => !current.includes(list.id)).map((list) => list.id)] : lists.map((list) => list.id));
+  }
+  const [prevBaseCurrency, setPrevBaseCurrency] = useState(baseCurrency);
+  if (prevBaseCurrency !== baseCurrency) {
+    setPrevBaseCurrency(baseCurrency);
     setDisplayCurrency(baseCurrency === 'USD' ? 'USD' : 'NIO');
-  }, [baseCurrency]);
-  useEffect(() => {
+  }
+  const [prevTotalPages, setPrevTotalPages] = useState(totalPages);
+  if (prevTotalPages !== totalPages) {
+    setPrevTotalPages(totalPages);
     setPage((current) => Math.min(current, totalPages));
-  }, [totalPages]);
-  useEffect(() => {
-    if (missingOpen) setMissingSelectedIds(new Set(missingProducts.map((product) => product.id)));
-  }, [missingOpen, missingProducts]);
+  }
+  const [prevMissingOpen, setPrevMissingOpen] = useState(missingOpen);
+  const [prevMissingProducts, setPrevMissingProducts] = useState(missingProducts);
+  if (missingOpen && (prevMissingOpen !== missingOpen || prevMissingProducts !== missingProducts)) {
+    setPrevMissingOpen(missingOpen);
+    setPrevMissingProducts(missingProducts);
+    setMissingSelectedIds(new Set(missingProducts.map((product) => product.id)));
+  }
 
   const toggleProduct = (id: string, source: 'main' | 'missing' = 'main') => {
     const setter = source === 'main' ? setSelectedProductIds : setMissingSelectedIds;

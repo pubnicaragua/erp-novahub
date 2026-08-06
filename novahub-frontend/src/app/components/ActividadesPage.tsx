@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Card } from './ui/card';
-import { Button } from './ui/button';
 import { Activity, ListTodo, CalendarDays, Bell, Database } from 'lucide-react';
 import { cn } from './ui/utils';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { motion, AnimatePresence } from 'motion/react';
 import { TareasView } from './actividades/TareasView';
 import { EventosView } from './actividades/EventosView';
@@ -67,15 +65,15 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const currentTab = activeSubModule || activeTab;
 
   useEffect(() => {
-    if (activeSubModule) {
-      setActiveTab(activeSubModule);
-    }
-  }, [activeSubModule]);
+    const load = async () => {
+      setLoading(true);
+      await fetchData();
+    };
+    load();
+  }, []);
 
   const tabs = [
     { id: 'tareas', label: 'Tareas', icon: ListTodo, color: 'text-blue-500', module: 'ACTIVITIES_TASKS' },
@@ -104,7 +102,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
             </div>
           </div>
 
-          <Tabs value={activeTab} className="w-full" onValueChange={(val) => {
+          <Tabs value={currentTab} className="w-full" onValueChange={(val) => {
             setActiveTab(val);
             if (onSubModuleChange) onSubModuleChange(val);
           }}>
@@ -134,16 +132,16 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
             
             <AnimatePresence mode="wait">
               <motion.div
-                key={activeTab}
+                key={currentTab}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                {activeTab === 'tareas' && <TareasView data={data.tareas} loading={loading} onRefresh={fetchData} />}
-                {activeTab === 'eventos' && <EventosView data={data.eventos} loading={loading} onRefresh={fetchData} />}
-                {activeTab === 'recordatorios' && <RecordatoriosView data={data.recordatorios} loading={loading} onRefresh={fetchData} />}
-                {activeTab === 'bitacora' && <BitacoraView data={data.bitacora} loading={loading} onRefresh={fetchData} />}
+                {currentTab === 'tareas' && <TareasView data={data.tareas} loading={loading} onRefresh={fetchData} />}
+                {currentTab === 'eventos' && <EventosView data={data.eventos} loading={loading} onRefresh={fetchData} />}
+                {currentTab === 'recordatorios' && <RecordatoriosView data={data.recordatorios} loading={loading} onRefresh={fetchData} />}
+                {currentTab === 'bitacora' && <BitacoraView data={data.bitacora} loading={loading} onRefresh={fetchData} />}
               </motion.div>
             </AnimatePresence>
           </Tabs>

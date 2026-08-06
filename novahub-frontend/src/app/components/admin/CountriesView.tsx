@@ -55,7 +55,13 @@ export function CountriesView() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await fetch();
+    };
+    load();
+  }, []);
 
   const filtered = countries.filter((c) =>
     !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.code.toLowerCase().includes(search.toLowerCase())

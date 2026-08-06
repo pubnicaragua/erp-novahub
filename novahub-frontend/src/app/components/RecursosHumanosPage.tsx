@@ -1,4 +1,3 @@
-import React from 'react';
 import { cn } from './ui/utils';
 import { useState, useEffect, useCallback } from 'react';
 import { Badge } from './ui/badge';
@@ -39,7 +38,7 @@ interface RecursosHumanosPageProps {
 export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: RecursosHumanosPageProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [, setRefreshing] = useState(false);
   
   // Map sidebar submodule IDs to tab values
   const subModuleToTab: Record<string, string> = {
@@ -61,13 +60,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
   );
   
   // Sync tab when activeSubModule changes from sidebar
-  React.useEffect(() => {
-    if (activeSubModule && subModuleToTab[activeSubModule]) {
-      if (activeTab !== subModuleToTab[activeSubModule]) {
-        setActiveTab(subModuleToTab[activeSubModule]);
-      }
-    }
-  }, [activeSubModule, activeTab]);
+  const currentTab = activeSubModule && subModuleToTab[activeSubModule] ? subModuleToTab[activeSubModule] : activeTab;
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
@@ -139,7 +132,8 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
   }, []);
 
   useEffect(() => {
-    fetchData();
+    const timer = setTimeout(() => { void fetchData(); }, 0);
+    return () => clearTimeout(timer);
   }, [fetchData]);
 
 
@@ -172,7 +166,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
       </motion.div>
 
       {/* Main Navigation Tabs - Estilo Compras (Píldoras Flexibles y con Scroll) */}
-      <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
+      <Tabs value={currentTab} className="w-full" onValueChange={handleTabChange}>
         <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'HR_DASHBOARD' },

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -7,12 +7,11 @@ import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Separator } from '../ui/separator';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
 import {
-  BarChart3, Plus, Save, RefreshCw, Check, X, Target, Weight, Calendar, Users, User, MessageSquare, Edit3
+  BarChart3, Plus, Save, RefreshCw, X, Target, Weight, Calendar, Users, User, MessageSquare, Edit3
 } from 'lucide-react';
 import { hrService } from '../../services/hr.service';
 import { useAuth } from '../../contexts/AuthContext';
@@ -64,9 +63,7 @@ export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
   const [savingResult, setSavingResult] = useState(false);
   const [resultForm, setResultForm] = useState(defaultKpiResult());
 
-  useEffect(() => { fetchAll(); }, []);
-
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
       const [defRes, resRes] = await Promise.all([
@@ -81,7 +78,12 @@ export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchAll, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchAll]);
 
   const resetDefForm = () => { setDefForm(defaultKpiDef()); setEditingDefId(null); setShowDefForm(false); };
   const openEditDef = (d: KpiDefinition) => {

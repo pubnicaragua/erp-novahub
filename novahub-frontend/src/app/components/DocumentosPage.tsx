@@ -27,32 +27,38 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
   });
   const [loading, setLoading] = useState(true);
 
-  const fetchData = async () => {
+  const fetchData = () => {
+    Promise.all([
+      contractsService.getAll().catch(() => []),
+      legalInvoicesService.getAll().catch(() => []),
+      reportsService.getAll().catch(() => []),
+      filesService.getAll().catch(() => [])
+    ]).then(
+      ([contratos, facturas, reportes, archivos]) => {
+        setData({ contratos, facturas, reportes, archivos });
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching documentos:', error);
+        setLoading(false);
+      }
+    );
+  };
+
+  const handleRefresh = () => {
     setLoading(true);
-    try {
-      const [contratos, facturas, reportes, archivos] = await Promise.all([
-        contractsService.getAll().catch(() => []),
-        legalInvoicesService.getAll().catch(() => []),
-        reportsService.getAll().catch(() => []),
-        filesService.getAll().catch(() => [])
-      ]);
-      setData({ contratos, facturas, reportes, archivos });
-    } catch (error) {
-      console.error('Error fetching documentos:', error);
-    } finally {
-      setLoading(false);
-    }
+    fetchData();
   };
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  useEffect(() => {
-    if (activeSubModule) {
-      setActiveTab(activeSubModule);
-    }
-  }, [activeSubModule]);
+  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
+  if (activeSubModule !== prevSubModule) {
+    setPrevSubModule(activeSubModule);
+    setActiveTab(activeSubModule || 'archivos');
+  }
 
   const tabs = [
     { id: 'archivos', label: 'Archivos', icon: HardDrive, color: 'text-blue-500', module: 'DOCUMENTS_FILES' },
@@ -76,7 +82,7 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
                   Nova Cloud
                 </h1>
                 <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/50 mt-2">
-                  Almacenamiento y gestión documental en la nube
+                  Almacenamiento y gestiÃ³n documental en la nube
                 </p>
               </div>
             </div>
@@ -115,10 +121,10 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                {activeTab === 'archivos' && <ArchivosView data={data.archivos} loading={loading} onRefresh={fetchData} />}
-                {activeTab === 'contratos' && <ContratosView data={data.contratos} loading={loading} onRefresh={fetchData} />}
-                {activeTab === 'facturas' && <FacturasLegalesView data={data.facturas} loading={loading} onRefresh={fetchData} />}
-                {activeTab === 'reportes' && <ReportesView data={data.reportes} loading={loading} onRefresh={fetchData} />}
+                {activeTab === 'archivos' && <ArchivosView data={data.archivos} loading={loading} onRefresh={handleRefresh} />}
+                {activeTab === 'contratos' && <ContratosView data={data.contratos} loading={loading} onRefresh={handleRefresh} />}
+                {activeTab === 'facturas' && <FacturasLegalesView data={data.facturas} loading={loading} onRefresh={handleRefresh} />}
+                {activeTab === 'reportes' && <ReportesView data={data.reportes} loading={loading} onRefresh={handleRefresh} />}
                 {activeTab === 'planes' && <NovaCloudPlanesView />}
               </motion.div>
             </AnimatePresence>

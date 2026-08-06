@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package,
@@ -26,7 +26,6 @@ import {
   CreditCard,
   RotateCcw,
   PackageCheck,
-  Receipt,
   BadgeDollarSign,
   Wallet,
   Banknote,
@@ -54,7 +53,6 @@ import {
   BookOpen,
   Cloud,
   Calculator,
-  Store,
   Coins,
   BookOpenCheck,
   PieChart,
@@ -63,7 +61,6 @@ import {
   FileBarChart,
   Settings2,
   TicketIcon,
-  Gavel,
   BriefcaseBusiness,
   Tags,
 } from 'lucide-react';
@@ -405,11 +402,13 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
   const { themeConfig } = useTheme();
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(activeModule && activeModule !== 'overview' ? [activeModule] : []));
 
-  useEffect(() => {
+  const [prevActiveModule, setPrevActiveModule] = useState(activeModule);
+  if (prevActiveModule !== activeModule) {
+    setPrevActiveModule(activeModule);
     if (activeModule && activeModule !== 'overview') {
       setExpandedMenus(new Set([activeModule]));
     }
-  }, [activeModule]);
+  }
 
   const activeMenuArray = user?.isPlatformAdmin ? platformMenuItems : menuItems;
 
@@ -503,7 +502,20 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     return false;
   };
 
-  let lastSection = '';
+  const sectionHeaderIds = (() => {
+    const headers = new Set<string>();
+    let lastSection = '';
+    for (const item of activeMenuArray) {
+      if (item.id !== 'overview' && !hasAccess(item.id as Module)) continue;
+      const visibleSubmenu = item.submenu
+        ? item.submenu.filter(subItem => hasSubmenuAccess(item.id, subItem.id))
+        : undefined;
+      if (item.submenu && (!visibleSubmenu || visibleSubmenu.length === 0)) continue;
+      if (item.section && item.section !== lastSection) headers.add(item.id);
+      if (item.section) lastSection = item.section;
+    }
+    return headers;
+  })();
 
   return (
     <>
@@ -571,8 +583,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
                 const isActive = activeModule === item.id;
                 const isExpanded = expandedMenus.has(item.id);
-                const showSection = item.section && item.section !== lastSection;
-                if (item.section) lastSection = item.section;
+                const showSection = sectionHeaderIds.has(item.id);
 
                 return (
                   <React.Fragment key={item.id}>

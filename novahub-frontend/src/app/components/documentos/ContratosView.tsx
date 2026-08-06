@@ -22,6 +22,7 @@ interface ContratosViewProps {
 export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onRefresh }) => {
   const { baseCurrency, displayCurrency, exchangeRate, convertAmount, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [nowMs] = useState(() => Date.now());
   const { canPerform } = useAuth();
 
   const statusOpts = [
@@ -60,7 +61,7 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, onR
   const kpis = [
     { title: 'Total Contratos', value: data.length,                                                                    icon: Scale,         color: 'text-blue-500',    bg: 'bg-blue-500/10'    },
     { title: 'Activos',         value: data.filter(c => (c.status||'').toUpperCase() === 'ACTIVE').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { title: 'Por Vencer',      value: data.filter(c => c.endDate && new Date(c.endDate) < new Date(Date.now() + 30*86400000) && (c.status||'').toUpperCase() === 'ACTIVE').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { title: 'Por Vencer',      value: data.filter(c => c.endDate && new Date(c.endDate) < new Date(nowMs + 30*86400000) && (c.status||'').toUpperCase() === 'ACTIVE').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
     { title: `Valor Total (${displayCurrency})`, value: formatConvertedAmount(totalValue, displayCurrency), icon: AlertTriangle, color: 'text-purple-500', bg: 'bg-purple-500/10' },
   ];
 

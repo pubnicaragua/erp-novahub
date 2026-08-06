@@ -94,7 +94,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    refreshRate();
+    Promise.resolve().then(refreshRate);
   }, [isAuthenticated, user?.tenantId]);
 
   const setCurrency = (c: Currency) => {

@@ -1,5 +1,5 @@
 import { cn } from './ui/utils';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Package,
@@ -53,6 +53,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const { formatAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState(activeSubModule || 'productos');
+  const currentTab = activeSubModule && INVENTORY_SECTIONS.some((section) => section.id === activeSubModule) ? activeSubModule : activeTab;
   const tenantKey = user?.tenantId || 'anonymous';
 
   const toList = (value: any) => value?.data || (Array.isArray(value) ? value : []);
@@ -68,49 +69,49 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     ...commonQueryOptions,
     queryKey: ['inventory', 'products', tenantKey],
     queryFn: () => inventoryService.getProducts(),
-    enabled: Boolean(user) && ['dashboard', 'productos', 'servicios', 'transferencias', 'ajustes'].includes(activeTab),
+    enabled: Boolean(user) && ['dashboard', 'productos', 'servicios', 'transferencias', 'ajustes'].includes(currentTab),
   });
   const warehousesQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'warehouses', tenantKey],
     queryFn: inventoryService.getWarehouses,
-    enabled: Boolean(user) && activeTab !== 'dashboard',
+    enabled: Boolean(user) && currentTab !== 'dashboard',
   });
   const categoriesQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'categories', tenantKey],
     queryFn: inventoryService.getCategories,
-    enabled: Boolean(user) && ['productos', 'servicios'].includes(activeTab),
+    enabled: Boolean(user) && ['productos', 'servicios'].includes(currentTab),
   });
   const transfersQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'transfers', tenantKey],
     queryFn: inventoryService.getTransfers,
-    enabled: Boolean(user) && activeTab === 'transferencias',
+    enabled: Boolean(user) && currentTab === 'transferencias',
   });
   const adjustmentsQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'adjustments', tenantKey],
     queryFn: inventoryService.getAdjustments,
-    enabled: Boolean(user) && activeTab === 'ajustes',
+    enabled: Boolean(user) && currentTab === 'ajustes',
   });
   const seriesQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'series', tenantKey],
     queryFn: inventoryService.getSeries,
-    enabled: Boolean(user) && ['productos', 'servicios', 'transferencias', 'ajustes'].includes(activeTab),
+    enabled: Boolean(user) && ['productos', 'servicios', 'transferencias', 'ajustes'].includes(currentTab),
   });
   const movementsQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'movements', tenantKey],
     queryFn: inventoryService.getMovements,
-    enabled: Boolean(user) && ['productos', 'servicios', 'transferencias', 'ajustes', 'movimientos'].includes(activeTab),
+    enabled: Boolean(user) && ['productos', 'servicios', 'transferencias', 'ajustes', 'movimientos'].includes(currentTab),
   });
   const dashboardQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'dashboard', tenantKey],
     queryFn: inventoryService.getDashboardStats,
-    enabled: Boolean(user) && activeTab === 'dashboard',
+    enabled: Boolean(user) && currentTab === 'dashboard',
   });
   const categories = toList(categoriesQuery.data).map((category: any) => ({
     ...category,
@@ -156,12 +157,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const productItems = data.products.filter((product: any) => product.itemType !== 'SERVICE');
   const serviceItems = data.products.filter((product: any) => product.itemType === 'SERVICE');
 
-  useEffect(() => {
-    if (!activeSubModule) return;
-    const exists = INVENTORY_SECTIONS.some((section) => section.id === activeSubModule);
-    if (exists) setActiveTab(activeSubModule);
-  }, [activeSubModule]);
-
   const handleExportData = async () => {
     try {
       const csvContent = [
@@ -182,7 +177,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       link.download = `inventario_${new Date().toISOString().split('T')[0]}.csv`;
       link.click();
       toast.success('Archivo CSV descargado');
-    } catch (e: any) {
+    } catch {
       toast.error('Error al exportar datos');
     }
   };
@@ -239,7 +234,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
 
       {/* Main Navigation Tabs */}
       <Tabs
-        value={activeTab}
+        value={currentTab}
         className="w-full"
         onValueChange={(nextTab) => {
           setActiveTab(nextTab);

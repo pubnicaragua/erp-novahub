@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   FileMinus, Plus, Search, TrendingUp, Clock, CheckCircle2, Eye, Trash2, ChevronLeft, Send, FileDown
 } from 'lucide-react';
@@ -54,14 +54,16 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
 
-  useEffect(() => {
+  const [prevEditingId, setPrevEditingId] = useState(editingId);
+  if (prevEditingId !== editingId) {
+    setPrevEditingId(editingId);
     if (editingId) {
       const cn = data.find(x => x.id === editingId);
       if (cn) setLocalDoc(JSON.parse(JSON.stringify(cn)));
     } else if (!isCreating) {
       setLocalDoc(null);
     }
-  }, [editingId]);
+  }
 
   const filtered = data.filter(cn =>
     (statusFilter === 'ALL' || String(cn.status || '').toUpperCase() === statusFilter) &&

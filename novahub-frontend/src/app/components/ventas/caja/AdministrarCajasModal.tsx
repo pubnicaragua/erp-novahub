@@ -67,8 +67,8 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
 
   useEffect(() => {
     if (open) {
-      fetchCajas();
-      fetchSucursales();
+      Promise.resolve().then(fetchCajas);
+      Promise.resolve().then(fetchSucursales);
     }
   }, [open]);
 

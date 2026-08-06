@@ -3,8 +3,7 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import { cn } from './ui/utils';
 import {
   Users, FileSpreadsheet, ClipboardList, FileText,
-  RotateCcw, CreditCard, FileOutput, FileMinus,
-  ShoppingCart, BarChart3, Vault, Calculator, Coins, Tags
+  RotateCcw, CreditCard, FileOutput, FileMinus, Calculator, Coins, Tags
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -68,7 +67,7 @@ interface VentasPageProps {
 
 export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: VentasPageProps) {
   const { user } = useAuth();
-  const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
+  const { filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
@@ -81,18 +80,11 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const tabsRef = useRef<HTMLDivElement>(null);
 
   // Sync section with Sidebar prop
-  useEffect(() => {
-    if (activeSubModule) {
-      const exists = SALES_SECTIONS.some(s => s.id === activeSubModule);
-      if (exists) {
-        setActiveSection(activeSubModule);
-      }
-    }
-  }, [activeSubModule]);
+  const currentSection = activeSubModule && SALES_SECTIONS.some(s => s.id === activeSubModule) ? activeSubModule : activeSection;
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      if (activeSection === 'clientes' && tabsRef.current) {
+      if (currentSection === 'clientes' && tabsRef.current) {
         tabsRef.current.scrollLeft = 0;
         return;
       }
@@ -100,7 +92,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
       activeTab?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeSection, isSidebarCollapsed]);
+  }, [currentSection, isSidebarCollapsed]);
   
   const tenantKey = user?.tenantId || 'anonymous';
   const toArray = (response: any) => Array.isArray(response) ? response : (response?.data || []);
@@ -128,10 +120,10 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     return () => window.clearTimeout(timer);
   }, [searchState]);
   const searchFor = (section: string) => debouncedSearchState[section]?.trim() || undefined;
-  const isListSection = !['facturacion-caja', 'control-caja'].includes(activeSection);
-  const needsCatalogs = isListSection && activeSection !== 'clientes';
-  const needsProducts = ['estimaciones', 'ordenes-venta', 'facturas', 'devoluciones-venta'].includes(activeSection);
-  const needsInvoices = ['ordenes-venta', 'facturas', 'pagos-recibidos', 'devoluciones-venta'].includes(activeSection);
+  const isListSection = !['facturacion-caja', 'control-caja'].includes(currentSection);
+  const needsCatalogs = isListSection && currentSection !== 'clientes';
+  const needsProducts = ['estimaciones', 'ordenes-venta', 'facturas', 'devoluciones-venta'].includes(currentSection);
+  const needsInvoices = ['ordenes-venta', 'facturas', 'pagos-recibidos', 'devoluciones-venta'].includes(currentSection);
   const customersPage = pageFor('clientes');
   const estimatesPage = pageFor('estimaciones');
   const ordersPage = pageFor('ordenes-venta');
@@ -154,7 +146,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const customersListQuery = useQuery({
     queryKey: ['sales', 'customers', tenantKey, customersPage.page, customersPage.pageSize, searchFor('clientes')],
     queryFn: () => customersService.getAll({ page: customersPage.page, pageSize: customersPage.pageSize, search: searchFor('clientes') }),
-    enabled: activeSection === 'clientes',
+    enabled: currentSection === 'clientes',
     placeholderData: keepPreviousData,
   });
   const customersCatalogQuery = useQuery({
@@ -166,13 +158,13 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const estimatesQuery = useQuery({
     queryKey: ['sales', 'estimates', tenantKey, estimatesPage.page, estimatesPage.pageSize, searchFor('estimaciones'), estimatesDates.dateFrom, estimatesDates.dateTo],
     queryFn: () => estimatesService.getAll({ page: estimatesPage.page, pageSize: estimatesPage.pageSize, search: searchFor('estimaciones'), ...estimatesDates }),
-    enabled: activeSection === 'estimaciones',
+    enabled: currentSection === 'estimaciones',
     placeholderData: keepPreviousData,
   });
   const ordersQuery = useQuery({
     queryKey: ['sales', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes-venta'), ordersDates.dateFrom, ordersDates.dateTo],
     queryFn: () => salesOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes-venta'), ...ordersDates }),
-    enabled: activeSection === 'ordenes-venta',
+    enabled: currentSection === 'ordenes-venta',
     placeholderData: keepPreviousData,
   });
   const invoicesQuery = useQuery({
@@ -184,25 +176,25 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const paymentsQuery = useQuery({
     queryKey: ['sales', 'payments', tenantKey, paymentsPage.page, paymentsPage.pageSize, searchFor('pagos-recibidos'), paymentsDates.dateFrom, paymentsDates.dateTo],
     queryFn: () => paymentsService.getAll({ page: paymentsPage.page, pageSize: paymentsPage.pageSize, search: searchFor('pagos-recibidos'), ...paymentsDates }),
-    enabled: activeSection === 'pagos-recibidos',
+    enabled: currentSection === 'pagos-recibidos',
     placeholderData: keepPreviousData,
   });
   const recurringQuery = useQuery({
     queryKey: ['sales', 'recurring-invoices', tenantKey, recurringPage.page, recurringPage.pageSize, searchFor('facturas-recurrentes'), recurringDates.dateFrom, recurringDates.dateTo],
     queryFn: () => recurringInvoicesService.getAll({ page: recurringPage.page, pageSize: recurringPage.pageSize, search: searchFor('facturas-recurrentes'), ...recurringDates }),
-    enabled: activeSection === 'facturas-recurrentes',
+    enabled: currentSection === 'facturas-recurrentes',
     placeholderData: keepPreviousData,
   });
   const returnsQuery = useQuery({
     queryKey: ['sales', 'returns', tenantKey, returnsPage.page, returnsPage.pageSize, searchFor('devoluciones-venta'), returnsDates.dateFrom, returnsDates.dateTo],
     queryFn: () => salesReturnsService.getAll({ page: returnsPage.page, pageSize: returnsPage.pageSize, search: searchFor('devoluciones-venta'), ...returnsDates }),
-    enabled: activeSection === 'devoluciones-venta',
+    enabled: currentSection === 'devoluciones-venta',
     placeholderData: keepPreviousData,
   });
   const creditNotesQuery = useQuery({
     queryKey: ['sales', 'credit-notes', tenantKey, creditNotesPage.page, creditNotesPage.pageSize, searchFor('notas-credito'), creditNotesDates.dateFrom, creditNotesDates.dateTo],
     queryFn: () => creditNotesService.getAll({ page: creditNotesPage.page, pageSize: creditNotesPage.pageSize, search: searchFor('notas-credito'), ...creditNotesDates }),
-    enabled: activeSection === 'notas-credito',
+    enabled: currentSection === 'notas-credito',
     placeholderData: keepPreviousData,
   });
   const productsQuery = useQuery({
@@ -214,24 +206,24 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const seriesQuery = useQuery({
     queryKey: ['sales', 'series', tenantKey],
     queryFn: () => inventoryService.getSeries(),
-    enabled: activeSection === 'facturas',
+    enabled: currentSection === 'facturas',
     placeholderData: keepPreviousData,
   });
   const warehousesQuery = useQuery({
     queryKey: ['sales', 'warehouses', tenantKey],
     queryFn: () => inventoryService.getWarehouses(),
-    enabled: activeSection === 'facturas',
+    enabled: currentSection === 'facturas',
     placeholderData: keepPreviousData,
   });
   const employeesQuery = useQuery({
     queryKey: ['sales', 'employees', tenantKey],
     queryFn: () => hrService.getEmployees(),
-    enabled: ['ordenes-venta', 'facturas'].includes(activeSection),
+    enabled: ['ordenes-venta', 'facturas'].includes(currentSection),
     placeholderData: keepPreviousData,
   });
 
   const data = {
-    clientes: toArray(activeSection === 'clientes' ? customersListQuery.data : customersCatalogQuery.data) as Customer[],
+    clientes: toArray(currentSection === 'clientes' ? customersListQuery.data : customersCatalogQuery.data) as Customer[],
     estimaciones: toArray(estimatesQuery.data) as Estimate[],
     ordenes: toArray(ordersQuery.data) as SalesOrder[],
     facturas: toArray(invoicesQuery.data) as Invoice[],
@@ -260,14 +252,14 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     employees: data.employees,
   };
 
-  const activeQuery = activeSection === 'clientes' ? customersListQuery
-    : activeSection === 'estimaciones' ? estimatesQuery
-      : activeSection === 'ordenes-venta' ? ordersQuery
-        : activeSection === 'facturas' ? invoicesQuery
-          : activeSection === 'facturas-recurrentes' ? recurringQuery
-            : activeSection === 'pagos-recibidos' ? paymentsQuery
-              : activeSection === 'devoluciones-venta' ? returnsQuery
-                : activeSection === 'notas-credito' ? creditNotesQuery
+  const activeQuery = currentSection === 'clientes' ? customersListQuery
+    : currentSection === 'estimaciones' ? estimatesQuery
+      : currentSection === 'ordenes-venta' ? ordersQuery
+        : currentSection === 'facturas' ? invoicesQuery
+          : currentSection === 'facturas-recurrentes' ? recurringQuery
+            : currentSection === 'pagos-recibidos' ? paymentsQuery
+              : currentSection === 'devoluciones-venta' ? returnsQuery
+                : currentSection === 'notas-credito' ? creditNotesQuery
                   : undefined;
   const loading = Boolean(activeQuery?.isPending || (needsCatalogs && customersCatalogQuery.isPending) || (needsProducts && productsQuery.isPending));
 
@@ -348,7 +340,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
             <BranchScopeFilter className="ml-auto" showLabel={false} />
           </div>
 
-          <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
+          <Tabs value={currentSection} className="w-full" onValueChange={(val) => { setActiveSection(val); if (onSubModuleChange) onSubModuleChange(val); }}>
             <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
             <TabsList ref={tabsRef} className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {SALES_SECTIONS.map((section) => {
@@ -374,22 +366,22 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
           <AnimatePresence mode="wait">
             <motion.div
               className="min-w-0 max-w-full"
-              key={activeSection}
+              key={currentSection}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              {activeSection === 'clientes' && (
+              {currentSection === 'clientes' && (
                 <ClientesView data={data.clientes} loading={loading} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} isSidebarCollapsed={isSidebarCollapsed} />
               )}
-              {activeSection === 'estimaciones' && (
+              {currentSection === 'estimaciones' && (
                 <EstimacionesView data={filteredData.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={filteredData.clientes} products={data.productos} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} dateFrom={estimatesDates.dateFrom} dateTo={estimatesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('estimaciones', from, to)} />
               )}
-              {activeSection === 'ordenes-venta' && (
+              {currentSection === 'ordenes-venta' && (
                 <OrdenesVentaView data={filteredData.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} targetOrderId={targetOrderId} onClearTargetOrderId={() => setTargetOrderId(null)} customers={filteredData.clientes} products={data.productos} employees={data.employees} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes-venta', value)} dateFrom={ordersDates.dateFrom} dateTo={ordersDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('ordenes-venta', from, to)} />
               )}
-              {activeSection === 'facturas' && (
+              {currentSection === 'facturas' && (
                 <FacturasView 
                   data={filteredData.facturas} 
                   loading={loading} 
@@ -410,22 +402,22 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                   onDateRangeChange={(from, to) => updateDateRange('facturas', from, to)}
                 />
               )}
-              {activeSection === 'facturas-recurrentes' && (
+              {currentSection === 'facturas-recurrentes' && (
                 <FacturasRecurrentesView data={filteredData.recurrentes} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} products={data.productos} pagination={pagination.recurrentes} onSearchChange={(value) => updateSearch('facturas-recurrentes', value)} dateFrom={recurringDates.dateFrom} dateTo={recurringDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('facturas-recurrentes', from, to)} />
               )}
-              {activeSection === 'pagos-recibidos' && (
+              {currentSection === 'pagos-recibidos' && (
                 <PagosRecibidosView data={filteredData.pagos} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} invoices={filteredData.facturas} pagination={pagination.pagos} onSearchChange={(value) => updateSearch('pagos-recibidos', value)} dateFrom={paymentsDates.dateFrom} dateTo={paymentsDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('pagos-recibidos', from, to)} />
               )}
-              {activeSection === 'devoluciones-venta' && (
+              {currentSection === 'devoluciones-venta' && (
                 <DevolucionesView data={filteredData.devoluciones} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} invoices={filteredData.facturas} products={data.productos} pagination={pagination.devoluciones} onSearchChange={(value) => updateSearch('devoluciones-venta', value)} dateFrom={returnsDates.dateFrom} dateTo={returnsDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('devoluciones-venta', from, to)} />
               )}
-              {activeSection === 'notas-credito' && (
+              {currentSection === 'notas-credito' && (
                 <NotasCreditoView data={filteredData.notasCredito} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} dateFrom={creditNotesDates.dateFrom} dateTo={creditNotesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('notas-credito', from, to)} />
               )}
-              {activeSection === 'listas-precios' && (
+              {currentSection === 'listas-precios' && (
                 <PriceListsView products={data.productos} onRefresh={fetchData} isSidebarCollapsed={isSidebarCollapsed} />
               )}
-              {activeSection === 'facturacion-caja' && (
+              {currentSection === 'facturacion-caja' && (
                 <FacturacionCajaView 
                   onNavigateToControlCaja={(registerId) => {
                     setControlCajaTargetParams(registerId ? { registerId, section: 'dashboard' } : null);
@@ -434,7 +426,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                   }}
                 />
               )}
-              {activeSection === 'control-caja' && (
+              {currentSection === 'control-caja' && (
                 <ControlDashboardCajaView 
                   onNavigateToFacturacion={() => {
                     setActiveSection('facturacion-caja');

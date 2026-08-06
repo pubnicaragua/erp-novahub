@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
-import { Separator } from '../ui/separator';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -49,8 +48,6 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AbsenceTypeForm>(DEFAULT_FORM);
 
-  useEffect(() => { fetchAbsenceTypes(); }, []);
-
   const fetchAbsenceTypes = async () => {
     try {
       setLoading(true);
@@ -63,6 +60,8 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
       setLoading(false);
     }
   };
+
+  useEffect(() => { Promise.resolve().then(fetchAbsenceTypes); }, []);
 
   const resetForm = () => {
     setForm(DEFAULT_FORM);

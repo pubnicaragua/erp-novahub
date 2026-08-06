@@ -16,15 +16,26 @@ const queryClient = new QueryClient({
   },
 });
 
-if (import.meta.env.VITE_SENTRY_DSN) {
-  Sentry.init({
-    dsn: import.meta.env.VITE_SENTRY_DSN,
-    environment: import.meta.env.MODE || 'development',
-    integrations: [Sentry.browserTracingIntegration(), Sentry.replayIntegration()],
-    tracesSampleRate: 0.1,
-    replaysSessionSampleRate: 0.1,
-    replaysOnErrorSampleRate: 1.0,
-  });
+Sentry.init({
+  dsn:
+    import.meta.env.VITE_SENTRY_DSN ||
+    'https://e8777c5efd3a5c6531d70483c75a508b@o4511838597611520.ingest.us.sentry.io/4511838767939584',
+  environment: import.meta.env.MODE || 'development',
+  integrations: [Sentry.browserTracingIntegration(), Sentry.replayIntegration()],
+  // Tracing
+  tracesSampleRate: parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || '1.0'),
+  // Set 'tracePropagationTargets' to control for which URLs distributed tracing should be enabled
+  tracePropagationTargets: ['localhost', /\/api/],
+  // Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1.0,
+});
+
+// Test trigger: visit /?sentry-test to send a metric + force a captured error
+if (new URLSearchParams(window.location.search).has('sentry-test')) {
+  const g = globalThis as typeof globalThis & { myUndefinedFunction?: () => void };
+  Sentry.metrics.count('test_counter', 1);
+  (g.myUndefinedFunction as () => void)();
 }
 
 createRoot(document.getElementById('root')!).render(

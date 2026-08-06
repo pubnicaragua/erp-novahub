@@ -65,8 +65,10 @@ export function CambiosPatrimonioView() {
   }, [dateFrom, dateTo]);
 
   useEffect(() => {
-    if (dateFrom && dateTo) fetchData();
-  }, [fetchData]);
+    if (!dateFrom || !dateTo) return;
+    const timer = window.setTimeout(fetchData, 0);
+    return () => window.clearTimeout(timer);
+  }, [dateFrom, dateTo, fetchData]);
 
   const netIncomePositive = (data?.netIncome ?? 0) >= 0;
 

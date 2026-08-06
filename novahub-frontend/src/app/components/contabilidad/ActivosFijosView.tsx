@@ -57,7 +57,13 @@ export function ActivosFijosView() {
     }
   }, []);
 
-  useEffect(() => { loadAssets(); }, [loadAssets]);
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await loadAssets();
+    };
+    load();
+  }, [loadAssets]);
 
   const filtered = assets.filter((a) =>
     !searchTerm ||

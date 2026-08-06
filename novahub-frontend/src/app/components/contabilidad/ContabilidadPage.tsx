@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   BookOpen, FileText, Scale, TrendingUp, PieChart,
   DollarSign, Landmark, Calendar, FileBarChart,
@@ -228,14 +228,16 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const help = HELP_DATA[activeSection];
 
-  useEffect(() => {
+  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
+  if (activeSubModule !== prevSubModule) {
+    setPrevSubModule(activeSubModule);
     if (activeSubModule && activeSubModule !== activeSection) {
       const validSection = SECTIONS.find(s => s.id === activeSubModule);
       if (validSection) {
         setActiveSection(validSection.id);
       }
     }
-  }, [activeSubModule]);
+  }
 
   const handleSectionChange = (id: string) => {
     setActiveSection(id);

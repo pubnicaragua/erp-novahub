@@ -51,8 +51,13 @@ export function useCajaSession(selectedRegister: string) {
   }, [selectedRegister]);
 
   useEffect(() => {
-    loadSessionData();
-  }, [loadSessionData]);
+    const load = async () => {
+      if (!selectedRegister) return;
+      setLoading(true);
+      await loadSessionData();
+    };
+    load();
+  }, [loadSessionData, selectedRegister]);
 
   const expectedNIO = session
     ? Number(session.initialAmountNIO || 0) +

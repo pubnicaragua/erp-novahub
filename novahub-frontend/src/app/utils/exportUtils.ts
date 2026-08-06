@@ -1,7 +1,7 @@
 export const exportToCsv = (filename: string, rows: any[][]) => {
   const processRow = (row: any[]) => {
     return row.map(val => {
-      let finalVal = val === null || val === undefined ? '' : 
+      const finalVal = val === null || val === undefined ? '' : 
         (val instanceof Date ? val.toLocaleDateString() : String(val));
 
       let result = finalVal.replace(/"/g, '""');

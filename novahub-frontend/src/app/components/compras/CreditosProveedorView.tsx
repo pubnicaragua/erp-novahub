@@ -43,25 +43,24 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
     }).catch();
   }, []);
 
-  useEffect(() => {
-    if (editingId) {
-      if (editingId === 'NEW') {
-         setLocalDoc({
-           supplierId: '',
-           date: new Date().toISOString(),
-           reason: '',
-           status: 'issued',
-           items: [],
-           total: 0
-         });
-      } else {
-         const found = data.find(x => x.id === editingId);
-         setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
-      }
+  const openEditor = (id: string | null) => {
+    setEditingId(id);
+    if (id === 'NEW') {
+      setLocalDoc({
+        supplierId: '',
+        date: new Date().toISOString(),
+        reason: '',
+        status: 'issued',
+        items: [],
+        total: 0,
+      });
+    } else if (id) {
+      const found = data.find(x => x.id === id);
+      setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
     } else {
       setLocalDoc(null);
     }
-  }, [editingId, data]);
+  };
 
   const filtered = data.filter(c =>
     (c.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,7 +84,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
 
   const handleUpdate = async (id: string | number, updates: Partial<SupplierCredit>) => {
     try { await vendorCreditsService.update(id as string, updates); toast.success('Crédito actualizado'); onRefresh(); }
-    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
   };
 
   const recalculatedTotal = (localDoc?.items || []).reduce((acc, it) => acc + (Number(it.quantity || 0) * Number(it.unitPrice || 0)), 0);
@@ -110,7 +109,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
         await vendorCreditsService.update(editingId!, finalDoc as any);
         toast.success('Crédito guardado');
       }
-      setEditingId(null);
+      openEditor(null);
       onRefresh();
     } catch (e: any) { 
         toast.error(e?.response?.data?.message || e?.message || 'Error al registrar'); 
@@ -124,7 +123,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
       await vendorCreditsService.delete(pendingDeleteId);
       toast.success('Crédito eliminado exitosamente');
       setPendingDeleteId(null);
-      setEditingId(null);
+      openEditor(null);
       onRefresh();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Error al eliminar');
@@ -161,7 +160,7 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={() => openEditor(null)} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -369,14 +368,14 @@ export function CreditosProveedorView({ data, loading, onRefresh }: Props) {
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('PURCHASES_RETURNS', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Crédito</Button>
+              <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Crédito</Button>
             )}
           </div>
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading}
           actions={(row) => (
              <div className="flex gap-1">
-              <Button title={canPerform('PURCHASES_RETURNS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <Button title={canPerform('PURCHASES_RETURNS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}><Eye className="size-4" /></Button>
               <PurchaseAuditButton entity="SUPPLIER_CREDIT" entityId={row.id} title="Auditoria del Credito" />
               {canPerform('PURCHASES_RETURNS', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>

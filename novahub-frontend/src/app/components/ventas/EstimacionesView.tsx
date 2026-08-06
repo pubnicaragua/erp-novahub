@@ -319,19 +319,21 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
 
   useEffect(() => {
-    if (editingId) {
-      const e = data.find(x => x.id === editingId);
-      setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
-      if (e) {
-        setLocalRates({ ...calculateRates(e), irRate: Number((e as any).irRate || 0), irTaxId: (e as any).irTaxId || '' });
-        setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0 || Number(line.irRate || 0) !== 0) ? 'individual' : 'global');
+    const timer = setTimeout(() => {
+      if (editingId) {
+        const e = data.find(x => x.id === editingId);
+        setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
+        if (e) {
+          setLocalRates({ ...calculateRates(e), irRate: Number((e as any).irRate || 0), irTaxId: (e as any).irTaxId || '' });
+          setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0 || Number(line.irRate || 0) !== 0) ? 'individual' : 'global');
+        }
+      } else {
+        setLocalDoc(null);
+        setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
       }
-    } else {
-      setLocalDoc(null);
-      setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [editingId]); // Intentionally removed 'data' to prevent server-refreshes from destroying mid-edit local states
-
 
   const columns: ColumnDef<Estimate>[] = [
     { 

@@ -20,7 +20,16 @@ export function TrialExtensionRequestsPanel() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchRequests() }, [])
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await api.get<any[]>('/admin/trial-extension-requests')
+        setRequests(res || [])
+      } catch { setRequests([]) }
+      finally { setLoading(false) }
+    }
+    void load()
+  }, [])
 
   const handleApprove = async (id: string, days: number) => {
     setProcessing(id)

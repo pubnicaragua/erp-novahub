@@ -73,6 +73,8 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
   });
   const [loading, setLoading] = useState(true);
 
+  const currentTab = activeSubModule && tabIds.includes(activeSubModule) ? activeSubModule : activeTab;
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -90,16 +92,15 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
   };
 
   useEffect(() => {
-    void fetchData();
+    const load = async () => {
+      setLoading(true);
+      await fetchData();
+    };
+    load();
   }, []);
 
   useEffect(() => {
-    if (!activeSubModule) return;
-    setActiveTab(tabIds.includes(activeSubModule) ? activeSubModule : 'alertas');
-  }, [activeSubModule]);
-
-  useEffect(() => {
-    if (activeTab !== 'mensajes') return;
+    if (currentTab !== 'mensajes') return;
     let active = true;
     const syncMessages = async () => {
       try {
@@ -125,7 +126,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
       window.removeEventListener('focus', syncWhenFocused);
       document.removeEventListener('visibilitychange', syncWhenVisible);
     };
-  }, [activeTab]);
+  }, [currentTab]);
 
   return (
     <div className="min-h-full bg-background">
@@ -144,7 +145,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
         </header>
 
         <Tabs
-          value={activeTab}
+          value={currentTab}
           className="w-full"
           onValueChange={(value) => {
             setActiveTab(value);
@@ -169,15 +170,15 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
 
           <AnimatePresence mode="wait">
             <motion.div
-              key={activeTab}
+              key={currentTab}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.18 }}
             >
-              {activeTab === 'alertas' && <AlertasView data={data.alertas} loading={loading} onRefresh={fetchData} />}
-              {activeTab === 'mensajes' && <MensajesView data={data.mensajes} loading={loading} onRefresh={fetchData} />}
-              {activeTab === 'push' && <PushView data={data.push} loading={loading} onRefresh={fetchData} />}
+              {currentTab === 'alertas' && <AlertasView data={data.alertas} loading={loading} onRefresh={fetchData} />}
+              {currentTab === 'mensajes' && <MensajesView data={data.mensajes} loading={loading} onRefresh={fetchData} />}
+              {currentTab === 'push' && <PushView data={data.push} loading={loading} onRefresh={fetchData} />}
             </motion.div>
           </AnimatePresence>
         </Tabs>

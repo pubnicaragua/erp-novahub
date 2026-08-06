@@ -4,7 +4,6 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
@@ -104,7 +103,8 @@ export function SucursalesView({
   };
 
   useEffect(() => {
-    fetchBranches();
+    const timeout = setTimeout(() => { void fetchBranches(); }, 0);
+    return () => clearTimeout(timeout);
   }, []);
 
   useEffect(() => {

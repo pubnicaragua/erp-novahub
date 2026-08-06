@@ -127,7 +127,10 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   useEffect(() => {
     mountedRef.current = true;
     loadDataRef.current = loadData;
-    loadData();
+    const load = async () => {
+      await loadData();
+    };
+    load();
 
     let focusTimer: ReturnType<typeof setTimeout>;
     const onVisible = () => {

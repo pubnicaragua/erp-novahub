@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../..
 import { Button } from '../../ui/button';
 import { ScrollArea } from '../../ui/scroll-area';
 import { Badge } from '../../ui/badge';
-import { Calculator, ArrowDownToLine, ArrowUpFromLine, Plus, Printer, Lock, Vault, BarChart3 } from 'lucide-react';
+import { Calculator, ArrowDownToLine, Plus, Printer, Lock, Vault, BarChart3 } from 'lucide-react';
 import { CashRegisterSession, SessionLog, CashRegisterCount, CashClosureMode } from '../../../services/caja.service';
 import { MovimientoManualModal } from './MovimientoManualModal';
 import { DenominationCounter, NIO_BILLS, NIO_COINS, USD_BILLS, USD_COINS, DenominationState } from './DenominationCounter';
@@ -61,7 +61,7 @@ export function SesionActivaStep({
     ...USD_COINS.map(v => ({ value: v, quantity: 0, type: 'coin' as const }))
   ]);
 
-  const renderLogIcon = (type: string, method?: string) => {
+  const renderLogIcon = (type: string) => {
     switch(type) {
       case 'SALE': return <Badge className="bg-emerald-500/10 text-emerald-500 border-none px-2 rounded-sm text-[10px]">VENTA</Badge>;
       case 'ENTRY': return <Badge className="bg-blue-500/10 text-blue-500 border-none px-2 rounded-sm text-[10px]">ENTRADA</Badge>;
@@ -101,15 +101,18 @@ export function SesionActivaStep({
     const latestDenominations = latestCount?.denominations || [];
     if (latestDenominations.length === 0) return;
 
-    setNioDenominations(current => current.map(denomination => ({
-      ...denomination,
-      quantity: Number(latestDenominations.find(d => d.currency === 'NIO' && Number(d.value) === denomination.value)?.quantity || 0),
-    })));
-    setUsdDenominations(current => current.map(denomination => ({
-      ...denomination,
-      quantity: Number(latestDenominations.find(d => d.currency === 'USD' && Number(d.value) === denomination.value)?.quantity || 0),
-    })));
-  }, [latestCount?.attempt]);
+    const timer = setTimeout(() => {
+      setNioDenominations(current => current.map(denomination => ({
+        ...denomination,
+        quantity: Number(latestDenominations.find(d => d.currency === 'NIO' && Number(d.value) === denomination.value)?.quantity || 0),
+      })));
+      setUsdDenominations(current => current.map(denomination => ({
+        ...denomination,
+        quantity: Number(latestDenominations.find(d => d.currency === 'USD' && Number(d.value) === denomination.value)?.quantity || 0),
+      })));
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [latestCount?.attempt, latestCount?.denominations]);
 
   const buildDenominations = () => [
     ...nioDenominations.filter(d => d.quantity > 0).map(d => ({ currency: 'NIO', value: d.value, quantity: d.quantity, subtotal: d.value * d.quantity })),

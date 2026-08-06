@@ -19,7 +19,7 @@ import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  PieChart, Pie, Cell, LabelList
+  PieChart, Pie, Cell
 } from 'recharts';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme';
 
@@ -321,7 +321,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
             const rule = rules[r] as CSSStyleRule;
             if (rule.cssText && hasUnsupported(rule.cssText)) {
               // Replace oklch values in the rule with fallback
-              let newCss = rule.cssText.replace(/oklch\([^)]*\)/gi, '#9ca3af');
+              const newCss = rule.cssText.replace(/oklch\([^)]*\)/gi, '#9ca3af');
               try {
                 sheets[s].deleteRule(r);
                 sheets[s].insertRule(newCss, r);

@@ -50,7 +50,11 @@ export function useApiData<T>(
 
   useEffect(() => {
     if (options.autoFetch) {
-      fetchData();
+      const load = async () => {
+        setLoading(true);
+        await fetchData();
+      };
+      load();
     }
   }, [fetchData, options.autoFetch]);
 

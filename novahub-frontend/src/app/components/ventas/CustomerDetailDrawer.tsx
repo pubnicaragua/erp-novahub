@@ -113,75 +113,79 @@ export function CustomerDetailDrawer({
   const [creatingPortalLink, setCreatingPortalLink] = useState(false);
 
   useEffect(() => {
-    if (!customerId) {
-      setDetail(null);
-      setInvoices([]);
-      setHistory([]);
-      setError(null);
-      return;
-    }
-
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    (async () => {
-      try {
-        const resp: any = await customersService.getById(customerId);
-        const cust = resp?.data?.data || resp?.data || resp;
-        if (cancelled) return;
-        if (cust && typeof cust === 'object' && cust.id) {
-          setDetail(cust);
-        }
-      } catch (e: any) {
-        if (!cancelled && !customerSnapshot) {
-          setError(e?.message || 'No se pudo cargar la información del cliente');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+    const timer = setTimeout(() => {
+      if (!customerId) {
+        setDetail(null);
+        setInvoices([]);
+        setHistory([]);
+        setError(null);
+        return;
       }
-    })();
 
-    // Fetch facturas asociadas
-    setLoadingInvoices(true);
-    (async () => {
-      try {
-        const resp: any = await invoicesService.getAll({ customerId, limit: 50 } as any);
-        const list = resp?.data?.data || resp?.data || resp;
-        if (!cancelled) {
-          setInvoices(Array.isArray(list) ? list : []);
+      setLoading(true);
+      setError(null);
+
+      (async () => {
+        try {
+          const resp: any = await customersService.getById(customerId);
+          const cust = resp?.data?.data || resp?.data || resp;
+          if (cancelled) return;
+          if (cust && typeof cust === 'object' && cust.id) {
+            setDetail(cust);
+          }
+        } catch (e: any) {
+          if (!cancelled) {
+            setError(e?.message || 'No se pudo cargar la información del cliente');
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
         }
-      } catch {
-        if (!cancelled) setInvoices([]);
-      } finally {
-        if (!cancelled) setLoadingInvoices(false);
-      }
-    })();
+      })();
 
-    (async () => {
-      try {
-        const response: any = await auditService.getEntityHistory('CUSTOMER', customerId);
-        const list = response?.data?.data || response?.data || response;
-        if (!cancelled) setHistory(Array.isArray(list) ? list : []);
-      } catch {
-        if (!cancelled) setHistory([]);
-      }
-    })();
+      // Fetch facturas asociadas
+      setLoadingInvoices(true);
+      (async () => {
+        try {
+          const resp: any = await invoicesService.getAll({ customerId, limit: 50 } as any);
+          const list = resp?.data?.data || resp?.data || resp;
+          if (!cancelled) {
+            setInvoices(Array.isArray(list) ? list : []);
+          }
+        } catch {
+          if (!cancelled) setInvoices([]);
+        } finally {
+          if (!cancelled) setLoadingInvoices(false);
+        }
+      })();
 
-    (async () => {
-      setPublicLinksLoading(true);
-      try { const links = await publicAccessService.list(customerId); if (!cancelled) setPublicLinks(links || []); }
-      catch { if (!cancelled) setPublicLinks([]); }
-      finally { if (!cancelled) setPublicLinksLoading(false); }
-    })();
+      (async () => {
+        try {
+          const response: any = await auditService.getEntityHistory('CUSTOMER', customerId);
+          const list = response?.data?.data || response?.data || response;
+          if (!cancelled) setHistory(Array.isArray(list) ? list : []);
+        } catch {
+          if (!cancelled) setHistory([]);
+        }
+      })();
+
+      (async () => {
+        setPublicLinksLoading(true);
+        try { const links = await publicAccessService.list(customerId); if (!cancelled) setPublicLinks(links || []); }
+        catch { if (!cancelled) setPublicLinks([]); }
+        finally { if (!cancelled) setPublicLinksLoading(false); }
+      })();
+    }, 0);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [customerId]);
 
   useEffect(() => {
-    setActiveTab('general');
+    const timer = setTimeout(() => setActiveTab('general'), 0);
+    return () => clearTimeout(timer);
   }, [customerId]);
 
   const customer = detail ?? customerSnapshot ?? null;
@@ -286,7 +290,7 @@ export function CustomerDetailDrawer({
 
           <ScrollArea className="customer-detail-scroll min-h-0 flex-1 overflow-hidden">
             <div className="p-6 space-y-6">
-              {error && (
+              {error && !customerSnapshot && (
                 <Card className="p-4 bg-rose-500/10 border-rose-500/20 text-rose-500 flex items-center gap-3">
                   <AlertCircle className="size-5 shrink-0" />
                   <p className="text-xs font-bold">{error}</p>
@@ -465,7 +469,7 @@ export function CustomerDetailDrawer({
                   </h3>
                   <div className="space-y-4 pl-2 border-l-2 border-border/40 ml-2 pt-1">
                     {history.length > 0 ? history.slice(0, 30).map((event: any) => {
-                      let details: any = {};
+                      let details: any;
                       try { details = event.details ? JSON.parse(event.details) : {}; } catch { details = {}; }
                       const changes = details.commercial_changes ? Object.entries(details.commercial_changes).map(([field, values]: any) => `${field}: ${values.before ?? '—'} → ${values.after ?? '—'}`).join(' · ') : '';
                       return <div key={event.id} className="relative pl-4 space-y-1"><div className={`absolute -left-[21px] top-1 size-3 rounded-full border-2 border-background ${event.action === 'CREATE' ? 'bg-primary' : 'bg-blue-500'}`} /><p className="text-xs font-bold text-foreground">{event.action === 'CREATE' ? 'Cliente registrado' : 'Datos comerciales actualizados'}</p><p className="text-[11px] text-muted-foreground">{changes || details.fields_updated || 'Actualización registrada'}</p><p className="text-[11px] text-muted-foreground flex items-center gap-1 font-mono"><Clock className="size-3" />{event.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : '—'}</p></div>;

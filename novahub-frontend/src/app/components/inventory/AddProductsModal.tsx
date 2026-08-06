@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { Badge } from '@/app/components/ui/badge';
 import { ProductImagePicker } from '../ui/ProductImage';
-import { Trash2, Plus, Package, Check, AlertTriangle } from 'lucide-react';
+import { Trash2, Plus, Package } from 'lucide-react';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { inventoryService } from '@/app/services/inventario.service';
 import { storageService } from '@/app/services/storage.service';
@@ -21,8 +21,24 @@ interface AddProductsModalProps {
   itemType?: 'PRODUCT' | 'SERVICE';
 }
 
+const makeDefaultDraft = (categoryId: string, itemType: string) => ({
+  id: `draft-${Date.now()}`,
+  code: '',
+  name: '',
+  categoryId,
+  itemType,
+  priceCurrency: 'NIO',
+  costPrice: '',
+  salePrice: '',
+  trackSerialNumbers: false,
+  initialStock: '',
+  initialWarehouseId: '',
+  imageFile: null as File | null,
+  imagePreviewUrl: ''
+});
+
 export function AddProductsModal({ open, onOpenChange, categories, warehouses, onRefresh, itemType = 'PRODUCT' }: AddProductsModalProps) {
-  const { formatAmount, exchangeRate, baseCurrency } = useCurrency();
+  const { exchangeRate, baseCurrency } = useCurrency();
   const [internalCategories, setInternalCategories] = useState<any[]>([]);
   const [internalWarehouses, setInternalWarehouses] = useState<any[]>([]);
 
@@ -42,21 +58,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
   const [productsList, setProductsList] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  const defaultDraft = {
-    id: `draft-${Date.now()}`,
-    code: '',
-    name: '',
-    categoryId: effectiveCategories[0]?.id || '',
-    itemType: catalogItemType,
-    priceCurrency: 'NIO',
-    costPrice: '',
-    salePrice: '',
-    trackSerialNumbers: false,
-    initialStock: '',
-    initialWarehouseId: '',
-    imageFile: null as File | null,
-    imagePreviewUrl: ''
-  };
+  const defaultDraft = makeDefaultDraft(effectiveCategories[0]?.id || '', catalogItemType);
 
   const [draftProduct, setDraftProduct] = useState<any>({ ...defaultDraft });
   
@@ -84,7 +86,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
   // Select the first one once loaded so the required category is not left empty.
   useEffect(() => {
     if (!open || draftProduct.categoryId || effectiveCategories.length === 0) return;
-    setDraftProduct((prev: any) => ({ ...prev, categoryId: effectiveCategories[0].id }));
+    const timer = setTimeout(() => {
+      setDraftProduct((prev: any) => ({ ...prev, categoryId: effectiveCategories[0].id }));
+    }, 0);
+    return () => clearTimeout(timer);
   }, [open, draftProduct.categoryId, effectiveCategories]);
 
   const handleImageSelected = (file: File) => {
@@ -238,7 +243,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       setSkuError('');
       onOpenChange(false);
       onRefresh();
-    } catch (error: any) {
+    } catch {
             toast.error(`Hubo un error guardando. Solo se guardaron ${successCount} ${catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}.`);
     } finally {
       setIsSaving(false);

@@ -167,12 +167,6 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (isOpen && entity && entityId) {
-      fetchLogs();
-    }
-  }, [isOpen, entity, entityId]);
-
   const fetchLogs = async () => {
     try {
       setLoading(true);
@@ -184,6 +178,16 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen && entity && entityId) {
+      const load = async () => {
+        setLoading(true);
+        await fetchLogs();
+      };
+      load();
+    }
+  }, [isOpen, entity, entityId]);
 
   const parseDetails = (details: string | null) => {
     if (!details) return null;

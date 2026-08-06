@@ -90,7 +90,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (parsed.tenantName === 'Solcom ERP') return defaultTheme;
         return parsed;
       }
-    } catch { }
+    } catch { /* intentionally empty */ }
     return defaultTheme;
   });
 
@@ -146,6 +146,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const updateTheme = (colors: Partial<BrandColors>) => {
+    setThemeConfig(prev => ({
+      ...prev,
+      colors: { ...prev.colors, ...colors },
+    }));
+  };
+
+  const updateConfig = (config: Partial<Omit<ThemeConfig, 'colors'>>) => {
+    setThemeConfig(prev => ({
+      ...prev,
+      ...config,
+    }));
+  };
+
   useEffect(() => {
     if (!tokenTrigger) return;
     api.get<any>('/branding/current')
@@ -161,20 +175,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(err => console.error('Failed to fetch branding:', err));
   }, [tokenTrigger]);
-
-  const updateTheme = (colors: Partial<BrandColors>) => {
-    setThemeConfig(prev => ({
-      ...prev,
-      colors: { ...prev.colors, ...colors },
-    }));
-  };
-
-  const updateConfig = (config: Partial<Omit<ThemeConfig, 'colors'>>) => {
-    setThemeConfig(prev => ({
-      ...prev,
-      ...config,
-    }));
-  };
 
   const resetTheme = () => {
     setThemeConfig(defaultTheme);

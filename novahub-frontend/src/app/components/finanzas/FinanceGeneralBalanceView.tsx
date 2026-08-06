@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Landmark, TrendingUp, TrendingDown } from 'lucide-react'
+import { Landmark } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { useCurrency } from '../../contexts/CurrencyContext'

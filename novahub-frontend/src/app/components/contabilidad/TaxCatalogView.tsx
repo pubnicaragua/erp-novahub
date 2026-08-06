@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -31,14 +31,17 @@ export function TaxCatalogView() {
   })
   const [editingId, setEditingId] = useState<string | null>(null)
 
-  const fetchEntries = () => {
+  const fetchEntries = useCallback(() => {
     setLoading(true)
     contabilidadService.getTaxCatalog().then((res: any) => {
       setEntries(res?.data || res || [])
     }).catch(() => {}).finally(() => setLoading(false))
-  }
+  }, [])
 
-  useEffect(() => { fetchEntries() }, [])
+  useEffect(() => {
+    const timer = window.setTimeout(fetchEntries, 0)
+    return () => window.clearTimeout(timer)
+  }, [fetchEntries])
 
   const handleCreate = async () => {
     if (!newEntry.name || !newEntry.code) { toast.error('Nombre y código requeridos'); return }

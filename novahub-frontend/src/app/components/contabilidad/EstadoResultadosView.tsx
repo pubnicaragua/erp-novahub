@@ -79,8 +79,10 @@ export function EstadoResultadosView() {
   }, [dateFrom, dateTo, showPreviousYear]);
 
   useEffect(() => {
-    if (dateFrom && dateTo) fetchData();
-  }, [fetchData]);
+    if (!dateFrom || !dateTo) return;
+    const timer = setTimeout(() => { void fetchData(); }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchData, dateFrom, dateTo]);
 
   const netIncome = (data?.totalIngresos || 0) - (data?.totalGastos || 0);
   const netIncomePrev = (data?.totalIngresosPrev || 0) - (data?.totalGastosPrev || 0);

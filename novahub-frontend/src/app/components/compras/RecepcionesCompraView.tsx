@@ -70,7 +70,9 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
     }).catch();
   }, []);
 
-  useEffect(() => {
+  const [prevEdit, setPrevEdit] = useState({ editingId, data });
+  if (editingId !== prevEdit.editingId || data !== prevEdit.data) {
+    setPrevEdit({ editingId, data });
     if (editingId) {
       if (editingId === 'NEW') {
          setLocalDoc({
@@ -87,7 +89,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, onConvertToInv
     } else {
       setLocalDoc(null);
     }
-  }, [editingId, data]);
+  }
 
   const filtered = data.filter(r =>
     (r.number||'').toLowerCase().includes(searchTerm.toLowerCase()) ||

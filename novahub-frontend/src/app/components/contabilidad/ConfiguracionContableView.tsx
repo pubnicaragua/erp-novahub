@@ -197,11 +197,6 @@ export function ConfiguracionContableView() {
 
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set(['invoice', 'payment']))
 
-  useEffect(() => {
-    loadConfig()
-    loadAccounts()
-  }, [])
-
   const loadConfig = async () => {
     setLoading(true)
     try {
@@ -236,6 +231,14 @@ export function ConfiguracionContableView() {
       // non-critical
     }
   }
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadConfig()
+      void loadAccounts()
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [])
 
   const loadConnections = useCallback(async () => {
     setConnectionsLoading(true)
@@ -326,7 +329,7 @@ export function ConfiguracionContableView() {
       const key = `field${m.fields.length + 1}`
       return {
         ...m,
-        fields: [...m.fields, { key, label: 'Nuevo Campo', side: 'debit' as const, description: '', defaultCode: '1000', defaultName: 'Cuenta', defaultType: 'ASSET' as 'ASSET' }],
+        fields: [...m.fields, { key, label: 'Nuevo Campo', side: 'debit' as const, description: '', defaultCode: '1000', defaultName: 'Cuenta', defaultType: 'ASSET' as const }],
       }
     }))
     setAccountMappings(prev => ({

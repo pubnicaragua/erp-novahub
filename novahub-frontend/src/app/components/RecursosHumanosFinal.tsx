@@ -6,8 +6,8 @@ import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { cn } from './ui/utils';
 import {
-  Users, DollarSign, Calendar, TrendingUp, UserCheck, Plus, Search, RefreshCw,
-  Edit2, Trash2, Save, X, Building2, Briefcase, CheckCircle2, XCircle, Clock
+  Users, DollarSign, Calendar, Plus, Search, RefreshCw,
+  Edit2, Trash2, Building2
 } from 'lucide-react';
 import { hrService } from '../services/hr.service';
 import { Input } from './ui/input';
@@ -16,6 +16,8 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
 import { ConfirmDialog } from './ui/ConfirmDialog';
+
+const makeEmployeeNumber = () => `EMP${Date.now().toString().slice(-6)}`;
 
 export function RecursosHumanosFinal() {
   const [loading, setLoading] = useState(true);
@@ -30,8 +32,6 @@ export function RecursosHumanosFinal() {
   });
   const [departmentForm, setDepartmentForm] = useState({ code: '', name: '', description: '', budget: '' });
   const [pendingDeleteEmployee, setPendingDeleteEmployee] = useState<{ id: string; name: string } | null>(null);
-
-  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
@@ -58,18 +58,26 @@ export function RecursosHumanosFinal() {
     }
   };
 
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await fetchData();
+    };
+    load();
+  }, []);
+
   const handleCreateEmployee = async () => {
     try {
       await hrService.createEmployee({
         ...employeeForm,
-        employeeNumber: `EMP${Date.now().toString().slice(-6)}`,
+        employeeNumber: makeEmployeeNumber(),
         salary: Number(employeeForm.salary),
       });
       toast.success('Empleado creado exitosamente');
       setIsEmployeeDialogOpen(false);
       resetEmployeeForm();
       fetchData();
-    } catch (error) {
+    } catch {
       toast.error('Error al crear empleado');
     }
   };
@@ -82,7 +90,7 @@ export function RecursosHumanosFinal() {
       setSelectedEmployee(null);
       resetEmployeeForm();
       fetchData();
-    } catch (error) {
+    } catch {
       toast.error('Error al actualizar empleado');
     }
   };
@@ -98,7 +106,7 @@ export function RecursosHumanosFinal() {
       toast.success('Empleado eliminado');
       setPendingDeleteEmployee(null);
       fetchData();
-    } catch (error) {
+    } catch {
       toast.error('Error al eliminar empleado');
     }
   };
@@ -110,7 +118,7 @@ export function RecursosHumanosFinal() {
       setIsDepartmentDialogOpen(false);
       setDepartmentForm({ code: '', name: '', description: '', budget: '' });
       fetchData();
-    } catch (error) {
+    } catch {
       toast.error('Error al crear departamento');
     }
   };

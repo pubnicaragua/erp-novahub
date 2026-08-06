@@ -544,7 +544,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(createUserObject(response.user));
       fetchBranches();
     } catch (error: any) {
-      throw new Error(error.message || 'Error al iniciar sesión. Verifica tus credenciales.');
+      throw new Error(error.message || 'Error al iniciar sesión. Verifica tus credenciales.', { cause: error });
     }
   }, [fetchBranches]);
 

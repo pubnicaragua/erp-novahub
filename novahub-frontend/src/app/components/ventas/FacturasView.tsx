@@ -15,7 +15,6 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { useGlobalSearch } from '../hooks/useGlobalSearch';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
@@ -64,7 +63,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState(sessionStorage.getItem('global-search-module') === 'facturas' ? (sessionStorage.removeItem('global-search-module') || sessionStorage.getItem('global-search-term') || '') : '');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'RECEIVABLE' | 'OVERDUE' | 'PAID'>('ALL');
-  useEffect(() => { try { sessionStorage.removeItem('global-search-term') } catch {} }, [])
+  useEffect(() => { try { sessionStorage.removeItem('global-search-term') } catch { /* intentionally empty */ } }, [])
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -165,54 +164,59 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   };
 
   useEffect(() => {
-    if (invoiceDraft) {
-      setIsCreating(true);
-      setEditingId(null);
-      const draftSnapshot = { paymentMethod: 'CASH', accountId: '', ...JSON.parse(JSON.stringify(invoiceDraft)) };
-      setLocalDoc(draftSnapshot);
-      setPricingMode(inferPricingMode(draftSnapshot));
+    const timer = window.setTimeout(() => {
+      if (invoiceDraft) {
+        setIsCreating(true);
+        setEditingId(null);
+        const draftSnapshot = { paymentMethod: 'CASH', accountId: '', ...JSON.parse(JSON.stringify(invoiceDraft)) };
+        setLocalDoc(draftSnapshot);
+        setPricingMode(inferPricingMode(draftSnapshot));
 
-      const sub = Number(invoiceDraft.subtotal || 0);
-      if (sub > 0) {
-        const dRate = (Number(invoiceDraft.discountAmount || 0) / sub) * 100;
-        const base = sub - Number(invoiceDraft.discountAmount || 0);
-        const tRate = base > 0 ? (Number(invoiceDraft.taxAmount || 0) / base) * 100 : 0;
-        setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
-      } else {
-        setLocalRates({ dRate: 0, tRate: 15 });
-      }
-
-      if (onClearInvoiceDraft) {
-        setTimeout(() => onClearInvoiceDraft(), 0);
-      }
-    } else if (editingId) {
-      const inv = data.find(x => x.id === editingId);
-      if (inv) {
-        const invoiceSnapshot = JSON.parse(JSON.stringify(inv));
-        setLocalDoc(invoiceSnapshot);
-        setPricingMode(inferPricingMode(invoiceSnapshot));
-        const sub = Number(inv.subtotal || 0);
+        const sub = Number(invoiceDraft.subtotal || 0);
         if (sub > 0) {
-          const dRate = (Number(inv.discountAmount || 0) / sub) * 100;
-          const base = sub - Number(inv.discountAmount || 0);
-          const tRate = base > 0 ? (Number(inv.taxAmount || 0) / base) * 100 : 0;
+          const dRate = (Number(invoiceDraft.discountAmount || 0) / sub) * 100;
+          const base = sub - Number(invoiceDraft.discountAmount || 0);
+          const tRate = base > 0 ? (Number(invoiceDraft.taxAmount || 0) / base) * 100 : 0;
           setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
+        } else {
+          setLocalRates({ dRate: 0, tRate: 15 });
         }
+
+        if (onClearInvoiceDraft) {
+          setTimeout(() => onClearInvoiceDraft(), 0);
+        }
+      } else if (editingId) {
+        const inv = data.find(x => x.id === editingId);
+        if (inv) {
+          const invoiceSnapshot = JSON.parse(JSON.stringify(inv));
+          setLocalDoc(invoiceSnapshot);
+          setPricingMode(inferPricingMode(invoiceSnapshot));
+          const sub = Number(inv.subtotal || 0);
+          if (sub > 0) {
+            const dRate = (Number(inv.discountAmount || 0) / sub) * 100;
+            const base = sub - Number(inv.discountAmount || 0);
+            const tRate = base > 0 ? (Number(inv.taxAmount || 0) / base) * 100 : 0;
+            setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
+          }
+        }
+      } else if (!isCreating) {
+        setLocalDoc(null);
       }
-    } else if (!isCreating) {
-      setLocalDoc(null);
-    }
-  }, [editingId, invoiceDraft, data]);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [editingId, invoiceDraft, data, isCreating, onClearInvoiceDraft]);
 
   useEffect(() => {
-    if (targetInvoiceId) {
+    if (!targetInvoiceId) return;
+    const timer = window.setTimeout(() => {
       const exists = data.find(x => x.id === targetInvoiceId);
       if (exists) {
         setEditingId(targetInvoiceId);
         setIsCreating(false);
         onClearTargetInvoiceId?.();
       }
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [targetInvoiceId, data, onClearTargetInvoiceId]);
 
   const filtered = data.filter(f =>

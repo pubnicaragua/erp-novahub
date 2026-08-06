@@ -18,6 +18,29 @@ const normalizeList = (res: any): any[] => {
   return []
 }
 
+const Block = ({ title, icon: Icon, count, children }: { title: string; icon: any; count: number; children: React.ReactNode }) => (
+  <Card className="bg-card border-border/50">
+    <CardHeader className="pb-2">
+      <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+        <Icon className="size-4 text-primary" /> {title} ({count})
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="space-y-3">
+      {children}
+    </CardContent>
+  </Card>
+)
+
+const ItemRow = ({ name, extra, onDelete }: { name: string; extra?: React.ReactNode; onDelete: () => void }) => (
+  <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/20 text-xs">
+    <span className="font-medium truncate">{name}</span>
+    <div className="flex items-center gap-1 shrink-0">
+      {extra}
+      <button onClick={onDelete} className="text-rose-500 hover:bg-rose-500/10 p-1 rounded"><Trash2 className="size-3" /></button>
+    </div>
+  </div>
+)
+
 export function TeamManagementPanel({ tenantId, tenantName }: TeamPanelProps) {
   const [departments, setDepartments] = useState<any[]>([])
   const [roles, setRoles] = useState<any[]>([])
@@ -39,7 +62,7 @@ export function TeamManagementPanel({ tenantId, tenantName }: TeamPanelProps) {
     } catch { /* silent */ }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { Promise.resolve().then(load) }, [])
 
   const createDepartment = async () => {
     const name = newDept.trim()
@@ -105,29 +128,6 @@ export function TeamManagementPanel({ tenantId, tenantName }: TeamPanelProps) {
       load()
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar') }
   }
-
-  const Block = ({ title, icon: Icon, count, children }: { title: string; icon: any; count: number; children: React.ReactNode }) => (
-    <Card className="bg-card border-border/50">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-          <Icon className="size-4 text-primary" /> {title} ({count})
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {children}
-      </CardContent>
-    </Card>
-  )
-
-  const ItemRow = ({ name, extra, onDelete }: { name: string; extra?: React.ReactNode; onDelete: () => void }) => (
-    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/20 text-xs">
-      <span className="font-medium truncate">{name}</span>
-      <div className="flex items-center gap-1 shrink-0">
-        {extra}
-        <button onClick={onDelete} className="text-rose-500 hover:bg-rose-500/10 p-1 rounded"><Trash2 className="size-3" /></button>
-      </div>
-    </div>
-  )
 
   return (
     <div className="space-y-6">

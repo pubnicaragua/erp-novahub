@@ -1,6 +1,5 @@
-import React from 'react';
 import { useState } from 'react';
-import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Send, CheckCircle2, XCircle, History, Ban } from 'lucide-react';
+import { Plus, Search, Filter, Grid, List, Edit2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Send, CheckCircle2, XCircle, History, Ban } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -80,9 +79,11 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
 
-  React.useEffect(() => {
+  const [prevFilters, setPrevFilters] = useState({ searchTerm, filterDept, filterStatus, pageSize });
+  if (searchTerm !== prevFilters.searchTerm || filterDept !== prevFilters.filterDept || filterStatus !== prevFilters.filterStatus || pageSize !== prevFilters.pageSize) {
+    setPrevFilters({ searchTerm, filterDept, filterStatus, pageSize });
     setCurrentPage(1);
-  }, [searchTerm, filterDept, filterStatus, pageSize]);
+  }
 
   const totalPages = Math.ceil(filteredEmployees.length / pageSize);
   const paginatedEmployees = filteredEmployees.slice((currentPage - 1) * pageSize, currentPage * pageSize);

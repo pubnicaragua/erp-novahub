@@ -130,8 +130,19 @@ export function DiarioView() {
     }
   }, []);
 
-  useEffect(() => { loadJournals(); }, [loadJournals]);
-  useEffect(() => { loadAccounts(); }, [loadAccounts]);
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await loadJournals();
+    };
+    load();
+  }, [loadJournals]);
+  useEffect(() => {
+    const load = async () => {
+      await loadAccounts();
+    };
+    load();
+  }, [loadAccounts]);
 
   const accountOptions = accounts
     .filter((account) => account.isActive && account.allowManualEntry !== false && account.acceptsPostings !== false)

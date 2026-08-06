@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { User, PaginatedResponse, ApiFilters } from '../types';
+import type { User, ApiFilters } from '../types';
 
 export const usersService = {
   getAll: (filters?: ApiFilters) => api.get<User[]>('/users', filters as any),

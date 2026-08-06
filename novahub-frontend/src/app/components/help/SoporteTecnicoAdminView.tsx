@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   LifeBuoy, Search, X, Clock, CheckCircle2, Loader2, MessageSquareText,
   ImagePlus, Eye, ChevronRight, Building2, Send, AlertTriangle, Trash2
@@ -47,22 +47,7 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
   const [saving, setSaving] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
-  useEffect(() => { fetchAll(); }, []);
-
-  useEffect(() => {
-    if (activeSubModule && activeSubModule !== filterStatus) {
-      setFilterStatus(activeSubModule);
-    }
-  }, [activeSubModule]);
-
-  const handleStatusChange = (status: string) => {
-    setFilterStatus(status);
-    if (onSubModuleChange) {
-      onSubModuleChange(status);
-    }
-  };
-
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
       const [ticketsRes, statsRes] = await Promise.all([
@@ -73,6 +58,26 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange, is
       setStats(statsRes || {});
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al cargar soporte técnico'); }
     finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchAll, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchAll]);
+
+  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
+  if (prevSubModule !== activeSubModule) {
+    setPrevSubModule(activeSubModule);
+    if (activeSubModule && activeSubModule !== filterStatus) {
+      setFilterStatus(activeSubModule);
+    }
+  }
+
+  const handleStatusChange = (status: string) => {
+    setFilterStatus(status);
+    if (onSubModuleChange) {
+      onSubModuleChange(status);
+    }
   };
 
   const handleRespond = async () => {

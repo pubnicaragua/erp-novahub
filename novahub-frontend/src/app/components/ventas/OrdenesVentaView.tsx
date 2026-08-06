@@ -167,10 +167,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   useEffect(() => {
     if (!targetOrderId) return;
-    if (data.some((order) => order.id === targetOrderId)) {
-      setEditingId(targetOrderId);
-      onClearTargetOrderId?.();
-    }
+    const timer = setTimeout(() => {
+      if (data.some((order) => order.id === targetOrderId)) {
+        setEditingId(targetOrderId);
+        onClearTargetOrderId?.();
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [targetOrderId, data, onClearTargetOrderId]);
 
   const filtered = data.filter(o => 
@@ -289,17 +292,20 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0 });
 
   useEffect(() => {
-    if (editingId) {
-      const e = data.find(x => x.id === editingId);
-      setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
-      if (e) {
-        setLocalRates(calculateRates(e));
-        setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0 || Number(line.irRate || 0) !== 0) ? 'individual' : 'global');
+    const timer = setTimeout(() => {
+      if (editingId) {
+        const e = data.find(x => x.id === editingId);
+        setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
+        if (e) {
+          setLocalRates(calculateRates(e));
+          setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0 || Number(line.irRate || 0) !== 0) ? 'individual' : 'global');
+        }
+      } else {
+        setLocalDoc(null);
+        setLocalRates({ dRate: 0, tRate: 0 });
       }
-    } else {
-      setLocalDoc(null);
-      setLocalRates({ dRate: 0, tRate: 0 });
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [editingId]); // Intentionally removed 'data' to prevent server-refreshes from destroying mid-edit local states
 
   const handleAddOrder = async () => {

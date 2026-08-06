@@ -93,14 +93,16 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
 
   useEffect(() => {
     if (selectedId && !data.some((thread) => thread.id === selectedId)) {
-      setSelectedId(null);
-      setMobileThreadOpen(false);
+      Promise.resolve().then(() => {
+        setSelectedId(null);
+        setMobileThreadOpen(false);
+      });
     }
   }, [data, selectedId]);
 
   useEffect(() => {
     if (!selectedId && data.length > 0 && window.matchMedia('(min-width: 1024px)').matches) {
-      setSelectedId(data[0].id);
+      Promise.resolve().then(() => setSelectedId(data[0].id));
     }
   }, [data, selectedId]);
 
@@ -109,7 +111,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
     if (!visibleThread || visibleThread.unreadCount === 0 || markingReadId === visibleThread.id) return;
 
     let active = true;
-    setMarkingReadId(visibleThread.id);
+    Promise.resolve().then(() => setMarkingReadId(visibleThread.id));
     void messagesService.markRead(visibleThread.id)
       .then(() => onRefresh())
       .catch((e: any) => {

@@ -77,7 +77,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, departmentDialogO
     }
   };
 
-  useEffect(() => { void load(); }, [tenantId]);
+  useEffect(() => { void Promise.resolve().then(load); }, [tenantId]);
 
   const groupedModules = useMemo(() => ALL_PERM_MODULES.reduce((groups: Record<string, any[]>, module: any) => {
     const group = module.parent || module.id;

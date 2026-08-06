@@ -9,7 +9,7 @@ import {
 } from './table';
 import { Input } from './input';
 import { cn } from './utils';
-import { Pencil, Trash2, Copy, Eraser, MoreHorizontal, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Pencil, Trash2, Copy, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { motion, AnimatePresence } from 'motion/react';
@@ -63,8 +63,6 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   actions,
   showSelection = true,
   bulkActions,
-  showClearSelection = true,
-  onAddRow,
   pagination,
   actionsWidth = 'w-32',
   fitContent = false,
@@ -110,9 +108,11 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     return [...new Set(boundaries)].sort((a, b) => a - b);
   }, [columns, showSelection]);
 
-  useEffect(() => {
+  const [prevInitialData, setPrevInitialData] = useState(initialData);
+  if (prevInitialData !== initialData) {
+    setPrevInitialData(initialData);
     setData(initialData);
-  }, [initialData]);
+  }
 
   useEffect(() => {
     if (!showHorizontalControls || layoutMode === 'cards') return;
@@ -134,7 +134,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     };
   }, [columns.length, data.length, layoutMode, showHorizontalControls, tableMinWidth]);
 
-  const scrollTable = (direction: 'left' | 'right') => {
+  const scrollTable = useCallback((direction: 'left' | 'right') => {
     const element = tableScrollRef.current;
     if (!element) return;
     const targets = getColumnScrollTargets();
@@ -143,7 +143,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       ? targets.find((target) => target > currentPosition + 4) ?? targets[targets.length - 1]
       : [...targets].reverse().find((target) => target < currentPosition - 4) ?? targets[0];
     element.scrollTo({ left: nextPosition, behavior: 'smooth' });
-  };
+  }, [getColumnScrollTargets]);
 
   useEffect(() => {
     if (!showHorizontalControls || layoutMode === 'cards') return;
@@ -159,7 +159,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     };
     window.addEventListener('keydown', handleWindowKeyDown);
     return () => window.removeEventListener('keydown', handleWindowKeyDown);
-  }, [layoutMode, showHorizontalControls]);
+  }, [layoutMode, showHorizontalControls, scrollTable]);
 
   const handleTableKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
@@ -275,28 +275,6 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     setData(newData);
     toast.success(`Sincronizadas ${updatedCount} filas desde Excel`);
   }, [data, columns, onRowUpdate, idField]);
-
-  const handleAddNewRow = () => {
-    if (onAddRow) {
-      onAddRow();
-    } else {
-      const newId = `new-${Math.random().toString(36).substr(2, 9)}`;
-      const newRow = { [idField]: newId } as any;
-      // Initialize with empty strings for all keys in columns
-      columns.forEach(col => {
-        newRow[col.key as string] = '';
-      });
-      setData(prev => [...prev, newRow as T]);
-      setDraftRows(prev => new Set(prev).add(newId));
-      
-      // Auto-focus first editable cell of new row
-      const firstEditable = columns.find(c => c.editable);
-      if (firstEditable) {
-        setEditingCell({ rowId: newId, colKey: firstEditable.key as string });
-        setEditValue('');
-      }
-    }
-  };
 
   const handleBulkDuplicate = async () => {
     if (!onBulkDuplicate || selectedIds.size === 0) return;

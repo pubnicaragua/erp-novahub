@@ -11,10 +11,8 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
-  Globe,
   Wallet,
   Building2,
-  Euro,
   CircleDollarSign,
   ShoppingCart
 } from 'lucide-react';
@@ -29,17 +27,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from './ui/popover';
+
+
 import { useAuth, type Module } from '../contexts/AuthContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { ScrollArea } from './ui/scroll-area';
-import { cn } from './ui/utils';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
 import { Label } from './ui/label';

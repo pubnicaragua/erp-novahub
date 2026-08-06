@@ -188,7 +188,13 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
     }
   }, []);
 
-  useEffect(() => { fetchAccounts(true); }, [fetchAccounts]);
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await fetchAccounts(true);
+    };
+    load();
+  }, [fetchAccounts]);
 
   const flatList = useMemo(() => flattenTree(accounts), [accounts]);
 

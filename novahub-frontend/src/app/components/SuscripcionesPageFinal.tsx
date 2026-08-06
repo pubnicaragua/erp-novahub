@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { toast } from 'sonner';
@@ -7,7 +7,7 @@ import { motion } from 'motion/react';
 import { cn } from './ui/utils';
 import {
   Building2, Users, CheckCircle2, XCircle, Clock, Plus, Search, Edit2, Trash2,
-  UserPlus, TrendingUp, Activity, DollarSign, Zap, ShieldCheck, LayoutGrid, HandCoins, Globe, Headphones, BellRing, Settings, FileText, CalendarDays, Package, Users as UserIcon, Briefcase, BarChart3
+  UserPlus, TrendingUp, DollarSign, Zap, HandCoins, Headphones, BellRing, Settings, FileText, CalendarDays, Package, Users as UserIcon, BarChart3
 } from 'lucide-react';
 import { subscriptionsService } from '../services/subscriptions.service';
 import { tenantsService } from '../services/tenants.service';
@@ -57,8 +57,6 @@ export function SuscripcionesPageFinal() {
   const [moduleForm, setModuleForm] = useState({ module: '', price: 0, notes: '' });
   const [pendingDeleteTenant, setPendingDeleteTenant] = useState<{ id: string; name: string } | null>(null);
 
-  useEffect(() => { fetchData(); }, []);
-
   const fetchData = async () => {
     if (!isPlatformAdmin) {
       setLoading(false);
@@ -81,6 +79,14 @@ export function SuscripcionesPageFinal() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await fetchData();
+    };
+    load();
+  }, []);
 
   const handleCreateTenant = async () => {
     if (!isPlatformAdmin) return toast.error('No autorizado');
@@ -123,7 +129,7 @@ export function SuscripcionesPageFinal() {
       setSelectedTenant(null);
       resetTenantForm();
       fetchData();
-    } catch (error) {
+    } catch {
       toast.error('Error al actualizar empresa');
     }
   };
@@ -140,7 +146,7 @@ export function SuscripcionesPageFinal() {
       toast.success('Empresa eliminada');
       setPendingDeleteTenant(null);
       fetchData();
-    } catch (error) {
+    } catch {
       toast.error('Error al eliminar empresa');
     }
   };
@@ -203,7 +209,7 @@ export function SuscripcionesPageFinal() {
       await subscriptionsService.updateRequestStatus(id, { status: 'APPROVED' });
       toast.success('Solicitud aprobada');
       fetchData();
-    } catch (error) {
+    } catch {
       toast.error('Error al aprobar solicitud');
     }
   };
@@ -214,7 +220,7 @@ export function SuscripcionesPageFinal() {
       await subscriptionsService.updateRequestStatus(id, { status: 'REJECTED' });
       toast.success('Solicitud rechazada');
       fetchData();
-    } catch (error) {
+    } catch {
       toast.error('Error al rechazar solicitud');
     }
   };

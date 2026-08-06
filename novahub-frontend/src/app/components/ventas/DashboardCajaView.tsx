@@ -35,21 +35,19 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
   const [startDate, setStartDate] = useState(getTodayDateString());
   const [endDate, setEndDate] = useState(getTodayDateString());
 
-  const loadDashboard = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await cajaService.getDashboard(undefined, registerId, startDate, endDate);
-      setData(res);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar dashboard de caja');
-    } finally {
-      setLoading(false);
-    }
-  }, [startDate, endDate, registerId]);
-
   useEffect(() => {
-    void loadDashboard();
-  }, [loadDashboard]);
+    const load = async () => {
+      try {
+        const res = await cajaService.getDashboard(undefined, registerId, startDate, endDate);
+        setData(res);
+      } catch (e: any) {
+        toast.error(e?.response?.data?.message || e?.message || 'Error al cargar dashboard de caja');
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
+  }, [startDate, endDate, registerId]);
 
   if (loading) {
     return (

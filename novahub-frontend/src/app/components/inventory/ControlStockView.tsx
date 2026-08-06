@@ -87,7 +87,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     unitCost: 0,
     currency: baseCurrency,
   });
-  const [allocations, setAllocations] = useState<ReceptionAllocation[]>([
+  const [allocations, setAllocations] = useState<ReceptionAllocation[]>(() => [
     { id: `alloc-${Date.now()}`, warehouseId: '', quantity: 0 },
   ]);
   const [saving, setSaving] = useState(false);

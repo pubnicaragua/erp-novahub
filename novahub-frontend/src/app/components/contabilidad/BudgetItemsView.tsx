@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Wallet,
-  AlertTriangle, CheckCircle
+  Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Wallet
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -185,7 +184,6 @@ export function BudgetItemsView() {
                 const assigned = Number(item.assignedAmount);
                 const executed = Number(item.executedAmount);
                 const available = assigned - executed;
-                const pct = assigned > 0 ? (executed / assigned) * 100 : 0;
                 return (
                   <tr key={item.id} className="border-b border-border/20 hover:bg-muted/10 transition-colors">
                     <td className="px-4 py-3 font-mono text-xs font-bold">{item.code}</td>

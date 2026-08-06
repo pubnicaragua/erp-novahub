@@ -48,30 +48,29 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
     }).catch();
   }, []);
 
-  useEffect(() => {
-    if (editingId) {
-      if (editingId === 'NEW') {
-         const nextMonth = new Date();
-         nextMonth.setMonth(nextMonth.getMonth() + 1);
-         setLocalDoc({
-           supplierId: '',
-           frequency: 'monthly',
-           startDate: new Date().toISOString(),
-           nextInvoiceDate: nextMonth.toISOString(),
-            currency: displayCurrency,
-           exchangeRate: globalRate,
-           status: 'ACTIVE',
-           items: [],
-           total: 0
-         } as any);
-      } else {
-         const found = data.find(x => x.id === editingId);
-         setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
-      }
+  const openEditor = (id: string | null) => {
+    setEditingId(id);
+    if (id === 'NEW') {
+      const nextMonth = new Date();
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      setLocalDoc({
+        supplierId: '',
+        frequency: 'monthly',
+        startDate: new Date().toISOString(),
+        nextInvoiceDate: nextMonth.toISOString(),
+        currency: displayCurrency,
+        exchangeRate: globalRate,
+        status: 'ACTIVE',
+        items: [],
+        total: 0,
+      } as any);
+    } else if (id) {
+      const found = data.find(x => x.id === id);
+      setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
     } else {
       setLocalDoc(null);
     }
-  }, [editingId, data, globalRate]);
+  };
 
   const filtered = data.filter(r =>
     ((r as any).description||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -97,7 +96,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
 
   const handleUpdate = async (id: string | number, updates: any) => {
     try { await recurringSupplierInvoicesService.update(id as string, updates); toast.success('Actualizado'); onRefresh(); }
-    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error(); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
   };
 
   const handleSaveDoc = async () => {
@@ -113,7 +112,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
         await recurringSupplierInvoicesService.update(editingId!, finalDoc as any);
         toast.success('Factura recurrente guardada');
       }
-      setEditingId(null);
+      openEditor(null);
       onRefresh();
     } catch (e: any) { 
         toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la factura recurrente'); 
@@ -154,7 +153,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={() => openEditor(null)} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -358,7 +357,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
                await recurringSupplierInvoicesService.delete(pendingDeleteId);
                toast.success('Eliminado');
                setPendingDeleteId(null);
-               setEditingId(null);
+               openEditor(null);
                onRefresh();
              } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); }
             finally { setDeleteLoading(false); }
@@ -405,7 +404,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
           <div className="flex items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('PURCHASES_INVOICES_REC', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Agregar Factura Recurrente</Button>
+              <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Agregar Factura Recurrente</Button>
             )}
           </div>
         </div>
@@ -424,7 +423,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh }: Props) {
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title={canPerform('PURCHASES_INVOICES_REC', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <Button title={canPerform('PURCHASES_INVOICES_REC', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}><Eye className="size-4" /></Button>
               <PurchaseAuditButton entity="RECURRING_SUPPLIER_INVOICE" entityId={row.id} title="Auditoria de la Factura Recurrente" />
               {canPerform('PURCHASES_INVOICES_REC', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>

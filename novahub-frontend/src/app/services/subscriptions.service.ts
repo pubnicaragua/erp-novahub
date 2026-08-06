@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { PaginatedResponse, ApiFilters } from '../types';
+import type { ApiFilters } from '../types';
 
 export interface SubscriptionRequest {
   id: string;

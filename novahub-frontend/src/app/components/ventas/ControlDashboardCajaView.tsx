@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useRef } from 'react';
+import { Fragment, useState, useEffect, useRef, useCallback } from 'react';
 import { useCajaSession } from '../../hooks/useCajaSession';
 import { cajaService, CashRegister } from '../../services/caja.service';
 import { toast } from 'sonner';
@@ -59,41 +59,14 @@ export function ControlDashboardCajaView({
     closeSession,
   } = useCajaSession(selectedRegister);
 
-  useEffect(() => {
-    loadRegisters();
-  }, []);
-
-  useEffect(() => {
-    if (activeSection === 'history' && selectedRegister) {
-      loadHistory();
-    }
-  }, [activeSection, selectedRegister]);
-
-  useEffect(() => {
-    if (initialRegisterId) setSelectedRegister(initialRegisterId);
-    if (initialSection) setActiveSection(initialSection);
-  }, [initialRegisterId, initialSection]);
-
-  useEffect(() => {
-    const context = consumeImplementationTourContext('ventas', 'control-caja');
-    if (!context) return;
-
-    cameFromSetupRef.current = true;
-    if (context.action === 'open-cash-register-form') {
-      setActiveSection('session');
-      setInitialCajaModalMode('create-register');
-      setManageCajasOpen(true);
-    }
-  }, []);
-
-  const loadRegisters = async () => {
+  const loadRegisters = useCallback(async () => {
     try {
       const res = await cajaService.getRegisters();
       const registersData = Array.isArray(res) ? res : ((res as any)?.data || []);
       setRegisters(registersData);
-      if (registersData.length > 0 && !selectedRegister) {
+      if (registersData.length > 0) {
         const openRegister = registersData.find((r: any) => r.hasActiveSession);
-        setSelectedRegister(openRegister ? openRegister.id : registersData[0].id);
+        setSelectedRegister(prev => prev || (openRegister ? openRegister.id : registersData[0].id));
       }
       if (cameFromSetupRef.current && registersData.length > 0) {
         cameFromSetupRef.current = false;
@@ -102,16 +75,49 @@ export function ControlDashboardCajaView({
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Error al cargar cajas'));
     }
-  };
+  }, []);
 
-  const loadHistory = async () => {
+  const loadHistory = useCallback(async () => {
     try {
       const data = await cajaService.getSessionHistory(selectedRegister === 'ALL' ? undefined : selectedRegister);
       setHistoryItems(data.items || []);
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Error al cargar historial de caja'));
     }
-  };
+  }, [selectedRegister]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadRegisters, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadRegisters]);
+
+  useEffect(() => {
+    if (activeSection !== 'history' || !selectedRegister) return;
+    const timer = window.setTimeout(loadHistory, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeSection, selectedRegister, loadHistory]);
+
+  const [prevInitialsKey, setPrevInitialsKey] = useState('');
+  const initialsKey = `${initialRegisterId || ''}|${initialSection || ''}`;
+  if (prevInitialsKey !== initialsKey) {
+    setPrevInitialsKey(initialsKey);
+    if (initialRegisterId) setSelectedRegister(initialRegisterId);
+    if (initialSection) setActiveSection(initialSection);
+  }
+
+  useEffect(() => {
+    const context = consumeImplementationTourContext('ventas', 'control-caja');
+    if (!context) return;
+
+    cameFromSetupRef.current = true;
+    if (context.action === 'open-cash-register-form') {
+      window.setTimeout(() => {
+        setActiveSection('session');
+        setInitialCajaModalMode('create-register');
+        setManageCajasOpen(true);
+      }, 0);
+    }
+  }, []);
 
   if (loading && (!registers || registers.length === 0)) {
     return (

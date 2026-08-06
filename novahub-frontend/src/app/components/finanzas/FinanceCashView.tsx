@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Landmark, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { Wallet } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { useCurrency } from '../../contexts/CurrencyContext'

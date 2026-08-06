@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
-  ClipboardList, Search, Eye, X, AlertTriangle,
-  CheckCircle, Clock, FileText, Printer,
-  Building2, ArrowUpRight, FileSpreadsheet, Plus,
+  ClipboardList, Search, Eye, X,
+  CheckCircle, Clock, Printer,
+  Building2, ArrowUpRight, Plus,
   Loader2, Package,
 } from 'lucide-react';
 import { Button } from '../ui/button';

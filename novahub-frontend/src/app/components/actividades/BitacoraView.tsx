@@ -5,7 +5,7 @@ import { ActivityLog } from '../../types';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Search, Activity, MousePointerClick, RefreshCcw, Database, Plus, Folder, FileText } from 'lucide-react';
+import { Search, Activity, MousePointerClick, Database, Plus, Folder, FileText } from 'lucide-react';
 import { activityLogsService, tasksService, eventsService } from '../../services/actividades.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { useState } from 'react';
 import { Clock, LogIn, LogOut, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Upload, FileDown, Info, UserCheck, UserX } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -146,10 +145,6 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
-
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [pageSize]);
 
   const totalPages = Math.ceil(attendance.length / pageSize);
   const paginatedAttendance = attendance.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -364,7 +359,7 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
             <div className="flex items-center gap-2">
               <span>Mostrar</span>
-              <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
+              <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
                 {PAGE_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
               </select>
               <span>por página</span>

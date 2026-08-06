@@ -62,7 +62,10 @@ export function BalanceComprobacionView() {
     }
   }, [dateFrom, dateTo]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    const timeout = setTimeout(() => { void fetchData(); }, 0);
+    return () => clearTimeout(timeout);
+  }, [fetchData]);
 
   const grouped = ACCOUNT_TYPE_ORDER.map(type => ({
     type,

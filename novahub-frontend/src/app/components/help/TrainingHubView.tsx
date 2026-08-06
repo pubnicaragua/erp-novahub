@@ -67,20 +67,6 @@ export function TrainingHubView() {
 
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    fetchVideos();
-  }, []);
-
-  useEffect(() => {
-    if (selectedVideo) {
-      setShowVideoInfo(true);
-      const timer = setTimeout(() => {
-        setShowVideoInfo(false);
-      }, 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [selectedVideo]);
-
   const fetchVideos = async () => {
     try {
       setLoading(true);
@@ -92,6 +78,27 @@ export function TrainingHubView() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    Promise.resolve().then(fetchVideos);
+  }, []);
+
+  const [prevSelectedVideo, setPrevSelectedVideo] = useState(selectedVideo);
+  if (selectedVideo !== prevSelectedVideo) {
+    setPrevSelectedVideo(selectedVideo);
+    if (selectedVideo) {
+      setShowVideoInfo(true);
+    }
+  }
+
+  useEffect(() => {
+    if (selectedVideo) {
+      const timer = setTimeout(() => {
+        setShowVideoInfo(false);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedVideo]);
 
   const handleUpload = async () => {
     if (!uploadData.title || !uploadData.file) {

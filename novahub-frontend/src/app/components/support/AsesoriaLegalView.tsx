@@ -28,7 +28,8 @@ interface AsesoriaLegalViewProps {
 
 export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: AsesoriaLegalViewProps) {
   const { canPerform } = useAuth();
-  const [activeTab, setActiveTab] = useState(activeSubModule || 'cases');
+  const [localTab, setLocalTab] = useState('cases');
+  const activeTab = activeSubModule || localTab;
   const [cases, setCases] = useState<LegalCase[]>([]);
   const [reminders, setReminders] = useState<LegalReminder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,16 +56,16 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
     }
   };
 
-  useEffect(() => { fetchData(); }, [filterType, filterStatus]);
-
   useEffect(() => {
-    if (activeSubModule && activeSubModule !== activeTab) {
-      setActiveTab(activeSubModule);
-    }
-  }, [activeSubModule]);
+    const load = async () => {
+      setLoading(true);
+      await fetchData();
+    };
+    load();
+  }, [filterType, filterStatus]);
 
   const handleTabChange = (value: string) => {
-    setActiveTab(value);
+    setLocalTab(value);
     if (onSubModuleChange) {
       onSubModuleChange(value);
     }

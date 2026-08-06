@@ -1,6 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { contabilidadService } from '../../services/contabilidad.service';
 
 export interface SalesIrOption { id: string; name: string; code: string; rate: number; category?: string; type?: string; isActive?: boolean }
 

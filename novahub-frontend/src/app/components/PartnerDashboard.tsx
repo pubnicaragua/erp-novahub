@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { 
-  Users, Zap, TrendingUp, AlertCircle, 
-  ArrowUpRight, Building2, LayoutGrid, Clock,
-  Globe, ShieldCheck, DollarSign, MessageSquare
+  Users, Zap, TrendingUp, Building2, Clock,
+  Globe, MessageSquare
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Badge } from './ui/badge';

@@ -1,4 +1,4 @@
-import { Calendar, CalendarClock, DollarSign } from 'lucide-react'
+import { Calendar, CalendarClock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { useCurrency } from '../../contexts/CurrencyContext'

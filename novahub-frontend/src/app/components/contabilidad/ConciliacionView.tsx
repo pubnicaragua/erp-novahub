@@ -95,8 +95,11 @@ export function ConciliacionView() {
   };
 
   useEffect(() => {
-    fetchReconciliations();
-    fetchAccounts();
+    const load = async () => {
+      setLoading(true);
+      await Promise.all([fetchReconciliations(), fetchAccounts()]);
+    };
+    load();
   }, []);
 
   const filtered = reconciliations.filter((r) => {

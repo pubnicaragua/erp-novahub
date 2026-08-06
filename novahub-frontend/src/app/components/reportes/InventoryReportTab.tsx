@@ -252,7 +252,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     return map;
   }, [opMov]);
 
-  const nowMs = useMemo(() => Date.now(), []);
+  const [nowMs] = useState(() => Date.now());
 
   // ── KPI: Valor del inventario a costo ──
   const valuation = useMemo(() => {
@@ -647,7 +647,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             });
             doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
             currentY += height + 5;
-          } catch {}
+          } catch { /* intentionally empty */ }
         };
 
         await capture('inventory-dynamics-chart', 80);

@@ -70,6 +70,12 @@ export function MultiSelectFilter({
     [onChange],
   );
 
+  const filteredOptions = React.useMemo(() => {
+    if (!searchable || !query.trim()) return options;
+    const q = query.toLowerCase();
+    return options.filter((opt) => opt.label.toLowerCase().includes(q));
+  }, [options, query, searchable]);
+
   const handleSelectAll = React.useCallback(
     () => {
       const visible = filteredOptions.map((o) => o.value);
@@ -81,15 +87,8 @@ export function MultiSelectFilter({
         onChange(merged);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [onChange, selected],
+    [filteredOptions, onChange, selected],
   );
-
-  const filteredOptions = React.useMemo(() => {
-    if (!searchable || !query.trim()) return options;
-    const q = query.toLowerCase();
-    return options.filter((opt) => opt.label.toLowerCase().includes(q));
-  }, [options, query, searchable]);
 
   const triggerLabel = React.useMemo(() => {
     if (selected.length === 0) return label;

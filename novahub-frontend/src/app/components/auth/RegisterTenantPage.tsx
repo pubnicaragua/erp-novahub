@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate, Link } from 'react-router';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
@@ -291,13 +291,13 @@ export function RegisterTenantPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showUserPassword, setShowUserPassword] = useState(false);
 
-  const { register, handleSubmit, formState: { errors }, watch, setError: setFormError } = useForm<Step1Data>({
+  const { register, handleSubmit, formState: { errors }, control, setError: setFormError } = useForm<Step1Data>({
     resolver: zodResolver(step1Schema),
     defaultValues: { companyName: '', userName: '', email: '', password: '', acceptTerms: false },
   });
 
-  const acceptTerms = watch('acceptTerms');
-  const passwordValue = watch('password');
+  const acceptTerms = useWatch({ control, name: 'acceptTerms' });
+  const passwordValue = useWatch({ control, name: 'password' });
 
   const passwordRules = [
     { label: 'Mínimo 8 caracteres', test: (v: string) => v.length >= 8 },
@@ -307,7 +307,8 @@ export function RegisterTenantPage() {
   ];
 
   useEffect(() => {
-    if (step === 2 && industry && !recommendations) {
+    if (step !== 2 || !industry || recommendations) return;
+    const timer = window.setTimeout(() => {
       setLoadingModules(true);
       authService.getModuleRecommendations(industry, companySize || undefined)
         .then((res: any) => {
@@ -317,19 +318,23 @@ export function RegisterTenantPage() {
         })
         .catch((e: any) => toast.error(e?.response?.data?.message || e?.message || 'Error al cargar recomendaciones'))
         .finally(() => setLoadingModules(false));
-    }
-  }, [step, industry, recommendations]);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [step, industry, recommendations, companySize]);
 
   useEffect(() => {
     if (!showWelcome) return;
-    setMsgIndex(0);
-    const interval = setInterval(() => {
-      setMsgIndex((prev) => {
-        if (prev >= 5) { clearInterval(interval); return prev; }
-        return prev + 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const timer = window.setTimeout(() => {
+      setMsgIndex(0);
+      interval = setInterval(() => {
+        setMsgIndex((prev) => {
+          if (prev >= 5) { if (interval) clearInterval(interval); return prev; }
+          return prev + 1;
+        });
+      }, 1000);
+    }, 0);
+    return () => { window.clearTimeout(timer); if (interval) clearInterval(interval); };
   }, [showWelcome]);
 
   const onStep1Submit = async (data: Step1Data) => {
@@ -342,20 +347,12 @@ export function RegisterTenantPage() {
       }
       setStep1Data(data);
       setStep(1);
-    } catch (e: any) {
+    } catch {
       setFormError('email', { type: 'manual', message: 'Error al verificar el correo' });
     }
   };
 
   const canGoStep2 = industry !== null && companySize !== null;
-  const totalPrice = selectedModules.reduce((sum, mod) => {
-    if (!PARENT_KEYS.has(mod)) return sum;
-    const found = [
-      ...(recommendations?.recommended || []),
-      ...(recommendations?.optional || []),
-    ].find((m) => m.module === mod);
-    return sum + (found?.price ?? FALLBACK_PARENT_PRICES[mod] ?? 0);
-  }, 0);
 
   const handleFinalSubmit = async () => {
     if (!step1Data) return;
@@ -558,7 +555,7 @@ export function RegisterTenantPage() {
                   if (res?.data?.exists ?? res?.exists) {
                     setFormError('email', { type: 'manual', message: 'Email ya registrado en el sistema' });
                   }
-                } catch (err) {}
+                } catch { /* intentionally empty */ }
               }
             }}
             className={cn('h-11 pl-11 rounded-xl bg-white/5 border-white/10', errors.email && 'border-destructive')} />
@@ -999,7 +996,7 @@ export function RegisterTenantPage() {
                   if (res?.data?.exists ?? res?.exists) {
                     toast.error('Este email ya está en uso');
                   }
-                } catch (err) {}
+                } catch { /* intentionally empty */ }
               }
             }}
             placeholder="Email" 

@@ -66,7 +66,7 @@ export function ReportesFiscalesView() {
   };
 
   useEffect(() => {
-    fetchReports();
+    Promise.resolve().then(fetchReports);
   }, []);
 
   const handleGenerate = async (type: string, promise: Promise<any>) => {

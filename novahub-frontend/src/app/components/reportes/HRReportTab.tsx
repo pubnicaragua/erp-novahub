@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -150,7 +150,7 @@ function fmtTenure(months: number): string {
 }
 
 function nextAnniversary(hireDate: Date, now: Date): { label: string; days: number } {
-  let next = new Date(hireDate);
+  const next = new Date(hireDate);
   next.setFullYear(now.getFullYear());
   if (next.getTime() < now.getTime()) next.setFullYear(now.getFullYear() + 1);
   const days = Math.max(0, Math.round((next.getTime() - now.getTime()) / 86400000));
@@ -245,13 +245,13 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     return `${currencySymbol}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
-  const fmtMoney = (v: number) => {
+  const fmtMoney = useCallback((v: number) => {
     const num = Number(v);
     if (!Number.isFinite(num)) return `${currencySymbol}0.00`;
     const converted = convertAmount(num, 'NIO');
     const sign = converted < 0 ? '-' : '';
     return `${sign}${currencySymbol}${Math.abs(converted).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  }, [currencySymbol, convertAmount]);
 
   const pctVar = (cur: number, prev: number) => (prev > 0 ? ((cur - prev) / prev) * 100 : cur > 0 ? 100 : 0);
   const ppVar = (cur: number, prev: number) => cur - prev;
@@ -408,13 +408,13 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   }, [fEmployees, dateRange, currentStart]);
 
   // ── Costo de nómina ──
-  const employerCost = (p: any) => {
+  const employerCost = useCallback((p: any) => {
     const total = Number(p.costoTotalEmpresa || 0);
     if (total > 0) return total;
     return Number(p.grossPay || 0) + Number(p.inssPatronal || 0) + Number(p.inatec || 0) + Number(p.trecenoMes || 0) + Number(p.vacacionesProv || 0) + Number(p.indemnizacion || 0);
-  };
+  }, []);
 
-  const sumTotals = (list: any[]) => {
+  const sumTotals = useCallback((list: any[]) => {
     let salario = 0, horasExtra = 0, comisiones = 0, cargas = 0, prestaciones = 0, deducciones = 0, neto = 0, total = 0;
     const emps = new Set<string>();
     for (const p of list) {
@@ -429,17 +429,17 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       if (p.employeeId || p.employee?.id) emps.add(p.employeeId || p.employee.id);
     }
     return { salario, horasExtra, comisiones, cargas, prestaciones, deducciones, neto, total, empleados: emps.size };
-  };
+  }, [employerCost]);
 
   const fPay = useMemo(() => fPayrolls.filter(p => {
     const d = toDate(p.periodEnd || p.paymentDate || p.createdAt);
     return d && d >= currentStart;
   }), [fPayrolls, currentStart]);
 
-  const payrollTotals = useMemo(() => sumTotals(fPay), [fPay]);
+  const payrollTotals = useMemo(() => sumTotals(fPay), [fPay, sumTotals]);
   const costoPorColaborador = payrollTotals.empleados > 0 ? payrollTotals.total / payrollTotals.empleados : 0;
 
-  const prevPayrollTotals = useMemo(() => prevWin ? sumTotals(fPayrolls.filter(p => isDateInWindow(p.periodEnd || p.paymentDate || p.createdAt, prevWin.startMs, prevWin.endMs))) : sumTotals([]), [fPayrolls, prevWin]);
+  const prevPayrollTotals = useMemo(() => prevWin ? sumTotals(fPayrolls.filter(p => isDateInWindow(p.periodEnd || p.paymentDate || p.createdAt, prevWin.startMs, prevWin.endMs))) : sumTotals([]), [fPayrolls, prevWin, sumTotals]);
   const prevCostoPorColaborador = prevPayrollTotals.empleados > 0 ? prevPayrollTotals.total / prevPayrollTotals.empleados : 0;
 
   const costoPorEmp = useMemo(() => {
@@ -457,7 +457,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       const emp = employeesById.get(id);
       return { id, name: emp ? empName(emp) : (fallback.get(id) || 'Sin nombre'), dept: emp ? empDept(emp) : '—', total };
     }).sort((a, b) => b.total - a.total).slice(0, 5);
-  }, [fPay, employeesById, payrolls]);
+  }, [fPay, employeesById, payrolls, employerCost]);
 
   const prevCostByDept = useMemo(() => {
     const map = new Map<string, number>();
@@ -471,7 +471,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       }
     }
     return map;
-  }, [fPayrolls, prevWin, employeesById]);
+  }, [fPayrolls, prevWin, employeesById, employerCost]);
 
   const costByDept = useMemo(() => {
     const map = new Map<string, number>();
@@ -487,7 +487,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       pct: (totalC / total) * 100,
       prev: prevCostByDept.get(name) || 0,
     })).sort((a, b) => b.total - a.total).slice(0, 8);
-  }, [fPay, employeesById, payrollTotals.total, prevCostByDept]);
+  }, [fPay, employeesById, payrollTotals.total, prevCostByDept, employerCost]);
 
   // ── Asistencia y ausentismo ──
   const attendancePeriod = useMemo(() => fAttendance.filter(a => isDateInRange(a.date, dateRange)), [fAttendance, dateRange]);
@@ -601,7 +601,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       }
       return { key: b.key, label: b.label, salario, variables: horasExtra + comisiones + prestaciones, cargas, total, prev: prevByKey.get(b.key) ?? null };
     });
-  }, [fPay, fPayrolls, currentStart, now, prevWin]);
+  }, [fPay, fPayrolls, currentStart, now, prevWin, employerCost]);
 
   // ── Movimientos ──
   const movBuckets = useMemo(() => {
@@ -704,7 +704,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       total: activeEmployees.length,
       sinSucursal: distKey === 'sucursal' && items.length === 1 && items[0]?.name === 'Sin sucursal',
     };
-  }, [activeEmployees, distKey, fPay, payrollTotals.total]);
+  }, [activeEmployees, distKey, fPay, payrollTotals.total, employerCost]);
 
   // ── Vacaciones ──
   const vacStats = useMemo(() => {
@@ -845,7 +845,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     }
     const order = { rojo: 0, naranja: 1, azul: 2, verde: 3 };
     return list.slice().sort((a, b) => order[a.tone] - order[b.tone]).slice(0, 6);
-  }, [prevPayrollTotals.total, payrollTotals.total, costByDept, perfStats, vacProximas30, vacStats.inconsistentes, docStats, tasaRotacion, ausentismoRate, ausentismoDias, trainStats.vencidas]);
+  }, [prevPayrollTotals.total, payrollTotals.total, costByDept, perfStats, vacProximas30, vacStats.inconsistentes, docStats, tasaRotacion, ausentismoRate, ausentismoDias, trainStats.vencidas, fmtMoney]);
 
   // ── Modals ──
   const openAltasModal = () => {
@@ -1040,7 +1040,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
             });
             doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
             currentY += height + 5;
-          } catch {}
+          } catch { /* intentionally empty */ }
         };
 
         await capture('hr-evolution-chart', 80);

@@ -63,9 +63,11 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
 
-  React.useEffect(() => {
+  const [prevFilters, setPrevFilters] = useState({ filterEmployee, filterStatus, includeCommissions, pageSize });
+  if (filterEmployee !== prevFilters.filterEmployee || filterStatus !== prevFilters.filterStatus || includeCommissions !== prevFilters.includeCommissions || pageSize !== prevFilters.pageSize) {
+    setPrevFilters({ filterEmployee, filterStatus, includeCommissions, pageSize });
     setCurrentPage(1);
-  }, [filterEmployee, filterStatus, includeCommissions, pageSize]);
+  }
 
   const totalPages = Math.ceil(filteredPayrolls.length / pageSize);
   const paginatedPayrolls = filteredPayrolls.slice((currentPage - 1) * pageSize, currentPage * pageSize);

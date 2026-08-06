@@ -84,34 +84,37 @@ export function GastosView({ data, loading, onRefresh }: Props) {
   }, []);
 
   useEffect(() => {
-    if (editingId) {
-      if (editingId === 'NEW') {
-         setLocalDoc({
-           date: new Date().toISOString(),
-           time: new Date().toTimeString().slice(0, 5),
-            amount: 0,
-             currency: displayCurrency,
-            exchangeRate: globalRate,
-            category: 'OPERACIONAL',
-            categoryCustom: '',
-            expenseCategoryId: '',
-            description: '',
-            paidTo: '',
-            paymentSource: 'EFECTIVO',
-            status: 'PENDING',
-            evidenceFileName: '',
-            evidenceFileType: '',
-            evidenceFileSize: 0,
-            evidenceFileUrl: '',
-          });
+    const timer = setTimeout(() => {
+      if (editingId) {
+        if (editingId === 'NEW') {
+           setLocalDoc({
+             date: new Date().toISOString(),
+             time: new Date().toTimeString().slice(0, 5),
+              amount: 0,
+               currency: displayCurrency,
+              exchangeRate: globalRate,
+              category: 'OPERACIONAL',
+              categoryCustom: '',
+              expenseCategoryId: '',
+              description: '',
+              paidTo: '',
+              paymentSource: 'EFECTIVO',
+              status: 'PENDING',
+              evidenceFileName: '',
+              evidenceFileType: '',
+              evidenceFileSize: 0,
+              evidenceFileUrl: '',
+            });
+        } else {
+           const found = data.find(x => x.id === editingId);
+           setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+        }
       } else {
-         const found = data.find(x => x.id === editingId);
-         setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+        setLocalDoc(null);
       }
-    } else {
-      setLocalDoc(null);
-    }
-  }, [editingId, data, globalRate]);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [editingId, data, globalRate, displayCurrency]);
 
   const uniqueCategories = Array.from(new Set(data.map(g => String(g.category || '').toUpperCase()).filter(Boolean)));
 
@@ -356,7 +359,7 @@ export function GastosView({ data, loading, onRefresh }: Props) {
 
   const handleUpdate = async (id: string | number, updates: Partial<Expense>) => {
     try { await expensesService.update(id as string, updates); toast.success('Gasto actualizado'); onRefresh(); }
-    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
   };
 
   const handleDeleteConfirm = async () => {

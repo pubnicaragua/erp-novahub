@@ -2,11 +2,19 @@ import { defineConfig } from 'vite'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
+import { sentryVitePlugin } from '@sentry/vite-plugin'
 
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    sentryVitePlugin({
+      org: 'testnova',
+      project: 'javascript',
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      disable: !process.env.SENTRY_AUTH_TOKEN,
+      telemetry: false,
+    }),
   ],
   resolve: {
     alias: {
@@ -15,6 +23,7 @@ export default defineConfig({
   },
   assetsInclude: ['**/*.svg', '**/*.csv'],
   build: {
+    sourcemap: true,
     rollupOptions: {
       output: {
         manualChunks: {

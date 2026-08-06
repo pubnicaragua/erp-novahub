@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -43,9 +43,11 @@ export function PromptDialog({
 }: PromptDialogProps) {
   const [value, setValue] = useState(initialValue);
 
-  useEffect(() => {
+  const [prevDialogState, setPrevDialogState] = useState({ open, initialValue });
+  if (open !== prevDialogState.open || initialValue !== prevDialogState.initialValue) {
+    setPrevDialogState({ open, initialValue });
     if (open) setValue(initialValue);
-  }, [open, initialValue]);
+  }
 
   const submit = async () => {
     if (required && !value.trim()) return;

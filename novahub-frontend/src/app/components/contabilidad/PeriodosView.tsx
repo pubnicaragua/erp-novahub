@@ -69,7 +69,7 @@ export function PeriodosView() {
   };
 
   useEffect(() => {
-    fetchPeriods();
+    Promise.resolve().then(fetchPeriods);
   }, []);
 
   const handleCreate = async () => {

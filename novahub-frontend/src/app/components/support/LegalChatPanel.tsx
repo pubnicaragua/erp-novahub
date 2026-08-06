@@ -51,7 +51,10 @@ export function LegalChatPanel({ caseId, caseNumber, onBack }: LegalChatPanelPro
   };
 
   useEffect(() => {
-    fetchMessages();
+    const load = async () => {
+      await fetchMessages();
+    };
+    load();
     const interval = setInterval(fetchMessages, 5000);
     return () => clearInterval(interval);
   }, [caseId]);

@@ -60,21 +60,6 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange, isSideb
     evidenceFiles: [] as File[],
   });
 
-  useEffect(() => { fetchTickets(); }, []);
-
-  useEffect(() => {
-    if (activeSubModule && activeSubModule !== activeCategory) {
-      setActiveCategory(activeSubModule);
-    }
-  }, [activeSubModule]);
-
-  const handleCategoryChange = (id: string) => {
-    setActiveCategory(id);
-    if (onSubModuleChange) {
-      onSubModuleChange(id);
-    }
-  };
-
   const fetchTickets = async () => {
     try {
       setLoading(true);
@@ -84,6 +69,23 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange, isSideb
       toast.error(error instanceof Error ? error.message : 'Error al cargar tickets');
     }
     finally { setLoading(false); }
+  };
+
+  useEffect(() => { Promise.resolve().then(fetchTickets); }, []);
+
+  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
+  if (activeSubModule !== prevSubModule) {
+    setPrevSubModule(activeSubModule);
+    if (activeSubModule && activeSubModule !== activeCategory) {
+      setActiveCategory(activeSubModule);
+    }
+  }
+
+  const handleCategoryChange = (id: string) => {
+    setActiveCategory(id);
+    if (onSubModuleChange) {
+      onSubModuleChange(id);
+    }
   };
 
   const handleCreate = async () => {

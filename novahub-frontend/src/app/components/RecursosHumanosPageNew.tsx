@@ -9,21 +9,13 @@ import {
   Users,
   DollarSign,
   Calendar,
-  Award,
   TrendingUp,
-  UserCheck,
-  Clock,
-  FileText,
   Plus,
   Search,
-  BarChart3,
-  UserX,
   CheckCircle2,
-  XCircle,
-  AlertCircle
+  XCircle
 } from 'lucide-react';
 import { hrService } from '../services/hr.service';
-import { Input } from './ui/input';
 
 export function RecursosHumanosPageNew() {
   const [loading, setLoading] = useState(true);
@@ -34,10 +26,6 @@ export function RecursosHumanosPageNew() {
     leaveRequests: [],
     stats: null,
   });
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
   const fetchData = async () => {
     try {
@@ -62,6 +50,10 @@ export function RecursosHumanosPageNew() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    Promise.resolve().then(fetchData);
+  }, []);
 
   const activeEmployees = data.employees.filter((e: any) => e.employmentStatus === 'ACTIVE').length;
   const onLeave = data.leaveRequests.filter((l: any) => l.status === 'APPROVED').length;

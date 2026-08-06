@@ -70,10 +70,6 @@ export function FinanciamientoPymePage() {
   const [selectedApp, setSelectedApp] = useState<FinancingApplication | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
 
-  useEffect(() => {
-    fetchApplications();
-  }, []);
-
   const fetchApplications = async () => {
     setLoading(true);
     try {
@@ -85,6 +81,14 @@ export function FinanciamientoPymePage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await fetchApplications();
+    };
+    load();
+  }, []);
 
   return (
     <div className="p-6 md:p-10 max-w-[1700px] mx-auto min-h-[calc(100vh-5rem)]">
@@ -305,9 +309,10 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
 
   useEffect(() => {
     if (step === 1 && tenantId && !prefill) {
-      setLoading(true);
-      financingService.getPrefill(tenantId)
-        .then((res: any) => {
+      const load = async () => {
+        setLoading(true);
+        try {
+          const res: any = await financingService.getPrefill(tenantId);
           const data = res?.data || res;
           setPrefill(data);
           setForm((prev) => ({
@@ -315,9 +320,13 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
             monthlyRevenue: data.monthlyRevenue || 0,
             monthlyExpenses: data.monthlyExpenses || 0,
           }));
-        })
-        .catch(() => toast.error('Error al cargar datos del ERP'))
-        .finally(() => setLoading(false));
+        } catch {
+          toast.error('Error al cargar datos del ERP');
+        } finally {
+          setLoading(false);
+        }
+      };
+      load();
     }
   }, [step, tenantId]);
 

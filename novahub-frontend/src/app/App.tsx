@@ -114,25 +114,18 @@ function DashboardLayout() {
     setActiveSubModule(undefined);
   };
 
-  useEffect(() => {
-    const isDeny = activeModule !== 'overview' && !hasAccess(activeModule as Module);
-    
-    if (isDeny) {
-      const preferredOrder: Module[] = [
-        'inventario', 'ventas', 'compras', 'finanzas', 'contabilidad', 'rh',
-        'clientes', 'proveedores', 'actividades', 'tickets',
-        'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
-        'documentos', 'notificaciones', 'transferencias', 
-        'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
-        'dashboard-cxc'
-      ];
-      
-      const firstAllowed = preferredOrder.find(m => hasAccess(m));
-      if (firstAllowed) {
-        setActiveModule(firstAllowed);
-      }
-    }
-  }, [activeModule, hasAccess, user]);
+  const currentModule: Module | 'overview' = (() => {
+    if (activeModule === 'overview' || hasAccess(activeModule as Module)) return activeModule;
+    const preferredOrder: Module[] = [
+      'inventario', 'ventas', 'compras', 'finanzas', 'contabilidad', 'rh',
+      'clientes', 'proveedores', 'actividades', 'tickets',
+      'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
+      'documentos', 'notificaciones', 'transferencias',
+      'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
+      'dashboard-cxc'
+    ];
+    return preferredOrder.find(m => hasAccess(m)) ?? activeModule;
+  })();
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -146,14 +139,14 @@ function DashboardLayout() {
   }, [hasAccess]);
 
   const renderContent = () => {
-    if (activeModule === 'overview') {
+    if (currentModule === 'overview') {
       if (user?.role === 'partner') {
         return <PartnerDashboard onNavigate={handleNavigate} />;
       }
       return <ModuleErrorBoundary moduleName="Dashboard"><OverviewDashboard onNavigate={handleNavigate} onOverview={handleOverview} /></ModuleErrorBoundary>;
     }
 
-    if (!hasAccess(activeModule as Module)) {
+    if (!hasAccess(currentModule as Module)) {
       return (
         <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6">
           <div className="text-center">
@@ -164,7 +157,7 @@ function DashboardLayout() {
       );
     }
 
-    switch (activeModule) {
+    switch (currentModule) {
       case 'inventario': return <ModuleErrorBoundary moduleName="Inventario"><InventarioPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'ventas': return <ModuleErrorBoundary moduleName="Ventas"><VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'compras': return <ModuleErrorBoundary moduleName="Compras"><ComprasPage activeSubModule={activeSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
@@ -196,7 +189,7 @@ function DashboardLayout() {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar
-        activeModule={activeModule}
+        activeModule={currentModule}
         activeSubModule={activeSubModule}
         onModuleChange={handleModuleChange}
         isOpen={sidebarOpen}
@@ -227,9 +220,6 @@ function AppContent() {
   const location = useLocation();
   const [trialExpired, setTrialExpired] = useState(false);
 
-  if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
-  if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
-
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -249,6 +239,9 @@ function AppContent() {
       document.documentElement.classList.remove('dark');
     }
   }, []);
+
+  if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
+  if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
 
   // Ruta pública de registro: no requiere autenticación y evita el guard.
   if (location.pathname === '/register') {

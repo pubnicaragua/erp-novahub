@@ -131,7 +131,7 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
        const monthIdx = (currentMonth - (5-i) + 12) % 12;
        return { mes: MONTH_NAMES[monthIdx], mrr: (mrr * 0.8) + (i * (mrr * 0.05)) };
     });
-  }, [mrr, exchangeRate]);
+  }, [mrr]);
 
   useImperativeHandle(ref, () => ({
     exportPDF: async () => {

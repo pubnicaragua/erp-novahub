@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Palette, RotateCcw, Save, Upload, Eye, Check, Sparkles,
@@ -9,7 +9,7 @@ import {
   Trash2, Edit2, Shield, ArrowRight, Server, Rocket,
   BarChart3, Info, Coins, TrendingUp, HandCoins, User as UserIcon,
   CalendarDays, Headphones, BellRing, FileText, Activity, Settings,
-  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy, MessageSquare
+  BookOpen, Search, Landmark, Scale, GraduationCap, LifeBuoy
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -376,6 +376,7 @@ const PRICING_MODULES = [
 
 export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: string }) {
   const { themeConfig, updateTheme, updateConfig, resetTheme } = useTheme();
+  const updateThemeRef = useRef(updateTheme);
   const { user, canPerform } = useAuth();
   const { refreshRate: refreshCurrencyContext } = useCurrency();
   const scenario = getScenario(user?.role);
@@ -436,9 +437,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [activeTab, setActiveTab] = useState(() => ALL_TABS.some(tab => tab.id === initialTab) ? initialTab : 'branding');
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setActiveTab(ALL_TABS.some(tab => tab.id === initialTab) ? initialTab : 'branding');
-  }, [initialTab]);
+  const currentTab = ALL_TABS.some(tab => tab.id === initialTab) ? initialTab : activeTab;
 
   // Security state
   const [twoFaEnabled, setTwoFaEnabled] = useState(false);
@@ -461,12 +460,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   // New role dialog state (removed unused)
 
   // Load branding and currency on mount
-  useEffect(() => {
-    fetchBranding();
-    fetchCurrencySettings();
-    if (user?.tenantId) fetchIndustries();
-  }, []);
-
   const fetchIndustries = async () => {
     if (!user?.tenantId) return;
     try {
@@ -476,6 +469,67 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       console.error('Error fetching industries:', error);
     }
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const b = await brandingService.getCurrent();
+          if (b.primaryColor) setPrimaryHex(b.primaryColor.startsWith('oklch') ? oklchToApproxHex(b.primaryColor) : b.primaryColor);
+          if (b.sidebarColor) setSidebarHex(b.sidebarColor.startsWith('oklch') ? oklchToApproxHex(b.sidebarColor) : b.sidebarColor);
+          if (b.accentColor) setAccentHex(b.accentColor.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : b.accentColor);
+          if (b.portalPrimaryColor) setPortalPrimaryHex(b.portalPrimaryColor);
+          if (b.portalBackgroundColor) setPortalBackgroundHex(b.portalBackgroundColor);
+          if (b.portalAccentColor) setPortalAccentHex(b.portalAccentColor);
+          if (b.portalDefaultTheme) setPortalDefaultTheme(b.portalDefaultTheme === 'light' ? 'light' : 'dark');
+          if (b.companyName) setCompanyName(b.companyName);
+          if (b.logo) setLogoPreview(b.logo);
+          if (b.industry) setCompanyIndustry(b.industry);
+          if (b.whiteLabel !== undefined) setWhiteLabel(b.whiteLabel);
+          updateThemeRef.current(generateThemeFromColor(
+            b.primaryColor?.startsWith('oklch') ? oklchToApproxHex(b.primaryColor) : (b.primaryColor || '#10b981'),
+            b.sidebarColor?.startsWith('oklch') ? oklchToApproxHex(b.sidebarColor) : (b.sidebarColor || '#0c1a12'),
+            b.accentColor?.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : (b.accentColor || '#064e3b'),
+          ));
+        } catch (error) {
+          console.error('Error fetching branding:', error);
+        }
+      })();
+      (async () => {
+        try {
+          const data = await api.get<{
+            rate: number;
+            auto: boolean;
+            baseCurrency?: 'NIO' | 'USD';
+            displayCurrency?: 'NIO' | 'USD';
+            allowCurrencySwitch?: boolean;
+          }>('/tools/exchange-rate');
+          if (data) {
+            setExchangeRateAuto(data.auto);
+            setCurrentBackendRate(data.rate);
+            if (!data.auto) {
+              setManualRate(data.rate.toString());
+            }
+            setDisplayCurrencySetting(data.displayCurrency === 'USD' ? 'USD' : (data.baseCurrency === 'USD' ? 'USD' : 'NIO'));
+            setAllowCurrencySwitch(data.allowCurrencySwitch !== false);
+          }
+        } catch (error) {
+          console.error('Error fetching currency settings:', error);
+        }
+      })();
+      if (user?.tenantId) {
+        (async () => {
+          try {
+            const data = await api.get<{ id?: string; code: string; name: string; isDefault: boolean }[]>(`/tenants/${user.tenantId}/industries`);
+            if (data) setIndustryOptions(data);
+          } catch (error) {
+            console.error('Error fetching industries:', error);
+          }
+        })();
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [user?.tenantId]);
 
   const handleAddIndustry = async () => {
     if (!newIndustryName.trim() || !user?.tenantId) return;
@@ -497,55 +551,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       await api.delete(`/tenants/${user.tenantId}/industries/${id}`);
       toast.success('Industria eliminada');
       await fetchIndustries();
-    } catch (error) {
+    } catch {
       toast.error('Error al eliminar industria');
-    }
-  };
-
-  const fetchCurrencySettings = async () => {
-    try {
-      const data = await api.get<{
-        rate: number;
-        auto: boolean;
-        baseCurrency?: 'NIO' | 'USD';
-        displayCurrency?: 'NIO' | 'USD';
-        allowCurrencySwitch?: boolean;
-      }>('/tools/exchange-rate');
-      if (data) {
-        setExchangeRateAuto(data.auto);
-        setCurrentBackendRate(data.rate);
-        if (!data.auto) {
-          setManualRate(data.rate.toString());
-        }
-        setDisplayCurrencySetting(data.displayCurrency === 'USD' ? 'USD' : (data.baseCurrency === 'USD' ? 'USD' : 'NIO'));
-        setAllowCurrencySwitch(data.allowCurrencySwitch !== false);
-      }
-    } catch (error) {
-      console.error('Error fetching currency settings:', error);
-    }
-  };
-
-  const fetchBranding = async () => {
-    try {
-      const b = await brandingService.getCurrent();
-      if (b.primaryColor) setPrimaryHex(b.primaryColor.startsWith('oklch') ? oklchToApproxHex(b.primaryColor) : b.primaryColor);
-      if (b.sidebarColor) setSidebarHex(b.sidebarColor.startsWith('oklch') ? oklchToApproxHex(b.sidebarColor) : b.sidebarColor);
-      if (b.accentColor) setAccentHex(b.accentColor.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : b.accentColor);
-      if (b.portalPrimaryColor) setPortalPrimaryHex(b.portalPrimaryColor);
-      if (b.portalBackgroundColor) setPortalBackgroundHex(b.portalBackgroundColor);
-      if (b.portalAccentColor) setPortalAccentHex(b.portalAccentColor);
-      if (b.portalDefaultTheme) setPortalDefaultTheme(b.portalDefaultTheme === 'light' ? 'light' : 'dark');
-      if (b.companyName) setCompanyName(b.companyName);
-      if (b.logo) setLogoPreview(b.logo);
-      if (b.industry) setCompanyIndustry(b.industry);
-      if (b.whiteLabel !== undefined) setWhiteLabel(b.whiteLabel);
-      updateTheme(generateThemeFromColor(
-        b.primaryColor?.startsWith('oklch') ? oklchToApproxHex(b.primaryColor) : (b.primaryColor || '#10b981'),
-        b.sidebarColor?.startsWith('oklch') ? oklchToApproxHex(b.sidebarColor) : (b.sidebarColor || '#0c1a12'),
-        b.accentColor?.startsWith('oklch') ? oklchToApproxHex(b.accentColor) : (b.accentColor || '#064e3b'),
-      ));
-    } catch (error) {
-      console.error('Error fetching branding:', error);
     }
   };
 
@@ -559,14 +566,14 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       toast.success('Información corporativa guardada');
       const raw = sessionStorage.getItem('novahub:implementation-setup-tour');
       if (raw) {
-        try { const ctx = JSON.parse(raw); if (ctx.module === 'configuracion' && ctx.subModule === 'empresa') { sessionStorage.removeItem('novahub:implementation-setup-tour'); window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } })); return; } } catch {}
+        try { const ctx = JSON.parse(raw); if (ctx.module === 'configuracion' && ctx.subModule === 'empresa') { sessionStorage.removeItem('novahub:implementation-setup-tour'); window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } })); return; } } catch { /* intentionally empty */ }
       }
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Error al guardar la información');
     }
   };
 
-  const applyPreset = useCallback((preset: ColorPreset) => {
+  const applyPreset = (preset: ColorPreset) => {
     setPrimaryHex(preset.primary);
     setSidebarHex(preset.sidebar);
     setAccentHex(preset.accent);
@@ -575,7 +582,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setPrimaryFgHex('#ffffff');
     setSidebarFgHex('#f5f5f5');
     setActivePreset(preset.name);
-  }, []);
+  };
 
   const handleSave = async () => {
     try {
@@ -650,19 +657,19 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const [roles, setRoles] = useState<RoleManagement[]>([]);
-  // @ts-ignore
-  const [enabledModules, setEnabledModules] = useState<string[]>([]);
+  const [_enabledModules, setEnabledModules] = useState<string[]>([]);
   const [, setIsLoadingModules] = useState(false);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
   const [pendingDeleteRole, setPendingDeleteRole] = useState<RoleManagement | null>(null);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [sucursalModalOpen, setSucursalModalOpen] = useState(false);
 
-  useEffect(() => {
-    if (scenario === 'superadmin') {
-      fetchPricing();
-    }
-  }, [scenario]);
+  // Pricing state
+  const [pricingData, setPricingData] = useState<ModulePriceItem[]>([]);
+  const [pricingLoading, setPricingLoading] = useState(false);
+  const [pricingSaving, setPricingSaving] = useState(false);
+  const [pricingSearch, setPricingSearch] = useState('');
+  const [pricingEdits, setPricingEdits] = useState<Record<string, number>>({});
 
   const fetchPricing = async () => {
     setPricingLoading(true);
@@ -674,13 +681,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   useEffect(() => {
-    if (user?.tenantId && canViewRoles) {
-      fetchRoles();
-    }
-    if (user?.tenantId) {
-      fetchEnabledModules();
-    }
-  }, [user?.tenantId, canViewRoles]);
+    if (scenario !== 'superadmin') return;
+    const timer = setTimeout(() => { void fetchPricing(); }, 0);
+    return () => clearTimeout(timer);
+  }, [scenario]);
 
   const fetchRoles = async () => {
     setIsLoadingRoles(true);
@@ -711,18 +715,46 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     } catch { /* ignore */ }
   };
 
-  const fetchEnabledModules = async () => {
-    if (!user?.tenantId) return;
-    setIsLoadingModules(true);
-    try {
-      const res = await subscriptionsService.getEnabledModules(user.tenantId);
-      setEnabledModules(res);
-    } catch (error) {
-      console.error('Error fetching modules:', error);
-    } finally {
-      setIsLoadingModules(false);
-    }
-  };
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (user?.tenantId && canViewRoles) {
+        (async () => {
+          setIsLoadingRoles(true);
+          try {
+            console.log('[Config] Fetching roles for tenant:', user?.tenantId);
+            const res = await rolesService.getAll({ clientTenantId: user?.tenantId });
+            let rolesList = Array.isArray(res) ? res : (res as any)?.data || [];
+
+            console.log('[Config] Roles received:', rolesList.length);
+
+            if (!user?.isPlatformAdmin) {
+              rolesList = rolesList.filter((r: any) => r.clientTenantId === user?.tenantId);
+            }
+
+            setRoles(rolesList);
+          } catch (error) {
+            console.error('Error fetching roles:', error);
+          } finally {
+            setIsLoadingRoles(false);
+          }
+        })();
+      }
+      if (user?.tenantId) {
+        (async () => {
+          setIsLoadingModules(true);
+          try {
+            const res = await subscriptionsService.getEnabledModules(user.tenantId);
+            setEnabledModules(res);
+          } catch (error) {
+            console.error('Error fetching modules:', error);
+          } finally {
+            setIsLoadingModules(false);
+          }
+        })();
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [user?.tenantId, canViewRoles, user?.isPlatformAdmin]);
 
   const handleSaveCurrencySettings = async () => {
     setIsSavingCurrency(true);
@@ -746,30 +778,18 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         toast.success('Configuración de moneda actualizada');
         const raw = sessionStorage.getItem('novahub:implementation-setup-tour');
         if (raw) {
-          try { const ctx = JSON.parse(raw); if (ctx.module === 'configuracion' && ctx.subModule === 'currency') { sessionStorage.removeItem('novahub:implementation-setup-tour'); window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } })); return; } } catch {}
+          try { const ctx = JSON.parse(raw); if (ctx.module === 'configuracion' && ctx.subModule === 'currency') { sessionStorage.removeItem('novahub:implementation-setup-tour'); window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } })); return; } } catch { /* intentionally empty */ }
         }
       }
-    } catch (error) {
+    } catch {
       toast.error('Error al guardar configuración de moneda');
     } finally {
       setIsSavingCurrency(false);
     }
   };
 
-  // @ts-ignore
-  const handleToggleModule = async (moduleId: string) => {
-    toast.info('La gestión de módulos se realiza desde la pestaña de Suscripciones para garantizar el registro de auditoría.');
-  };
-
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Partial<ExtendedRoleManagement> | null>(null);
-
-  // Pricing state
-  const [pricingData, setPricingData] = useState<ModulePriceItem[]>([]);
-  const [pricingLoading, setPricingLoading] = useState(false);
-  const [pricingSaving, setPricingSaving] = useState(false);
-  const [pricingSearch, setPricingSearch] = useState('');
-  const [pricingEdits, setPricingEdits] = useState<Record<string, number>>({});
 
   const handleCreateRole = () => {
     if (!canCreateRoles) {
@@ -877,7 +897,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
     try {
       // Limpiar el objeto de envío para eliminar campos innecesarios o automáticos
-      const { id, _count, createdAt, updatedAt, ...cleanRole } = editingRole as any;
+      const { _id, _count, _createdAt, _updatedAt, ...cleanRole } = editingRole as any;
       
       const payload = {
         name: cleanRole.name,
@@ -910,7 +930,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
   const togglePermission = (module: string, type: 'read' | 'write' | 'create' | 'edit' | 'delete') => {
     if (!editingRole) return;
-    let newPerms = [...normalizePermissions(editingRole.permissions).map(p => ({ ...p }))];
+    const newPerms = [...normalizePermissions(editingRole.permissions).map(p => ({ ...p }))];
 
     const targetPerm = newPerms.find(p => p.module === module) as any;
     if (!targetPerm) return;
@@ -1000,7 +1020,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       </motion.div>
 
       {/* ── TABS ── */}
-      <Tabs value={activeTab} className="space-y-6" onValueChange={setActiveTab}>
+      <Tabs value={currentTab} className="space-y-6" onValueChange={setActiveTab}>
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
           <TabsList className="w-full h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-border/40">
             {visibleTabs.map((tab) => {

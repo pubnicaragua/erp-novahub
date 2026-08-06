@@ -72,7 +72,9 @@ export function SalesLinePriceListSelect({ productId, productCode, productName, 
   // (si el effect corre con items=[] y luego llegan, la key cambia y re-evalúa)
   const initialAppliedRef = useRef<string>('');
   const latestOnChange = useRef(onChange);
-  latestOnChange.current = onChange;
+  useEffect(() => {
+    latestOnChange.current = onChange;
+  });
 
   useEffect(() => {
     // Esperar a que la matriz tenga datos reales antes de aplicar

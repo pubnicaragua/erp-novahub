@@ -1,9 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlignCenter, AlignLeft, AlignRight, BarChart3, Barcode, Check, ChevronDown, ChevronLeft,
-  ChevronRight, FileCog, FileText, Folder, FolderPlus, Globe2, ImagePlus, LayoutTemplate,
-  Link2, Loader2, Maximize2, Palette, PanelBottom, PanelTop, Pencil, Plus, QrCode, Save,
-  Sparkles, Trash2, Upload, WandSparkles, ZoomIn, ZoomOut
+  AlignCenter, AlignLeft, AlignRight, Barcode, ChevronDown, ChevronLeft,
+  ChevronRight, FileCog, FileText, Folder, FolderPlus, ImagePlus, LayoutTemplate, Loader2, Maximize2, Palette, PanelBottom, PanelTop, Pencil, Plus, QrCode, Save, Trash2, Upload, WandSparkles, ZoomIn, ZoomOut
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -208,33 +206,36 @@ function PdfPageEditor({ source, fields, selectedFieldId, onSelectField = () => 
     let cancelled = false;
     let loadingTask: any;
     let loadedPdf: any;
-    pdfRef.current = null;
-    setPageNumber(1);
-    setPageCount(1);
-    setPageSize({ width: 0, height: 0 });
-    setError(null);
-    if (!source) return undefined;
-    setIsLoading(true);
-    const sourceData = source instanceof File ? source.arrayBuffer() : storageService.resolveUrl(source).then(url => fetch(url)).then(response => {
-      if (!response.ok) throw new Error('No se pudo obtener la plantilla');
-      return response.arrayBuffer();
-    });
-    void sourceData.then(data => {
-      if (cancelled) return null;
-      loadingTask = pdfjsLib.getDocument({ data });
-      return loadingTask.promise;
-    }).then(pdf => {
-      if (cancelled || !pdf) return;
-      loadedPdf = pdf;
-      pdfRef.current = pdf;
-      setPageCount(pdf.numPages);
-      setRenderVersion(version => version + 1);
-    }).catch(() => {
-      if (!cancelled) setError('No se pudo preparar la página PDF para editarla.');
-    }).finally(() => {
-      if (!cancelled) setIsLoading(false);
-    });
+    const timer = setTimeout(() => {
+      pdfRef.current = null;
+      setPageNumber(1);
+      setPageCount(1);
+      setPageSize({ width: 0, height: 0 });
+      setError(null);
+      if (!source) return;
+      setIsLoading(true);
+      const sourceData = source instanceof File ? source.arrayBuffer() : storageService.resolveUrl(source).then(url => fetch(url)).then(response => {
+        if (!response.ok) throw new Error('No se pudo obtener la plantilla');
+        return response.arrayBuffer();
+      });
+      void sourceData.then(data => {
+        if (cancelled) return null;
+        loadingTask = pdfjsLib.getDocument({ data });
+        return loadingTask.promise;
+      }).then(pdf => {
+        if (cancelled || !pdf) return;
+        loadedPdf = pdf;
+        pdfRef.current = pdf;
+        setPageCount(pdf.numPages);
+        setRenderVersion(version => version + 1);
+      }).catch(() => {
+        if (!cancelled) setError('No se pudo preparar la página PDF para editarla.');
+      }).finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    }, 0);
     return () => {
+      clearTimeout(timer);
       cancelled = true;
       pdfRef.current = null;
       if (loadingTask) void loadingTask.destroy();
@@ -344,18 +345,20 @@ function Pdf2HtmlPreview({ htmlUri, fields, selectedFieldId, onSelectField, page
 
   useEffect(() => {
     let cancelled = false;
-    setHtml('');
-    setError(null);
-    void storageService.resolveUrl(htmlUri).then(url => fetch(url)).then(response => {
-      if (!response.ok) throw new Error('No se pudo recuperar el HTML convertido');
-      return response.text();
-    }).then(value => {
-      if (!cancelled) {
-        const viewerCss = '<style id="novahub-viewer-css">html,body{margin:0!important;background:#fff!important;}#page-container{margin:0 auto!important;box-shadow:none!important;}#sidebar,#loading-indicator{display:none!important;}</style>';
-        setHtml(value.includes('</head>') ? value.replace('</head>', `${viewerCss}</head>`) : `${viewerCss}${value}`);
-      }
-    }).catch(() => { if (!cancelled) setError('No se pudo cargar la plantilla HTML convertida.'); });
-    return () => { cancelled = true; };
+    const timer = setTimeout(() => {
+      setHtml('');
+      setError(null);
+      void storageService.resolveUrl(htmlUri).then(url => fetch(url)).then(response => {
+        if (!response.ok) throw new Error('No se pudo recuperar el HTML convertido');
+        return response.text();
+      }).then(value => {
+        if (!cancelled) {
+          const viewerCss = '<style id="novahub-viewer-css">html,body{margin:0!important;background:#fff!important;}#page-container{margin:0 auto!important;box-shadow:none!important;}#sidebar,#loading-indicator{display:none!important;}</style>';
+          setHtml(value.includes('</head>') ? value.replace('</head>', `${viewerCss}</head>`) : `${viewerCss}${value}`);
+        }
+      }).catch(() => { if (!cancelled) setError('No se pudo cargar la plantilla HTML convertida.'); });
+    }, 0);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [htmlUri]);
 
   const ratio = pageSize?.width && pageSize?.height ? `${pageSize.width} / ${pageSize.height}` : '8.5 / 11';
@@ -446,51 +449,6 @@ function StructuredDocumentPreview({ target, settings, companyName, logo }: { ta
   </div>;
 }
 
-function HtmlTemplatePreview({ settings, documentType, companyName, logo, fields, selectedFieldId, onSelectField, fieldValue }: { settings: PdfSettings; documentType: PdfDocumentType; companyName: string; logo?: string | null; fields: PdfTemplateField[]; selectedFieldId: string; onSelectField: (id: string) => void; fieldValue: (field: PdfTemplateField) => string }) {
-  const primary = settings.primaryColor || '#10b981';
-  const text = settings.textColor || '#334155';
-  const line = settings.lineColor || '#e2e8f0';
-  const fieldMap = new Map(fields.map(field => [field.id, field]));
-  const getField = (id: string) => fieldMap.get(id);
-  const zone = (id: string, content: React.ReactNode, extraClass = '') => {
-    const field = getField(id);
-    if (!field || !field.enabled || !fieldValue(field).trim()) return null;
-    const selected = selectedFieldId === id;
-    return <div key={id} role="button" tabIndex={0} aria-label={`Editar ${field.label}`} onClick={() => onSelectField(id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') onSelectField(id); }} className={cn('group absolute cursor-pointer rounded-md border border-transparent p-1 transition-all hover:border-primary/50', selected && 'z-20 border-cyan-400 bg-cyan-50/60 ring-2 ring-cyan-300/50', extraClass)} style={{ left: `${field.x}%`, top: `${field.y}%`, width: `${field.width}%`, minHeight: `${field.height}%` }}>
-      {selected && <span className="absolute -top-3 left-1 z-30 rounded bg-cyan-500 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wide text-white shadow">{field.label}</span>}
-      {content}
-    </div>;
-  };
-  const title = documentLabel(documentType).toUpperCase();
-  const pageClass = settings.orientation === 'landscape' ? 'aspect-[1.414/1]' : 'aspect-[8.5/11]';
-  const bannerHeader = ['banner', 'ribbon', 'corner', 'double-band'].includes(settings.headerLayout);
-  const headerText = bannerHeader ? '#fff' : text;
-  return <div data-pdf-html-template="true" className={cn('relative mx-auto w-full max-w-[650px] overflow-hidden rounded-md border bg-white text-slate-700 shadow-2xl', pageClass)} style={{ fontFamily: settings.fontFamily, fontSize: `${settings.fontSize}px`, color: text }}>
-    {settings.watermark && <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden opacity-10"><span className="rotate-[-25deg] text-6xl font-black text-slate-500">{settings.watermark}</span></div>}
-    <div className={cn('absolute inset-x-0 top-0 z-0 h-[29%]', settings.headerLayout === 'double-band' && 'border-b-[10px]')} style={{ background: bannerHeader ? primary : '#fff', borderBottom: bannerHeader ? 'none' : `1px solid ${line}`, borderColor: settings.headerLayout === 'double-band' ? line : undefined }} />
-    {logo ? <img src={logo} alt="Logotipo" className="pointer-events-none absolute z-[1] object-contain" style={{ left: settings.logoPosition === 'center' ? '42%' : settings.logoPosition === 'right' ? '78%' : '8%', top: '5%', width: `${Math.min(settings.logoSize / 2, 13)}%`, maxHeight: '9%' }} /> : <div className="pointer-events-none absolute left-[8%] top-[6%] z-[1] flex size-8 items-center justify-center rounded bg-slate-100"><ImagePlus className="size-4 text-slate-400" /></div>}
-    {zone('company', <div className="font-bold" style={{ color: headerText }}>{fieldValue(getField('company')!)}</div>)}
-    {zone('slogan', <div className="truncate text-[.78em] opacity-75" style={{ color: headerText }}>{fieldValue(getField('slogan')!)}</div>)}
-    {zone('fiscal', <div className="whitespace-pre-line text-[.72em] opacity-75" style={{ color: headerText }}>{fieldValue(getField('fiscal')!)}</div>)}
-    {zone('documentTitle', <div className="whitespace-nowrap text-right text-[1.35em] font-black" style={{ color: headerText }}>{fieldValue(getField('documentTitle')!)}</div>)}
-    {zone('documentNumber', <div className="text-right text-[.82em]" style={{ color: headerText }}>Nº: {fieldValue(getField('documentNumber')!)}</div>)}
-    {zone('date', <div className="text-right text-[.82em]" style={{ color: headerText }}>Fecha: {fieldValue(getField('date')!)}</div>)}
-    {zone('customer', <div><strong className="block text-[.78em] uppercase" style={{ color: primary }}>Preparado para</strong><span className="font-semibold">{fieldValue(getField('customer')!)}</span></div>)}
-    {zone('address', <div className="whitespace-pre-line text-[.78em] opacity-75">{fieldValue(getField('address')!)}</div>)}
-    {zone('phone', <div className="text-[.78em] opacity-75">{fieldValue(getField('phone')!)}</div>)}
-    {zone('email', <div className="truncate text-[.78em] opacity-75">{fieldValue(getField('email')!)}</div>)}
-    {zone('items', <div className={cn('overflow-hidden border', settings.tableLayout === 'cards' ? 'space-y-1 border-0' : 'rounded')} style={{ borderColor: line }}><div className={cn('grid grid-cols-[1fr_12%_18%_18%] gap-1 px-2 py-2 text-[.78em] font-bold', settings.tableLayout === 'minimal' ? 'text-slate-700' : 'text-white')} style={{ background: settings.tableLayout === 'minimal' ? '#f8fafc' : primary }}><span>Descripción</span><span>Cant.</span><span>Precio</span><span>Total</span></div>{['Servicio principal', 'Producto adicional', 'Soporte mensual'].map((item, index) => <div key={item} className={cn('grid grid-cols-[1fr_12%_18%_18%] gap-1 border-t px-2 py-2 text-[.72em]', settings.tableLayout === 'cards' && 'rounded border')} style={{ borderColor: line, background: ['striped', 'ledger', 'accent'].includes(settings.tableLayout) && index % 2 ? '#f8fafc' : '#fff' }}><span>{item}</span><span>1</span><span>$ 100.00</span><strong style={{ color: settings.tableLayout === 'accent' ? primary : undefined }}>$ 100.00</strong></div>)}</div>, 'p-0')}
-    {zone('totals', <div className="space-y-1 text-right text-[.78em]"><div className="flex justify-between gap-3"><span>Subtotal</span><span>$ 300.00</span></div><div className="flex justify-between gap-3"><span>Impuesto</span><span>$ 45.00</span></div><div className="flex justify-between gap-3 border-t pt-1 font-bold" style={{ borderColor: line, color: primary }}><span>TOTAL</span><span>$ 345.00</span></div></div>)}
-    {zone('legal', <div className="whitespace-pre-line text-[.68em] opacity-75">{fieldValue(getField('legal')!)}</div>)}
-    {zone('terms', <div className="whitespace-pre-line text-[.68em] opacity-75">{fieldValue(getField('terms')!)}</div>)}
-    {zone('notes', <div className="whitespace-pre-line text-[.68em] opacity-75">{fieldValue(getField('notes')!)}</div>)}
-    {zone('footer', <div className="border-t pt-1 text-[.68em] opacity-70" style={{ borderColor: line }}>{fieldValue(getField('footer')!)}</div>)}
-    {settings.showPageNumber && <div className="absolute bottom-[3%] right-[8%] text-[.65em] opacity-60">{settings.pageNumberFormat === 'number-only' ? '1' : settings.pageNumberFormat === 'custom' ? settings.pageNumberCustom.replace('{page}', '1').replace('{pages}', '1') : 'Página 1 de 1'}</div>}
-    {settings.showQr && <div className="absolute bottom-[7%] right-[8%] flex size-9 items-center justify-center border opacity-70"><QrCode className="size-7" /></div>}
-    {settings.showBarcode && <div className="absolute bottom-[7%] right-[18%] flex h-9 w-20 items-center justify-center border opacity-70"><Barcode className="size-16" /></div>}
-  </div>;
-}
-
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) { return <div className="space-y-1.5"><Label className="text-xs font-bold text-muted-foreground">{label}</Label>{children}{hint && <p className="text-[10px] text-muted-foreground/70">{hint}</p>}</div>; }
 function ToggleRow({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (value: boolean) => void }) { return <div className="flex items-center justify-between gap-3 rounded-xl border border-border/40 bg-muted/15 p-3"><div><p className="text-sm font-semibold">{label}</p><p className="text-[11px] text-muted-foreground">{description}</p></div><Switch checked={checked} onCheckedChange={onChange} /></div>; }
 
@@ -511,7 +469,7 @@ export function PdfDocumentCustomizer({ tenantId, companyName = '', corporateCol
   const [selectedTemplateKey, setSelectedTemplateKey] = useState('');
   const [showTutorial, setShowTutorial] = useState(false);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
-  const [pendingTemplateFile, setPendingTemplateFile] = useState<File | null>(null);
+  const [pendingTemplateFile, _setPendingTemplateFile] = useState<File | null>(null);
   const [templateName, setTemplateName] = useState('');
   const [pendingTemplateDocumentType, setPendingTemplateDocumentType] = useState<PdfDocumentType | null>(null);
   const [isUploadingTemplate, setIsUploadingTemplate] = useState(false);
@@ -524,29 +482,24 @@ export function PdfDocumentCustomizer({ tenantId, companyName = '', corporateCol
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'design'; record: PdfDocumentDesignRecord } | { kind: 'folder'; record: PdfDocumentDesignFolder } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [sourceMetadata, setSourceMetadata] = useState<{ sourceType: string; sourceFileUrl?: string; sourceFileName?: string; analysisStatus?: string; layoutZones?: Record<string, any> } | null>(null);
   const isUploadedSource = sourceMetadata?.sourceType === 'UPLOADED_PDF' || sourceMetadata?.sourceType === 'UPLOADED_HTML';
 
-  useEffect(() => { Promise.all([pdfDocumentDesignService.list(), pdfDocumentDesignService.listFolders()]).then(([records, folderRecords]) => { setDesigns(records || []); setFolders(folderRecords || []); if (records?.length) loadDesign(records[0]); }).catch(() => {}).finally(() => setIsLoading(false)); }, []);
-  useEffect(() => { if (settings.paletteMode === 'corporate' && corporateColor && activeId === 'draft') setSettings(prev => ({ ...prev, primaryColor: corporateColor })); }, [corporateColor]);
+  const loadDesign = useCallback((record: PdfDocumentDesignRecord) => { const storedFields = (record.layoutZones as any)?.fields; const assignedDocument = normalizePdfTemplateKey(record.documentTypes?.[0] || 'ventas.estimate'); const target = getPdfTemplateTarget(assignedDocument); setActiveId(record.id); setSelectedFolderId(record.folderId || null); setSelectedTemplateKey(TEMPLATE_LIBRARY.some(template => template.key === record.templateKey) ? record.templateKey : ''); setName(record.name); setDescription(record.description || ''); setAssignedDocuments([assignedDocument]); setDocumentType(assignedDocument); setSelectedModule(target.module); setSettings({ ...DEFAULT_SETTINGS, companyName, primaryColor: corporateColor, ...(record.settings as Partial<PdfSettings>) }); setTemplateFields(normalizeTemplateFields(storedFields, companyName)); setSourceMetadata({ sourceType: record.sourceType, sourceFileUrl: record.sourceFileUrl || undefined, sourceFileName: record.sourceFileName || undefined, analysisStatus: record.analysisStatus, layoutZones: record.layoutZones || undefined }); if (record.sourceType === 'UPLOADED_PDF' && !['HTML_CONVERTED', 'PDF_VIEWER_FALLBACK'].includes(record.analysisStatus)) { void pdfDocumentDesignService.convertToHtml(record.id).then(converted => { setDesigns(prev => prev.map(item => item.id === converted.id ? converted : item)); setSourceMetadata({ sourceType: converted.sourceType, sourceFileUrl: converted.sourceFileUrl || undefined, sourceFileName: converted.sourceFileName || undefined, analysisStatus: converted.analysisStatus, layoutZones: converted.layoutZones || undefined }); }).catch(() => {}); } }, [companyName, corporateColor]);
 
-  const loadDesign = (record: PdfDocumentDesignRecord) => { const storedFields = (record.layoutZones as any)?.fields; const assignedDocument = normalizePdfTemplateKey(record.documentTypes?.[0] || 'ventas.estimate'); const target = getPdfTemplateTarget(assignedDocument); setActiveId(record.id); setSelectedFolderId(record.folderId || null); setSelectedTemplateKey(TEMPLATE_LIBRARY.some(template => template.key === record.templateKey) ? record.templateKey : ''); setName(record.name); setDescription(record.description || ''); setAssignedDocuments([assignedDocument]); setDocumentType(assignedDocument); setSelectedModule(target.module); setSettings({ ...DEFAULT_SETTINGS, companyName, primaryColor: corporateColor, ...(record.settings as Partial<PdfSettings>) }); setTemplateFields(normalizeTemplateFields(storedFields, companyName)); setSourceMetadata({ sourceType: record.sourceType, sourceFileUrl: record.sourceFileUrl || undefined, sourceFileName: record.sourceFileName || undefined, analysisStatus: record.analysisStatus, layoutZones: record.layoutZones || undefined }); if (record.sourceType === 'UPLOADED_PDF' && !['HTML_CONVERTED', 'PDF_VIEWER_FALLBACK'].includes(record.analysisStatus)) { void pdfDocumentDesignService.convertToHtml(record.id).then(converted => { setDesigns(prev => prev.map(item => item.id === converted.id ? converted : item)); setSourceMetadata({ sourceType: converted.sourceType, sourceFileUrl: converted.sourceFileUrl || undefined, sourceFileName: converted.sourceFileName || undefined, analysisStatus: converted.analysisStatus, layoutZones: converted.layoutZones || undefined }); }).catch(() => {}); } };
+  useEffect(() => { Promise.all([pdfDocumentDesignService.list(), pdfDocumentDesignService.listFolders()]).then(([records, folderRecords]) => { setDesigns(records || []); setFolders(folderRecords || []); if (records?.length) loadDesign(records[0]); }).catch(() => {}).finally(() => setIsLoading(false)); }, [loadDesign]);
+  useEffect(() => {
+    if (settings.paletteMode !== 'corporate' || !corporateColor || activeId !== 'draft') return;
+    const timer = setTimeout(() => { setSettings(prev => ({ ...prev, primaryColor: corporateColor })); }, 0);
+    return () => clearTimeout(timer);
+  }, [corporateColor, activeId, settings.paletteMode]);
   const update = <K extends keyof PdfSettings>(key: K, value: PdfSettings[K]) => setSettings(prev => ({ ...prev, [key]: value }));
   const reservedDocumentDesign = (id: PdfDocumentType, excludeId = activeId) => designs.find(record => record.isActive && record.id !== excludeId && normalizePdfTemplateKey(record.documentTypes?.[0]) === normalizePdfTemplateKey(id));
   const availableDocumentTypes = DOCUMENTS.filter(item => !reservedDocumentDesign(item.id));
   const firstAvailableDocumentType = (preferred: PdfDocumentType, excludeId = activeId) => {
     const available = DOCUMENTS.filter(item => !reservedDocumentDesign(item.id, excludeId));
     return available.some(item => item.id === preferred) ? preferred : available[0]?.id || preferred;
-  };
-  const toggleDocument = (id: PdfDocumentType) => {
-    const reservedBy = reservedDocumentDesign(id);
-    if (reservedBy) {
-      toast.error(`«${documentLabel(id)}» ya está asignado a «${reservedBy.name}»`);
-      return;
-    }
-    setAssignedDocuments([id]);
   };
 
   const saveDesign = async () => {
@@ -562,14 +515,13 @@ export function PdfDocumentCustomizer({ tenantId, companyName = '', corporateCol
   const deleteDesignRecord = (record: PdfDocumentDesignRecord) => setDeleteTarget({ kind: 'design', record });
   const deleteDesign = async () => { if (activeId === 'draft') return; const record = designs.find(item => item.id === activeId); if (record) deleteDesignRecord(record); };
   const applyTemplate = (template: typeof TEMPLATE_LIBRARY[number]) => { const structure: Partial<PdfSettings> = { headerLayout: template.settings.headerLayout, tableLayout: template.settings.tableLayout, separator: template.settings.separator, ...(template.settings.fontFamily ? { fontFamily: template.settings.fontFamily } : {}), ...(template.settings.fontSize ? { fontSize: template.settings.fontSize } : {}) }; setSelectedTemplateKey(template.key); setSettings(prev => ({ ...prev, ...structure })); toast.success(`Estructura ${template.name} aplicada`); };
-  const prepareCustomTemplate = (file: File) => { const isHtml = file.type === 'text/html' || /\.html?$/i.test(file.name); if (file.type !== 'application/pdf' && !isHtml) { toast.error('Selecciona un PDF o un HTML generado por pdf2htmlEX'); return; } const available = DOCUMENTS.filter(item => !reservedDocumentDesign(item.id, 'draft')); if (!available.length) { toast.error('Todas las vistas ya tienen una plantilla asignada. Libera una vista antes de cargar otra.'); return; } const nextDocumentType = available.some(item => item.id === documentType) ? documentType : available[0].id; setPendingTemplateDocumentType(nextDocumentType); setPendingTemplateFile(file); setTemplateName(file.name.replace(/\.(pdf|html?)$/i, '') || 'Plantilla personalizada'); setTemplateModalOpen(true); };
   const updateTemplateField = (id: string, changes: Partial<PdfTemplateField>) => setTemplateFields(fields => fields.map(field => field.id === id ? { ...field, ...changes } : field));
   const previewDocument = useMemo(() => assignedDocuments.includes(documentType) ? documentType : assignedDocuments[0] || 'ventas.estimate', [assignedDocuments, documentType]);
   const moduleTargets = useMemo(() => DOCUMENTS.filter(target => target.module === selectedModule), [selectedModule]);
   const selectTarget = (targetKey: string) => { const target = getPdfTemplateTarget(targetKey); setSelectedModule(target.module); setDocumentType(target.key); setAssignedDocuments([target.key]); };
   const selectedTemplateField = templateFields.find(field => field.id === selectedTemplateFieldId) || templateFields[0];
   const selectedTemplateFieldValue = selectedTemplateField ? TEMPLATE_FIELD_SETTINGS[selectedTemplateField.id] : undefined;
-  const templateFieldValue = (field: PdfTemplateField) => {
+  const templateFieldValue = useCallback((field: PdfTemplateField) => {
     const settingKey = TEMPLATE_FIELD_SETTINGS[field.id];
     if (settingKey) {
       const value = String(settings[settingKey] || '').trim();
@@ -587,11 +539,11 @@ export function PdfDocumentCustomizer({ tenantId, companyName = '', corporateCol
       case 'totals': return '$ 345.00';
       default: return field.sample;
     }
-  };
+  }, [settings, previewDocument, companyName]);
   const liveTemplateFields = useMemo(() => templateFields.map(field => {
     if (isUploadedSource && !field.enabled && TEMPLATE_FIELD_SETTINGS[field.id] && templateFieldValue(field)) return { ...field, enabled: true };
     return field;
-  }), [templateFields, sourceMetadata?.sourceType, settings, previewDocument]);
+  }), [templateFields, isUploadedSource, templateFieldValue]);
   const updateSelectedFieldValue = (value: string) => {
     if (!selectedTemplateField) return;
     const settingKey = TEMPLATE_FIELD_SETTINGS[selectedTemplateField.id];

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { Ticket, TicketAudit, TicketComment } from '../../types';
 import { Card, CardContent } from '../ui/card';
@@ -32,7 +32,7 @@ interface TicketsViewProps {
 }
 
 const SlaStatusBadge: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
-  const now = Date.now();
+  const [now] = useState(() => Date.now());
   const dueAt = ticket.slaDueAt ? new Date(ticket.slaDueAt).getTime() : null;
   const resolved = ['RESOLVED', 'CLOSED'].includes((ticket.status || '').toUpperCase());
 
@@ -86,7 +86,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
     { value: 'URGENT', label: 'Urgente', color: 'text-rose-500' },
   ];
 
-  const loadTicketDetails = async (ticketId: string) => {
+  const loadTicketDetails = useCallback(async (ticketId: string) => {
     try {
       setDetailLoading(true);
       const [commentsRes, auditRes] = await Promise.all([
@@ -102,18 +102,22 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
     } finally {
       setDetailLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!selectedTicket?.id) return;
-    loadTicketDetails(selectedTicket.id);
-  }, [selectedTicket?.id]);
+    const timer = window.setTimeout(() => loadTicketDetails(selectedTicket.id), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadTicketDetails, selectedTicket?.id]);
 
-  useEffect(() => {
-    if (!selectedTicket?.id) return;
-    const updated = data.find((item) => item.id === selectedTicket.id);
-    if (updated) setSelectedTicket(updated);
-  }, [data, selectedTicket?.id]);
+  const [prevData, setPrevData] = useState(data);
+  if (prevData !== data) {
+    setPrevData(data);
+    if (selectedTicket?.id) {
+      const updated = data.find((item) => item.id === selectedTicket.id);
+      if (updated) setSelectedTicket(updated);
+    }
+  }
 
   const columns: ColumnDef<Ticket>[] = [
     { key: 'number', header: 'Ticket', width: '110px' },
@@ -271,15 +275,11 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
     },
   ];
 
-  const filtered = useMemo(
-    () =>
-      data.filter(
-        (t) =>
-          t.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          t.number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          t.description?.toLowerCase().includes(searchTerm.toLowerCase()),
-      ),
-    [data, searchTerm],
+  const filtered = data.filter(
+    (t) =>
+      t.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.description?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (

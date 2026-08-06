@@ -11,7 +11,7 @@ import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
 import {
   Settings2, Save, RefreshCw, Shield, DollarSign, Building2, 
-  Calculator, Info, CheckCircle2, Percent, Scale
+  Calculator, Info, Percent, Scale
 } from 'lucide-react';
 import { hrService } from '../../services/hr.service';
 import { useAuth } from '../../contexts/AuthContext';
@@ -61,38 +61,38 @@ export function ConfigNominaView() {
   // Simulation calculator state
   const [simSalaryBruto, setSimSalaryBruto] = useState<number>(13000);
 
-  useEffect(() => { fetchConfig(); }, []);
-
-  const fetchConfig = async () => {
-    try {
-      setLoading(true);
-      const res = await hrService.getActivePayrollConfig() as any;
-      if (res && res.id) {
-        setConfig({
-          id: res.id,
-          name: res.name || 'Configuración Default',
-          inssLaboralPct: Number(res.inssLaboralPct),
-          irEnabled: res.irEnabled ?? true,
-          irTramo1Limite: Number(res.irTramo1Limite), irTramo1Pct: Number(res.irTramo1Pct),
-          irTramo2Limite: Number(res.irTramo2Limite), irTramo2Base: Number(res.irTramo2Base), irTramo2Pct: Number(res.irTramo2Pct),
-          irTramo3Limite: Number(res.irTramo3Limite), irTramo3Base: Number(res.irTramo3Base), irTramo3Pct: Number(res.irTramo3Pct),
-          irTramo4Limite: Number(res.irTramo4Limite), irTramo4Base: Number(res.irTramo4Base), irTramo4Pct: Number(res.irTramo4Pct),
-          irTramo5Base: Number(res.irTramo5Base), irTramo5Pct: Number(res.irTramo5Pct),
-          inssPatronalPct: Number(res.inssPatronalPct),
-          inatecPct: Number(res.inatecPct),
-          trecenoMesPct: Number(res.trecenoMesPct),
-          vacacionesPct: Number(res.vacacionesPct),
-          indemnizacionPct: Number(res.indemnizacionPct),
-          isActive: res.isActive ?? true,
-        });
-        setHasExisting(true);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await hrService.getActivePayrollConfig() as any;
+        if (res && res.id) {
+          setConfig({
+            id: res.id,
+            name: res.name || 'Configuración Default',
+            inssLaboralPct: Number(res.inssLaboralPct),
+            irEnabled: res.irEnabled ?? true,
+            irTramo1Limite: Number(res.irTramo1Limite), irTramo1Pct: Number(res.irTramo1Pct),
+            irTramo2Limite: Number(res.irTramo2Limite), irTramo2Base: Number(res.irTramo2Base), irTramo2Pct: Number(res.irTramo2Pct),
+            irTramo3Limite: Number(res.irTramo3Limite), irTramo3Base: Number(res.irTramo3Base), irTramo3Pct: Number(res.irTramo3Pct),
+            irTramo4Limite: Number(res.irTramo4Limite), irTramo4Base: Number(res.irTramo4Base), irTramo4Pct: Number(res.irTramo4Pct),
+            irTramo5Base: Number(res.irTramo5Base), irTramo5Pct: Number(res.irTramo5Pct),
+            inssPatronalPct: Number(res.inssPatronalPct),
+            inatecPct: Number(res.inatecPct),
+            trecenoMesPct: Number(res.trecenoMesPct),
+            vacacionesPct: Number(res.vacacionesPct),
+            indemnizacionPct: Number(res.indemnizacionPct),
+            isActive: res.isActive ?? true,
+          });
+          setHasExisting(true);
+        }
+      } catch (error) {
+        console.error('Error fetching payroll config:', error);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching payroll config:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    void load();
+  }, []);
 
   const handleSave = async () => {
     try {

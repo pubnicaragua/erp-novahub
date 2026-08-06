@@ -79,7 +79,10 @@ export function BalanceGeneralView() {
     }
   }, [date, showPreviousYear]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    const timer = window.setTimeout(fetchData, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchData]);
 
   const totalActivos = data?.totalAssets || 0;
   const totalPasivos = data?.totalLiabilities || 0;

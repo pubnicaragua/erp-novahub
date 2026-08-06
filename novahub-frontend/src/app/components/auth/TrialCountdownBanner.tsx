@@ -24,7 +24,7 @@ function getTimeRemaining(expiresAt: string | Date | null | undefined): {
 
 export function TrialCountdownBanner() {
   const { user } = useAuth();
-  const [, setNow] = useState(Date.now());
+  const [, setNow] = useState(() => Date.now());
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem(DISMISS_KEY) === 'true';
@@ -59,7 +59,7 @@ export function TrialCountdownBanner() {
     setDismissed(true);
     try {
       localStorage.setItem(DISMISS_KEY, 'true');
-    } catch {}
+    } catch { /* intentionally empty */ }
   };
 
   return (

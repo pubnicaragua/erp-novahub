@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { Warehouse, MapPin, Plus, Trash2, X, Check, Edit2, Banknote, Loader2, Users, CircleHelp } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -150,8 +150,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   };
 
   React.useEffect(() => {
-    fetchCajas();
-    fetchSucursales();
+    Promise.resolve().then(fetchCajas);
+    Promise.resolve().then(fetchSucursales);
     contabilidadService.getChartOfAccounts().then(res => setAccounts(res.data || [])).catch(() => {});
   }, []);
 
@@ -173,7 +173,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     if (!context) return;
 
     cameFromSetupRef.current = true;
-    setShowTutorial(context.tourActive);
+    Promise.resolve().then(() => setShowTutorial(context.tourActive));
     window.setTimeout(() => {
       if (context.action === 'open-warehouse-form') {
         handleAddNewRow();

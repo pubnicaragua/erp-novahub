@@ -281,7 +281,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   const setBehavior = (code: string, behavior: CostBehavior, fixedPercentage?: number) => {
     const next: BreakEvenConfig = { ...breakEvenConfig, [code]: { behavior, ...(behavior === 'MIXED' ? { fixedPercentage: fixedPercentage ?? 50, variablePercentage: 100 - (fixedPercentage ?? 50) } : {}) } };
     setBreakEvenConfig(next);
-    try { localStorage.setItem('erp-breakeven-config', JSON.stringify(next)); } catch { }
+    try { localStorage.setItem('erp-breakeven-config', JSON.stringify(next)); } catch { /* intentionally empty */ }
   };
 
   const extraordinario = useMemo(() => {
@@ -303,7 +303,9 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
   const liquidezAlta = liquidez.razonCorriente !== null && liquidez.razonCorriente > 10;
 
   const now = new Date();
-  const budget = useMemo(() => buildBudget(budgetItems, budgetAccounts, trialRows, String(now.getFullYear()), `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`), [budgetItems, budgetAccounts, trialRows, now.getFullYear(), now.getMonth()]);
+  const currentYear = now.getFullYear();
+  const currentMonth = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const budget = useMemo(() => buildBudget(budgetItems, budgetAccounts, trialRows, String(currentYear), currentMonth), [budgetItems, budgetAccounts, trialRows, currentYear, currentMonth]);
 
   const recurrentes = useMemo(() => {
     if (!raw) return { ingresos: 0, gastos: 0, ingMensual: 0, expMensual: 0, impactoNeto: 0, nextIng: null as any, nextExp: null as any };
@@ -476,7 +478,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
             const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', onclone: (clonedDoc) => sanitizeHtml2CanvasOklch(exportIds, clonedDoc, primaryHex) });
             doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
             currentY += height + 5;
-          } catch { }
+          } catch { /* intentionally empty */ }
         };
 
         await capture('finance-monthly-chart', 80);

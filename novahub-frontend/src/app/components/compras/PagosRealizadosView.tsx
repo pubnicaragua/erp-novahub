@@ -33,6 +33,8 @@ const methodOpts = [
   { label: 'Otro',            value: 'OTHER' },
 ];
 
+const fallbackPaymentReference = () => `PAG-${Date.now().toString().slice(-5)}`;
+
 export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], draftPaymentFromInvoice, onDraftConsumed }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount, convertAmount } = useCurrency();
@@ -68,47 +70,56 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   }, []);
 
   useEffect(() => {
-    if (supplierInvoices.length > 0) {
-      setBills(supplierInvoices);
-    }
+    const timer = setTimeout(() => {
+      if (supplierInvoices.length > 0) {
+        setBills(supplierInvoices);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [supplierInvoices]);
 
   useEffect(() => {
-    if (draftPaymentFromInvoice) {
-      setEditingId('NEW');
-    }
+    const timer = setTimeout(() => {
+      if (draftPaymentFromInvoice) {
+        setEditingId('NEW');
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [draftPaymentFromInvoice]);
 
   useEffect(() => {
-    if (editingId) {
-      setIsMixed(false);
-      if (editingId === 'NEW') {
-         const prefilled = draftPaymentFromInvoice || {};
-         setLocalDoc({
-           supplierId: prefilled.supplierId || '',
-           supplierInvoiceId: prefilled.supplierInvoiceId || '',
-            date: prefilled.date || new Date().toISOString(),
-            amount: Number(prefilled.amount || 0),
-            currency: (prefilled.currency as any) || displayCurrency,
-            exchangeRate: prefilled.exchangeRate || globalRate,
-            method: normalizeMethod(prefilled.method as any),
-            reference: prefilled.reference || `PAG-${Date.now().toString().slice(-5)}`,
-            notes: prefilled.notes || '',
-           });
-         if (draftPaymentFromInvoice && onDraftConsumed) onDraftConsumed();
-       } else {
-          const found = data.find(x => x.id === editingId);
-          setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
-       }
-    } else {
-      setLocalDoc(null);
-    }
-  }, [editingId, data, draftPaymentFromInvoice, onDraftConsumed]);
+    const timer = setTimeout(() => {
+      if (editingId) {
+        setIsMixed(false);
+        if (editingId === 'NEW') {
+           const prefilled = draftPaymentFromInvoice || {};
+           setLocalDoc({
+             supplierId: prefilled.supplierId || '',
+             supplierInvoiceId: prefilled.supplierInvoiceId || '',
+              date: prefilled.date || new Date().toISOString(),
+              amount: Number(prefilled.amount || 0),
+              currency: (prefilled.currency as any) || displayCurrency,
+              exchangeRate: prefilled.exchangeRate || globalRate,
+              method: normalizeMethod(prefilled.method as any),
+              reference: prefilled.reference || `PAG-${Date.now().toString().slice(-5)}`,
+              notes: prefilled.notes || '',
+             });
+           if (draftPaymentFromInvoice && onDraftConsumed) onDraftConsumed();
+         } else {
+            const found = data.find(x => x.id === editingId);
+            setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+         }
+      } else {
+        setLocalDoc(null);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [editingId, data, draftPaymentFromInvoice, onDraftConsumed, displayCurrency, globalRate]);
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const getMethodLabel = (method?: string) => methodOpts.find((opt) => opt.value === normalizeMethod(method))?.label || method || '-';
   const toExpensePayload = (payment: Partial<PaymentMade>, supplierName?: string) => ({
-    number: payment.number || payment.reference || payment.id || `PAG-${Date.now().toString().slice(-5)}`,
+    number: payment.number || payment.reference || payment.id || fallbackPaymentReference(),
     id: payment.id,
     date: payment.date,
     amount: Number(payment.amount || 0),
@@ -183,7 +194,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       toast.success('Pago actualizado');
       onRefresh();
     }
-    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
   };
 
   const syncLinkedInvoiceStatus = async (paymentDraft: Partial<PaymentMade>, paymentIdToUpsert?: string) => {

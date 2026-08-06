@@ -94,7 +94,11 @@ export function NovaChatView() {
   }, []);
 
   useEffect(() => {
-    void loadData();
+    const load = async () => {
+      setLoading(true);
+      await loadData();
+    };
+    load();
   }, [loadData]);
 
   useEffect(() => {

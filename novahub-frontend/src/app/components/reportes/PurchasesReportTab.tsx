@@ -1037,8 +1037,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             });
             doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
             currentY += height + 5;
-          } catch {
-          }
+          } catch { /* ignore */ }
         };
 
         await capture('purchases-monthly-chart', 85);

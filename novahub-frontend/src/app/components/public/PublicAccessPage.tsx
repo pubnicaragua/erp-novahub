@@ -95,7 +95,7 @@ export function PublicAccessPage({ mode }: { mode: 'document' | 'portal' }) {
   useEffect(() => {
     const savedTheme = localStorage.getItem(themeStorageKey);
     const configuredTheme = data?.company?.portalDefaultTheme === 'light' ? 'light' : 'dark';
-    setThemeMode(savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : configuredTheme);
+    Promise.resolve().then(() => setThemeMode(savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : configuredTheme));
   }, [data?.company?.portalDefaultTheme, themeStorageKey]);
 
   useEffect(() => { localStorage.setItem(themeStorageKey, themeMode); }, [themeMode, themeStorageKey]);
@@ -133,7 +133,8 @@ export function PublicAccessPage({ mode }: { mode: 'document' | 'portal' }) {
         if (!cancelled) setError(e.message);
       }
     };
-    if (token) load(); else setError('Enlace incompleto.');
+    if (token) Promise.resolve().then(load);
+    else Promise.resolve().then(() => setError('Enlace incompleto.'));
     return () => { cancelled = true; };
   }, [mode, token, storageKey]);
 

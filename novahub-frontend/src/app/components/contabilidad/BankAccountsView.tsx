@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Building2, Plus, Trash2, Edit2, Loader2, Landmark } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader2, Landmark } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -39,7 +39,7 @@ export function BankAccountsView() {
     }
   };
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => { Promise.resolve().then(fetch); }, []);
 
   const openCreate = () => {
     setEditing(null);

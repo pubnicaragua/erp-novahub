@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
-  Zap, Building2, CircleHelp, Globe, User as UserIcon, LayoutGrid, Check, Clock, Plus, ShieldCheck, DollarSign, MessageSquare, Users, Edit2, Trash2, KeyRound, X, Mail, Shield, MapPin, Store, Info, Crown
+  Zap, Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Store, Info, Crown
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -22,7 +22,6 @@ import { usersService } from '../../services/users.service';
 import { inventoryService } from '../../services/inventario.service';
 import { brandingService } from '../../services/branding.service';
 import { api } from '../../services/api';
-import { cajaService } from '../../services/caja.service';
 import { toast } from 'sonner';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -63,7 +62,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [notes, setNotes] = useState('');
   const [users, setUsers] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [, setLoadingUsers] = useState(false);
   const [companyName, setCompanyName] = useState('');
   const [companySlug, setCompanySlug] = useState('');
   const [companyIndustry, setCompanyIndustry] = useState('OTHER');
@@ -78,20 +77,35 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [newPasswordForUser, setNewPasswordForUser] = useState('');
   const [updatingPassword, setUpdatingPassword] = useState(false);
 
-  useEffect(() => {
-    if (tenant?.id) {
-      fetchUsers();
-      inventoryService.getWarehouses().then((response: any) => setWarehouses(Array.isArray(response) ? response : (response?.data || []))).catch(() => setWarehouses([]));
-      setCompanyName(tenant.name || '');
-      setCompanySlug(tenant.slug || '');
-      setCompanyIndustry(tenant.industry || 'OTHER');
-      brandingService.getCurrent().then((branding) => {
-        if (branding.companyName) setCompanyName(branding.companyName);
-        if (branding.industry) setCompanyIndustry(branding.industry);
-      }).catch(() => undefined);
-      api.get<any[]>(`/tenants/${tenant.id}/industries`).then((response) => setIndustryOptions(Array.isArray(response) ? response : [])).catch(() => setIndustryOptions([]));
+  const fetchUsers = useCallback(async () => {
+    try {
+      setLoadingUsers(true);
+      const res = await tenantsService.getUsers(tenant.id);
+      setUsers(Array.isArray(res) ? res : (res as any)?.data || []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    } finally {
+      setLoadingUsers(false);
     }
-  }, [tenant?.id]);
+  }, [tenant]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (tenant?.id) {
+        void fetchUsers();
+        inventoryService.getWarehouses().then((response: any) => setWarehouses(Array.isArray(response) ? response : (response?.data || []))).catch(() => setWarehouses([]));
+        setCompanyName(tenant.name || '');
+        setCompanySlug(tenant.slug || '');
+        setCompanyIndustry(tenant.industry || 'OTHER');
+        brandingService.getCurrent().then((branding) => {
+          if (branding.companyName) setCompanyName(branding.companyName);
+          if (branding.industry) setCompanyIndustry(branding.industry);
+        }).catch(() => undefined);
+        api.get<any[]>(`/tenants/${tenant.id}/industries`).then((response) => setIndustryOptions(Array.isArray(response) ? response : [])).catch(() => setIndustryOptions([]));
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [tenant?.id, tenant?.name, tenant?.industry, tenant?.slug, fetchUsers]);
 
   const handleAddIndustry = async () => {
     const name = newIndustryName.trim();
@@ -137,18 +151,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       toast.error(error?.response?.data?.message || 'Error al guardar la información');
     } finally {
       setSavingCompany(false);
-    }
-  };
-
-  const fetchUsers = async () => {
-    try {
-      setLoadingUsers(true);
-      const res = await tenantsService.getUsers(tenant.id);
-      setUsers(Array.isArray(res) ? res : (res as any)?.data || []);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    } finally {
-      setLoadingUsers(false);
     }
   };
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, FileDown, Info, Ban } from 'lucide-react';
+import { Truck, Plus, Search, Eye, TrendingDown, CheckCircle2, ArrowUpDown, Upload, FileDown, Info, Ban } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';

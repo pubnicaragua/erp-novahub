@@ -309,8 +309,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const [emitDate, setEmitDate] = useState(getTodayInputDate());
   const [discountPercent, setDiscountPercent] = useState(0);
   const [pricingMode, setPricingMode] = useState<PricingMode>('global');
-  const [irRate, setIrRate] = useState(0);
-  const [irTaxId, setIrTaxId] = useState<string | null>(null);
+  const [irRate] = useState(0);
+  const [irTaxId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState('');
   const [catalogItemFilter, setCatalogItemFilter] = useState<CatalogItemFilter>('ALL');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -334,11 +334,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
 
   const cartSessions = useRef<Map<string, CartSession>>(new Map());
 
-  useEffect(() => {
-    if (!user?.tenantId) return;
+  const [prevTenantId, setPrevTenantId] = useState(user?.tenantId);
+  if (prevTenantId !== user?.tenantId) {
+    setPrevTenantId(user?.tenantId);
     setPriceLists([]);
     setPriceListItems([]);
     setSelectedPriceListId('');
+  }
+
+  useEffect(() => {
+    if (!user?.tenantId) return;
     let active = true;
     void Promise.all([priceListsService.getAll(), priceListsService.getMatrix()]).then(([lists, matrix]) => {
       if (!active) return;
@@ -458,7 +463,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   }, []);
 
   useEffect(() => {
-    void loadInitialData();
+    const timer = window.setTimeout(loadInitialData, 0);
     brandingService.getCurrent().then((branding) => {
       if (branding?.companyName?.trim()) setCompanyName(branding.companyName.trim());
     }).catch(() => undefined);
@@ -466,6 +471,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       const items = response?.data ?? response?.items ?? response;
       setBankAccounts(Array.isArray(items) ? items.filter((account: Account) => account.isActive && String(account.type || '').toUpperCase() === 'ASSET') : []);
     }).catch(() => setBankAccounts([]));
+    return () => window.clearTimeout(timer);
   }, [loadInitialData]);
 
   useEffect(() => {
@@ -481,13 +487,17 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     }
   }, [catalogView]);
 
-  useEffect(() => {
-    if (!selectedRegisterId) {
-      setRecentInvoices([]);
-      return;
-    }
+  const [prevRegisterId, setPrevRegisterId] = useState(selectedRegisterId);
+  if (prevRegisterId !== selectedRegisterId) {
+    setPrevRegisterId(selectedRegisterId);
+    if (!selectedRegisterId) setRecentInvoices([]);
+  }
 
-    void loadRecentInvoices(selectedRegisterId);
+  useEffect(() => {
+    if (!selectedRegisterId) return;
+
+    const timer = window.setTimeout(() => loadRecentInvoices(selectedRegisterId), 0);
+    return () => window.clearTimeout(timer);
   }, [loadRecentInvoices, selectedRegisterId]);
 
   const productsById = useMemo(

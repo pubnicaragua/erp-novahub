@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Eye, Trash2, ChevronLeft, FileDown
 } from 'lucide-react';
@@ -111,7 +111,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     };
   };
 
-  useEffect(() => {
+  const [prevEditingId, setPrevEditingId] = useState(editingId);
+  if (editingId !== prevEditingId) {
+    setPrevEditingId(editingId);
     if (editingId) {
       const r = data.find(x => x.id === editingId);
       if (r) {
@@ -123,7 +125,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       setLocalDoc(null);
       setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
     }
-  }, [editingId]);
+  }
 
   const filtered = data.filter(r =>
     (statusFilter === 'ALL' || String(r.status || '').toUpperCase() === statusFilter) &&

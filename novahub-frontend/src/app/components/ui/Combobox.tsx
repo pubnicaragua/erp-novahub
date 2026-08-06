@@ -50,9 +50,10 @@ export function Combobox({
       .slice(0, 100)
   }, [options, search])
 
-  React.useEffect(() => {
-    if (!open) setSearch('')
-  }, [open])
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) setSearch('')
+    setOpen(nextOpen)
+  }
 
   const commitSelection = React.useCallback((nextValue: string) => {
     onChange(nextValue === value ? "" : nextValue)
@@ -60,7 +61,7 @@ export function Combobox({
   }, [onChange, value])
 
   return (
-    <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
+    <Popover open={open} onOpenChange={disabled ? undefined : handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"

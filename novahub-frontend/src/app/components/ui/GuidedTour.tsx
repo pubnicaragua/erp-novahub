@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight, CheckCircle2, Lightbulb, X } from 'lucide-react';
 import { cn } from './utils';
@@ -130,7 +130,7 @@ export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiad
     return () => observer.disconnect();
   }, [stepIndex]);
 
-  const tooltipStyle = useMemo(() => {
+  const tooltipStyle = (() => {
     const maxHeight = Math.max(120, viewport.height - 24);
 
     if (viewport.width < 640 || !highlight) {
@@ -160,7 +160,7 @@ export function GuidedTour({ steps, onClose, onComplete, title = 'Tutorial guiad
     }
 
     return { left: centeredLeft, top: clamp(highlight.bottom + TOOLTIP_GAP, 12, maxTop), width, maxHeight };
-  }, [currentStep?.placement, highlight, tooltipSize.height, viewport]);
+  })();
 
   if (!currentStep || typeof document === 'undefined') return null;
 

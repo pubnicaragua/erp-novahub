@@ -62,11 +62,7 @@ export function TransferenciasPage() {
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [isNewTransferOpen, setIsNewTransferOpen] = useState(false);
   const [transfersArr, setTransfersArr] = useState<Transfer[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchTransfers();
-  }, []);
+  const [, setLoading] = useState(true);
 
   const fetchTransfers = async () => {
     try {
@@ -79,6 +75,14 @@ export function TransferenciasPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await fetchTransfers();
+    };
+    load();
+  }, []);
 
   const filteredData = transfersArr.filter(transfer => {
     const matchesSearch =

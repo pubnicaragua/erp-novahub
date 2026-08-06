@@ -1,12 +1,12 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Users, UserCircle, FileSpreadsheet, CalendarClock, Plus, Search, Eye, Edit, DollarSign, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Users, UserCircle, FileSpreadsheet, CalendarClock, Plus, Search, Edit, DollarSign, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { ConfirmDialog } from './ui/ConfirmDialog';
@@ -39,10 +39,6 @@ export function RHPage({ activeSubModule }: RHPageProps) {
   const [vacacionesArr, setVacacionesArr] = useState<TimeOff[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchRHData();
-  }, []);
-
   const fetchRHData = async () => {
     try {
       setLoading(true);
@@ -62,10 +58,14 @@ export function RHPage({ activeSubModule }: RHPageProps) {
   };
 
   useEffect(() => {
-    if (activeSubModule) {
-      setActiveTab(tabMap[activeSubModule] || 'empleados');
-    }
-  }, [activeSubModule]);
+    Promise.resolve().then(fetchRHData);
+  }, []);
+
+  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
+  if (activeSubModule !== prevSubModule) {
+    setPrevSubModule(activeSubModule);
+    setActiveTab(tabMap[activeSubModule || 'empleados'] || 'empleados');
+  }
 
   const [isEmpleadoDialogOpen, setIsEmpleadoDialogOpen] = useState(false);
   const [editingEmpleado, setEditingEmpleado] = useState<Employee | null>(null);

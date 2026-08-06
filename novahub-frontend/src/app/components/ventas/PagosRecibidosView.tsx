@@ -9,7 +9,6 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { paymentsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { cn } from '../ui/utils';
 import type { PaymentReceived, Customer, Invoice, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';

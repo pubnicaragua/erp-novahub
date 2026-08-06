@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
-import { Card, CardContent } from '../ui/card';
+import { Card } from '../ui/card';
 import { purchaseOrdersService, supplierInvoicesService, expensesService, recurringExpensesService, supplierPricesService } from '../../services/compras.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -32,14 +32,6 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
   const [page, setPage] = useState(1);
   const { formatConvertedAmount } = useCurrency();
   const { user } = useAuth();
-
-  useEffect(() => {
-    if (open && supplier) {
-      loadHistory();
-    } else {
-      setItems([]);
-    }
-  }, [open, supplier]);
 
   const loadHistory = async () => {
     try {
@@ -139,6 +131,20 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
     }
   };
 
+  const [prevDialog, setPrevDialog] = useState({ open, supplier });
+  if (open !== prevDialog.open || supplier !== prevDialog.supplier) {
+    setPrevDialog({ open, supplier });
+    if (!open || !supplier) {
+      setItems([]);
+    }
+  }
+
+  useEffect(() => {
+    if (open && supplier) {
+      Promise.resolve().then(loadHistory);
+    }
+  }, [open, supplier]);
+
   const handleExportPDF = () => {
     if (!supplier || items.length === 0) return;
     generateSupplierHistoryPDF({
@@ -187,7 +193,11 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
 
   const totalPages = Math.ceil(items.length / 50);
   const pageItems = items.slice((page - 1) * 50, page * 50);
-  useEffect(() => { setPage(1); }, [items]);
+  const [prevItems, setPrevItems] = useState(items);
+  if (items !== prevItems) {
+    setPrevItems(items);
+    setPage(1);
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

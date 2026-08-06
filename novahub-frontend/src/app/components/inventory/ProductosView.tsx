@@ -9,7 +9,6 @@ import { Badge } from '../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Pagination, PaginationContent, PaginationItem } from '../ui/pagination';
 import { toast } from 'sonner';
 import { MultiSelectFilter } from './MultiSelectFilter';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
@@ -32,6 +31,9 @@ const WAREHOUSE_TYPES = [
   { value: 'DISTRIBUTION_CENTER', label: 'Centro de distribución' },
   { value: 'VIRTUAL', label: 'Virtual' },
 ];
+
+let tempIdCounter = 0;
+const nextTempId = () => `temp-${++tempIdCounter}`;
 
 const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="inventory-products-title"]', title: 'Vista de Productos', description: 'Aquí administras el catálogo, el costo, el stock y la distribución por almacén. Los precios de venta se gestionan desde Listas de precios.', placement: 'bottom' },
@@ -236,7 +238,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const { user, canPerform } = useAuth();
   const catalogItemType = itemType || 'PRODUCT';
   const isServiceView = catalogItemType === 'SERVICE';
-  const entityLabel = isServiceView ? 'servicio' : 'producto';
   const entityLabelCap = isServiceView ? 'Servicio' : 'Producto';
   const [importAddedCategories, setImportAddedCategories] = useState<any[]>([]);
   const [importAddedWarehouses, setImportAddedWarehouses] = useState<any[]>([]);
@@ -283,7 +284,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [newWarehouseParentId, setNewWarehouseParentId] = useState('none');
   const [newWarehouseInventoryAccountId, setNewWarehouseInventoryAccountId] = useState('none');
   const [warehouseAccounts, setWarehouseAccounts] = useState<any[]>([]);
-  const [warehouseAccountsLoading, setWarehouseAccountsLoading] = useState(false);
+  const [warehouseAccountsLoading, setWarehouseAccountsLoading] = useState(() => true);
   const [creatingWarehouse, setCreatingWarehouse] = useState(false);
   const [pendingWarehouseRowIndex, setPendingWarehouseRowIndex] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -307,7 +308,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [skuErrors, setSkuErrors] = useState<Map<string, string>>(new Map());
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ─── Solicitar Compra Batch desde inventario ──────────────────────────────────
+  // ������ Solicitar Compra Batch desde inventario ��������������������������������������������������������������������
   const [batchPrOpen, setBatchPrOpen] = useState(false);
   const [batchPrWarehouses, setBatchPrWarehouses] = useState<any[]>([]);
   const [batchPrWarehouseId, setBatchPrWarehouseId] = useState('');
@@ -385,6 +386,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   };
 
   const newRowRef = useRef<HTMLInputElement>(null);
+  const [now] = useState(() => Date.now());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
@@ -397,7 +399,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
   useEffect(() => {
     if (!warehouseModalOpen || warehouseAccounts.length > 0) return;
-    setWarehouseAccountsLoading(true);
     contabilidadService.getChartOfAccounts()
       .then((response: any) => setWarehouseAccounts(response?.data || response || []))
       .catch(() => setWarehouseAccounts([]))
@@ -406,15 +407,20 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
 
   // Reset page & selection when filters change
-  useEffect(() => {
+  const [prevFilterKey, setPrevFilterKey] = useState('');
+  const filterKey = `${searchTerm}|${categoryFilters.join(',')}|${warehouseFilters.join(',')}|${stockFilter}|${catalogItemType}`;
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
     setPage(1);
     setSelectedIds(new Set());
-  }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, catalogItemType]);
+  }
 
   // Clear selection when products list changes (e.g. after refresh)
-  useEffect(() => {
+  const [prevProducts, setPrevProducts] = useState(products);
+  if (prevProducts !== products) {
+    setPrevProducts(products);
     setSelectedIds(new Set());
-  }, [products]);
+  }
 
   const filteredProducts = products.filter((p: any) => {
     const matchesSearch = !searchTerm || 
@@ -442,10 +448,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     return matchesSearch && matchesCategory && matchesWarehouse && matchesType && matchesStock;
       });
 
-  const paginatedProducts = useMemo(() => {
+  const paginatedProducts = (() => {
     const start = (page - 1) * pageSize;
     return filteredProducts.slice(start, start + pageSize);
-  }, [filteredProducts, page, pageSize]);
+  })();
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
 
@@ -474,7 +480,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const serviceSummary = useMemo(() => {
     const services = products.filter((product: any) => String(product.itemType || product.type || '').toUpperCase() === 'SERVICE');
     const categories = new Set(services.map((service: any) => service.categoryId || service.category?.id).filter(Boolean));
-    const now = Date.now();
     const twelveWeeksAgo = now - (12 * 7 * 24 * 60 * 60 * 1000);
     const prices = services.map((service: any) => Number(service.salePrice ?? service.price ?? 0)).filter((price) => Number.isFinite(price));
     const createdInLastTwelveWeeks = services.filter((service: any) => {
@@ -486,7 +491,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       weeklyAverage: createdInLastTwelveWeeks / 12,
       averagePrice: prices.length ? prices.reduce((sum, price) => sum + price, 0) / prices.length : 0,
     };
-  }, [products]);
+  }, [products, now]);
 
   const getStockStatus = (product: any) => {
     const stock = Number(product.stock || 0);
@@ -564,16 +569,16 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       imageStorageUri: product.imageUrlStorageUri || (String(product.imageUrl || '').startsWith('storage://') ? product.imageUrl : undefined),
       warehouseId: product.warehouseCatalogs?.[0]?.warehouseId || product.warehouseCatalogs?.[0]?.warehouse?.id,
       initialAllocations: String(product.itemType || product.type || 'PRODUCT').toUpperCase() === 'SERVICE'
-        ? [{ id: `alloc-service-${Date.now()}`, warehouseId: product.warehouseCatalogs?.[0]?.warehouseId || product.warehouseCatalogs?.[0]?.warehouse?.id || '', quantity: 0, minStock: 0, maxStock: 0 }]
+        ? [{ id: `alloc-service-${nextTempId()}`, warehouseId: product.warehouseCatalogs?.[0]?.warehouseId || product.warehouseCatalogs?.[0]?.warehouse?.id || '', quantity: 0, minStock: 0, maxStock: 0 }]
         : (product.stockLevels && product.stockLevels.length > 0)
         ? product.stockLevels.map((sl: any, idx: number) => ({
-            id: `alloc-edit-${Date.now()}-${idx}`,
+            id: `alloc-edit-${nextTempId()}-${idx}`,
             warehouseId: sl.warehouseId,
             quantity: Number(sl.quantity) || 0,
             minStock: Number(sl.minStock || 0),
             maxStock: Number(sl.maxStock || 0),
           }))
-        : [{ id: `alloc-edit-${Date.now()}-0`, warehouseId: '', quantity: 0, minStock: Number(product.minStock || 0), maxStock: getProductMaxStock(product) }]
+        : [{ id: `alloc-edit-${nextTempId()}-0`, warehouseId: '', quantity: 0, minStock: Number(product.minStock || 0), maxStock: getProductMaxStock(product) }]
     };
     setEditingRows(new Map(editingRows.set(product.id, editProduct)));
   };
@@ -661,22 +666,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     const next = [
       ...(product.initialAllocations || []),
       {
-        id: `alloc-${Date.now()}-${(product.initialAllocations || []).length}`,
+        id: `alloc-${nextTempId()}-${(product.initialAllocations || []).length}`,
         warehouseId: '',
         quantity: 0,
         minStock: Number(product.minStock || 0),
         maxStock: Number(product.maxStock || 0),
       },
     ];
-    setEditingRows(new Map(editingRows.set(productId, { ...product, initialAllocations: next })));
-  };
-
-  const removeInitialAllocation = (productId: string, allocationId: string) => {
-    const product = editingRows.get(productId);
-    if (!product) return;
-    const current = product.initialAllocations || [];
-    if (current.length <= 1) return;
-    const next = current.filter((item) => item.id !== allocationId);
     setEditingRows(new Map(editingRows.set(productId, { ...product, initialAllocations: next })));
   };
 
@@ -902,7 +898,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       const created = ((response as any)?.data || response || {}) as any;
       const createdCategory = {
         ...created,
-        id: created.id || `import-category-${Date.now()}`,
+        id: created.id || `import-category-${nextTempId()}`,
         name: created.name || newCategoryName.trim(),
         type: created.type || catalogItemType,
       };
@@ -941,7 +937,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       const created = ((response as any)?.data || response || {}) as any;
       const createdWarehouse = {
         ...created,
-        id: created.id || `import-warehouse-${Date.now()}`,
+        id: created.id || `import-warehouse-${nextTempId()}`,
         name: created.name || newWarehouseName.trim(),
         location: created.location || newWarehouseLocation.trim(),
         type: created.type || newWarehouseType,
@@ -1336,7 +1332,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Productos');
     const guide = XLSX.utils.aoa_to_sheet([
-      ['GUÍA DE LLENADO · IMPORTACIÓN INICIAL DE INVENTARIO'],
+      ['GUÍA DE LLENADO · IMPORTACI�N INICIAL DE INVENTARIO'],
       ['La importación inicial se puede ejecutar una sola vez por empresa. Revisa y corrige la previsualización antes de cargar.'],
       ['Campo', 'Regla'],
       ['Código / SKU', 'Obligatorio y único dentro de la empresa. La carga inicial del catálogo es única por empresa.'],
@@ -1412,7 +1408,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     });
   }, [importCategoryOptions, importWarehouseOptions, imageZipEntries, imageZipFileName]);
 
-  const handleFileSelected = useCallback((file: File) => {
+  const handleFileSelected = (file: File) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
       toast.error('Selecciona un archivo Excel o CSV válido');
       return;
@@ -1476,9 +1472,9 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       toast.error('No se pudo leer el archivo seleccionado');
     };
     reader.readAsArrayBuffer(file);
-  }, [validateImportRows]);
+  };
 
-  const handleImageZipSelected = useCallback(async (file: File) => {
+  const handleImageZipSelected = async (file: File) => {
     if (!/\.zip$/i.test(file.name)) {
       toast.error('Selecciona un archivo ZIP válido');
       return;
@@ -1505,7 +1501,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     } finally {
       setImportProcessing(false);
     }
-  }, [validateImportRows]);
+  };
 
   const handleImportRowUpdate = (index: number, field: string, value: any) => {
     setImportData((prev) => {
@@ -1823,7 +1819,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           const warehousesForProduct = isServiceView
             ? (product.warehouseCatalogs || []).map((catalog: any) => catalog.warehouse?.name).filter(Boolean)
             : (product.stockLevels || []).map((level: any) => level.warehouse?.name).filter(Boolean);
-          const salePrice = Number(product.salePrice || 0);
           const costPrice = Number(product.costPrice || 0);
           const maxStock = getProductMaxStock(product);
           return (
@@ -2115,7 +2110,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} aria-label="Página anterior"><ChevronLeft className="size-4" /></button>
           <span className="min-w-24 text-center font-bold text-foreground">Pág. {page} / {Math.max(1, totalPages)}</span>
           <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} aria-label="Página siguiente"><ChevronRight className="size-4" /></button>
-          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage(totalPages)} disabled={page >= totalPages} aria-label="Última página"><ChevronsRight className="size-4" /></button>
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage(totalPages)} disabled={page >= totalPages} aria-label="�altima página"><ChevronsRight className="size-4" /></button>
         </div>
       </div>
         </>
@@ -2208,7 +2203,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setWarehouseModalOpen(false)} disabled={creatingWarehouse}>Cancelar</Button>
-            <Button onClick={handleCreateWarehouse} disabled={creatingWarehouse || !newWarehouseName.trim()}>{creatingWarehouse ? 'Guardando…' : 'Guardar almacén'}</Button>
+            <Button onClick={handleCreateWarehouse} disabled={creatingWarehouse || !newWarehouseName.trim()}>{creatingWarehouse ? 'Guardando⬦' : 'Guardar almacén'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2491,13 +2486,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <div className="rounded-xl border bg-muted/30 p-4">
               <p className="mb-2 text-sm font-semibold">Columnas soportadas:</p>
               <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                <p>• <b>Código</b> (requerido)</p>
-                <p>• <b>Nombre</b> (requerido)</p>
-                <p>• <b>Categoría</b></p>
-                <p>• <b>Precios por lista</b></p>
-                <p>• <b>Costo</b></p>
-                <p>• <b>Stock Inicial</b></p>
-                <p>• <b>IMEI</b> (Si/No)</p>
+                <p>⬢ <b>Código</b> (requerido)</p>
+                <p>⬢ <b>Nombre</b> (requerido)</p>
+                <p>⬢ <b>Categoría</b></p>
+                <p>⬢ <b>Precios por lista</b></p>
+                <p>⬢ <b>Costo</b></p>
+                <p>⬢ <b>Stock Inicial</b></p>
+                <p>⬢ <b>IMEI</b> (Si/No)</p>
               </div>
               <Button variant="outline" size="sm" className="mt-4 w-full text-xs font-bold" onClick={handleDownloadTemplate}>
                 <Download className="mr-2 size-3" />
@@ -2610,7 +2605,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               <Package className="size-4" /> Solicitar Compra ({selectedIds.size} productos)
             </DialogTitle>
             <DialogDescription>
-              Se crearán solicitudes para {selectedIds.size} producto(s) seleccionados. La cantidad sugerida será (minStock × 2) − stock actual.
+              Se crearán solicitudes para {selectedIds.size} producto(s) seleccionados. La cantidad sugerida será (minStock � 2) �� stock actual.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -2650,7 +2645,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           <DialogHeader>
             <DialogTitle>Solicitud de Reabastecimiento</DialogTitle>
             <DialogDescription>
-              Periodo: {replenishmentPeriod === 'weekly' ? 'Semanal' : replenishmentPeriod === 'biweekly' ? 'Quincenal' : 'Mensual'} — {replenishmentData?.length || 0} producto(s) sugeridos
+              Periodo: {replenishmentPeriod === 'weekly' ? 'Semanal' : replenishmentPeriod === 'biweekly' ? 'Quincenal' : 'Mensual'} � {replenishmentData?.length || 0} producto(s) sugeridos
             </DialogDescription>
           </DialogHeader>
           {replenishmentData && replenishmentData.length > 0 && (
@@ -2724,3 +2719,4 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     </>
     );
 }
+

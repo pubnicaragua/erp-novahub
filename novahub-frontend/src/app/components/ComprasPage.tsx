@@ -1,13 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
-import {
-  ShoppingCart, Truck, Wallet, CalendarClock,
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Truck, Wallet, CalendarClock,
   ClipboardList, PackageCheck, FileInput, RotateCcw,
   Banknote, BadgeDollarSign,
   ClipboardPen,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
-import { Button } from './ui/button';
 import { cn } from './ui/utils';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -71,7 +69,7 @@ type ComprasData = {
 
 export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageProps) {
   const { user } = useAuth();
-  const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
+  const { filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const normalize = (s?: string) => {
     if (!s) return 'solicitudes';
     const map: Record<string, string> = {
@@ -111,27 +109,15 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
     setActiveSection('pagos');
   };
 
-  useEffect(() => {
+  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
+  if (prevSubModule !== activeSubModule) {
+    setPrevSubModule(activeSubModule);
     if (activeSubModule) setActiveSection(normalize(activeSubModule));
-  }, [activeSubModule]);
-
-  useEffect(() => { fetchData(); }, [activeSection]);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      if (activeSection === 'solicitudes' && tabsRef.current) {
-        tabsRef.current.scrollLeft = 0;
-        return;
-      }
-      const activeTab = tabsRef.current?.querySelector<HTMLElement>('[data-state="active"]');
-      activeTab?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [activeSection]);
+  }
 
   const toArr = (r: any) => Array.isArray(r) ? r : (r?.data || []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [sup, exp, expRec, ord, rec, inv, invRec, pay, cred, req] = await Promise.all([
@@ -158,12 +144,29 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
         creditos:      toArr(cred),
         solicitudes:   toArr(req),
       });
-    } catch (e: any) {
+    } catch {
       toast.error('Error al cargar módulo de Compras');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchData, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeSection, fetchData]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (activeSection === 'solicitudes' && tabsRef.current) {
+        tabsRef.current.scrollLeft = 0;
+        return;
+      }
+      const activeTab = tabsRef.current?.querySelector<HTMLElement>('[data-state="active"]');
+      activeTab?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeSection]);
 
   const filteredData = {
     proveedores: filterByBranch(data.proveedores),

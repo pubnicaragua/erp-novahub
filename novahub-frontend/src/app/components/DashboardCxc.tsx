@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { motion, Variants } from 'motion/react';
 import {
   DollarSign, Clock, AlertTriangle, Loader2, Users, Truck,
@@ -25,16 +25,6 @@ const itemVariants: Variants = {
 
 const fmt = (amount: number) =>
   new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(amount);
-
-const bucketLabels: Record<string, string> = {
-  current: 'Al día',
-  days1_30: '1-30 días',
-  days31_60: '31-60 días',
-  days61_90: '61-90 días',
-  days90plus: '90+ días',
-};
-
-const bucketColors = ['#10b981', '#f59e0b', '#f97316', '#ef4444', '#7c3aed'];
 
 interface AgingData {
   summary: { current: number; days1_30: number; days31_60: number; days61_90: number; days90plus: number; total: number };
@@ -75,12 +65,7 @@ function DashboardCxc() {
     localStorage.setItem('erp-cierre-checklist', JSON.stringify(checklist));
   }, [checklist]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = useCallback(async () => {
     try {
       const [arRes, apRes] = await Promise.all([
         reportsService.getAging(),
@@ -94,7 +79,12 @@ function DashboardCxc() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadData, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadData]);
 
   const toggleChecklist = (id: string) => {
     setChecklist(prev => prev.map(item => item.id === id ? { ...item, done: !item.done } : item));
@@ -255,8 +245,8 @@ function DashboardCxc() {
           <CardContent className="p-0 max-h-[320px] overflow-y-auto">
             {ar.byCustomer && ar.byCustomer.length > 0 ? (
               <div className="divide-y divide-border/20">
-                {ar.byCustomer.filter((c: any) => c.buckets.total > 0).slice(0, 10).map((c: any) => (
-                  <div key={c.customer?.id || Math.random()} className="flex items-center justify-between px-5 py-2.5">
+                {ar.byCustomer.filter((c: any) => c.buckets.total > 0).slice(0, 10).map((c: any, idx: number) => (
+                  <div key={c.customer?.id || `overdue-${idx}`} className="flex items-center justify-between px-5 py-2.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="size-7 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
                         <Users className="size-3.5 text-muted-foreground" />

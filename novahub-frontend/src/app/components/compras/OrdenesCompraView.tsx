@@ -6,7 +6,6 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { Switch } from '../ui/switch';
 import { Combobox } from '../ui/Combobox';
 import { TaxDetail } from '../ui/TaxSelector';
 import { purchaseOrdersService, suppliersService } from '../../services/compras.service';
@@ -33,6 +32,8 @@ interface Props {
 
 const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
+
+const daysFromNow = (days: number) => new Date(Date.now() + days * 86400000).toISOString();
 
 const statusOpts = [
   { label: 'Borrador',   value: 'DRAFT',      color: 'bg-muted/20 text-muted-foreground' },
@@ -70,36 +71,34 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     }).catch();
   }, []);
 
-  useEffect(() => {
-    if (editingId) {
-      if (editingId === 'NEW') {
-             setLocalDoc({
-                supplierId: '',
-                date: new Date().toISOString(),
-                expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
-                currency: displayCurrency,
-                exchangeRate: globalRate,
-                status: 'DRAFT',
-                purchaseType: 'INVENTORY',
-                requestedBy: 'Admin',
-                address: '',
-                items: [],
-                subtotal: 0,
-                taxAmount: 0,
-                withholdingTotal: 0,
-                withholdingBase: 0,
-                total: 0
-          });
-      } else {
-         const found = data.find(x => x.id === editingId);
-         setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
-      }
-      setEvidenceFiles([]);
+  const openEditor = (id: string | null) => {
+    setEditingId(id);
+    if (id === 'NEW') {
+      setLocalDoc({
+        supplierId: '',
+        date: new Date().toISOString(),
+        expectedDelivery: daysFromNow(7),
+        currency: displayCurrency,
+        exchangeRate: globalRate,
+        status: 'DRAFT',
+        purchaseType: 'INVENTORY',
+        requestedBy: 'Admin',
+        address: '',
+        items: [],
+        subtotal: 0,
+        taxAmount: 0,
+        withholdingTotal: 0,
+        withholdingBase: 0,
+        total: 0,
+      });
+    } else if (id) {
+      const found = data.find(x => x.id === id);
+      setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
     } else {
       setLocalDoc(null);
-      setEvidenceFiles([]);
     }
-  }, [editingId, data, globalRate]);
+    setEvidenceFiles([]);
+  };
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filtered = data.filter(o => {
@@ -144,7 +143,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
 
   const handleUpdate = async (id: string | number, updates: Partial<PurchaseOrder>) => {
     try { await purchaseOrdersService.update(id as string, updates); toast.success('Orden actualizada'); onRefresh(); }
-    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
   };
 
   const handleCancelConfirm = async () => {
@@ -155,7 +154,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       toast.success('Orden de compra anulada');
       setPendingCancelId(null);
       setCancelReason('');
-      if (editingId === pendingCancelId) setEditingId(null);
+      if (editingId === pendingCancelId) openEditor(null);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
@@ -233,8 +232,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
         await purchaseOrdersService.update(editingId!, cleanedDoc);
         toast.success('Orden guardada');
       }
-      setEditingId(null);
-      setEvidenceFiles([]);
+      openEditor(null);
       onRefresh();
     } catch (e: any) {
       const msg = e?.response?.data?.message || e?.message || '';
@@ -269,7 +267,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       supplierId: order.supplierId,
       purchaseOrderId: order.id,
       date: new Date().toISOString(),
-      dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+      dueDate: daysFromNow(30),
       currency: order.currency || 'NIO',
       exchangeRate: order.exchangeRate || globalRate,
       status: 'PENDING',
@@ -386,16 +384,6 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     recalculateTotals(newItems);
   };
 
-  const handleServiceToggle = (checked: boolean) => {
-    if (!localDoc) return;
-    const updatedItems = (localDoc.items || []).map((item: any) => ({
-      ...item,
-      stockApplies: checked ? false : !!item.stockApplies,
-      stock: checked ? undefined : item.stock,
-    }));
-    setLocalDoc((prev: any) => prev ? { ...prev, purchaseType: checked ? 'SERVICE' : 'INVENTORY', items: updatedItems } : prev);
-  };
-
   const recalculateTotals = (items: any[]) => {
     const totals = calculateTotals(items);
     setLocalDoc(prev => ({ ...prev!, items, ...totals }));
@@ -439,7 +427,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       <div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={() => openEditor(null)} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -879,7 +867,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('PURCHASES_ORDERS', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Orden</Button>
+              <Button onClick={() => openEditor('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Orden</Button>
             )}
           </div>
         </div>
@@ -908,7 +896,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
               >
                 <FileInput className="size-4" />
               </Button>
-              <Button title={canPerform('PURCHASES_ORDERS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <Button title={canPerform('PURCHASES_ORDERS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}><Eye className="size-4" /></Button>
               <PurchaseAuditButton entity="PURCHASE_ORDER" entityId={row.id} title="Auditoria de la Orden" />
               {canPerform('PURCHASES_ORDERS', 'delete') && (
                 <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>

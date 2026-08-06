@@ -53,6 +53,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<SupplierInvoice> | null>(null);
+  const [nowMs] = useState(() => Date.now());
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
@@ -76,18 +77,22 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
   useEffect(() => {
     if (draftInvoiceFromOrder) {
-      setLocalDoc({ number: generateSupplierInvoiceNumber(), ...draftInvoiceFromOrder, _fromDraft: true });
-      setEditingId('NEW');
-      if (onDraftConsumed) onDraftConsumed();
+      const applyDraft = () => {
+        setLocalDoc({ number: generateSupplierInvoiceNumber(), ...draftInvoiceFromOrder, _fromDraft: true });
+        setEditingId('NEW');
+        if (onDraftConsumed) onDraftConsumed();
+      };
+      applyDraft();
     }
   }, [draftInvoiceFromOrder]);
 
-  useEffect(() => {
-    if (editingId && editingId !== 'NEW') {
-       const found = data.find(x => x.id === editingId);
-       setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+  const openEditor = (id: string | null) => {
+    setEditingId(id);
+    if (id && id !== 'NEW') {
+      const found = data.find(x => x.id === id);
+      setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
     }
-  }, [editingId, data]);
+  };
 
   const handleCreateNew = () => {
     setLocalDoc({
@@ -350,7 +355,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       setPendingCancelId(null);
       setCancelReason('');
       if (editingId === pendingCancelId) {
-        setEditingId(null);
+        openEditor(null);
         setLocalDoc(null);
       }
       onRefresh();
@@ -431,7 +436,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         }
         
         toast.success('Factura creada exitosamente');
-        setEditingId(null);
+        openEditor(null);
         setLocalDoc(null);
       } else {
         const existingInvoice = data.find((x) => x.id === editingId);
@@ -543,7 +548,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       <><div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setLocalDoc(null); }} className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={() => { openEditor(null); setLocalDoc(null); }} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -939,7 +944,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
        bg: 'bg-amber-500/10',
        filter: 'PENDING',
      },
-     { title: 'Vencidas',        value: data.filter(b => new Date(b.dueDate).getTime() < Date.now() && (b.status||'').toUpperCase() !== 'PAID').length, icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10', filter: 'OVERDUE' },
+     { title: 'Vencidas',        value: data.filter(b => new Date(b.dueDate).getTime() < nowMs && (b.status||'').toUpperCase() !== 'PAID').length, icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10', filter: 'OVERDUE' },
      { title: 'Pagadas (Mes)',   value: data.filter(b => (b.status||'').toUpperCase() === 'PAID').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', filter: 'PAID' },
   ];
 
@@ -988,7 +993,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title={canPerform('PURCHASES_INVOICES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <Button title={canPerform('PURCHASES_INVOICES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}><Eye className="size-4" /></Button>
               {canPerform('PURCHASES_INVOICES', 'create') && onRegisterPaymentFromInvoice && (
                 <Button
                   title="Registrar Pago"

@@ -2,8 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { notificationsService } from '../services/notifications.service';
 import type { Notification } from '../types';
 
-const MP3_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'; // Clean notification bell mp3
-
 export function useNotifications() {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -19,26 +17,11 @@ export function useNotifications() {
     }, []);
 
     useEffect(() => {
-        fetchNotifications();
+        const initialTimer = window.setTimeout(fetchNotifications, 0);
         // Polling for new notifications every 30 seconds
         const interval = setInterval(fetchNotifications, 30000);
-        return () => clearInterval(interval);
+        return () => { window.clearTimeout(initialTimer); clearInterval(interval); };
     }, [fetchNotifications]);
-
-    const playSound = () => {
-        try {
-            const audio = new Audio(MP3_URL);
-            audio.volume = 0.5;
-            const playPromise = audio.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    console.warn("Autoplay audio blocked by browser.", error);
-                });
-            }
-        } catch (e: any) {
-            console.warn("Failed to play notification sound");
-        }
-    };
 
     const markAsRead = async (id: string) => {
         try {

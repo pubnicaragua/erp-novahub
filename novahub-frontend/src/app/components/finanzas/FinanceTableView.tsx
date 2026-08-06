@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '../ui/table';
@@ -91,12 +91,19 @@ export function FinanceTableView({
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE_OPTIONS = [10, 20, 30, 50];
 
-  useEffect(() => { setLocalData(data); }, [data]);
+  const [prevData, setPrevData] = useState(data);
+  if (prevData !== data) {
+    setPrevData(data);
+    setLocalData(data);
+  }
 
   // Reset to page 1 when filters change
-  useEffect(() => {
+  const [prevFilterKey, setPrevFilterKey] = useState('');
+  const filterKey = `${searchTerm}|${categoryFilter}|${dateRange.start}|${dateRange.end}|${pageSize}`;
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
     setCurrentPage(1);
-  }, [searchTerm, categoryFilter, dateRange, pageSize]);
+  }
 
   const handleCellEdit = (id: string, key: string, value: any) => {
     setLocalData(prev => prev.map(item => {
@@ -202,7 +209,7 @@ export function FinanceTableView({
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
-    } catch (e: any) {
+    } catch {
       return null;
     }
   };

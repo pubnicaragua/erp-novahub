@@ -18,15 +18,17 @@ export function useBranchScope() {
   const accessibleBranches = useMemo(() => {
     if (!isRestricted) return allBranches;
     return allBranches.filter(b => user!.branchIds!.includes(b.id));
-  }, [allBranches, isRestricted, user?.branchIds]);
+  }, [allBranches, isRestricted, user]);
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
 
-  useEffect(() => {
+  const [prevAccessibleBranches, setPrevAccessibleBranches] = useState(accessibleBranches);
+  if (prevAccessibleBranches !== accessibleBranches) {
+    setPrevAccessibleBranches(accessibleBranches);
     if (!selectedBranchId && accessibleBranches.length > 0 && isRestricted) {
       setSelectedBranchId(accessibleBranches[0].id);
     }
-  }, [accessibleBranches, selectedBranchId, isRestricted]);
+  }
 
   const selectedBranch = useMemo(() => {
     if (!selectedBranchId) return null;
@@ -41,7 +43,7 @@ export function useBranchScope() {
   const hasBranchAccess = useCallback((branchId: string): boolean => {
     if (!isRestricted) return true;
     return user!.branchIds!.includes(branchId);
-  }, [isRestricted, user?.branchIds]);
+  }, [isRestricted, user]);
 
   return {
     allBranches,

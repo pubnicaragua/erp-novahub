@@ -1,15 +1,12 @@
 import { cn } from './ui/utils';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   DollarSign, TrendingUp, TrendingDown, BarChart3, 
-  CalendarClock, Landmark, RotateCcw, Wallet,
-  AlertTriangle, Calendar, CalendarDays, Filter, X,
+  CalendarClock, Landmark, RotateCcw, Wallet, CalendarDays, X,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
-import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { FinanceDashboardView } from './finanzas/FinanceDashboardView';
 import { FinanceTableView } from './finanzas/FinanceTableView';
 import { FinanceBalanceView } from './finanzas/FinanceBalanceView';
@@ -42,8 +39,8 @@ const PERIOD_PRESETS = [
 
 export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: FinanzasPageProps) {
   const { user, canPerform } = useAuth();
-  const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
-  const { displayCurrency, exchangeRate: globalRate, convertAmount } = useCurrency();
+  const { filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
+  const { exchangeRate: globalRate, convertAmount } = useCurrency();
 
   const hasAccess = (moduleId: string) => {
     if (!user?.enabledModules) return true;
@@ -152,13 +149,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     return createdAccount;
   };
 
-  useEffect(() => {
-    if (activeSubModule && subModuleToTab[activeSubModule]) {
-      if (activeTab !== subModuleToTab[activeSubModule]) {
-        setActiveTab(subModuleToTab[activeSubModule]);
-      }
-    }
-  }, [activeSubModule, activeTab]);
+  const currentTab = activeSubModule && subModuleToTab[activeSubModule] ? subModuleToTab[activeSubModule] : activeTab;
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
@@ -166,35 +157,35 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     if (onSubModuleChange) onSubModuleChange(subModule);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [incRes, expRes, rexpRes, accRes, rincRes] = await Promise.allSettled([
+          incomeService.getAll(),
+          expensesService.getAll(),
+          recurringExpensesService.getAll(),
+          accountsService.getAll(),
+          recurringIncomesService.getAll(),
+        ]);
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [incRes, expRes, rexpRes, accRes, rincRes] = await Promise.allSettled([
-        incomeService.getAll(),
-        expensesService.getAll(),
-        recurringExpensesService.getAll(),
-        accountsService.getAll(),
-        recurringIncomesService.getAll(),
-      ]);
+        setIncomes(incRes.status === 'fulfilled' ? normalizeListResponse(incRes.value) : []);
+        setExpenses(expRes.status === 'fulfilled' ? normalizeListResponse(expRes.value) : []);
+        setRecurringExpenses(rexpRes.status === 'fulfilled' ? normalizeListResponse(rexpRes.value) : []);
+        setAccounts(accRes.status === 'fulfilled' ? normalizeListResponse(accRes.value) : []);
+        setRecurringIncomes(rincRes.status === 'fulfilled' ? normalizeListResponse(rincRes.value) : []);
 
-      setIncomes(incRes.status === 'fulfilled' ? normalizeListResponse(incRes.value) : []);
-      setExpenses(expRes.status === 'fulfilled' ? normalizeListResponse(expRes.value) : []);
-      setRecurringExpenses(rexpRes.status === 'fulfilled' ? normalizeListResponse(rexpRes.value) : []);
-      setAccounts(accRes.status === 'fulfilled' ? normalizeListResponse(accRes.value) : []);
-      setRecurringIncomes(rincRes.status === 'fulfilled' ? normalizeListResponse(rincRes.value) : []);
-
-      if ([incRes, expRes, rexpRes, accRes].every((res) => res.status === 'rejected')) {
+        if ([incRes, expRes, rexpRes, accRes].every((res) => res.status === 'rejected')) {
+          toast.error('Error al cargar datos financieros');
+        }
+      } catch (error) {
+        console.error('Error fetching finance data:', error);
         toast.error('Error al cargar datos financieros');
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching finance data:', error);
-      toast.error('Error al cargar datos financieros');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    void load();
+  }, []);
 
   const INCOME_COLUMNS = [
     { key: 'number', label: 'No. Recibo', type: 'text' as const, editable: false },
@@ -285,7 +276,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
         setRecurringExpenses([res, ...recurringExpenses]);
       }
       toast.success(`Nuevo movimiento ${type === 'INCOME' ? 'de ingreso' : 'de gasto'} recurrente añadido`);
-    } catch (error) {
+    } catch {
       toast.error('Error al crear movimiento recurrente');
     }
   };
@@ -297,7 +288,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       const res = await incomeService.create(newItem);
       setIncomes([res, ...incomes]);
       toast.success('Nuevo ingreso añadido');
-    } catch (error) { toast.error('Error al crear ingreso'); }
+    } catch { toast.error('Error al crear ingreso'); }
   };
 
   const handleAddExpense = async () => {
@@ -307,7 +298,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       const res = await expensesService.create(newItem);
       setExpenses([res, ...expenses]);
       toast.success('Nuevo gasto añadido');
-    } catch (error) { toast.error('Error al crear gasto'); }
+    } catch { toast.error('Error al crear gasto'); }
   };
 
   const totalIncome = fIncomes.reduce((acc, i) => acc + convertAmount(i.amount || 0, i.currency, i.exchangeRate), 0);
@@ -371,7 +362,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
         <BranchScopeFilter className="ml-auto" showLabel={false} />
       </div>
 
-      <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
+      <Tabs value={currentTab} className="w-full" onValueChange={handleTabChange}>
         <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
           {tabs.map((tab) => {
             if (!hasAccess(tab.module)) return null;

@@ -32,10 +32,6 @@ export function ClientesPage() {
     status: 'active'
   });
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -47,6 +43,14 @@ export function ClientesPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await fetchData();
+    };
+    load();
+  }, []);
 
   const filtered = clientesData.filter(c =>
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

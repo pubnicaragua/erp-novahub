@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -13,26 +13,19 @@ import { api } from '../services/api';
 import { TrialExtensionRequestsPanel } from './suscripciones/TrialExtensionRequestsPanel';
 import { NovaSuiteIcon } from './ui/NovaIcons';
 import { 
-  CheckCircle2, 
   Clock, 
-  XCircle, 
   Plus, 
   HandCoins, 
   ShieldCheck, 
   LayoutGrid, 
   Building2,
-  Lock,
   Zap,
   DollarSign,
   Search,
   Check,
   Globe,
-  Mail,
   User as UserIcon,
-  MessageSquare,
   TrendingUp,
-  Activity,
-  Award,
   Edit2,
   Eye,
   Trash2,
@@ -41,7 +34,6 @@ import {
   Settings,
   BarChart3,
   CalendarDays,
-  Briefcase,
   Package,
   Headphones,
   BellRing,
@@ -53,7 +45,7 @@ import {
   GraduationCap,
   LifeBuoy
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { cn } from './ui/utils';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
@@ -161,19 +153,6 @@ export function SuscripcionesPage() {
     customPrice: ''
   });
 
-  useEffect(() => {
-    if (user && (user.isPlatformAdmin || user.isTenantAdmin)) {
-      fetchData();
-      // Actualización automática cada 5 segundos SOLO para platform admins
-      if (user.isPlatformAdmin) {
-        const interval = setInterval(() => {
-          fetchData();
-        }, 5000);
-        return () => clearInterval(interval);
-      }
-    }
-  }, [user]);
-
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -205,6 +184,19 @@ export function SuscripcionesPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (user && (user.isPlatformAdmin || user.isTenantAdmin)) {
+      Promise.resolve().then(fetchData);
+      // Actualización automática cada 5 segundos SOLO para platform admins
+      if (user.isPlatformAdmin) {
+        const interval = setInterval(() => {
+          fetchData();
+        }, 5000);
+        return () => clearInterval(interval);
+      }
+    }
+  }, [user]);
 
   const inferSystemRoleFromCustomRole = (role: any): 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER' => {
     const perms = Array.isArray(role?.permissions) ? role.permissions : [];
@@ -1215,7 +1207,7 @@ export function SuscripcionesPage() {
                   {tenantDetails.subscriptions?.filter((s: any) => s.isActive).length > 0 ? (
                     tenantDetails.subscriptions.filter((s: any) => s.isActive).map((sub: any) => {
                       // Buscar en módulos principales
-                      let mod = AVAILABLE_MODULES.find(m => m.id === sub.module);
+                      const mod = AVAILABLE_MODULES.find(m => m.id === sub.module);
                       let label = mod?.label;
                       // Si no está, buscar en submódulos
                       if (!mod) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Truck, Plus, Search, Edit, Star, Download, Filter, Phone, Mail, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -31,11 +31,7 @@ export function ProveedoresPage() {
     status: 'active' as EntityStatus,
   });
 
-  useEffect(() => {
-    fetchProveedores();
-  }, []);
-
-  const fetchProveedores = async () => {
+  const fetchProveedores = useCallback(async () => {
     try {
       setLoading(true);
       const res = await suppliersService.getAll();
@@ -45,7 +41,12 @@ export function ProveedoresPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchProveedores, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchProveedores]);
 
   const filtered = proveedoresData.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 

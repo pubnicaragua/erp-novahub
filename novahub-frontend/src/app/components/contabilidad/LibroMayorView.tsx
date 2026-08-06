@@ -61,8 +61,14 @@ export function LibroMayorView() {
     }
   }, []);
 
-  useEffect(() => { loadEntries(); }, [loadEntries]);
-  useEffect(() => { loadAccounts(); }, [loadAccounts]);
+  useEffect(() => {
+    const timer = window.setTimeout(loadEntries, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadEntries]);
+  useEffect(() => {
+    const timer = window.setTimeout(loadAccounts, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadAccounts]);
 
   const accountOptions = accounts.map((a) => ({
     label: `${a.code} - ${a.name}`,
