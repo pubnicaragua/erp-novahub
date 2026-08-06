@@ -39,6 +39,7 @@ const SoporteTecnicoView = lazy(() => import('./components/help/SoporteTecnicoVi
 const SoporteTecnicoAdminView = lazy(() => import('./components/help/SoporteTecnicoAdminView').then(m => ({ default: m.SoporteTecnicoAdminView })));
 const ContabilidadPage = lazy(() => import('./components/contabilidad/ContabilidadPage').then(m => ({ default: m.ContabilidadPage })));
 const DashboardCxc = lazy(() => import('./components/DashboardCxc').then(m => ({ default: m.DashboardCxc })));
+const QaConsoleView = lazy(() => import('./components/qa/QaConsoleView').then(m => ({ default: m.QaConsoleView })));
 
 function PageLoader() {
   return (
@@ -183,6 +184,7 @@ function DashboardLayout() {
       case 'dashboard-cxc': return <DashboardCxc />;
       case 'asesoria-legal': return <AsesoriaLegalPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'novachat': return <NovaChatView />;
+      case 'qa-console': return <ModuleErrorBoundary moduleName="Validador QA"><QaConsoleView /></ModuleErrorBoundary>;
       default: return <ModuleErrorBoundary moduleName="Dashboard"><OverviewDashboard onNavigate={handleNavigate} /></ModuleErrorBoundary>;
     }
   };

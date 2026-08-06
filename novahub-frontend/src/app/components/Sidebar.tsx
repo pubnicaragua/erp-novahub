@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -23,6 +23,8 @@ import {
   ClipboardList,
   FileText,
   FileCheck,
+
+  ShieldCheck,
   CreditCard,
   RotateCcw,
   PackageCheck,
@@ -94,10 +96,11 @@ interface MenuItem {
   icon: React.ReactNode;
   submenu?: SubMenuItem[];
   section?: string;
+  superadminOnly?: boolean;
 }
 
 const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
-  // Ventas — cada sub-item solo se controla por su sub-módulo específico
+  // Ventas â€” cada sub-item solo se controla por su sub-mÃ³dulo especÃ­fico
   clientes: ['SALES_CLIENTS'],
   estimaciones: ['SALES_QUOTES'],
   'ordenes-venta': ['SALES_ORDERS'],
@@ -197,7 +200,7 @@ const menuItems: MenuItem[] = [
       { id: 'devoluciones-venta', label: 'Devoluciones de venta', icon: <FileOutput className="size-4" /> },
       { id: 'notas-credito', label: 'Notas de credito', icon: <FileMinus className="size-4" /> },
       { id: 'listas-precios', label: 'Listas de precios', icon: <Tags className="size-4" /> },
-      { id: 'facturacion-caja', label: 'Facturación por Caja', icon: <Calculator className="size-4" /> },
+      { id: 'facturacion-caja', label: 'FacturaciÃ³n por Caja', icon: <Calculator className="size-4" /> },
       { id: 'control-caja', label: 'Control de Caja', icon: <Coins className="size-4" /> },
     ]
   },
@@ -244,7 +247,7 @@ const menuItems: MenuItem[] = [
       { id: 'egresos', label: 'Gastos', icon: <Wallet className="size-4" /> },
       { id: 'movimientos-recurrentes', label: 'Movimientos Recurrentes', icon: <RotateCcw className="size-4" /> },
       { id: 'calendario-financiero', label: 'Calendario Financiero', icon: <CalendarClock className="size-4" /> },
-      { id: 'analisis-ingresos-gastos', label: 'Análisis Ingresos/Gastos', icon: <BarChart3 className="size-4" /> },
+      { id: 'analisis-ingresos-gastos', label: 'AnÃ¡lisis Ingresos/Gastos', icon: <BarChart3 className="size-4" /> },
       { id: 'balance-general', label: 'Balance General', icon: <Landmark className="size-4" /> },
     ]
   },
@@ -257,17 +260,17 @@ const menuItems: MenuItem[] = [
       { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: <BookOpen className="size-4" /> },
       { id: 'diario', label: 'Libro Diario', icon: <FileText className="size-4" /> },
       { id: 'libro-mayor', label: 'Libro Mayor', icon: <BookOpenCheck className="size-4" /> },
-      { id: 'balance-comprobacion', label: 'Balance de Comprobación', icon: <Scale className="size-4" /> },
+      { id: 'balance-comprobacion', label: 'Balance de ComprobaciÃ³n', icon: <Scale className="size-4" /> },
       { id: 'estado-resultados', label: 'Estado de Resultados', icon: <TrendingUp className="size-4" /> },
       { id: 'balance-general', label: 'Balance General', icon: <PieChart className="size-4" /> },
       { id: 'flujo-efectivo', label: 'Flujo de Efectivo', icon: <DollarSign className="size-4" /> },
       { id: 'diferencias-cambiarias', label: 'Diferencias Cambiarias', icon: <BadgeDollarSign className="size-4" /> },
       { id: 'cambios-patrimonio', label: 'Cambios Patrimonio', icon: <FileSpreadsheet className="size-4" /> },
       { id: 'activos-fijos', label: 'Activos Fijos', icon: <Building2 className="size-4" /> },
-      { id: 'conciliacion', label: 'Conciliación Bancaria', icon: <Landmark className="size-4" /> },
-      { id: 'periodos', label: 'Períodos Contables', icon: <Calendar className="size-4" /> },
+      { id: 'conciliacion', label: 'ConciliaciÃ³n Bancaria', icon: <Landmark className="size-4" /> },
+      { id: 'periodos', label: 'PerÃ­odos Contables', icon: <Calendar className="size-4" /> },
       { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: <FileBarChart className="size-4" /> },
-      { id: 'configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
+      { id: 'configuracion', label: 'ConfiguraciÃ³n', icon: <Settings2 className="size-4" /> },
     ]
   },
   {
@@ -277,13 +280,13 @@ const menuItems: MenuItem[] = [
     submenu: [
       { id: 'dashboard-hr', label: 'Dashboard', icon: <BarChart3 className="size-4" /> },
       { id: 'empleados', label: 'Empleados', icon: <Users className="size-4" /> },
-      { id: 'nominas', label: 'Nóminas', icon: <DollarSign className="size-4" /> },
+      { id: 'nominas', label: 'NÃ³minas', icon: <DollarSign className="size-4" /> },
       { id: 'asistencia', label: 'Asistencia', icon: <CalendarClock className="size-4" /> },
       { id: 'ausencias', label: 'Vacaciones', icon: <CalendarClock className="size-4" /> },
-      { id: 'evaluaciones', label: 'Desempeño', icon: <BarChart3 className="size-4" /> },
-      { id: 'capacitaciones', label: 'Capacitación', icon: <FileCheck className="size-4" /> },
+      { id: 'evaluaciones', label: 'DesempeÃ±o', icon: <BarChart3 className="size-4" /> },
+      { id: 'capacitaciones', label: 'CapacitaciÃ³n', icon: <FileCheck className="size-4" /> },
       { id: 'beneficios', label: 'Beneficios', icon: <Plus className="size-4" /> },
-      { id: 'config-nomina', label: 'Config Nómina', icon: <Settings className="size-4" /> },
+      { id: 'config-nomina', label: 'Config NÃ³mina', icon: <Settings className="size-4" /> },
     ]
   },
   {
@@ -295,7 +298,7 @@ const menuItems: MenuItem[] = [
       { id: 'tareas', label: 'Tareas', icon: <ListTodo className="size-4" /> },
       { id: 'eventos', label: 'Eventos', icon: <CalendarDays className="size-4" /> },
       { id: 'recordatorios', label: 'Recordatorios', icon: <Bell className="size-4" /> },
-      { id: 'bitacora', label: 'Bitácora', icon: <Database className="size-4" /> }
+      { id: 'bitacora', label: 'BitÃ¡cora', icon: <Database className="size-4" /> }
     ]
   },
   { 
@@ -310,14 +313,14 @@ const menuItems: MenuItem[] = [
   },
   {
     id: 'centro-capacitacion',
-    label: 'Centro de Capacitación',
+    label: 'Centro de CapacitaciÃ³n',
     icon: <GraduationCap className="size-5" />,
     section: 'Ayuda',
   },
-  { id: 'soporte-tecnico', label: 'Soporte Técnico', icon: <LifeBuoy className="size-5" /> },
+  { id: 'soporte-tecnico', label: 'Soporte TÃ©cnico', icon: <LifeBuoy className="size-5" /> },
   { 
     id: 'asesoria-legal', 
-    label: 'Asesoría Legal', 
+    label: 'AsesorÃ­a Legal', 
     icon: <Scale className="size-5" />,
     submenu: [
       { id: 'cases', label: 'Casos', icon: <FileText className="size-4" /> },
@@ -377,23 +380,30 @@ const platformMenuItems: MenuItem[] = [
   },
   {
     id: 'suscripciones',
-    label: 'Gestión de Empresas',
+    label: 'GestiÃ³n de Empresas',
     icon: <Building2 className="size-5" />,
   },
   {
     id: 'configuracion',
-    label: 'Configuración Global',
+    label: 'ConfiguraciÃ³n Global',
     icon: <Settings className="size-5" />,
     section: 'Ajustes',
   },
   {
     id: 'centro-capacitacion',
-    label: 'Capacitación ERP',
+    label: 'CapacitaciÃ³n ERP',
     icon: <GraduationCap className="size-5" />,
     section: 'Ayuda',
   },
-  { id: 'soporte-tecnico', label: 'Soporte Técnico', icon: <LifeBuoy className="size-5" /> },
-  { id: 'asesoria-legal', label: 'Asesoría Legal', icon: <Scale className="size-5" /> },
+  { id: 'soporte-tecnico', label: 'Soporte TÃ©cnico', icon: <LifeBuoy className="size-5" /> },
+  { id: 'asesoria-legal', label: 'AsesorÃ­a Legal', icon: <Scale className="size-5" /> },
+  {
+    id: 'qa-console',
+    label: 'Validador ERP (QA)',
+    icon: <ShieldCheck className="size-5" />,
+    section: 'NovaHub Platform',
+    superadminOnly: true,
+  },
 ];
 
 export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview }: SidebarProps) {
@@ -409,7 +419,9 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     }
   }
 
-  const activeMenuArray = user?.isPlatformAdmin ? platformMenuItems : menuItems;
+  const activeMenuArray = (user?.isPlatformAdmin ? platformMenuItems : menuItems).filter(
+    (item) => !item.superadminOnly || user?.role === 'superadmin'
+  );
 
   const toggleMenu = (id: string) => {
     setExpandedMenus(prev => {
@@ -718,3 +730,4 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     </>
   );
 }
+

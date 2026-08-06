@@ -36,7 +36,8 @@ export type Module =
   | 'inventario_productos'
   | 'contabilidad'
   | 'dashboard-ventas'
-  | 'dashboard-cxc';
+  | 'dashboard-cxc'
+  | 'qa-console';
 
 export type SubModule = string;
 
@@ -101,7 +102,7 @@ const ALL_MODULES: Module[] = [
   'documentos', 'notificaciones', 'transferencias',
   'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
   'financiamiento-pyme', 'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal',
-  'contabilidad', 'novachat',
+  'contabilidad', 'novachat', 'qa-console',
 ];
 
 const getPermissionsByRole = (role: Role): Permission[] => {
@@ -354,7 +355,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const platformModules = [
         'dashboard', 'suscripciones', 'configuracion', 'notificaciones',
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
+        'qa-console',
     ];
+      if (module === 'qa-console') return user.role === 'superadmin';
       return platformModules.includes(module);
     }
 

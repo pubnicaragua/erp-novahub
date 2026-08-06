@@ -46,3 +46,7 @@ coverage
 
 # OS files
 Thumbs.db
+
+test-results/
+e2e-results/
+playwright-report/
