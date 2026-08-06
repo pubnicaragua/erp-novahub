@@ -12,7 +12,7 @@ import { Combobox } from '../ui/Combobox';
 import { TaxDetail } from '../ui/TaxSelector';
 import { purchaseOrdersService } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
-import type { PurchaseOrder, Supplier, SupplierInvoice } from '../../types';
+import type { PurchaseOrder, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -26,6 +26,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { generatePurchaseOrderPDF } from '../../utils/pdfGenerator';
 import { exportToCsv } from '../../utils/exportUtils';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
+import { PurchaseOrderPreviewDialog } from './ui/PurchaseOrderPreviewDialog';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
@@ -34,10 +35,9 @@ interface Props {
   data: PurchaseOrder[];
   loading: boolean;
   onRefresh: () => void;
-  onConvertToInvoice?: (draft: any) => void;
-  supplierInvoices?: SupplierInvoice[];
   supplierCatalog?: Supplier[];
   productCatalog?: any[];
+  productCategories?: any[];
   isSidebarCollapsed?: boolean;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
@@ -52,6 +52,7 @@ type PurchaseImportRow = {
   productId?: string;
   description: string;
   category: string;
+  categoryId?: string;
   quantity: string | number;
   unitPrice: string | number;
   taxType: string;
@@ -183,15 +184,19 @@ const statusOpts = [
   { label: 'Cancelada',  value: 'CANCELLED',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice, supplierInvoices = [], supplierCatalog = [], productCatalog = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange }: Props) {
+export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [previewOrder, setPreviewOrder] = useState<Partial<PurchaseOrder> | null>(null);
+  const [approveConfirmId, setApproveConfirmId] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -212,7 +217,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
   useEffect(() => {
     setSuppliers(supplierCatalog);
     setProducts(productCatalog);
-  }, [supplierCatalog, productCatalog]);
+    setCategories(productCategories);
+  }, [supplierCatalog, productCatalog, productCategories]);
 
   const findImportProduct = (sku: unknown) => {
     const normalized = String(sku || '').trim().toLowerCase();
@@ -257,6 +263,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
         currentStock: product?.stock != null ? Number(product.stock) : product?.inventoryLevels?.reduce((sum: number, level: any) => sum + Number(level.quantity || 0), 0),
         description: String(row.description || product?.name || '').trim(),
         category: String(row.category || product?.category?.name || product?.category || '').trim(),
+        categoryId: product?.categoryId || (product?.category?.id ? product.category.id : ''),
         taxType: String(row.taxType || 'GRAVADO').toUpperCase(),
         withholdingType: String(row.withholdingType || 'NONE').toUpperCase(),
         _hasError: errors.length > 0,
@@ -412,6 +419,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       name: row.description || row.sku,
       description: row.description || row.sku,
       category: row.category,
+      categoryId: row.categoryId
+        || categories.find((c: any) => String(c.name || '').trim().toLowerCase() === String(row.category || '').trim().toLowerCase())?.id
+        || '',
       stockApplies: String(localDoc.purchaseType || 'INVENTORY').toUpperCase() !== 'SERVICE',
       currentStock: row.currentStock,
       quantity: Number(row.quantity),
@@ -524,6 +534,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       toast.success('Orden de compra anulada');
       setPendingCancelId(null);
       setCancelReason('');
+      setPreviewOrder(null);
       if (editingId === pendingCancelId) setEditingId(null);
       onRefresh();
     } catch (e: any) {
@@ -533,12 +544,29 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     }
   };
 
+  const handleApproveConfirm = async () => {
+    if (!approveConfirmId) return;
+    setApproving(true);
+    try {
+      await purchaseOrdersService.approve(approveConfirmId);
+      toast.success('Orden de compra aprobada');
+      setApproveConfirmId(null);
+      setPreviewOrder(null);
+      if (editingId === approveConfirmId) setEditingId(null);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al aprobar');
+    } finally {
+      setApproving(false);
+    }
+  };
+
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
     if (!String(localDoc.address || '').trim()) return toast.error('Debe ingresar la dirección');
     if ((localDoc.items || []).length === 0) return toast.error('Debe agregar al menos un ítem');
-    if ((localDoc.items || []).some((it: any) => !String(it.code || '').trim() || !String(it.name || '').trim() || !String(it.category || '').trim())) {
-      return toast.error('Cada ítem requiere código, nombre y categoría');
+    if ((localDoc.items || []).some((it: any) => !String(it.code || '').trim() || !String(it.name || '').trim())) {
+      return toast.error('Cada ítem requiere código y nombre');
     }
 
     const cleanedDoc: any = {
@@ -622,53 +650,6 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
     recalculateTotals(newItems);
   };
 
-  const handleConvertToInvoice = (order: Partial<PurchaseOrder>) => {
-    if (!onConvertToInvoice) return;
-    const sourceOrderId = order.id;
-    const alreadyInvoiced = !!sourceOrderId && supplierInvoices.some((inv) => inv.purchaseOrderId === sourceOrderId);
-    if (alreadyInvoiced) {
-      toast.error('Esta orden de compra ya fue convertida en factura');
-      return;
-    }
-    if (String(order.status || '').toUpperCase() === 'RECEIVED') {
-      toast.error('Esta orden ya fue recibida y no puede volver a convertirse');
-      return;
-    }
-    const draft = {
-      supplierId: order.supplierId,
-      purchaseOrderId: order.id,
-      date: new Date().toISOString(),
-      dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-      currency: order.currency || 'NIO',
-      exchangeRate: order.exchangeRate || globalRate,
-      status: 'PENDING',
-      items: (order.items || []).map((it: any) => ({
-        ...it,
-        description: it.description || it.name || '',
-        productId: it.productId || null,
-        taxType: it.taxType || 'GRAVADO',
-        taxRate: it.taxType === 'EXENTO' || it.taxType === 'NO_GRAVADO' ? 0 : (it.taxRate || 15),
-        taxBase: it.taxBase || 0,
-        taxAmount: it.taxAmount || 0,
-        withholdingType: it.withholdingType || 'NONE',
-        withholdingRate: it.withholdingRate || 0,
-        withholdingBase: it.withholdingBase || 0,
-        accountId: it.accountId || null,
-        unitPrice: Number(it.unitPrice || 0),
-        quantity: Number(it.quantity || 0),
-        total: Number(it.total || 0),
-      })),
-      subtotal: order.subtotal,
-      taxAmount: order.taxAmount,
-      withholdingTotal: order.withholdingTotal || 0,
-      withholdingBase: order.withholdingBase || 0,
-      total: order.total,
-      _sourceOrderId: order.id,
-    };
-    onConvertToInvoice(draft);
-    toast.success('Abriendo formulario de factura...', { position: 'bottom-right' });
-  };
-
   const calculateTotals = (items: any[]) => {
     const subtotal = items.reduce((acc, it) => acc + (Number(it.quantity||0) * Number(it.unitPrice||0)), 0);
     const taxAmount = items.reduce((acc, it) => {
@@ -699,31 +680,35 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
 
   const handleItemChange = (idx: number, field: string, value: any) => {
     if (!localDoc) return;
-    const newItems = [...(localDoc.items || [])];
-    newItems[idx] = { ...newItems[idx], [field]: value };
+    setLocalDoc((prev) => {
+      if (!prev) return prev;
+      const newItems = [...(prev.items || [])];
+      newItems[idx] = { ...newItems[idx], [field]: value };
 
-    if (field === 'stockApplies' && !value) {
-      newItems[idx].stock = undefined;
-    }
-    
-    if (['quantity', 'unitPrice', 'taxType', 'taxRate', 'withholdingType', 'withholdingRate'].includes(field)) {
-       const q = Number(newItems[idx].quantity || 0);
-       const p = Number(newItems[idx].unitPrice || 0);
-       const sub = q * p;
-       const tt = (newItems[idx].taxType || 'GRAVADO').toUpperCase();
-       if (tt === 'EXENTO' || tt === 'NO_GRAVADO') {
-         newItems[idx].taxRate = 0;
-         newItems[idx].taxBase = 0;
-         newItems[idx].taxAmount = 0;
-       }
-       const wt = (newItems[idx].withholdingType || 'NONE').toUpperCase();
-       if (wt === 'NONE') {
-         newItems[idx].withholdingRate = 0;
-         newItems[idx].withholdingBase = 0;
-       }
-       newItems[idx].total = sub;
-    }
-    recalculateTotals(newItems);
+      if (field === 'stockApplies' && !value) {
+        newItems[idx].stock = undefined;
+      }
+
+      if (['quantity', 'unitPrice', 'taxType', 'taxRate', 'withholdingType', 'withholdingRate'].includes(field)) {
+        const q = Number(newItems[idx].quantity || 0);
+        const p = Number(newItems[idx].unitPrice || 0);
+        const sub = q * p;
+        const tt = (newItems[idx].taxType || 'GRAVADO').toUpperCase();
+        if (tt === 'EXENTO' || tt === 'NO_GRAVADO') {
+          newItems[idx].taxRate = 0;
+          newItems[idx].taxBase = 0;
+          newItems[idx].taxAmount = 0;
+        }
+        const wt = (newItems[idx].withholdingType || 'NONE').toUpperCase();
+        if (wt === 'NONE') {
+          newItems[idx].withholdingRate = 0;
+          newItems[idx].withholdingBase = 0;
+        }
+        newItems[idx].total = sub;
+      }
+      const totals = calculateTotals(newItems);
+      return { ...prev, items: newItems, ...totals };
+    });
   };
 
   const handleSelectExistingProduct = (idx: number, productId: string) => {
@@ -743,6 +728,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
       name: selected.name || currentItem.name || '',
       description: selected.description || currentItem.description || selected.name || '',
       category: selected.category?.name || selected.category || selected.categoryId || currentItem.category || '',
+      categoryId: selected.categoryId || (selected.category?.id ? selected.category.id : currentItem.categoryId || ''),
       stockApplies: localDoc.purchaseType === 'SERVICE' ? false : true,
       currentStock: Number(currentStock),
       unitPrice: purchasePrice,
@@ -835,8 +821,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
           <div className="flex items-center gap-3">
              {!isNew && (
                 <Button variant="outline" className="rounded-xl border-primary/50 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => handleConvertToInvoice(localDoc)}>
-                  <FileInput className="size-3 mr-2" /> Convertir a Factura
+                  onClick={() => setPreviewOrder(localDoc)}>
+                  <Eye className="size-3 mr-2" /> Vista previa
                 </Button>
              )}
              {!isNew && (
@@ -1063,7 +1049,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                 </Button>
                   <Button variant="outline" size="sm" onClick={() => {
                   const isServiceOrder = localDoc.purchaseType === 'SERVICE';
-                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, productId: '', code: '', name: '', category: '', stockApplies: isServiceOrder ? false : false, stock: undefined, currentStock: 0, quantity: 1, unitPrice: 0, taxType: 'GRAVADO', taxRate: 15, taxBase: 0, taxAmount: 0, withholdingType: 'NONE', withholdingRate: 0, withholdingBase: 0, accountId: '', total: 0 }];
+                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, productId: '', code: '', name: '', category: '', categoryId: '', stockApplies: isServiceOrder ? false : false, stock: undefined, currentStock: 0, quantity: 1, unitPrice: 0, taxType: 'GRAVADO', taxRate: 15, taxBase: 0, taxAmount: 0, withholdingType: 'NONE', withholdingRate: 0, withholdingBase: 0, accountId: '', total: 0 }];
                   setLocalDoc({ ...localDoc, items: newItems as any });
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                   <Plus className="size-3 mr-2" /> Agregar Item
@@ -1143,13 +1129,21 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
                     </div>
                     <div className="col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Categoría</p>
-                      <Input
+                      <select
                         disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                        value={item.category || ''}
-                        onChange={(e) => handleItemChange(idx, 'category', e.target.value)}
-                        className="h-8 text-xs"
-                        placeholder="Categoría"
-                      />
+                        value={item.categoryId || ''}
+                        onChange={(e) => {
+                          const cat = categories.find((c: any) => String(c.id) === String(e.target.value));
+                          handleItemChange(idx, 'categoryId', e.target.value);
+                          handleItemChange(idx, 'category', cat?.name || '');
+                        }}
+                        className={cn("h-8 w-full rounded-md border border-input bg-background px-2 text-xs", item.categoryId ? "" : "text-muted-foreground/50")}
+                      >
+                        <option value="">Sin categoría</option>
+                        {categories.map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
                     </div>
                     <div className="col-span-1">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Stock actual</p>
@@ -1309,6 +1303,51 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
             <DialogFooter><Button className="w-full" onClick={() => setImportResults(null)}>Volver a la orden</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <ConfirmDialog
+          open={!!pendingCancelId}
+          onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
+          title="Anular Orden de Compra"
+          description="La orden quedará cancelada. No se podrá recibir ni facturar. Esta acción no se puede deshacer."
+          confirmLabel="Anular Orden"
+          variant="destructive"
+          loading={cancelLoading}
+          disabled={!cancelReason.trim()}
+          onConfirm={handleCancelConfirm}
+        >
+          <div className="mt-4">
+            <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
+            <textarea
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+              rows={3}
+              placeholder="Ej: Cancelada por el proveedor, error en productos..."
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+          </div>
+        </ConfirmDialog>
+
+        <PurchaseOrderPreviewDialog
+          open={!!previewOrder}
+          order={previewOrder}
+          suppliers={supplierCatalog}
+          canApprove={canPerform('PURCHASES_ORDERS', 'edit')}
+          canCancel={canPerform('PURCHASES_ORDERS', 'delete')}
+          approving={approving}
+          onClose={() => setPreviewOrder(null)}
+          onApprove={(id) => setApproveConfirmId(id)}
+          onCancel={(id) => { setPreviewOrder(null); setPendingCancelId(id); setCancelReason(''); }}
+        />
+        <ConfirmDialog
+          open={!!approveConfirmId}
+          onOpenChange={(open) => { if (!open) setApproveConfirmId(null); }}
+          title="Aprobar Orden de Compra"
+          description="La orden quedará aprobada y podrá ser recibida. ¿Desea continuar?"
+          confirmLabel="Aprobar Orden"
+          variant="default"
+          loading={approving}
+          onConfirm={handleApproveConfirm}
+        />
       </div>
     );
   }
@@ -1367,12 +1406,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
           actions={(row) => (
             <div className="flex gap-1">
               <Button
-                title="Convertir a Factura"
+                title="Vista previa"
                 variant="ghost"
                 size="icon"
-                disabled={String(row.status || '').toUpperCase() === 'RECEIVED' || supplierInvoices.some((inv) => inv.purchaseOrderId === row.id)}
-                className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-50"
-                onClick={() => handleConvertToInvoice(row)}
+                className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500"
+                onClick={() => setPreviewOrder(row)}
               >
                 <FileInput className="size-4" />
               </Button>
@@ -1406,6 +1444,28 @@ export function OrdenesCompraView({ data, loading, onRefresh, onConvertToInvoice
             />
           </div>
         </ConfirmDialog>
+
+        <PurchaseOrderPreviewDialog
+          open={!!previewOrder}
+          order={previewOrder}
+          suppliers={supplierCatalog}
+          canApprove={canPerform('PURCHASES_ORDERS', 'edit')}
+          canCancel={canPerform('PURCHASES_ORDERS', 'delete')}
+          approving={approving}
+          onClose={() => setPreviewOrder(null)}
+          onApprove={(id) => setApproveConfirmId(id)}
+          onCancel={(id) => { setPreviewOrder(null); setPendingCancelId(id); setCancelReason(''); }}
+        />
+        <ConfirmDialog
+          open={!!approveConfirmId}
+          onOpenChange={(open) => { if (!open) setApproveConfirmId(null); }}
+          title="Aprobar Orden de Compra"
+          description="La orden quedará aprobada y podrá ser recibida. ¿Desea continuar?"
+          confirmLabel="Aprobar Orden"
+          variant="default"
+          loading={approving}
+          onConfirm={handleApproveConfirm}
+        />
 
         <Dialog open={false} onOpenChange={setImportIntroOpen}>
           <DialogContent className="max-w-2xl rounded-2xl">

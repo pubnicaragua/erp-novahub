@@ -204,7 +204,14 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const productCatalogQuery = useQuery({
     queryKey: ['purchases', 'products-catalog', tenantKey, 1, 200],
     queryFn: ({ signal }) => inventoryService.getProducts({ page: 1, pageSize: 200 }, signal),
-    enabled: activeSection === 'ordenes',
+    enabled: ['ordenes', 'recepciones'].includes(activeSection),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+  const productCategoriesQuery = useQuery({
+    queryKey: ['purchases', 'products-categories-catalog', tenantKey],
+    queryFn: ({ signal }) => inventoryService.getCategories(signal),
+    enabled: ['ordenes', 'recepciones'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
@@ -227,6 +234,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const accountCatalog = useMemo(() => toArr(accountCatalogQuery.data) as any[], [accountCatalogQuery.data]);
   const warehouseCatalog = useMemo(() => toArr(warehouseCatalogQuery.data) as any[], [warehouseCatalogQuery.data]);
   const productCatalog = useMemo(() => toArr(productCatalogQuery.data) as any[], [productCatalogQuery.data]);
+  const productCategories = useMemo(() => toArr(productCategoriesQuery.data) as any[], [productCategoriesQuery.data]);
   const orderCatalog = useMemo(() => toArr(orderCatalogQuery.data) as any[], [orderCatalogQuery.data]);
   const receiptCatalog = useMemo(() => toArr(receiptCatalogQuery.data) as any[], [receiptCatalogQuery.data]);
   const expensesPage = pageFor('gastos');
@@ -445,8 +453,8 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                     {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={filteredData.proveedores} pagination={pagination.proveedores} onSearchChange={(value) => updateSearch('proveedores', value)} />}
                     {section.id === 'gastos'        && <GastosView         {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} />}
                     {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={accountCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
-                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} supplierCatalog={supplierCatalog} productCatalog={productCatalog} data={filteredData.ordenes} supplierInvoices={invoiceCatalog} onConvertToInvoice={handleConvertToInvoice} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
-                     {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} data={filteredData.recepciones} onConvertToInvoice={handleConvertToInvoice} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
+                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} supplierCatalog={supplierCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
+                     {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} onConvertToInvoice={handleConvertToInvoice} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
                    {section.id === 'facturas-prov' && (
                      <FacturasProveedorView
                        {...commonProps}

@@ -495,6 +495,7 @@ export interface PurchaseOrderItem {
   code?: string;
   name?: string;
   category?: string;
+  categoryId?: string;
   stockApplies?: boolean;
   stock?: number;
   quantity: number;

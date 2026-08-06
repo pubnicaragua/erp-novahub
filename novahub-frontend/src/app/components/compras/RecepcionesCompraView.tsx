@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
-  PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, FileInput,
+  PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, FileInput, Pencil,
   AlertTriangle, XCircle, ArrowDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -8,7 +9,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { purchaseReceiptsService } from '../../services/compras.service';
+import { purchaseOrdersService, purchaseReceiptsService } from '../../services/compras.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { inventoryService } from '../../services/inventario.service';
 import type { PurchaseReceipt, Supplier, PurchaseOrder, Warehouse } from '../../types';
@@ -24,7 +25,7 @@ import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
-interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; onConvertToInvoice?: (draft: any) => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; onConvertToInvoice?: (draft: any) => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
 const statusOpts = [
   { label: 'Pendiente',     value: 'PENDING',        color: 'bg-amber-500/10 text-amber-500' },
@@ -34,15 +35,18 @@ const statusOpts = [
   { label: 'Rechazado',     value: 'REJECTED',       color: 'bg-rose-500/10 text-rose-500' },
 ];
 
+const STATUS_OPTIONS_RECEIVING = ['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'];
+
 const incidenciaIcons: Record<string, any> = {
   faltante: ArrowDown,
   rechazado: XCircle,
   incidencia: AlertTriangle,
 };
 
-export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], warehouseCatalog = [], orderCatalog = [], onConvertToInvoice, pagination, onSearchChange }: Props) {
+export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], onConvertToInvoice, pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
   const { formatConvertedAmount } = useCurrency();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'RECEIVED' | 'WITH_INCIDENTS'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -51,21 +55,29 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseReceipt> | null>(null);
+  const [invalidCodeItems, setInvalidCodeItems] = useState<Record<number, boolean>>({});
+  const [codeEditMode, setCodeEditMode] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     setSuppliers(supplierCatalog);
     setOrders(orderCatalog);
     setWarehouses(warehouseCatalog);
     setAccounts(accountCatalog);
-  }, [supplierCatalog, orderCatalog, warehouseCatalog, accountCatalog]);
+    setProducts(productCatalog);
+    setCategories(productCategories);
+  }, [supplierCatalog, orderCatalog, warehouseCatalog, accountCatalog, productCatalog, productCategories]);
 
   const [prevEdit, setPrevEdit] = useState({ editingId, data });
   if (editingId !== prevEdit.editingId || data !== prevEdit.data) {
     setPrevEdit({ editingId, data });
     if (editingId) {
+      setInvalidCodeItems({});
+      setCodeEditMode({});
       if (editingId === 'NEW') {
          setLocalDoc({
            supplierId: '',
@@ -118,12 +130,21 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       const currentReceipt = data.find((x) => x.id === id);
       const previousStatus = String(currentReceipt?.status || '').toUpperCase();
       const requestedStatus = String(updates.status || currentReceipt?.status || '').toUpperCase();
-      if (!['RECEIVED', 'PARTIAL'].includes(previousStatus) && ['RECEIVED', 'PARTIAL'].includes(requestedStatus)) {
+      if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVING.includes(requestedStatus)) {
         const missingWarehouse = (currentReceipt?.items || []).some((item: any) =>
           Number(item?.quantityReceived || 0) > 0 && !String(item?.warehouseId || '').trim(),
         );
         if (missingWarehouse) {
           toast.error('Selecciona la bodega para cada ítem recibido antes de marcar la recepción');
+          return;
+        }
+        const invalidManualItem = (currentReceipt?.items || []).some((item: any) =>
+          Number(item?.quantityReceived || 0) > 0
+          && !String(item?.productId || '').trim()
+          && (!String(item?.description || '').trim() || !String(item?.code || '').trim()),
+        );
+        if (invalidManualItem) {
+          toast.error('Cada ítem recibido sin producto debe tener nombre y código para crearse en inventario');
           return;
         }
       }
@@ -144,13 +165,26 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       }
       toast.success('Recepción actualizada');
       onRefresh();
+      void queryClient.invalidateQueries({ queryKey: ['inventory'] });
     }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
   };
 
+  const findProductByCode = async (code: string): Promise<any> => {
+    const normalizedCode = String(code || '').trim().toLowerCase();
+    if (!normalizedCode) return null;
+    try {
+      const searchResp = await inventoryService.getProducts({ search: code, page: 1, pageSize: 50 });
+      const searchList = Array.isArray(searchResp) ? searchResp : (searchResp as any)?.data || [];
+      return searchList.find((p: any) => String(p.code || p.sku || '').trim().toLowerCase() === normalizedCode) || null;
+    } catch {
+      return products.find((p: any) => String(p.code || p.sku || '').trim().toLowerCase() === normalizedCode) || null;
+    }
+  };
+
   const ensureInventoryEntriesForReceipt = async (receipt: Partial<PurchaseReceipt>) => {
     const nextStatus = String(receipt.status || '').toUpperCase();
-    if (!['RECEIVED', 'PARTIAL'].includes(nextStatus)) return;
+    if (!STATUS_OPTIONS_RECEIVING.includes(nextStatus)) return;
     if (!receipt.id) return;
     const receiptItems = Array.isArray(receipt.items) ? receipt.items : [];
     if (receiptItems.length === 0) return;
@@ -163,22 +197,83 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     for (const [index, item] of receiptItems.entries()) {
       const quantityReceived = Number((item as any)?.quantityReceived || 0);
       if (quantityReceived <= 0) continue;
-      const productId = String((item as any)?.productId || '').trim();
+      let productId = String((item as any)?.productId || '').trim();
       const warehouseId = String((item as any)?.warehouseId || '').trim();
-      if (!productId) continue;
       if (!warehouseId) {
         throw new Error(`Debe seleccionar bodega para el ítem ${index + 1}`);
+      }
+
+      // Producto no vinculado: intentar crearlo en inventario con código y categoría del ítem
+      if (!productId) {
+        const name = String((item as any)?.description || (item as any)?.name || '').trim();
+        const code = String((item as any)?.code || '').trim();
+        if (!name) {
+          throw new Error(`El ítem ${index + 1} necesita un nombre/descripción para crearse en inventario`);
+        }
+        if (!code) {
+          throw new Error(`El ítem ${index + 1} necesita un código para crearse en inventario`);
+        }
+        const isService = (item as any)?.stockApplies === false;
+
+        const existingProduct = await findProductByCode(code);
+
+        if (existingProduct?.id) {
+          productId = String(existingProduct.id);
+        } else {
+          const createdResponse = await inventoryService.createProduct({
+            code,
+            name,
+            sku: code,
+            categoryId: (item as any)?.categoryId || undefined,
+            costPrice: Number((item as any)?.unitPrice || 0),
+            salePrice: Number((item as any)?.unitPrice || 0),
+            minStock: 0,
+            unit: 'unidad',
+            type: isService ? 'SERVICE' : 'PRODUCT',
+            itemType: isService ? 'SERVICE' : 'PRODUCT',
+            trackInventory: !isService,
+            initialStock: 0,
+          } as any);
+          const created = (createdResponse as any)?.data || createdResponse;
+          productId = created?.id || productId;
+          if (!productId) {
+            throw new Error(`No se pudo crear el producto para el ítem ${index + 1}`);
+          }
+          toast.success(`${isService ? 'Servicio' : 'Producto'} '${name}' creado en inventario`);
+        }
+      }
+
+      let variantId: string | undefined;
+      const productDetailResp = await inventoryService.getProduct(productId).catch(() => null);
+      const productDetail = (productDetailResp as any)?.data || productDetailResp;
+      variantId = productDetail?.variants?.[0]?.id;
+      if (!variantId) {
+        throw new Error(`El producto '${(item as any)?.description || productId}' no tiene una variante de stock; revisa el producto ${index + 1}`);
       }
 
       const movementReference = `PURCHASE_RECEIPT:${receipt.id}:${(item as any)?.id || productId}:${warehouseId}`;
       const alreadySynced = existingMovements.some((movement: any) => String(movement?.reference || '') === movementReference);
       if (alreadySynced) continue;
 
+      const stockLevels = Array.isArray(productDetail?.stockLevels) ? productDetail.stockLevels : [];
+      const currentLevel = Number(stockLevels.find((sl: any) => sl.warehouseId === warehouseId)?.quantity || 0);
+      const newQuantity = currentLevel + quantityReceived;
+
+      await inventoryService.updateStockLevel({
+        productId,
+        warehouseId,
+        variantId,
+        quantity: newQuantity,
+        minStock: 0,
+      } as any);
+
       await inventoryService.createMovement({
         productId,
         warehouseId,
+        variantId,
         type: 'IN',
         quantity: quantityReceived,
+        unitCost: Number((item as any)?.unitPrice || 0),
         reference: movementReference,
       } as any);
     }
@@ -187,7 +282,9 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
     if (!localDoc?.purchaseOrderId) return toast.error('Debe seleccionar una orden de compra');
-    const isReceiving = ['RECEIVED', 'PARTIAL'].includes(String(localDoc.status || '').toUpperCase());
+    const autoComputedStatus = calcStatus(localDoc.items || []);
+    localDoc.status = autoComputedStatus as any;
+    const isReceiving = STATUS_OPTIONS_RECEIVING.includes(String(localDoc.status || '').toUpperCase());
     if (isReceiving) {
       const missingWarehouse = (localDoc.items || []).some((item: any) =>
         Number(item?.quantityReceived || 0) > 0 && !String(item?.warehouseId || '').trim(),
@@ -195,20 +292,51 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       if (missingWarehouse) {
         return toast.error('Debe seleccionar una bodega para cada ítem recibido');
       }
+      const invalidManualItem = (localDoc.items || []).some((item: any) =>
+        Number(item?.quantityReceived || 0) > 0
+        && !String(item?.productId || '').trim()
+        && (!String(item?.description || '').trim() || !String(item?.code || '').trim()),
+      );
+      if (invalidManualItem) {
+        return toast.error('Cada ítem recibido sin producto debe tener nombre y código para crearse en inventario');
+      }
+
+      const nextInvalidMap: Record<number, boolean> = {};
+      for (const [idx, item] of (localDoc.items || []).entries()) {
+        const qty = Number((item as any)?.quantityReceived || 0);
+        if (qty <= 0 || String((item as any)?.productId || '').trim()) continue;
+        const name = String((item as any)?.description || (item as any)?.name || '').trim();
+        const code = String((item as any)?.code || '').trim();
+        const existing = await findProductByCode(code);
+        if (existing?.id) {
+          const existingName = String(existing.name || '').trim();
+          if (existingName && existingName.toLowerCase() !== name.toLowerCase()) {
+            nextInvalidMap[idx] = true;
+            toast.error(`No se puede recepcionar. El código "${code}" ya está registrado en inventario bajo el nombre "${existingName}", y no coincide con el ítem "${name}". Verifique que el código no sea repetido o ajuste el ítem en esta recepción, y reintente.`);
+          }
+        }
+      }
+      setInvalidCodeItems(nextInvalidMap);
+      if (Object.keys(nextInvalidMap).length > 0) {
+        return;
+      }
     }
     
     try {
       if (editingId === 'NEW') {
         const createdResponse = await purchaseReceiptsService.create(localDoc as any);
         const createdReceipt = (createdResponse as any)?.data || createdResponse;
-        if (['RECEIVED', 'PARTIAL'].includes(String(createdReceipt?.status || localDoc.status || '').toUpperCase())) {
+        if (STATUS_OPTIONS_RECEIVING.includes(String(createdReceipt?.status || localDoc.status || '').toUpperCase())) {
           try {
             await ensureInventoryEntriesForReceipt({
               ...(localDoc || {}),
-              ...(createdReceipt || {}),
+              items: (localDoc?.items && localDoc.items.length ? localDoc.items : createdReceipt?.items),
+              id: createdReceipt?.id || localDoc?.id,
+              status: (createdReceipt?.status || localDoc.status) as any,
             });
           } catch (syncError: any) {
-            toast.warning(`Recepción creada, pero no se pudo sincronizar inventario: ${syncError?.message || 'Error de sincronización'}`);
+            console.error('[RecepcionInventario] error de sincronización:', syncError);
+            toast.warning(`Recepción creada, pero no se pudo sincronizar inventario: ${syncError?.message || syncError?.response?.data?.message || 'Error de sincronización'}`);
           }
         }
         toast.success('Recepción creada');
@@ -218,11 +346,12 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         const updatedResponse = await purchaseReceiptsService.update(editingId!, localDoc as any);
         const updatedReceipt = (updatedResponse as any)?.data || updatedResponse;
         const nextStatus = String(updatedReceipt?.status || localDoc.status || previousStatus).toUpperCase();
-        if (!['RECEIVED', 'PARTIAL'].includes(previousStatus) && ['RECEIVED', 'PARTIAL'].includes(nextStatus)) {
+if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVING.includes(nextStatus)) {
           try {
             await ensureInventoryEntriesForReceipt({
               ...(currentReceipt || {}),
               ...(updatedReceipt || {}),
+              items: (currentReceipt?.items && currentReceipt.items.length ? currentReceipt.items : updatedReceipt?.items),
               id: editingId!,
               status: nextStatus as any,
             });
@@ -234,6 +363,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       }
       setEditingId(null);
       onRefresh();
+      void queryClient.invalidateQueries({ queryKey: ['inventory'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la recepción');
     }
@@ -264,6 +394,11 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     newItems[idx] = { ...newItems[idx], [field]: value };
     const autoStatus = calcStatus(newItems);
     setLocalDoc({ ...localDoc, items: newItems as any, status: autoStatus as any });
+    if (invalidCodeItems[idx]) {
+      const next = { ...invalidCodeItems };
+      delete next[idx];
+      setInvalidCodeItems(next);
+    }
   };
 
   const currentAvailableOrders = orders.filter(o => o.supplierId === localDoc?.supplierId && ['APPROVED'].includes((o.status||'').toUpperCase()));
@@ -359,10 +494,25 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
                     options={currentAvailableOrders.map(c => ({ label: `${c.number} (Total: ${formatConvertedAmount(Number(c.total || 0), c.currency, c.exchangeRate)})`, value: c.id }))}
                     value={localDoc.purchaseOrderId || ''}
-                    onChange={(val) => {
-                       const ord = currentAvailableOrders.find(x => x.id === val);
+                    onChange={async (val) => {
+                       const listOrd = currentAvailableOrders.find(x => x.id === val);
+                       let ord = listOrd;
+                       if (val) {
+                         const detail = await purchaseOrdersService.getById(val).catch(() => null);
+                         const detailItems = (detail as any)?.data?.items ?? (detail as any)?.items;
+                         if (Array.isArray(detailItems) && detailItems.length) {
+                           ord = { ...(listOrd || {}), items: detailItems } as any;
+                         }
+                       }
                        const newItems = ord?.items?.map(it => ({
                           description: (it as any).description,
+                          code: (it as any).code || (it as any).sku || '',
+                          name: (it as any).name || '',
+                          category: (it as any).category || '',
+                          categoryId: (it as any).categoryId
+                            || categories.find((c: any) => String(c.name || '').trim().toLowerCase() === String((it as any).category || '').trim().toLowerCase())?.id
+                            || '',
+                          stockApplies: (it as any).stockApplies !== false,
                           quantityOrdered: (it as any).quantity,
                           quantityReceived: (it as any).quantity,
                           productId: (it as any).productId,
@@ -375,7 +525,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                           costCenterId: (it as any).costCenterId || null,
                           warehouseId: warehouses.find((w) => (w as any)?.isMain)?.id || '',
                         })) || [];
-                        setLocalDoc({ ...localDoc, purchaseOrderId: val, items: newItems as any });
+                        const autoStatus = calcStatus(newItems);
+                        setLocalDoc({ ...localDoc, purchaseOrderId: val, items: newItems as any, status: autoStatus as any });
                      }}
                     placeholder={localDoc.supplierId ? "Seleccionar Orden" : "Seleccione un proveedor primero"}
                   />
@@ -436,14 +587,6 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos Recibidos</p>
-              {((isNew && canPerform('PURCHASES_RECEIPTS', 'create')) || (!isNew && canPerform('PURCHASES_RECEIPTS', 'edit'))) && (
-                <Button variant="outline" size="sm" onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantityOrdered: 0, quantityReceived: 1, unitPrice: 0, taxType: 'GRAVADO', taxRate: 15, withholdingType: 'NONE', accountId: '' }];
-                  setLocalDoc({ ...localDoc, items: newItems as any });
-                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                  <Plus className="size-3 mr-2" /> Agregar Item
-                </Button>
-              )}
             </div>
             
             <div className="space-y-3">
@@ -453,8 +596,14 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                 const qRejected = Number(item.quantityRejected || 0);
                 const faltante = qReceived < qOrdered && qReceived >= 0;
                 const rechazado = qRejected > 0;
+                const conflictoCodigo = !!invalidCodeItems[idx];
                 return (
-                <div key={item.id || idx} className={cn('group relative rounded-2xl border p-4 space-y-3 transition-all duration-200', (faltante || rechazado) ? 'border-orange-500/30 bg-orange-500/5 hover:border-orange-500/50' : 'border-border/40 bg-background/60 backdrop-blur-sm hover:border-primary/30 hover:shadow-md')}>
+                <div key={item.id || idx} className={cn('group relative rounded-2xl border p-4 space-y-3 transition-all duration-200', conflictoCodigo ? 'border-rose-500/40 bg-rose-500/5 hover:border-rose-500/60' : (faltante || rechazado) ? 'border-orange-500/30 bg-orange-500/5 hover:border-orange-500/50' : 'border-border/40 bg-background/60 backdrop-blur-sm hover:border-primary/30 hover:shadow-md')}>
+                  {conflictoCodigo && (
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Badge variant="outline" className="text-[8px] font-black uppercase px-1.5 py-0 border-none bg-rose-500/15 text-rose-500"><XCircle className="size-2.5 mr-1" /> Código duplicado en inventario — corregir antes de recepcionar</Badge>
+                    </div>
+                  )}
                   {((faltante || rechazado) && !isNew) && (
                     <div className="flex items-center gap-1.5 mb-2">
                       {faltante && <Badge variant="outline" className="text-[8px] font-black uppercase px-1.5 py-0 border-none bg-amber-500/10 text-amber-500"><ArrowDown className="size-2.5 mr-1" /> Faltante: {qOrdered - qReceived} uds.</Badge>}
@@ -463,19 +612,75 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                   )}
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1.5">Descripción del Producto</p>
-                      <Input 
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1.5">Producto</p>
+                      <Combobox
                         disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
-                        value={item.description || ''} 
-                        onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
-                        className="h-8 text-xs font-bold" 
-                        placeholder="Ej. Llantas Michelin" 
+                        options={products.map((p) => ({ label: `${p.code} - ${p.name}`, value: p.id }))}
+                        value={item.productId || ''}
+                        onChange={(val) => {
+                          const prod = products.find((p) => p.id === val);
+                          handleItemChange(idx, 'productId', val);
+                          if (prod) {
+                            handleItemChange(idx, 'description', prod.name);
+                            handleItemChange(idx, 'name', prod.name);
+                            handleItemChange(idx, 'code', prod.code);
+                            handleItemChange(idx, 'category', prod.category?.name || prod.category || '');
+                            handleItemChange(idx, 'categoryId', prod.categoryId || (prod.category?.id ? prod.category.id : ''));
+                            handleItemChange(idx, 'unitPrice', Number(prod.costPrice || prod.cost || prod.price || 0));
+                          }
+                        }}
+                        placeholder="Seleccionar producto (o déjalo vacío para crear uno)"
                       />
                     </div>
                     {((isNew && canPerform('PURCHASES_RECEIPTS', 'create')) || (!isNew && canPerform('PURCHASES_RECEIPTS', 'edit'))) && (
                       <Button variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground/40 hover:bg-rose-500/10 hover:text-rose-500 rounded-xl opacity-0 group-hover:opacity-100 transition-all" onClick={() => handleDeleteItem(idx)}>
                         <Trash2 className="size-3.5" />
                       </Button>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1.5">Descripción / Nombre</p>
+                      <Input
+                        disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
+                        value={item.description || ''}
+                        onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
+                        className="h-8 text-xs font-bold"
+                        placeholder="Ej. Llantas Michelin"
+                      />
+                    </div>
+                    {!item.productId && (
+                      <>
+                        <div className="min-w-0 sm:w-40">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1.5">Código {codeEditMode[idx] ? 'nuevo' : '(de la orden)'}</p>
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              disabled={!codeEditMode[idx] || (isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit'))}
+                              value={item.code || ''}
+                              onChange={(e) => handleItemChange(idx, 'code', e.target.value)}
+                              className={cn('h-8 text-xs font-mono', !codeEditMode[idx] && 'bg-muted/30')}
+                              placeholder="Sin código"
+                            />
+                            {(isNew ? canPerform('PURCHASES_RECEIPTS', 'create') : canPerform('PURCHASES_RECEIPTS', 'edit')) && (
+                              <Button variant="ghost" size="icon" title={codeEditMode[idx] ? 'Finalizar edición' : 'Agregar un código nuevo'} className="size-8 shrink-0 text-muted-foreground/50 hover:text-primary rounded-xl" onClick={() => setCodeEditMode((prev) => ({ ...prev, [idx]: !prev[idx] }))}>
+                                {codeEditMode[idx] ? <CheckCircle2 className="size-3.5" /> : <Pencil className="size-3.5" />}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="min-w-0 sm:w-44">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1.5">Categoría</p>
+                          <select
+                            disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
+                            value={item.categoryId || ''}
+                            onChange={(e) => handleItemChange(idx, 'categoryId', e.target.value)}
+                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold"
+                          >
+                            <option value="">Sin categoría</option>
+                            {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </div>
+                      </>
                     )}
                   </div>
                   <div className="purchase-item-fields grid grid-cols-12 gap-2 items-end">
