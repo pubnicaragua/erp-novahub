@@ -63,7 +63,7 @@ export const hrService = {
   // ===== TRAINING =====
   getTrainings: (statusOrFilters?: string | any, signal?: AbortSignal) => api.get('/hr/training', withSignal(typeof statusOrFilters === 'object' ? statusOrFilters : { status: statusOrFilters }, signal)),
   getTraining: (id: string, signal?: AbortSignal) => api.get(`/hr/training/${id}`, withSignal(undefined, signal)),
-  createTraining: (data: any) => api.post('/hr/training', data),
+  createTraining: (data: any) => api.idempotentPost('/hr/training', data),
   updateTraining: (id: string, data: any) => api.patch(`/hr/training/${id}`, data),
   enrollEmployee: (data: any) => api.post('/hr/training/enroll', data),
   completeTraining: (trainingId: string, employeeId: string, data: any) => 
@@ -71,8 +71,8 @@ export const hrService = {
 
   // ===== BENEFITS =====
   getBenefits: (filters?: any, signal?: AbortSignal) => api.get('/hr/benefits', withSignal(filters, signal)),
-  createBenefit: (data: any) => api.post('/hr/benefits', data),
-  updateBenefit: (id: string, data: any) => api.patch(`/hr/benefits/${id}`, data),
+  createBenefit: (data: any) => api.idempotentPost('/hr/benefits', data),
+  updateBenefit: (id: string, data: any) => api.idempotentPatch(`/hr/benefits/${id}`, data),
   deleteBenefit: (id: string) => api.delete(`/hr/benefits/${id}`),
   assignBenefit: (data: any) => api.post('/hr/benefits/assign', data),
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { HandHeart, Plus, Save, X, Edit2, Trash2, Users, DollarSign, CheckCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -31,7 +31,15 @@ const BENEFIT_TYPE_LABELS: Record<string, string> = {
   TRANSPORTATION: 'Transporte', FOOD: 'Alimentación', GYM: 'Gimnasio', OTHER: 'Otro',
 };
 
-const EMPTY_FORM = { name: '', description: '', type: 'OTHER', cost: '', isActive: true, employeeIds: [] as string[] };
+const PAYMENT_METHODS = [
+  { value: 'CASH', label: 'Efectivo / Caja' },
+  { value: 'CARD', label: 'Tarjeta' },
+  { value: 'TRANSFER', label: 'Transferencia' },
+  { value: 'CHECK', label: 'Cheque' },
+  { value: 'OTHER', label: 'Otro medio' },
+];
+
+const EMPTY_FORM = { name: '', description: '', type: 'OTHER', cost: '', currency: 'NIO', paymentSource: 'CASH', isActive: true, employeeIds: [] as string[] };
 
 export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
@@ -41,25 +49,45 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   const [form, setForm] = useState<any>(EMPTY_FORM);
   const [editForm, setEditForm] = useState<any>({});
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [savingUpdateId, setSavingUpdateId] = useState<string | null>(null);
+  const createInFlightRef = useRef(false);
+  const updateInFlightRef = useRef<string | null>(null);
 
   const handleCreate = async () => {
     if (!form.name) { toast.error('El nombre es requerido'); return; }
+    if (createInFlightRef.current) return;
+    createInFlightRef.current = true;
+    setIsCreating(true);
     try {
       await hrService.createBenefit({ ...form, cost: form.cost ? Number(form.cost) : null, currency: form.currency || 'USD' });
       toast.success('Beneficio creado');
       setAddingNew(false);
-      setForm(EMPTY_FORM);
+      setForm({ ...EMPTY_FORM, currency: displayCurrency });
       onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear beneficio'); }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al crear beneficio');
+    } finally {
+      createInFlightRef.current = false;
+      setIsCreating(false);
+    }
   };
 
   const handleUpdate = async (id: string) => {
+    if (updateInFlightRef.current === id) return;
+    updateInFlightRef.current = id;
+    setSavingUpdateId(id);
     try {
       await hrService.updateBenefit(id, { ...editForm, cost: editForm.cost ? Number(editForm.cost) : null });
       toast.success('Beneficio actualizado');
       setEditingId(null);
       onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar beneficio'); }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar beneficio');
+    } finally {
+      updateInFlightRef.current = null;
+      setSavingUpdateId(null);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -126,6 +154,29 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                       <Input type="number" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })} placeholder="0.00" className="rounded-xl h-10 pl-7" />
                     </div>
                   </div>
+                   <div className="space-y-1">
+                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Moneda</label>
+                    <select
+                      value={form.currency || displayCurrency}
+                      onChange={e => setForm({ ...form, currency: e.target.value })}
+                      disabled={isCreating}
+                      className="w-full h-10 px-3 rounded-xl border border-input bg-background text-sm font-medium"
+                    >
+                      <option value="NIO">Córdobas (NIO)</option>
+                      <option value="USD">Dólares (USD)</option>
+                     </select>
+                   </div>
+                   <div className="space-y-1">
+                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Medio de pago</label>
+                     <select
+                       value={form.paymentSource || 'CASH'}
+                       onChange={e => setForm({ ...form, paymentSource: e.target.value })}
+                       disabled={isCreating}
+                       className="w-full h-10 px-3 rounded-xl border border-input bg-background text-sm font-medium"
+                     >
+                       {PAYMENT_METHODS.map(method => <option key={method.value} value={method.value}>{method.label}</option>)}
+                     </select>
+                   </div>
                   <div className="md:col-span-2 space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción</label>
                     <Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Cobertura médica completa para empleado y familia" className="rounded-xl h-10" />
@@ -155,8 +206,8 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                     </div>
                   </div>
                   <div className="flex items-end gap-2 md:col-span-2">
-                    <Button onClick={handleCreate} className="flex-1 rounded-xl gap-2 font-bold"><Save className="size-4" /> Guardar</Button>
-                    <Button variant="ghost" onClick={() => setAddingNew(false)} className="rounded-xl"><X className="size-4" /></Button>
+                    <Button onClick={handleCreate} disabled={isCreating} className="flex-1 rounded-xl gap-2 font-bold"><Save className="size-4" /> {isCreating ? 'Guardando...' : 'Guardar'}</Button>
+                    <Button variant="ghost" onClick={() => setAddingNew(false)} disabled={isCreating} className="rounded-xl"><X className="size-4" /></Button>
                   </div>
                 </div>
               </CardContent>
@@ -185,12 +236,18 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                         className="h-9 px-2 rounded-xl border border-input bg-background text-sm font-medium">
                         {Object.entries(BENEFIT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                       </select>
-                      <div className="relative">
-                        <span className="absolute left-2 top-2.5 text-xs text-muted-foreground font-medium">
-                          {editForm.currency === 'USD' ? '$' : 'C$'}
-                        </span>
-                        <Input type="number" value={editForm.cost} onChange={e => setEditForm({ ...editForm, cost: e.target.value })} placeholder="Costo" className="rounded-xl h-9 text-sm pl-6" />
-                      </div>
+                      <select value={editForm.currency || displayCurrency} onChange={e => setEditForm({ ...editForm, currency: e.target.value })}
+                        disabled={savingUpdateId === benefit.id}
+                        className="h-9 px-2 rounded-xl border border-input bg-background text-sm font-medium">
+                        <option value="NIO">Córdobas (NIO)</option>
+                        <option value="USD">Dólares (USD)</option>
+                      </select>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-2 top-2.5 text-xs text-muted-foreground font-medium">
+                        {editForm.currency === 'USD' ? '$' : 'C$'}
+                      </span>
+                      <Input type="number" value={editForm.cost} onChange={e => setEditForm({ ...editForm, cost: e.target.value })} placeholder="Costo" disabled={savingUpdateId === benefit.id} className="rounded-xl h-9 text-sm pl-6" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empleados Asignados</label>
@@ -217,8 +274,8 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                       </div>
                     </div>
                     <div className="flex gap-2 mt-2">
-                      <Button size="sm" onClick={() => handleUpdate(benefit.id)} className="flex-1 rounded-xl gap-1 font-bold text-xs"><Save className="size-3" /> Guardar</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="rounded-xl"><X className="size-3" /></Button>
+                      <Button size="sm" onClick={() => handleUpdate(benefit.id)} disabled={savingUpdateId === benefit.id} className="flex-1 rounded-xl gap-1 font-bold text-xs"><Save className="size-3" /> {savingUpdateId === benefit.id ? 'Guardando...' : 'Guardar'}</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} disabled={savingUpdateId === benefit.id} className="rounded-xl"><X className="size-3" /></Button>
                     </div>
                   </CardContent>
                 ) : (

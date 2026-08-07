@@ -16,6 +16,7 @@ import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { Combobox } from '../ui/Combobox'
+import { cn } from '../ui/utils'
 import { toast } from 'sonner'
 import { ChevronDown, ChevronUp, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react'
 import { BankAccountsView } from './BankAccountsView'
@@ -139,12 +140,26 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'payroll', label: 'Nóminas', icon: Users,
-    description: 'Nómina → gasto de nómina + obligaciones laborales + neto a pagar',
+    description: 'Un solo asiento al pagar la nómina: costos laborales, obligaciones y salida del neto',
     fields: [
-      { key: 'expense', label: 'Gasto de Nómina', side: 'debit', description: 'Se debita el total devengado', defaultCode: '5100', defaultName: 'Gastos de Nomina', defaultType: 'EXPENSE' },
-      { key: 'inssPayable', label: 'INSS por Pagar', side: 'credit', description: 'Aportes INSS (laboral + patronal)', defaultCode: '2200', defaultName: 'INSS por Pagar', defaultType: 'LIABILITY' },
-      { key: 'irPayable', label: 'IR por Pagar', side: 'credit', description: 'Retención IR', defaultCode: '2300', defaultName: 'IR por Pagar', defaultType: 'LIABILITY' },
-      { key: 'netPayable', label: 'Neto a Pagar', side: 'credit', description: 'Sueldo neto a pagar a empleados', defaultCode: '2400', defaultName: 'Neto a Pagar', defaultType: 'LIABILITY' },
+      { key: 'salaryExpense', label: 'Salario base', side: 'debit', description: 'Se debita el salario base devengado', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
+      { key: 'bonusesExpense', label: 'Bonificaciones', side: 'debit', description: 'Se debitan las bonificaciones devengadas', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
+      { key: 'overtimeExpense', label: 'Horas extras', side: 'debit', description: 'Se debita el pago por horas extras', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
+      { key: 'commissionsExpense', label: 'Comisiones', side: 'debit', description: 'Se debita la comisión incluida en nómina', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
+      { key: 'inssPatronalExpense', label: 'Gasto INSS patronal', side: 'debit', description: 'Se debita el aporte patronal asumido por la empresa', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
+      { key: 'inatecExpense', label: 'Gasto INATEC', side: 'debit', description: 'Se debita el aporte patronal de INATEC', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
+      { key: 'thirteenthExpense', label: 'Provisión de aguinaldo', side: 'debit', description: 'Se debita la provisión del décimo tercer mes', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
+      { key: 'vacationExpense', label: 'Provisión de vacaciones', side: 'debit', description: 'Se debita la provisión de vacaciones', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
+      { key: 'indemnityExpense', label: 'Provisión de indemnización', side: 'debit', description: 'Se debita la provisión de indemnización', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
+      { key: 'inssLaboralPayable', label: 'INSS laboral por pagar', side: 'credit', description: 'Retención INSS al empleado', defaultCode: '2200', defaultName: 'INSS por Pagar', defaultType: 'LIABILITY' },
+      { key: 'inssPatronalPayable', label: 'INSS patronal por pagar', side: 'credit', description: 'Obligación patronal de INSS', defaultCode: '2200', defaultName: 'INSS por Pagar', defaultType: 'LIABILITY' },
+      { key: 'inatecPayable', label: 'INATEC por pagar', side: 'credit', description: 'Obligación patronal de INATEC', defaultCode: '2200', defaultName: 'INATEC por Pagar', defaultType: 'LIABILITY' },
+      { key: 'irPayable', label: 'IR por pagar', side: 'credit', description: 'Retención de IR al empleado', defaultCode: '2300', defaultName: 'IR por Pagar', defaultType: 'LIABILITY' },
+      { key: 'otherDeductionsPayable', label: 'Otras deducciones', side: 'credit', description: 'Deducciones adicionales retenidas al empleado', defaultCode: '2400', defaultName: 'Otras Deducciones por Pagar', defaultType: 'LIABILITY' },
+      { key: 'thirteenthPayable', label: 'Aguinaldo por pagar', side: 'credit', description: 'Pasivo acumulado por aguinaldo', defaultCode: '2400', defaultName: 'Provisiones Laborales por Pagar', defaultType: 'LIABILITY' },
+      { key: 'vacationPayable', label: 'Vacaciones por pagar', side: 'credit', description: 'Pasivo acumulado por vacaciones', defaultCode: '2400', defaultName: 'Provisiones Laborales por Pagar', defaultType: 'LIABILITY' },
+      { key: 'indemnityPayable', label: 'Indemnización por pagar', side: 'credit', description: 'Pasivo acumulado por indemnización', defaultCode: '2400', defaultName: 'Provisiones Laborales por Pagar', defaultType: 'LIABILITY' },
+      { key: 'cash', label: 'Caja / Bancos', side: 'credit', description: 'Se acredita al pagar el neto al empleado', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
     ],
   },
   {
@@ -172,10 +187,27 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     ],
   },
   {
-    id: 'hrExpense', label: 'Otros gastos de RRHH', icon: Users,
-    description: 'Capacitaciones y beneficios → cuenta de gasto configurada',
+    id: 'hrTraining', label: 'Formación y Capacitaciones', icon: Users,
+    description: 'Gasto pagado de formación → gasto + medio de pago propio de esta subvista',
     fields: [
-      { key: 'expense', label: 'Gastos de RRHH', side: 'debit', description: 'Se debita el gasto de la actividad de RRHH', defaultCode: '5000', defaultName: 'Gastos de RRHH', defaultType: 'EXPENSE' },
+      { key: 'expense', label: 'Gasto de Formación', side: 'debit', description: 'Se debita el costo pagado de la capacitación', defaultCode: '5000', defaultName: 'Gastos de Formación', defaultType: 'EXPENSE' },
+      { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita el efectivo pagado en Formación', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
+      { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la cuenta propia de tarjetas para Formación', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
+      { key: 'transfer', label: 'Transferencias', side: 'credit', description: 'Se acredita la cuenta propia de transferencias para Formación', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
+      { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la cuenta propia de cheques para Formación', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
+      { key: 'other', label: 'Otros medios de pago', side: 'credit', description: 'Se acredita la cuenta propia de otros medios para Formación', defaultCode: '1090', defaultName: 'Otros Medios de Pago', defaultType: 'ASSET' },
+    ],
+  },
+  {
+    id: 'hrBenefit', label: 'Beneficios de Empleados', icon: Users,
+    description: 'Gasto pagado de beneficios → gasto + medio de pago propio de esta subvista',
+    fields: [
+      { key: 'expense', label: 'Gasto de Beneficios', side: 'debit', description: 'Se debita el costo pagado de los beneficios', defaultCode: '5000', defaultName: 'Gastos de Beneficios', defaultType: 'EXPENSE' },
+      { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita el efectivo pagado en Beneficios', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
+      { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la cuenta propia de tarjetas para Beneficios', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
+      { key: 'transfer', label: 'Transferencias', side: 'credit', description: 'Se acredita la cuenta propia de transferencias para Beneficios', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
+      { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la cuenta propia de cheques para Beneficios', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
+      { key: 'other', label: 'Otros medios de pago', side: 'credit', description: 'Se acredita la cuenta propia de otros medios para Beneficios', defaultCode: '1090', defaultName: 'Otros Medios de Pago', defaultType: 'ASSET' },
     ],
   },
   {
@@ -194,10 +226,11 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'cashRegister', label: 'Cierre de Caja', icon: Wallet,
-    description: 'Diferencias al cerrar caja → efectivo contado y diferencia de caja',
+    description: 'Apertura y cierre son control operativo; solo las diferencias del arqueo generan asiento',
     fields: [
-      { key: 'cash', label: 'Caja', side: 'debit', description: 'Se debita el efectivo contado en caja', defaultCode: '1000', defaultName: 'Caja', defaultType: 'ASSET' },
-      { key: 'difference', label: 'Diferencia de Caja', side: 'credit', description: 'Contrapartida de sobrantes o faltantes de caja', defaultCode: '5310', defaultName: 'Diferencias de Caja', defaultType: 'EXPENSE' },
+      { key: 'cash', label: 'Caja global', side: 'debit', description: 'Cuenta única del efectivo físico de todas las cajas', defaultCode: '1000', defaultName: 'Caja', defaultType: 'ASSET' },
+      { key: 'shortage', label: 'Faltantes de Caja', side: 'debit', description: 'Se debita cuando el efectivo contado es menor al esperado', defaultCode: '5310', defaultName: 'Faltantes de Caja', defaultType: 'EXPENSE' },
+      { key: 'surplus', label: 'Sobrantes de Caja', side: 'credit', description: 'Se acredita cuando el efectivo contado supera al esperado', defaultCode: '4020', defaultName: 'Sobrantes de Caja', defaultType: 'INCOME' },
     ],
   },
   {
@@ -225,7 +258,7 @@ const ACCOUNTING_MODULE_GROUPS = [
     label: 'Cuentas contables de Recursos Humanos',
     description: 'Nómina, obligaciones laborales y gastos de RRHH.',
     icon: Users,
-    moduleIds: ['payroll', 'hrExpense'],
+    moduleIds: ['payroll', 'hrTraining', 'hrBenefit'],
   },
   {
     id: 'finance',
@@ -644,9 +677,13 @@ export function ConfiguracionContableView() {
     const modMapping = accountMappings[mod.id] || {}
     const listMod = connections?.modules?.find((m: any) => m.id === mod.id)
     const Icon = mod.icon
+    const isPayroll = mod.id === 'payroll'
 
     return (
-      <div key={mod.id} className="min-w-0 rounded-2xl border border-border/40 bg-background/35 p-4">
+      <div key={mod.id} className={cn(
+        'min-w-0 rounded-2xl border border-border/40 bg-background/35 p-4',
+        isPayroll && 'xl:col-span-2',
+      )}>
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-2.5">
             <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
@@ -656,7 +693,10 @@ export function ConfiguracionContableView() {
             </div>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className={cn(
+          'mt-4 grid grid-cols-1 gap-3 md:grid-cols-2',
+          isPayroll && 'xl:grid-cols-4',
+        )}>
           {mod.fields.map(field => (
             <AccountCodeInput
               key={field.key}
@@ -718,7 +758,7 @@ export function ConfiguracionContableView() {
     ]
 
     return (
-      <div key="invoice-sales-cycle" className="min-w-0 rounded-2xl border border-primary/20 bg-primary/[0.025] p-4 xl:col-span-2">
+      <div key="invoice-sales-cycle" className="min-w-0 rounded-2xl border border-primary/20 bg-primary/[0.025] p-4">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-2.5">
             <FileText className="mt-0.5 size-4 shrink-0 text-primary" />
@@ -795,8 +835,9 @@ export function ConfiguracionContableView() {
   }, [allAccounts, currentAccountPage, accountPageSize])
   const accountRangeStart = totalAccounts === 0 ? 0 : (currentAccountPage - 1) * accountPageSize + 1
   const accountRangeEnd = Math.min(currentAccountPage * accountPageSize, totalAccounts)
-  const okCount = connections?.modules?.filter((m: any) => m.status === 'connected')?.length ?? 0
-  const totalMods = connections?.modules?.length ?? allModuleDefs.length
+  const visibleModuleIds = useMemo(() => new Set(allModuleDefs.map(module => module.id)), [allModuleDefs])
+  const okCount = connections?.modules?.filter((m: any) => visibleModuleIds.has(m.id) && m.status === 'connected')?.length ?? 0
+  const totalMods = allModuleDefs.length
 
   if (loading) {
     return (

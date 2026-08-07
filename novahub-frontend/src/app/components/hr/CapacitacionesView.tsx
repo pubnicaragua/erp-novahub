@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { GraduationCap, Plus, Calendar } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -9,10 +9,20 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
 
+const PAYMENT_METHODS = [
+  { value: 'CASH', label: 'Efectivo / Caja' },
+  { value: 'CARD', label: 'Tarjeta' },
+  { value: 'TRANSFER', label: 'Transferencia' },
+  { value: 'CHECK', label: 'Cheque' },
+  { value: 'OTHER', label: 'Otro medio' },
+];
+
 export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
   const { displayCurrency } = useCurrency();
   const [showNewForm, setShowNewForm] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const createInFlightRef = useRef(false);
   const [newTraining, setNewTraining] = useState({
     title: '',
     description: '',
@@ -23,6 +33,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     capacity: 20,
     cost: 0,
     currency: displayCurrency,
+    paymentSource: 'CASH',
     employeeIds: [] as string[],
   });
 
@@ -31,7 +42,10 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
       toast.error('Completa los campos requeridos');
       return;
     }
+    if (createInFlightRef.current) return;
 
+    createInFlightRef.current = true;
+    setIsCreating(true);
     try {
       await hrService.createTraining(newTraining);
       toast.success('Capacitación creada');
@@ -44,13 +58,17 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
         startDate: '',
         endDate: '',
         capacity: 20,
-        cost: 0,
-        currency: displayCurrency,
-        employeeIds: [],
+         cost: 0,
+         currency: displayCurrency,
+         paymentSource: 'CASH',
+         employeeIds: [],
       });
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al crear capacitación');
+    } finally {
+      createInFlightRef.current = false;
+      setIsCreating(false);
     }
   };
 
@@ -186,6 +204,29 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 />
               </div>
             </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Moneda</label>
+              <select
+                value={newTraining.currency}
+                onChange={(e) => setNewTraining({ ...newTraining, currency: e.target.value })}
+                disabled={isCreating}
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-medium"
+              >
+                <option value="NIO">Córdobas (NIO)</option>
+                <option value="USD">Dólares (USD)</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Medio de pago</label>
+              <select
+                value={newTraining.paymentSource}
+                onChange={(e) => setNewTraining({ ...newTraining, paymentSource: e.target.value })}
+                disabled={isCreating}
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-medium"
+              >
+                {PAYMENT_METHODS.map(method => <option key={method.value} value={method.value}>{method.label}</option>)}
+              </select>
+            </div>
             <div className="md:col-span-2">
               <label className="text-sm font-medium mb-1 block">Empleados Participantes</label>
               <div className="border border-border/50 rounded-xl p-3 max-h-40 overflow-y-auto bg-background">
@@ -218,8 +259,8 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
             </div>
           </div>
           <div className="flex items-center gap-2 mt-4">
-            <Button onClick={handleCreateTraining} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              Crear Capacitación
+            <Button onClick={handleCreateTraining} disabled={isCreating} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              {isCreating ? 'Guardando...' : 'Crear Capacitación'}
             </Button>
             <Button variant="outline" onClick={() => setShowNewForm(false)}>
               Cancelar

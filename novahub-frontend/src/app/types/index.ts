@@ -786,6 +786,7 @@ export interface RecurringExpense {
   category: string;
   description: string;
   source?: string;
+  paymentSource?: string;
   notes?: string;
   status: RecurringExpenseStatus;
   createdAt: string;

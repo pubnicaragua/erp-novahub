@@ -110,7 +110,7 @@ export function EmployeeImportPreview({
   const warningRows = rows.filter((row) => !row._hasError && row._hasWarning).length;
 
   useEffect(() => {
-    if (!result) return;
+    if (!result || result.errors.length) return;
     const timer = window.setTimeout(onDone, 3600);
     return () => window.clearTimeout(timer);
   }, [result, onDone]);
@@ -147,7 +147,7 @@ export function EmployeeImportPreview({
         </div>
 
         <HorizontalTableScroller className="min-h-0 flex-1" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
-          <Table containerClassName="overflow-visible" containerStyle={{ width: '3900px', minWidth: '3900px', maxWidth: 'none' }} className="w-[3900px] min-w-[3900px]">
+          <Table containerClassName="overflow-visible" containerStyle={{ width: '4050px', minWidth: '4050px', maxWidth: 'none' }} className="w-[4050px] min-w-[4050px]">
             <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
               <TableRow>
                 <TableHead className="w-20 min-w-20 whitespace-nowrap text-center">Estado</TableHead>
@@ -155,6 +155,7 @@ export function EmployeeImportPreview({
                 <TableHead className="w-44 min-w-44 whitespace-nowrap">Nombres *</TableHead>
                 <TableHead className="w-44 min-w-44 whitespace-nowrap">Apellidos *</TableHead>
                 <TableHead className="w-64 min-w-64 whitespace-nowrap">Correo *</TableHead>
+                <TableHead className="w-48 min-w-48 whitespace-nowrap">Cédula</TableHead>
                 <TableHead className="w-44 min-w-44 whitespace-nowrap">Teléfono</TableHead>
                 <TableHead className="w-36 min-w-36 whitespace-nowrap">Contratación *</TableHead>
                 <TableHead className="w-64 min-w-64 whitespace-nowrap">Departamento *</TableHead>
@@ -176,6 +177,7 @@ export function EmployeeImportPreview({
                     <TableCell><Input className={fieldClass} value={row.firstName} onChange={(event) => onRowUpdate(index, 'firstName', event.target.value)} disabled={importing} /></TableCell>
                     <TableCell><Input className={fieldClass} value={row.lastName} onChange={(event) => onRowUpdate(index, 'lastName', event.target.value)} disabled={importing} /></TableCell>
                     <TableCell><Input className={fieldClass} type="email" value={row.email} onChange={(event) => onRowUpdate(index, 'email', event.target.value)} disabled={importing} /></TableCell>
+                    <TableCell><Input className={fieldClass} value={row.nationalId} onChange={(event) => onRowUpdate(index, 'nationalId', event.target.value)} disabled={importing} placeholder="Cédula" /></TableCell>
                     <TableCell><Input className={fieldClass} value={row.phone} onChange={(event) => onRowUpdate(index, 'phone', event.target.value)} disabled={importing} /></TableCell>
                     <TableCell><Input className={fieldClass} type="date" value={row.hireDate} onChange={(event) => onRowUpdate(index, 'hireDate', event.target.value)} disabled={importing} /></TableCell>
                     <TableCell>
@@ -241,7 +243,10 @@ export function EmployeeImportPreview({
           <DialogHeader><div className="flex flex-col items-center gap-3 py-3 text-center"><div className="flex size-20 animate-in zoom-in items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 duration-500"><CheckCircle2 className="size-12 animate-pulse" /></div><DialogTitle className="text-xl">Importación procesada</DialogTitle><DialogDescription>Los empleados válidos ya fueron registrados. Puedes volver a importar otro archivo cuando quieras.</DialogDescription></div></DialogHeader>
           <div className="grid grid-cols-3 gap-2 text-center"><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-emerald-500">{result?.created || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Creados</p></div><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-amber-500">{result?.warnings.length || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Avisos</p></div><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-rose-500">{result?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Omitidos</p></div></div>
           {(result?.errors.length || result?.warnings.length) ? <div className="max-h-40 overflow-auto rounded-xl border p-3 text-xs text-muted-foreground"><p className="font-bold text-foreground">Detalles</p>{[...(result?.errors || []), ...(result?.warnings || [])].slice(0, 10).map((item, index) => <p key={index} className="mt-1">• {typeof item === 'string' ? item : `Fila ${item.row || '?'}${item.employeeNumber ? ` (${item.employeeNumber})` : ''}: ${item.message}`}</p>)}</div> : null}
-          <DialogFooter><Button className="w-full" onClick={onDone}>Continuar a empleados</Button></DialogFooter>
+          <DialogFooter className="flex-wrap sm:justify-between">
+            {result?.errors.length ? <Button type="button" variant="outline" onClick={onDownloadErrors}><Download className="size-4" /> Descargar errores</Button> : null}
+            <Button className="w-full sm:w-auto" onClick={onDone}>Continuar a empleados</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

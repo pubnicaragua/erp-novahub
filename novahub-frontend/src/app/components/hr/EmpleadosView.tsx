@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState } from 'react';
-import { Plus, Search, Filter, Grid, List, Edit2, Trash2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Send, CheckCircle2, XCircle, History, Ban, Download, Upload } from 'lucide-react';
+import { Plus, Search, Filter, Edit2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Send, CheckCircle2, XCircle, History, Ban, Download, Upload, Settings2, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -17,16 +17,23 @@ import { Badge } from '../ui/badge';
 import { cn } from '../ui/utils';
 import { Textarea } from '../ui/textarea';
 import { EmployeeImportPreview, type EmployeeImportResult, type EmployeeImportRow } from './EmployeeImportPreview';
+import { EmployeeDetailDrawer } from './EmployeeDetailDrawer';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh, isSidebarCollapsed = false }: any) {
   const { canPerform } = useAuth();
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  const [columnConfigOpen, setColumnConfigOpen] = useState(false);
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>(['number', 'name', 'email', 'phone', 'nationalId', 'department', 'position', 'salary', 'status', 'auth']);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<any>({});
   const [newRows, setNewRows] = useState<any[]>([]);
+  const [isCreateEmployeeModalOpen, setIsCreateEmployeeModalOpen] = useState(false);
+  const [newEmployeeForm, setNewEmployeeForm] = useState<any>({});
+  const [editingPendingId, setEditingPendingId] = useState<string | null>(null);
+  const [savingPendingEmployees, setSavingPendingEmployees] = useState(false);
+  const [savingEmployee, setSavingEmployee] = useState(false);
 
   const [showNewDeptModal, setShowNewDeptModal] = useState(false);
   const [showNewPosModal, setShowNewPosModal] = useState(false);
@@ -43,6 +50,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   const [selectedDepartmentIds, setSelectedDepartmentIds] = useState<string[]>([]);
   const [primaryDepartmentId, setPrimaryDepartmentId] = useState<string>('');
   const [savingDepartments, setSavingDepartments] = useState(false);
+  const [detailEmployeeId, setDetailEmployeeId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importRows, setImportRows] = useState<EmployeeImportRow[]>([]);
@@ -73,6 +81,18 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
     description: 'Tabla completa con todos los empleados registrados. Puedes editar, ver detalles o eliminar usando los botones de acción en cada fila.',
     placement: 'top',
   },
+  {
+    target: '[data-tour="empleados-columns"]',
+    title: 'Configurar columnas',
+    description: 'Elige qué información quieres mantener visible en la lista y en las tarjetas.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="empleados-layout"]',
+    title: 'Lista o tarjetas',
+    description: 'Cambia entre la tabla y una vista en tarjetas para consultar los empleados de forma más visual.',
+    placement: 'bottom',
+  },
 ];
 
   const filteredEmployees = employees.filter((emp: any) => {
@@ -100,8 +120,32 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
 
   const totalPages = Math.ceil(filteredEmployees.length / pageSize);
   const paginatedEmployees = filteredEmployees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const columnOptions = [
+    { key: 'number', label: 'Número' },
+    { key: 'name', label: 'Nombre' },
+    { key: 'email', label: 'Correo' },
+    { key: 'phone', label: 'Teléfono' },
+    { key: 'nationalId', label: 'Cédula' },
+    { key: 'department', label: 'Departamento' },
+    { key: 'position', label: 'Puesto' },
+    { key: 'salary', label: 'Salario' },
+    { key: 'status', label: 'Estado' },
+    { key: 'auth', label: 'Autorización' },
+  ];
+  const isColumnVisible = (key: string) => visibleColumnKeys.includes(key);
+  const getEmploymentStatusLabel = (status?: string) => ({
+    ACTIVE: 'Activo',
+    INACTIVE: 'Inactivo',
+    ON_LEAVE: 'En ausencia',
+    TERMINATED: 'Terminado',
+  } as Record<string, string>)[String(status || '').toUpperCase()] || 'No especificado';
+  const getApprovalStatusLabel = (status?: string) => ({
+    APPROVED: 'Aprobado',
+    PENDING_APPROVAL: 'Pendiente',
+    REJECTED: 'Rechazado',
+    DRAFT: 'Borrador',
+  } as Record<string, string>)[String(status || '').toUpperCase()] || 'No especificado';
 
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -113,6 +157,8 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       const importRowIndex = pendingImportDepartmentRow;
       if (importRowIndex !== null && createdDepartment?.id) {
         setImportRows((current) => validateEmployeeImportRows(current.map((row, index) => index === importRowIndex ? { ...row, department: createdDepartment.name, departmentId: createdDepartment.id, positionId: '' } : row)));
+      } else if (createdDepartment?.id) {
+        setNewEmployeeForm((current: any) => ({ ...current, departmentId: createdDepartment.id, positionId: '' }));
       }
       toast.success('Departamento creado');
       setNewDeptName('');
@@ -131,6 +177,8 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       const importRowIndex = pendingImportPositionRow;
       if (importRowIndex !== null && createdPosition?.id) {
         setImportRows((current) => validateEmployeeImportRows(current.map((row, index) => index === importRowIndex ? { ...row, position: createdPosition.title, positionId: createdPosition.id } : row)));
+      } else if (createdPosition?.id) {
+        setNewEmployeeForm((current: any) => ({ ...current, positionId: createdPosition.id }));
       }
       toast.success('Puesto creado');
       setNewPosTitle('');
@@ -141,18 +189,45 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear puesto'); }
   };
 
+  const toDateInputValue = (value: any) => value ? String(value).slice(0, 10) : '';
+
   const handleEdit = (emp: any) => {
     setEditingId(emp.id);
-    setEditData({ ...emp });
-    if (viewMode === 'cards') {
-      setIsEditModalOpen(true);
-    }
+    setEditingPendingId(null);
+    setNewEmployeeForm({
+      employeeNumber: emp.employeeNumber || '',
+      firstName: emp.firstName || '',
+      lastName: emp.lastName || '',
+      email: emp.email || '',
+      phone: emp.phone || '',
+      nationalId: emp.nationalId || '',
+      dateOfBirth: toDateInputValue(emp.dateOfBirth),
+      hireDate: toDateInputValue(emp.hireDate),
+      departmentId: emp.departmentId || emp.department?.id || '',
+      positionId: emp.positionId || emp.position?.id || '',
+      contractType: emp.contractType || 'FULL_TIME',
+      salary: emp.salary ?? '',
+      currency: emp.currency || 'NIO',
+      employmentStatus: emp.employmentStatus || 'ACTIVE',
+      address: emp.address || '',
+      city: emp.city || '',
+      state: emp.state || '',
+      postalCode: emp.postalCode || '',
+      country: emp.country ?? '',
+      emergencyContact: emp.emergencyContact || '',
+      emergencyPhone: emp.emergencyPhone || '',
+      socialSecurityNumber: emp.socialSecurityNumber || '',
+      probationEndDate: toDateInputValue(emp.probationEndDate),
+      notes: emp.notes || '',
+      payFrequency: emp.payFrequency || 'MONTHLY',
+    });
+    setIsCreateEmployeeModalOpen(true);
   };
 
-  const handleCardEdit = (emp: any) => {
-    setEditingId(emp.id);
-    setEditData({ ...emp });
-    setIsEditModalOpen(true);
+  const handleCardEdit = (emp: any) => handleEdit(emp);
+
+  const openEmployeeDetails = (emp: any) => {
+    if (emp?.id) setDetailEmployeeId(emp.id);
   };
 
   const openDepartmentEditor = (emp: any) => {
@@ -195,50 +270,81 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
 
   const handleSave = async (id: string) => {
     // Validación básica de campos
-    if (!editData.employeeNumber?.trim()) {
+    if (!newEmployeeForm.employeeNumber?.trim()) {
       toast.error('El número de empleado es obligatorio');
-      return;
+      return false;
     }
 
-    if (!editData.firstName?.trim() || !editData.lastName?.trim()) {
+    if (!newEmployeeForm.firstName?.trim() || !newEmployeeForm.lastName?.trim()) {
       toast.error('El nombre y apellido son obligatorios');
-      return;
+      return false;
     }
 
-    if (!editData.email?.trim()) {
+    if (!newEmployeeForm.email?.trim()) {
       toast.error('El correo electrónico es obligatorio');
-      return;
+      return false;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(editData.email)) {
+    if (!emailRegex.test(newEmployeeForm.email.trim())) {
       toast.error('El formato del correo electrónico no es válido');
-      return;
+      return false;
+    }
+
+    if (!newEmployeeForm.hireDate) {
+      toast.error('La fecha de contratación es obligatoria');
+      return false;
+    }
+
+    if (!newEmployeeForm.departmentId || !newEmployeeForm.positionId) {
+      toast.error('El departamento y el puesto son obligatorios');
+      return false;
+    }
+
+    if (newEmployeeForm.salary === '' || newEmployeeForm.salary === null || !Number.isFinite(Number(newEmployeeForm.salary)) || Number(newEmployeeForm.salary) < 0) {
+      toast.error('Ingresa un salario válido');
+      return false;
     }
 
     try {
       // Sanitizar datos antes de enviar
       const sanitizedData = {
-        ...editData,
-        employeeNumber: editData.employeeNumber.trim(),
-        firstName: editData.firstName.trim(),
-        lastName: editData.lastName.trim(),
-        email: editData.email.trim(),
-        phone: editData.phone?.trim() || null,
-        salary: isNaN(editData.salary) ? 0 : Number(editData.salary),
-        currency: editData.currency || 'NIO',
-        nationalId: editData.nationalId?.trim() || null,
-        socialSecurityNumber: editData.socialSecurityNumber?.trim() || null,
-        probationEndDate: editData.probationEndDate || null,
+        employeeNumber: newEmployeeForm.employeeNumber.trim(),
+        firstName: newEmployeeForm.firstName.trim(),
+        lastName: newEmployeeForm.lastName.trim(),
+        email: newEmployeeForm.email.trim(),
+        phone: newEmployeeForm.phone?.trim() || null,
+        dateOfBirth: newEmployeeForm.dateOfBirth || null,
+        hireDate: newEmployeeForm.hireDate || null,
+        departmentId: newEmployeeForm.departmentId,
+        positionId: newEmployeeForm.positionId,
+        contractType: newEmployeeForm.contractType || 'FULL_TIME',
+        salary: isNaN(newEmployeeForm.salary) ? 0 : Number(newEmployeeForm.salary),
+        currency: newEmployeeForm.currency || 'NIO',
+        employmentStatus: newEmployeeForm.employmentStatus || 'ACTIVE',
+        address: newEmployeeForm.address?.trim() || null,
+        city: newEmployeeForm.city?.trim() || null,
+        state: newEmployeeForm.state?.trim() || null,
+        postalCode: newEmployeeForm.postalCode?.trim() || null,
+        country: newEmployeeForm.country?.trim() || null,
+        emergencyContact: newEmployeeForm.emergencyContact?.trim() || null,
+        emergencyPhone: newEmployeeForm.emergencyPhone?.trim() || null,
+        nationalId: newEmployeeForm.nationalId?.trim() || null,
+        socialSecurityNumber: newEmployeeForm.socialSecurityNumber?.trim() || null,
+        probationEndDate: newEmployeeForm.probationEndDate || null,
+        notes: newEmployeeForm.notes?.trim() || null,
+        payFrequency: newEmployeeForm.payFrequency || 'MONTHLY',
       };
 
       await hrService.updateEmployee(id, sanitizedData);
       toast.success('Empleado actualizado correctamente');
       setEditingId(null);
       onRefresh();
+      return true;
     } catch (error: any) {
       const msg = error?.response?.data?.message || 'Error al actualizar empleado';
       toast.error(Array.isArray(msg) ? msg[0] : msg);
+      return false;
     }
   };
 
@@ -302,6 +408,11 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
     .trim();
 
   const normalizeImportText = (value: unknown) => normalizeImportHeader(value).replace(/\s/g, '');
+  const normalizeImportNationalId = (value: unknown) => String(value ?? '')
+    .normalize('NFKC')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '');
 
   const emptyEmployeeImportRow = (sourceRow: number): EmployeeImportRow => ({
     sourceRow,
@@ -338,8 +449,8 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
 
   const normalizeImportStatus = (value: unknown) => {
     const normalized = normalizeImportText(value);
-    if (!normalized || normalized.includes('activ')) return 'ACTIVE';
     if (normalized.includes('inactiv')) return 'INACTIVE';
+    if (!normalized || normalized.includes('activ')) return 'ACTIVE';
     if (normalized.includes('ausenc') || normalized.includes('leave')) return 'ON_LEAVE';
     if (normalized.includes('termin')) return 'TERMINATED';
     return String(value).trim().toUpperCase();
@@ -348,8 +459,10 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
   const validateEmployeeImportRows = (rows: EmployeeImportRow[]) => {
     const existingNumbers = new Set(employees.map((employee: any) => String(employee.employeeNumber || '').trim().toLowerCase()).filter(Boolean));
     const existingEmails = new Set(employees.map((employee: any) => String(employee.email || '').trim().toLowerCase()).filter(Boolean));
+    const existingNationalIds = new Set(employees.map((employee: any) => normalizeImportNationalId(employee.nationalId)).filter(Boolean));
     const seenNumbers = new Set<string>();
     const seenEmails = new Set<string>();
+    const seenNationalIds = new Set<string>();
     const contractValues = ['FULL_TIME', 'PART_TIME', 'CONTRACTOR', 'INTERN', 'TEMPORARY'];
     const statusValues = ['ACTIVE', 'INACTIVE', 'ON_LEAVE', 'TERMINATED'];
 
@@ -369,12 +482,14 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       const positionExists = Boolean(positionMatch || positionId);
       const number = String(row.employeeNumber || '').trim();
       const email = String(row.email || '').trim().toLowerCase();
+      const nationalId = normalizeImportNationalId(row.nationalId);
       const salary = row.salary === '' || row.salary === null || row.salary === undefined ? NaN : Number(row.salary);
       const errors = [
         !number ? 'Número de empleado obligatorio' : existingNumbers.has(number.toLowerCase()) || seenNumbers.has(number.toLowerCase()) ? 'Número de empleado duplicado' : '',
         !String(row.firstName || '').trim() ? 'Nombres obligatorios' : '',
         !String(row.lastName || '').trim() ? 'Apellidos obligatorios' : '',
         !email || !/^\S+@\S+\.\S+$/.test(email) ? 'Correo inválido' : existingEmails.has(email) || seenEmails.has(email) ? 'Correo duplicado' : '',
+        nationalId && (existingNationalIds.has(nationalId) || seenNationalIds.has(nationalId)) ? 'Cédula duplicada en esta empresa' : '',
         !row.hireDate || Number.isNaN(new Date(row.hireDate).getTime()) ? 'Fecha de contratación inválida' : '',
         !departmentExists ? 'Departamento no encontrado' : '',
         !positionExists ? 'Puesto no encontrado' : '',
@@ -395,6 +510,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       }
       if (number) { seenNumbers.add(number.toLowerCase()); existingNumbers.add(number.toLowerCase()); }
       if (email) { seenEmails.add(email); existingEmails.add(email); }
+      if (nationalId) { seenNationalIds.add(nationalId); existingNationalIds.add(nationalId); }
       return next;
     });
   };
@@ -417,6 +533,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       ['Puesto', 'Debe coincidir por título o código y pertenecer al departamento de la misma fila. También puedes crearlo desde la previsualización.'],
       ['Tipo de contrato', 'Usa FULL_TIME, PART_TIME, CONTRACTOR, INTERN o TEMPORARY.'],
       ['Salario y moneda', 'El salario debe ser numérico y mayor o igual a cero. Monedas soportadas en esta vista: NIO y USD.'],
+      ['Cédula', 'Es opcional, pero si se informa no puede repetirse en otro empleado de la misma empresa. La comparación ignora mayúsculas, espacios y guiones.'],
       ['Estado', 'Usa ACTIVE, INACTIVE, ON_LEAVE o TERMINATED.'],
       ['Vendedores', 'No se importa un vendedor por empleado. La elegibilidad para comisiones la determina el departamento marcado como vendedor.'],
     ]);
@@ -441,7 +558,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         firstName: ['nombres', 'nombre', 'first name', 'firstname'], lastName: ['apellidos', 'apellido', 'last name', 'lastname'],
         email: ['correo', 'correo electronico', 'email'], phone: ['telefono', 'phone'], dateOfBirth: ['fecha de nacimiento', 'nacimiento', 'date of birth'],
         hireDate: ['fecha de contratacion', 'fecha ingreso', 'fecha de ingreso', 'hire date'], department: ['departamento', 'department'], position: ['puesto', 'cargo', 'posicion', 'position'],
-        contractType: ['tipo de contrato', 'contrato', 'contract type'], salary: ['salario', 'sueldo', 'salary'], currency: ['moneda', 'currency'], address: ['direccion', 'address'], city: ['ciudad', 'city'], state: ['estado provincia', 'estado', 'provincia', 'state'], country: ['pais', 'country'], postalCode: ['codigo postal', 'postal code', 'zip code'], emergencyContact: ['contacto de emergencia', 'emergency contact'], emergencyPhone: ['telefono de emergencia', 'emergency phone'], nationalId: ['cedula', 'identificacion', 'national id'], socialSecurityNumber: ['numero de seguro social', 'seguro social', 'inss', 'social security number'], probationEndDate: ['fin de prueba', 'fecha fin prueba', 'probation end date'], payFrequency: ['frecuencia de pago', 'frecuencia pago', 'pay frequency'], employmentStatus: ['estado laboral', 'estado', 'status'], notes: ['notas', 'observaciones', 'notes'],
+      contractType: ['tipo de contrato', 'contrato', 'contract type'], salary: ['salario', 'sueldo', 'salary'], currency: ['moneda', 'currency'], address: ['direccion', 'address'], city: ['ciudad', 'city'], state: ['estado provincia', 'provincia', 'state'], country: ['pais', 'country'], postalCode: ['codigo postal', 'postal code', 'zip code'], emergencyContact: ['contacto de emergencia', 'emergency contact'], emergencyPhone: ['telefono de emergencia', 'emergency phone'], nationalId: ['cedula', 'identificacion', 'national id'], socialSecurityNumber: ['numero de seguro social', 'seguro social', 'inss', 'social security number'], probationEndDate: ['fin de prueba', 'fecha fin prueba', 'probation end date'], payFrequency: ['frecuencia de pago', 'frecuencia pago', 'pay frequency'], employmentStatus: ['estado laboral', 'estado', 'status'], notes: ['notas', 'observaciones', 'notes'],
       };
       const colMap: Record<string, number> = {};
       Object.entries(aliases).forEach(([key, options]) => { const index = headers.findIndex((header: string) => options.includes(header)); if (index >= 0) colMap[key] = index; });
@@ -479,11 +596,19 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
   };
 
   const downloadEmployeeImportErrors = () => {
-    const incidents = importRows.filter((row) => row._hasError || row._hasWarning).map((row) => ({
+    const previewIncidents = importRows.filter((row) => row._hasError || row._hasWarning).map((row) => ({
       'Fila Excel': row.sourceRow, 'Número de empleado': row.employeeNumber, Nombres: row.firstName, Apellidos: row.lastName,
       Correo: row.email, Departamento: row.department, Puesto: row.position, Clasificación: row._hasError ? 'Error' : 'Advertencia',
       Detalle: row._errorMessage || row._warningMessage || 'Revisar fila',
     }));
+    const serverIncidents = (importResult?.errors || []).map((item: any) => ({
+      'Fila Excel': typeof item === 'string' ? '' : item.row || '',
+      'Número de empleado': typeof item === 'string' ? '' : item.employeeNumber || '',
+      Nombres: '', Apellidos: '', Correo: '', Departamento: '', Puesto: '',
+      Clasificación: 'Error',
+      Detalle: typeof item === 'string' ? item : item.message || 'Error al guardar la fila',
+    }));
+    const incidents = [...previewIncidents, ...serverIncidents];
     if (!incidents.length) return;
     const sheet = XLSX.utils.json_to_sheet(incidents);
     const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, sheet, 'Incidencias'); XLSX.writeFile(workbook, 'incidencias_importacion_empleados.xlsx');
@@ -537,105 +662,159 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
     }
   };
 
-  const handleAddRow = () => {
-    const newRow = {
-      tempId: `new-${Date.now()}`,
-      employeeNumber: (() => {
-        const existing = employees.map((e: any) => {
-          const match = e.employeeNumber?.match(/\d+$/);
-          return match ? parseInt(match[0], 10) : 0;
-        });
-        const pending = newRows.map((r: any) => {
-          const match = r.employeeNumber?.match(/\d+$/);
-          return match ? parseInt(match[0], 10) : 0;
-        });
-        const maxNum = Math.max(0, ...existing, ...pending);
-        return `EMP${String(maxNum + 1).padStart(4, '0')}`;
-      })(),
-      firstName: '',
-      lastName: '',
-      email: '',
-      phone: '',
-      hireDate: new Date().toISOString().split('T')[0],
-      departmentId: departments[0]?.id || '',
-      positionId: positions[0]?.id || '',
-      contractType: 'FULL_TIME',
-      salary: 0,
-      currency: 'NIO',
-      nationalId: '',
-      socialSecurityNumber: '',
-      probationEndDate: '',
-      employmentStatus: 'ACTIVE',
-    };
-    setNewRows([...newRows, newRow]);
+  const getNextEmployeeNumber = () => {
+    const numbers = [...employees, ...newRows].map((employee: any) => {
+      const match = String(employee.employeeNumber || '').match(/\d+$/);
+      return match ? parseInt(match[0], 10) : 0;
+    });
+    return `EMP${String(Math.max(0, ...numbers) + 1).padStart(4, '0')}`;
   };
 
-  const handleSaveNewRow = async (tempId: string) => {
-    const row = newRows.find(r => r.tempId === tempId);
-    if (!row) return;
+  const createEmptyEmployeeDraft = () => {
+    const departmentId = departments[0]?.id || '';
+    return {
+      employeeNumber: getNextEmployeeNumber(), firstName: '', lastName: '', email: '', phone: '', nationalId: '',
+      dateOfBirth: '', hireDate: new Date().toISOString().split('T')[0], departmentId,
+      positionId: positions.find((position: any) => position.departmentId === departmentId)?.id || '',
+      contractType: 'FULL_TIME', salary: '', currency: 'NIO', employmentStatus: 'ACTIVE',
+      address: '', city: '', state: '', postalCode: '', country: 'Nicaragua',
+      emergencyContact: '', emergencyPhone: '', socialSecurityNumber: '',
+      probationEndDate: '', notes: '', payFrequency: 'MONTHLY',
+    };
+  };
 
-    // Validación básica de campos
-    if (!row.employeeNumber?.trim()) {
-      toast.error('El número de empleado es obligatorio');
+  const openCreateEmployeeModal = () => {
+    setEditingId(null);
+    setEditingPendingId(null);
+    setNewEmployeeForm(createEmptyEmployeeDraft());
+    setIsCreateEmployeeModalOpen(true);
+  };
+
+  const validateEmployeeDraft = (row: any, ignorePendingId?: string | null) => {
+    if (!row.employeeNumber?.trim()) return 'El número de empleado es obligatorio';
+    if (!row.firstName?.trim() || !row.lastName?.trim()) return 'El nombre y apellido son obligatorios';
+    if (!row.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())) return 'El formato del correo electrónico no es válido';
+    if (!row.hireDate) return 'La fecha de contratación es obligatoria';
+    if (!row.departmentId || !row.positionId) return 'Selecciona departamento y puesto';
+    const position = positions.find((item: any) => String(item.id) === String(row.positionId));
+    if (!position || String(position.departmentId) !== String(row.departmentId)) return 'El puesto no pertenece al departamento seleccionado';
+    if (row.salary === '' || row.salary === null || !Number.isFinite(Number(row.salary)) || Number(row.salary) < 0) return 'Ingresa un salario válido';
+    const employeeNumber = row.employeeNumber.trim().toLowerCase();
+    const email = row.email.trim().toLowerCase();
+    const nationalId = normalizeImportNationalId(row.nationalId);
+    if (employees.some((employee: any) => String(employee.employeeNumber || '').trim().toLowerCase() === employeeNumber)) return 'El número de empleado ya existe';
+    if (employees.some((employee: any) => String(employee.email || '').trim().toLowerCase() === email)) return 'El correo ya está registrado';
+    if (nationalId && employees.some((employee: any) => normalizeImportNationalId(employee.nationalId) === nationalId)) return 'La cédula ya está registrada en esta empresa';
+    if (newRows.some((pending: any) => pending.tempId !== ignorePendingId && String(pending.employeeNumber || '').trim().toLowerCase() === employeeNumber)) return 'El número de empleado ya está en la lista';
+    if (newRows.some((pending: any) => pending.tempId !== ignorePendingId && String(pending.email || '').trim().toLowerCase() === email)) return 'El correo ya está en la lista';
+    if (nationalId && newRows.some((pending: any) => pending.tempId !== ignorePendingId && normalizeImportNationalId(pending.nationalId) === nationalId)) return 'La cédula ya está en la lista';
+    return null;
+  };
+
+  const handleAddEmployeeToList = async () => {
+    // Los empleados nuevos se guardan inmediatamente, como en Clientes.
+    // Solo los borradores pendientes de una operación anterior permanecen en la lista temporal.
+    if (!editingPendingId) {
+      await handleInsertEmployeeDirectly();
       return;
     }
+    const error = validateEmployeeDraft(newEmployeeForm, editingPendingId);
+    if (error) { toast.error(error); return; }
+    const draft = {
+      ...newEmployeeForm,
+      employeeNumber: newEmployeeForm.employeeNumber.trim(), firstName: newEmployeeForm.firstName.trim(), lastName: newEmployeeForm.lastName.trim(), email: newEmployeeForm.email.trim(),
+      phone: newEmployeeForm.phone?.trim() || '', nationalId: newEmployeeForm.nationalId?.trim() || '', salary: Number(newEmployeeForm.salary),
+      tempId: editingPendingId || `new-${Date.now()}`,
+    };
+    setNewRows((current) => editingPendingId ? current.map((row) => row.tempId === editingPendingId ? draft : row) : [...current, draft]);
+    toast.success(editingPendingId ? 'Borrador actualizado' : 'Empleado agregado a la lista');
+    setEditingPendingId(null);
+    setNewEmployeeForm(createEmptyEmployeeDraft());
+    setIsCreateEmployeeModalOpen(false);
+  };
 
-    if (!row.firstName?.trim() || !row.lastName?.trim()) {
-      toast.error('El nombre y apellido son obligatorios');
-      return;
-    }
-
-    if (!row.email?.trim()) {
-      toast.error('El correo electrónico es obligatorio');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(row.email)) {
-      toast.error('El formato del correo electrónico no es válido');
-      return;
-    }
-
-    if (!row.departmentId || !row.positionId) {
-      toast.error('Selecciona departamento y puesto');
-      return;
-    }
-
-    try {
-      // Limpiar datos y asegurar tipos correctos
-      const employeeData = {
-        employeeNumber: row.employeeNumber.trim(),
-        firstName: row.firstName.trim(),
-        lastName: row.lastName.trim(),
-        email: row.email.trim(),
-        phone: row.phone?.trim() || null,
-        departmentId: row.departmentId,
-        positionId: row.positionId,
-        salary: isNaN(row.salary) ? 0 : Number(row.salary),
-        currency: row.currency || 'NIO',
-        nationalId: row.nationalId?.trim() || null,
-        socialSecurityNumber: row.socialSecurityNumber?.trim() || null,
-        probationEndDate: row.probationEndDate || null,
-        hireDate: row.hireDate || new Date().toISOString().split('T')[0],
-        contractType: row.contractType || 'FULL_TIME',
-      };
-
-      await hrService.createEmployee(employeeData);
-      toast.success('Empleado creado correctamente');
-      setNewRows(newRows.filter(r => r.tempId !== tempId));
-      onRefresh();
-    } catch (error: any) {
-      const msg = error?.response?.data?.message || 'Error al crear empleado';
-      toast.error(Array.isArray(msg) ? msg[0] : msg);
-    }
+  const handleEditPendingEmployee = (row: any) => {
+    setEditingId(null);
+    setEditingPendingId(row.tempId);
+    setNewEmployeeForm({ ...row });
+    setIsCreateEmployeeModalOpen(true);
   };
 
   const handleDeleteNewRow = (tempId: string) => {
-    setNewRows(newRows.filter(r => r.tempId !== tempId));
+    setNewRows((current) => current.filter((row) => row.tempId !== tempId));
   };
 
-  const updateNewRow = (tempId: string, field: string, value: any) => {
-    setNewRows(newRows.map(r => r.tempId === tempId ? { ...r, [field]: value } : r));
+  const updateNewEmployeeForm = (field: string, value: any) => {
+    setNewEmployeeForm((current: any) => {
+      const next = { ...current, [field]: value };
+      if (field === 'departmentId') next.positionId = positions.find((position: any) => position.departmentId === value)?.id || '';
+      return next;
+    });
+  };
+
+  const buildEmployeePayload = (row: any) => ({
+    employeeNumber: row.employeeNumber.trim(), firstName: row.firstName.trim(), lastName: row.lastName.trim(), email: row.email.trim(),
+    phone: row.phone?.trim() || undefined, dateOfBirth: row.dateOfBirth || undefined, hireDate: row.hireDate, departmentId: row.departmentId, positionId: row.positionId,
+    contractType: row.contractType || 'FULL_TIME', salary: Number(row.salary), currency: row.currency || 'NIO', employmentStatus: row.employmentStatus || 'ACTIVE',
+    address: row.address?.trim() || undefined, city: row.city?.trim() || undefined, state: row.state?.trim() || undefined, country: row.country?.trim() || undefined, postalCode: row.postalCode?.trim() || undefined,
+    nationalId: row.nationalId?.trim() || undefined, socialSecurityNumber: row.socialSecurityNumber?.trim() || undefined, emergencyContact: row.emergencyContact?.trim() || undefined, emergencyPhone: row.emergencyPhone?.trim() || undefined,
+    probationEndDate: row.probationEndDate || undefined, payFrequency: row.payFrequency || 'MONTHLY', notes: row.notes?.trim() || undefined,
+  });
+
+  const handleSaveExistingEmployee = async () => {
+    if (!editingId) return;
+    const saved = await handleSave(editingId);
+    if (saved) {
+      setIsCreateEmployeeModalOpen(false);
+      setNewEmployeeForm(createEmptyEmployeeDraft());
+    }
+  };
+
+  const handleInsertEmployeeDirectly = async () => {
+    const error = validateEmployeeDraft(newEmployeeForm, null);
+    if (error) { toast.error(error); return; }
+
+    setSavingEmployee(true);
+    try {
+      await hrService.createEmployee(buildEmployeePayload({
+        ...newEmployeeForm,
+        employeeNumber: newEmployeeForm.employeeNumber.trim(),
+        firstName: newEmployeeForm.firstName.trim(),
+        lastName: newEmployeeForm.lastName.trim(),
+        email: newEmployeeForm.email.trim(),
+        phone: newEmployeeForm.phone?.trim() || '',
+        nationalId: newEmployeeForm.nationalId?.trim() || '',
+        salary: Number(newEmployeeForm.salary),
+      }));
+      toast.success('Empleado guardado correctamente');
+      setIsCreateEmployeeModalOpen(false);
+      setEditingId(null);
+      setEditingPendingId(null);
+      setNewEmployeeForm(createEmptyEmployeeDraft());
+      await onRefresh();
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || error?.message || 'Error al crear empleado';
+      toast.error(Array.isArray(msg) ? msg[0] : msg);
+    } finally {
+      setSavingEmployee(false);
+    }
+  };
+
+  const savePendingEmployees = async () => {
+    if (!newRows.length) return;
+    setSavingPendingEmployees(true);
+    const pendingAtSave = [...newRows];
+    try {
+      const results = await Promise.allSettled(pendingAtSave.map((row) => hrService.createEmployee(buildEmployeePayload(row))));
+      const failedRows = pendingAtSave.filter((_, index) => results[index].status === 'rejected');
+      const createdCount = pendingAtSave.length - failedRows.length;
+      setNewRows(failedRows);
+      if (createdCount) await onRefresh();
+      if (failedRows.length) toast.warning(`${createdCount} empleado(s) guardado(s) y ${failedRows.length} quedaron pendientes por revisar`);
+      else toast.success(`${createdCount} empleado(s) creado(s) correctamente`);
+    } finally {
+      setSavingPendingEmployees(false);
+    }
   };
 
   if (importPreviewOpen) {
@@ -699,11 +878,27 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
           </Select>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setViewMode(viewMode === 'table' ? 'cards' : 'table')}>
-            {viewMode === 'table' ? <Grid className="size-4" /> : <List className="size-4" />}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setColumnConfigOpen(true)}
+            data-tour="empleados-columns"
+            className="h-10 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest"
+          >
+            <Settings2 className="mr-2 size-4" /> Columnas <span className="ml-1 text-muted-foreground">{visibleColumnKeys.length}</span>
           </Button>
+          <select
+            value={viewMode}
+            onChange={(event) => setViewMode(event.target.value as 'table' | 'cards')}
+            aria-label="Elegir distribución"
+            data-tour="empleados-layout"
+            className="h-10 w-32 rounded-xl border border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary"
+          >
+            <option value="table">Lista</option>
+            <option value="cards">Tarjetas</option>
+          </select>
           {canPerform('HR_EMPLOYEES', 'create') && (
-            <Button size="sm" onClick={handleAddRow} className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="empleados-add">
+            <Button size="sm" onClick={openCreateEmployeeModal} className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="empleados-add">
               <Plus className="size-4 mr-2" />
               Agregar Empleado
             </Button>
@@ -720,257 +915,84 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         </div>
       </div>
 
+      {newRows.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-primary/20 bg-primary/[0.03] shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-primary/10 bg-primary/[0.04] p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Lista de empleados</p>
+              <p className="mt-1 text-sm text-muted-foreground">Estos empleados todavía no se han guardado. Puedes revisar la lista y agregar más desde el modal.</p>
+            </div>
+            <Button type="button" onClick={() => void savePendingEmployees()} disabled={savingPendingEmployees} className="shrink-0">
+              <Save className="size-4" /> {savingPendingEmployees ? 'Guardando...' : `Guardar lista (${newRows.length})`}
+            </Button>
+          </div>
+          <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3">
+            {newRows.map((row: any) => {
+              const department = departments.find((item: any) => String(item.id) === String(row.departmentId));
+              const position = positions.find((item: any) => String(item.id) === String(row.positionId));
+              return (
+                <div key={row.tempId} className="flex min-w-0 items-start justify-between gap-3 rounded-xl border bg-background/80 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold">{row.firstName} {row.lastName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{row.employeeNumber} · {row.email}</p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">{department?.name || 'Sin departamento'} · {position?.title || 'Sin puesto'}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">Cédula: <span className="font-semibold text-foreground">{row.nationalId || 'No indicada'}</span></p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button type="button" size="icon" variant="ghost" className="size-8" onClick={() => handleEditPendingEmployee(row)} title="Editar empleado pendiente" aria-label="Editar empleado pendiente"><Edit2 className="size-3.5" /></Button>
+                    <Button type="button" size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => handleDeleteNewRow(row.tempId)} title="Quitar de la lista" aria-label="Quitar de la lista"><X className="size-3.5" /></Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Table View - Desktop Only */}
       <div data-tour="empleados-table" className={`border rounded-lg overflow-hidden ${viewMode === 'table' ? 'hidden md:block' : 'hidden'}`}>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1000px]">
               <thead className="bg-muted/50">
-        <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold">Número</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold">Nombre</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold">Email</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold">Teléfono</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold">Departamento</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold">Puesto</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold">Salario</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold">Estado</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold">Auth</th>
+                <tr>
+                  {isColumnVisible('number') && <th className="px-4 py-3 text-left text-xs font-semibold">Número</th>}
+                  {isColumnVisible('name') && <th className="px-4 py-3 text-left text-xs font-semibold">Nombre</th>}
+                  {isColumnVisible('email') && <th className="px-4 py-3 text-left text-xs font-semibold">Correo</th>}
+                  {isColumnVisible('phone') && <th className="px-4 py-3 text-left text-xs font-semibold">Teléfono</th>}
+                  {isColumnVisible('nationalId') && <th className="px-4 py-3 text-left text-xs font-semibold">Cédula</th>}
+                  {isColumnVisible('department') && <th className="px-4 py-3 text-left text-xs font-semibold">Departamento</th>}
+                  {isColumnVisible('position') && <th className="px-4 py-3 text-left text-xs font-semibold">Puesto</th>}
+                  {isColumnVisible('salary') && <th className="px-4 py-3 text-left text-xs font-semibold">Salario</th>}
+                  {isColumnVisible('status') && <th className="px-4 py-3 text-left text-xs font-semibold">Estado</th>}
+                  {isColumnVisible('auth') && <th className="px-4 py-3 text-left text-xs font-semibold">Autorización</th>}
                   <th className="px-4 py-3 text-right text-xs font-semibold">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {/* New Rows */}
-                {newRows.map((row) => (
-                  <tr key={row.tempId} className="bg-blue-50/50 hover:bg-blue-50 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 transition-colors">
-                    <td className="px-4 py-2">
-                      <Input
-                        value={row.employeeNumber}
-                        onChange={(e) => updateNewRow(row.tempId, 'employeeNumber', e.target.value)}
-                        className="h-8 text-sm"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex gap-1">
-                        <Input
-                          placeholder="Nombre"
-                          value={row.firstName}
-                          onChange={(e) => updateNewRow(row.tempId, 'firstName', e.target.value)}
-                          className="h-8 text-sm"
-                        />
-                        <Input
-                          placeholder="Apellido"
-                          value={row.lastName}
-                          onChange={(e) => updateNewRow(row.tempId, 'lastName', e.target.value)}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <Input
-                        type="email"
-                        placeholder="email@example.com"
-                        value={row.email}
-                        onChange={(e) => updateNewRow(row.tempId, 'email', e.target.value)}
-                        className="h-8 text-sm"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <Input
-                        placeholder="Teléfono"
-                        value={row.phone}
-                        onChange={(e) => updateNewRow(row.tempId, 'phone', e.target.value)}
-                        className="h-8 text-sm"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-1">
-                        <Select value={row.departmentId} onValueChange={(v) => updateNewRow(row.tempId, 'departmentId', v)}>
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {departments.map((dept: any) => (
-                              <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={() => setShowNewDeptModal(true)} title="Crear departamento">
-                          <Plus className="size-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-1">
-                        <Select value={row.positionId} onValueChange={(v) => updateNewRow(row.tempId, 'positionId', v)}>
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {positions.map((pos: any) => (
-                              <SelectItem key={pos.id} value={pos.id}>{pos.title}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={() => setShowNewPosModal(true)} title="Crear puesto">
-                          <Plus className="size-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex gap-1 items-center">
-                        <div className="relative flex-1">
-                          <span className="absolute left-2.5 top-1.5 text-xs text-muted-foreground font-medium">
-                            {row.currency === 'USD' ? '$' : 'C$'}
-                          </span>
-                          <Input
-                            type="number"
-                            value={row.salary}
-                            onChange={(e) => updateNewRow(row.tempId, 'salary', parseFloat(e.target.value))}
-                            className="h-8 text-sm pl-7 min-w-[100px]"
-                          />
-                        </div>
-                        <Select value={row.currency} onValueChange={(v) => updateNewRow(row.tempId, 'currency', v)}>
-                          <SelectTrigger className="h-8 w-16 text-[10px] font-bold">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="USD">USD</SelectItem>
-                            <SelectItem value="NIO">NIO</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded font-bold">Nuevo</span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="text-xs text-muted-foreground">—</span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => handleSaveNewRow(row.tempId)} className="h-7 px-2">
-                          <Save className="size-3" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleDeleteNewRow(row.tempId)} className="h-7 px-2">
-                          <X className="size-3" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-
                 {/* Existing Employees */}
                 {paginatedEmployees.map((emp: any) => (
-                  <tr key={emp.id} className="hover:bg-muted/50">
-                    <td className="px-4 py-2 text-sm">{emp.employeeNumber}</td>
-                    <td className="px-4 py-2">
-                      {editingId === emp.id ? (
-                        <div className="flex gap-1">
-                          <Input
-                            value={editData.firstName}
-                            onChange={(e) => setEditData({ ...editData, firstName: e.target.value })}
-                            className="h-8 text-sm"
-                          />
-                          <Input
-                            value={editData.lastName}
-                            onChange={(e) => setEditData({ ...editData, lastName: e.target.value })}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                      ) : (
-                        <span className="text-sm font-medium">{emp.firstName} {emp.lastName}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      {editingId === emp.id ? (
-                        <Input
-                          value={editData.email}
-                          onChange={(e) => setEditData({ ...editData, email: e.target.value })}
-                          className="h-8 text-sm"
-                        />
-                      ) : (
-                        <span className="text-sm text-muted-foreground">{emp.email}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="text-sm text-muted-foreground">{emp.phone || '—'}</span>
-                    </td>
-                    <td className="px-4 py-2 text-sm">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate">{emp.department?.name}</span>
-                        {canPerform('HR_EMPLOYEES', 'edit') && (
-                          <Button size="icon" variant="ghost" className="size-7 shrink-0" onClick={() => openDepartmentEditor(emp)} title="Gestionar departamentos">
-                            <Building2 className="size-3.5 text-primary" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-sm">{emp.position?.title}</td>
-                    <td className="px-4 py-2">
-                      {editingId === emp.id ? (
-                        <div className="flex gap-1 items-center">
-                          <div className="relative flex-1">
-                            <span className="absolute left-2 top-1.5 text-[10px] text-muted-foreground font-bold">
-                              {editData.currency === 'USD' ? '$' : 'C$'}
-                            </span>
-                            <Input
-                              type="number"
-                              value={editData.salary}
-                              onChange={(e) => setEditData({ ...editData, salary: parseFloat(e.target.value) })}
-                              className="h-8 text-sm pl-6 w-24"
-                            />
-                          </div>
-                          <Select value={editData.currency} onValueChange={(v) => setEditData({ ...editData, currency: v })}>
-                            <SelectTrigger className="h-8 w-16 text-[10px] font-bold">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="USD">USD</SelectItem>
-                              <SelectItem value="NIO">NIO</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col">
-                          <CurrencyValuationAmount amount={Number(emp.salary || 0)} sourceCurrency={emp.currency || 'USD'} sourceExchangeRate={emp.exchangeRate} className="text-sm font-bold text-primary" />
-                          <span className="text-[9px] text-muted-foreground uppercase font-black">Original: {emp.currency}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className={`text-[10px] px-2 py-1 rounded-lg font-black uppercase tracking-tighter ${
-                        emp.employmentStatus === 'ACTIVE' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                        emp.employmentStatus === 'INACTIVE' ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' :
-                        'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                      }`}>
-                        {emp.employmentStatus === 'ACTIVE' ? 'Activo' : emp.employmentStatus === 'INACTIVE' ? 'Inactivo' : emp.employmentStatus === 'ON_LEAVE' ? 'Licencia' : emp.employmentStatus === 'TERMINATED' ? 'Terminado' : emp.employmentStatus}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">
-                      {(() => {
-                        const opts: Record<string, {label:string,color:string}> = {APPROVED:{label:'Aprobado',color:'bg-emerald-500/10 text-emerald-500'},PENDING_APPROVAL:{label:'Pendiente',color:'bg-amber-500/10 text-amber-500'},REJECTED:{label:'Rechazado',color:'bg-rose-500/10 text-rose-500'},DRAFT:{label:'Borrador',color:'bg-muted/20 text-muted-foreground'}};
-                        const s = opts[String(emp.approvalStatus||'APPROVED').toUpperCase()] || opts.APPROVED;
-                        return <Badge variant="outline" className={cn('text-[8px] font-black uppercase px-1.5 py-0 border-none', s.color)}>{s.label}</Badge>;
-                      })()}
-                    </td>
+                  <tr
+                    key={emp.id}
+                    className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                    onClick={() => openEmployeeDetails(emp)}
+                    onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openEmployeeDetails(emp); } }}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Ver detalles de ${emp.firstName} ${emp.lastName}`}
+                  >
+                    {isColumnVisible('number') && <td className="px-4 py-2 text-sm font-mono text-muted-foreground">{emp.employeeNumber}</td>}
+                    {isColumnVisible('name') && <td className="px-4 py-2 text-sm font-semibold">{emp.firstName} {emp.lastName}</td>}
+                    {isColumnVisible('email') && <td className="px-4 py-2 text-sm text-muted-foreground">{emp.email}</td>}
+                    {isColumnVisible('phone') && <td className="px-4 py-2 text-sm text-muted-foreground">{emp.phone || '—'}</td>}
+                    {isColumnVisible('nationalId') && <td className="px-4 py-2 text-sm text-muted-foreground">{emp.nationalId || '—'}</td>}
+                    {isColumnVisible('department') && <td className="px-4 py-2 text-sm"><div className="flex items-center gap-1.5"><span className="truncate">{emp.department?.name || '—'}</span>{canPerform('HR_EMPLOYEES', 'edit') && <Button size="icon" variant="ghost" className="size-7 shrink-0" onClick={(event) => { event.stopPropagation(); openDepartmentEditor(emp); }} title="Gestionar departamentos"><Building2 className="size-3.5 text-primary" /></Button>}</div></td>}
+                    {isColumnVisible('position') && <td className="px-4 py-2 text-sm">{emp.position?.title || '—'}</td>}
+                    {isColumnVisible('salary') && <td className="px-4 py-2"><div className="flex flex-col"><CurrencyValuationAmount amount={Number(emp.salary || 0)} sourceCurrency={emp.currency || 'USD'} sourceExchangeRate={emp.exchangeRate} className="text-sm font-bold text-primary" /><span className="text-[9px] text-muted-foreground uppercase font-black">Original: {emp.currency}</span></div></td>}
+                    {isColumnVisible('status') && <td className="px-4 py-2"><span className={`text-[10px] px-2 py-1 rounded-lg font-black uppercase tracking-tighter ${emp.employmentStatus === 'ACTIVE' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : emp.employmentStatus === 'INACTIVE' ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'}`}>{emp.employmentStatus === 'ACTIVE' ? 'Activo' : emp.employmentStatus === 'INACTIVE' ? 'Inactivo' : emp.employmentStatus === 'ON_LEAVE' ? 'Licencia' : emp.employmentStatus === 'TERMINATED' ? 'Terminado' : emp.employmentStatus}</span></td>}
+                    {isColumnVisible('auth') && <td className="px-4 py-2">{(() => { const opts: Record<string, { label: string; color: string }> = { APPROVED: { label: 'Aprobado', color: 'bg-emerald-500/10 text-emerald-500' }, PENDING_APPROVAL: { label: 'Pendiente', color: 'bg-amber-500/10 text-amber-500' }, REJECTED: { label: 'Rechazado', color: 'bg-rose-500/10 text-rose-500' }, DRAFT: { label: 'Borrador', color: 'bg-muted/20 text-muted-foreground' } }; const status = opts[String(emp.approvalStatus || 'APPROVED').toUpperCase()] || opts.APPROVED; return <Badge variant="outline" className={cn('text-[8px] font-black uppercase px-1.5 py-0 border-none', status.color)}>{status.label}</Badge>; })()}</td>}
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
-                        {editingId === emp.id ? (
-                          <>
-                            <Button size="sm" variant="ghost" onClick={() => handleSave(emp.id)} className="h-7 px-2">
-                              <Save className="size-3" />
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="h-7 px-2">
-                              <X className="size-3" />
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            {canPerform('HR_EMPLOYEES', 'edit') && (
-                              <Button size="sm" variant="ghost" onClick={() => handleEdit(emp)} className="h-7 px-2">
-                                <Edit2 className="size-3" />
-                              </Button>
-                            )}
+                        {canPerform('HR_EMPLOYEES', 'edit') && <Button variant="ghost" size="icon" title="Editar empleado" aria-label="Editar empleado" onClick={(event) => { event.stopPropagation(); handleEdit(emp); }} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Edit2 className="size-4" /></Button>}
                             {emp.approvalStatus === 'DRAFT' && (
                               <Button title="Enviar a aprobación" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={(e) => { e.stopPropagation(); handleSubmitApproval(emp.id); }}>
                                 <Send className="size-4" />
@@ -989,13 +1011,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                             <Button title="Historial de cambios" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" onClick={(e) => { e.stopPropagation(); loadChangeLog(emp.id); }}>
                               <History className="size-4" />
                             </Button>
-                            {canPerform('HR_EMPLOYEES', 'delete') && (
-                              <Button size="sm" variant="ghost" title="Desactivar" onClick={() => setPendingDeleteId(emp.id)} className="h-7 px-2 text-red-600">
-                                <Ban className="size-3" />
-                              </Button>
-                            )}
-                          </>
-                        )}
+                            {canPerform('HR_EMPLOYEES', 'delete') && <Button variant="ghost" size="icon" title="Anular empleado" aria-label="Anular empleado" onClick={(event) => { event.stopPropagation(); setPendingDeleteId(emp.id); }} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Ban className="size-4" /></Button>}
                       </div>
                     </td>
                   </tr>
@@ -1009,65 +1025,84 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       {/* Cards View - Always shown on mobile, conditional on desktop */}
       <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${viewMode === 'cards' ? 'block' : 'block md:hidden'}`}>
           {paginatedEmployees.map((emp: any) => (
-            <div key={emp.id} className="border border-border/40 rounded-2xl p-5 bg-gradient-to-br from-card to-muted/20 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 relative overflow-hidden group">
+            <div
+              key={emp.id}
+              className="cursor-pointer border border-border/40 rounded-2xl p-5 bg-gradient-to-br from-card to-muted/20 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 relative overflow-hidden group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              onClick={() => openEmployeeDetails(emp)}
+              onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openEmployeeDetails(emp); } }}
+              tabIndex={0}
+              role="button"
+              aria-label={`Ver detalles de ${emp.firstName} ${emp.lastName}`}
+            >
               <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="size-12 rounded-full bg-primary flex items-center justify-center text-white font-bold text-lg">
-                    {emp.firstName[0]}{emp.lastName[0]}
+                    {emp.firstName?.[0]}{emp.lastName?.[0]}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <h3 className="font-semibold text-sm">{emp.firstName} {emp.lastName}</h3>
-                    <p className="text-xs text-muted-foreground">{emp.employeeNumber}</p>
+                    {isColumnVisible('number') && <p className="text-xs text-muted-foreground">{emp.employeeNumber}</p>}
                   </div>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded ${
+                {isColumnVisible('status') && <span className={`text-xs px-2 py-1 rounded ${
                   emp.employmentStatus === 'ACTIVE' 
                     ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
                     : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
                 }`}>
-                  {emp.employmentStatus === 'ACTIVE' ? 'Activo' : emp.employmentStatus === 'INACTIVE' ? 'Inactivo' : emp.employmentStatus}
-                </span>
+                  {getEmploymentStatusLabel(emp.employmentStatus)}
+                </span>}
               </div>
               <div className="space-y-2 text-sm">
-                <div className="flex items-center justify-between">
+                {isColumnVisible('email') && <div className="flex items-center justify-between gap-2">
                   <span className="text-muted-foreground">Email:</span>
-                  <span className="font-medium truncate ml-2">{emp.email}</span>
-                </div>
-                {emp.phone && (
-                <div className="flex items-center justify-between">
+                  <span className="font-medium truncate">{emp.email}</span>
+                </div>}
+                {isColumnVisible('phone') && emp.phone && <div className="flex items-center justify-between gap-2">
                   <span className="text-muted-foreground">Teléfono:</span>
                   <span className="font-medium">{emp.phone}</span>
-                </div>
-                )}
-                <div className="flex items-center justify-between gap-2">
+                </div>}
+                {isColumnVisible('department') && <div className="flex items-center justify-between gap-2">
                   <span className="text-muted-foreground">Departamento:</span>
                   <div className="flex min-w-0 items-center gap-1">
                     <span className="truncate font-medium">{emp.department?.name}</span>
-                    {canPerform('HR_EMPLOYEES', 'edit') && <Button size="icon" variant="ghost" className="size-7 shrink-0" onClick={() => openDepartmentEditor(emp)} title="Gestionar departamentos"><Building2 className="size-3.5 text-primary" /></Button>}
+                    {canPerform('HR_EMPLOYEES', 'edit') && <Button size="icon" variant="ghost" className="size-7 shrink-0" onClick={(event) => { event.stopPropagation(); openDepartmentEditor(emp); }} title="Gestionar departamentos"><Building2 className="size-3.5 text-primary" /></Button>}
                   </div>
-                </div>
-                <div className="flex items-center justify-between">
+                </div>}
+                {isColumnVisible('position') && <div className="flex items-center justify-between gap-2">
                   <span className="text-muted-foreground">Puesto:</span>
                   <span className="font-medium">{emp.position?.title}</span>
-                </div>
-                <div className="flex items-center justify-between">
+                </div>}
+                {isColumnVisible('salary') && <div className="flex items-center justify-between gap-2">
                   <span className="text-muted-foreground">Salario:</span>
                   <div className="flex flex-col items-end">
                     <CurrencyValuationAmount amount={Number(emp.salary || 0)} sourceCurrency={emp.currency || 'USD'} sourceExchangeRate={emp.exchangeRate} className="font-bold text-primary" />
                     <span className="text-[10px] text-muted-foreground uppercase font-medium">Contrato: {emp.currency}</span>
                   </div>
-                </div>
+                </div>}
+                {isColumnVisible('nationalId') && <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">Cédula:</span><span className="font-medium">{emp.nationalId || '—'}</span></div>}
+                {isColumnVisible('auth') && <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">Autorización:</span><Badge variant="outline" className="border-none bg-muted/20 text-[9px] font-black uppercase">{getApprovalStatusLabel(emp.approvalStatus)}</Badge></div>}
               </div>
               <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border/40 relative z-10">
                 {canPerform('HR_EMPLOYEES', 'edit') && (
-                  <Button size="sm" variant="outline" onClick={() => handleCardEdit(emp)} className="flex-1 rounded-xl transition-all hover:bg-primary/10 hover:text-primary hover:border-primary/30">
+                  <Button size="sm" variant="outline" onClick={(event) => { event.stopPropagation(); handleCardEdit(emp); }} className="flex-1 rounded-xl transition-all hover:bg-primary/10 hover:text-primary hover:border-primary/30">
                     <Edit2 className="size-3 mr-1" />
                     Editar
                   </Button>
                 )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  title="Historial de cambios"
+                  aria-label="Historial de cambios"
+                  onClick={(event) => { event.stopPropagation(); loadChangeLog(emp.id); }}
+                  className="size-8 rounded-lg hover:bg-blue-500/10 hover:text-blue-500 transition-colors"
+                >
+                  <History className="size-4" />
+                </Button>
                 {canPerform('HR_EMPLOYEES', 'delete') && (
-                  <Button size="sm" variant="outline" title="Desactivar" onClick={() => setPendingDeleteId(emp.id)} className="text-red-600 rounded-xl hover:bg-red-500/10 hover:border-red-500/30 transition-all">
-                    <Ban className="size-3" />
+                  <Button variant="ghost" size="icon" title="Anular empleado" aria-label="Anular empleado" onClick={(event) => { event.stopPropagation(); setPendingDeleteId(emp.id); }} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors">
+                    <Ban className="size-4" />
                   </Button>
                 )}
               </div>
@@ -1109,6 +1144,123 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
           <p className="text-muted-foreground">No se encontraron empleados</p>
         </div>
       )}
+
+      <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
+            <DialogDescription>Elige qué información quieres ver en la lista y en las tarjetas de empleados.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {columnOptions.map((option) => {
+              const active = isColumnVisible(option.key);
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setVisibleColumnKeys((current) => active ? (current.length > 1 ? current.filter((key) => key !== option.key) : current) : [...current, option.key])}
+                  className={cn('flex min-h-11 items-center justify-between rounded-xl border px-3 text-left text-xs font-bold transition-colors', active ? 'border-primary bg-primary/10 text-foreground' : 'border-border/60 bg-muted/10 text-muted-foreground hover:border-primary/50')}
+                >
+                  <span>{option.label}</span>
+                  {active && <Check className="size-4 text-primary" />}
+                </button>
+              );
+            })}
+          </div>
+          <DialogFooter className="flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setVisibleColumnKeys(columnOptions.map((option) => option.key))}>Mostrar todas</Button>
+            <Button onClick={() => setColumnConfigOpen(false)}>Aplicar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCreateEmployeeModalOpen} onOpenChange={(open) => {
+        setIsCreateEmployeeModalOpen(open);
+        if (!open) {
+          setEditingId(null);
+          setEditingPendingId(null);
+        }
+      }}>
+        <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,1400px)] !flex-col overflow-hidden rounded-3xl p-0">
+          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
+            <DialogTitle className="flex items-center gap-2">{editingId ? <Edit2 className="size-5 text-primary" /> : <Plus className="size-5 text-primary" />} {editingId ? 'Editar empleado' : editingPendingId ? 'Editar empleado pendiente' : 'Agregar empleado'}</DialogTitle>
+            <DialogDescription>
+              {editingId
+                ? 'Actualiza la información del empleado desde el mismo formulario utilizado para crearlo.'
+                : editingPendingId
+                  ? 'Modifica este empleado pendiente antes de insertarlo junto con los demás registros.'
+                  : 'Completa la información del empleado. Al guardarlo quedará registrado en la lista de empleados.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
+            <section className="space-y-3">
+              <div><p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Información personal</p><p className="mt-1 text-xs text-muted-foreground">La cédula se almacena en el expediente del empleado y también se puede importar desde Excel.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="space-y-2"><Label>Número de empleado *</Label><Input value={newEmployeeForm.employeeNumber || ''} onChange={(event) => updateNewEmployeeForm('employeeNumber', event.target.value)} placeholder="EMP0001" /></div>
+                <div className="space-y-2"><Label>Nombres *</Label><Input value={newEmployeeForm.firstName || ''} onChange={(event) => updateNewEmployeeForm('firstName', event.target.value)} placeholder="Nombres" /></div>
+                <div className="space-y-2"><Label>Apellidos *</Label><Input value={newEmployeeForm.lastName || ''} onChange={(event) => updateNewEmployeeForm('lastName', event.target.value)} placeholder="Apellidos" /></div>
+                <div className="space-y-2"><Label>Cédula</Label><Input value={newEmployeeForm.nationalId || ''} onChange={(event) => updateNewEmployeeForm('nationalId', event.target.value)} placeholder="001-010190-1000A" /></div>
+                <div className="space-y-2 sm:col-span-2"><Label>Correo electrónico *</Label><Input type="email" value={newEmployeeForm.email || ''} onChange={(event) => updateNewEmployeeForm('email', event.target.value)} placeholder="empleado@empresa.com" /></div>
+                <div className="space-y-2"><Label>Teléfono</Label><Input value={newEmployeeForm.phone || ''} onChange={(event) => updateNewEmployeeForm('phone', event.target.value)} placeholder="8888-8888" /></div>
+                <div className="space-y-2"><Label>Fecha de nacimiento</Label><Input type="date" value={newEmployeeForm.dateOfBirth || ''} onChange={(event) => updateNewEmployeeForm('dateOfBirth', event.target.value)} /></div>
+              </div>
+            </section>
+
+            <section className="space-y-3 border-t pt-5">
+              <div><p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Información laboral</p><p className="mt-1 text-xs text-muted-foreground">El departamento y el puesto deben pertenecer a los catálogos de Recursos Humanos.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="space-y-2"><Label>Fecha de contratación *</Label><Input type="date" value={newEmployeeForm.hireDate || ''} onChange={(event) => updateNewEmployeeForm('hireDate', event.target.value)} /></div>
+                <div className="space-y-2"><Label>Departamento *</Label><div className="flex items-center gap-2"><Select value={newEmployeeForm.departmentId || ''} onValueChange={(value) => updateNewEmployeeForm('departmentId', value)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{departments.map((department: any) => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}</SelectContent></Select><Button type="button" size="icon" variant="outline" className="size-9 shrink-0" onClick={() => { setNewDeptName(''); setPendingImportDepartmentRow(null); setShowNewDeptModal(true); }} title="Crear departamento" aria-label="Crear departamento"><Plus className="size-3.5" /></Button></div></div>
+                <div className="space-y-2"><Label>Puesto *</Label><div className="flex items-center gap-2"><Select value={newEmployeeForm.positionId || ''} onValueChange={(value) => updateNewEmployeeForm('positionId', value)}><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent>{positions.filter((position: any) => !newEmployeeForm.departmentId || position.departmentId === newEmployeeForm.departmentId).map((position: any) => <SelectItem key={position.id} value={position.id}>{position.title}</SelectItem>)}</SelectContent></Select><Button type="button" size="icon" variant="outline" className="size-9 shrink-0" onClick={() => { setNewPosTitle(''); setNewPosDeptId(newEmployeeForm.departmentId || ''); setPendingImportPositionRow(null); setShowNewPosModal(true); }} title="Crear puesto" aria-label="Crear puesto" disabled={!newEmployeeForm.departmentId}><Plus className="size-3.5" /></Button></div></div>
+                <div className="space-y-2"><Label>Tipo de contrato *</Label><Select value={newEmployeeForm.contractType || 'FULL_TIME'} onValueChange={(value) => updateNewEmployeeForm('contractType', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="FULL_TIME">Tiempo completo</SelectItem><SelectItem value="PART_TIME">Medio tiempo</SelectItem><SelectItem value="CONTRACTOR">Contratista</SelectItem><SelectItem value="INTERN">Pasante</SelectItem><SelectItem value="TEMPORARY">Temporal</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2"><Label>Salario *</Label><Input type="number" min="0" value={newEmployeeForm.salary ?? ''} onChange={(event) => updateNewEmployeeForm('salary', event.target.value === '' ? '' : Number(event.target.value))} placeholder="0.00" /></div>
+                <div className="space-y-2"><Label>Moneda</Label><Select value={newEmployeeForm.currency || 'NIO'} onValueChange={(value) => updateNewEmployeeForm('currency', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO - Córdoba</SelectItem><SelectItem value="USD">USD - Dólar</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2"><Label>Frecuencia de pago</Label><Select value={newEmployeeForm.payFrequency || 'MONTHLY'} onValueChange={(value) => updateNewEmployeeForm('payFrequency', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem><SelectItem value="HOURLY">Por hora</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2"><Label>Estado</Label><Select value={newEmployeeForm.employmentStatus || 'ACTIVE'} onValueChange={(value) => updateNewEmployeeForm('employmentStatus', value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem><SelectItem value="ON_LEAVE">En ausencia</SelectItem><SelectItem value="TERMINATED">Terminado</SelectItem></SelectContent></Select></div>
+              </div>
+            </section>
+
+            <section className="space-y-3 border-t pt-5">
+              <div><p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Ubicación y datos laborales adicionales</p><p className="mt-1 text-xs text-muted-foreground">Estos datos son opcionales y pueden completarse posteriormente.</p></div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="space-y-2 sm:col-span-2 lg:col-span-2"><Label>Dirección</Label><Input value={newEmployeeForm.address || ''} onChange={(event) => updateNewEmployeeForm('address', event.target.value)} placeholder="Dirección del empleado" /></div>
+                <div className="space-y-2"><Label>Ciudad</Label><Input value={newEmployeeForm.city || ''} onChange={(event) => updateNewEmployeeForm('city', event.target.value)} /></div>
+                <div className="space-y-2"><Label>Estado / Provincia</Label><Input value={newEmployeeForm.state || ''} onChange={(event) => updateNewEmployeeForm('state', event.target.value)} /></div>
+                <div className="space-y-2"><Label>País</Label><Input value={newEmployeeForm.country || ''} onChange={(event) => updateNewEmployeeForm('country', event.target.value)} /></div>
+                <div className="space-y-2"><Label>Código postal</Label><Input value={newEmployeeForm.postalCode || ''} onChange={(event) => updateNewEmployeeForm('postalCode', event.target.value)} /></div>
+                <div className="space-y-2"><Label>Número de seguro social</Label><Input value={newEmployeeForm.socialSecurityNumber || ''} onChange={(event) => updateNewEmployeeForm('socialSecurityNumber', event.target.value)} /></div>
+                <div className="space-y-2"><Label>Contacto de emergencia</Label><Input value={newEmployeeForm.emergencyContact || ''} onChange={(event) => updateNewEmployeeForm('emergencyContact', event.target.value)} /></div>
+                <div className="space-y-2"><Label>Teléfono de emergencia</Label><Input value={newEmployeeForm.emergencyPhone || ''} onChange={(event) => updateNewEmployeeForm('emergencyPhone', event.target.value)} /></div>
+                <div className="space-y-2"><Label>Fin del período de prueba</Label><Input type="date" value={newEmployeeForm.probationEndDate || ''} onChange={(event) => updateNewEmployeeForm('probationEndDate', event.target.value)} /></div>
+                <div className="space-y-2 sm:col-span-2 lg:col-span-4"><Label>Notas</Label><Textarea value={newEmployeeForm.notes || ''} onChange={(event) => updateNewEmployeeForm('notes', event.target.value)} placeholder="Observaciones del expediente" rows={3} /></div>
+              </div>
+            </section>
+          </div>
+          <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsCreateEmployeeModalOpen(false);
+                setEditingId(null);
+                setEditingPendingId(null);
+              }}
+              className="w-full rounded-xl sm:w-auto"
+            >
+              Cancelar
+            </Button>
+              {editingId ? (
+                <Button type="button" onClick={() => void handleSaveExistingEmployee()} className="w-full rounded-xl sm:w-auto">
+                  <Save className="size-4" /> Guardar cambios
+                </Button>
+              ) : (
+                <Button type="button" onClick={() => void handleAddEmployeeToList()} disabled={savingEmployee} className="w-full rounded-xl sm:w-auto">
+                  <Save className="size-4" /> {savingEmployee ? 'Guardando...' : editingPendingId ? 'Actualizar en la lista' : 'Guardar empleado'}
+                </Button>
+              )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) setImportOpen(false); }}>
         <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
@@ -1208,72 +1360,12 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         </DialogContent>
       </Dialog>
 
-      {/* Modal: Editar Empleado (Cards View) */}
-      <Dialog open={isEditModalOpen} onOpenChange={(open) => {
-        setIsEditModalOpen(open);
-        if (!open) setEditingId(null);
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Edit2 className="size-5 text-primary" /> Editar Empleado</DialogTitle>
-            <DialogDescription>Modifica los datos del empleado. Los cambios se guardarán de inmediato.</DialogDescription>
-          </DialogHeader>
-          {editingId && (
-            <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto px-1">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre</Label>
-                  <Input value={editData.firstName} onChange={e => setEditData({ ...editData, firstName: e.target.value })} className="rounded-xl" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Apellido</Label>
-                  <Input value={editData.lastName} onChange={e => setEditData({ ...editData, lastName: e.target.value })} className="rounded-xl" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Email</Label>
-                <Input value={editData.email} onChange={e => setEditData({ ...editData, email: e.target.value })} className="rounded-xl" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Teléfono</Label>
-                <Input value={editData.phone || ''} onChange={e => setEditData({ ...editData, phone: e.target.value })} className="rounded-xl" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Salario</Label>
-                  <Input type="number" value={editData.salary} onChange={e => setEditData({ ...editData, salary: parseFloat(e.target.value) })} className="rounded-xl" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Moneda</Label>
-                  <Select value={editData.currency} onValueChange={(v) => setEditData({ ...editData, currency: v })}>
-                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Moneda" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="USD">USD</SelectItem>
-                      <SelectItem value="NIO">NIO</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancelar</Button>
-            <Button onClick={() => {
-              if (editingId) {
-                handleSave(editingId);
-                setIsEditModalOpen(false);
-              }
-            }} className="bg-primary text-primary-foreground">Guardar Cambios</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <ConfirmDialog 
         open={pendingDeleteId !== null} 
         onOpenChange={open => { if (!open) setPendingDeleteId(null); }} 
-        title="¿Desactivar Empleado?" 
+        title="¿Anular empleado?"
         description="El empleado quedará inactivo y no aparecerá en selecciones futuras." 
-        confirmLabel="Desactivar" 
+        confirmLabel="Anular empleado"
         variant="destructive" 
         loading={deleteLoading} 
         onConfirm={() => pendingDeleteId ? handleDelete(pendingDeleteId) : Promise.resolve()} 
@@ -1304,6 +1396,14 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
           </div>
         </DialogContent>
       </Dialog>
+      <EmployeeDetailDrawer
+        employeeId={detailEmployeeId}
+        employeeSnapshot={employees.find((employee: any) => employee.id === detailEmployeeId) || null}
+        onOpenChange={(open) => { if (!open) setDetailEmployeeId(null); }}
+        onEdit={handleEdit}
+        onManageDepartments={openDepartmentEditor}
+        canEdit={canPerform('HR_EMPLOYEES', 'edit')}
+      />
       {showTutorial && <GuidedTour steps={EMPLEADOS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Empleados" />}
     </div>
   );
