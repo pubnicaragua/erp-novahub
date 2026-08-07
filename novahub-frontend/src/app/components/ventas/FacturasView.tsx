@@ -13,6 +13,7 @@ import { cn } from '../ui/utils';
 import type { Invoice, Customer, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
+import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useGlobalSearch } from '../hooks/useGlobalSearch';
@@ -101,6 +102,21 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
+
+  const [bypassActive, setBypassActive] = useState(() => {
+    return localStorage.getItem('nh-bypass-accounting') === 'true';
+  });
+
+  const toggleBypass = () => {
+    const newVal = !bypassActive;
+    setBypassActive(newVal);
+    localStorage.setItem('nh-bypass-accounting', String(newVal));
+    if (newVal) {
+      toast.success('Bypass de cuentas contables activado');
+    } else {
+      toast.info('Bypass de cuentas contables desactivado');
+    }
+  };
   const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
   const findProductForItem = (item: any) => products.find((product: any) => product.id === item?.productId)
@@ -1133,6 +1149,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
+            </div>
+            <div className="flex items-center gap-2 bg-muted/30 border border-border/40 rounded-xl px-3 h-10 text-xs font-bold text-muted-foreground">
+              <Switch checked={bypassActive} onCheckedChange={toggleBypass} id="bypass-switch" />
+              <label htmlFor="bypass-switch" className="cursor-pointer select-none">Bypass Cuentas</label>
             </div>
             {canPerform('SALES_INVOICES', 'create') && (
               <Button onClick={startNewInvoice} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
