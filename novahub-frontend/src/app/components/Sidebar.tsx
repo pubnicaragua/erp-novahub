@@ -113,7 +113,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'facturacion-caja': ['RETAIL_POS', 'SALES_POS'],
   'control-caja': ['RETAIL_POS', 'SALES_POS'],
   // Compras
-  solicitudes: ['PURCHASES_REQUESTS'],
+  solicitudes: ['PURCHASES_REQUESTS', 'PURCHASES'],
   proveedores: ['PURCHASES_PROVIDERS'],
   gastos: ['PURCHASES_EXPENSES'],
   'gastos-recurrentes': ['PURCHASES_EXPENSES_REC'],

@@ -26,6 +26,9 @@ import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/sale
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
+import { TaxDetail } from '../ui/TaxSelector';
+import { inventoryService } from '../../services/inventario.service';
+import { isTaxExempt } from '../../utils/taxUtils';
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -64,6 +67,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<SalesOrder | null>(null);
+  const [categories, setCategories] = useState<any[]>([]);
+
+  useEffect(() => {
+    inventoryService.getCategories().then((res: any) => {
+      setCategories((res?.data || res || []) as any[]);
+    }).catch(() => {});
+  }, []);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>([
     'number', 'customer', 'itemCount', 'total', 'status', 'date',
@@ -262,19 +272,62 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   const recalculateIndividualPricing = (items: any[]) => {
     const pricedItems = items.map((line) => {
-      const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
+      const q = Number(line.quantity || 0);
+      const p = Number(line.unitPrice || 0);
+      const gross = q * p;
       const discount = gross * (Number(line.discount || 0) / 100);
       const taxable = gross - discount;
-      const tax = taxable * (Number(line.taxRate || 0) / 100);
-      return { ...line, total: taxable + tax };
+      
+      const tt = (line.taxType || 'GRAVADO').toUpperCase();
+      let tax = 0;
+      if (!isTaxExempt(tt)) {
+        const tRate = Number(line.taxRate !== undefined ? line.taxRate : 15);
+        const tBase = Number(line.taxBase || taxable);
+        tax = (tBase * tRate) / 100;
+      }
+      
+      const wt = (line.withholdingType || 'NONE').toUpperCase();
+      let ir = 0;
+      if (wt !== 'NONE') {
+        const wRate = Number(line.withholdingRate || 0);
+        const wBase = Number(line.withholdingBase || taxable);
+        ir = (wBase * wRate) / 100;
+      }
+      
+      return { ...line, total: taxable + tax - ir };
     });
+    
     const subtotal = pricedItems.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
     const discountAmount = pricedItems.reduce((sum, line) => sum + (Number(line.quantity || 0) * Number(line.unitPrice || 0) * Number(line.discount || 0) / 100), 0);
+    
     const taxAmount = pricedItems.reduce((sum, line) => {
+      const tt = (line.taxType || 'GRAVADO').toUpperCase();
+      if (isTaxExempt(tt)) return sum;
+      const tRate = Number(line.taxRate !== undefined ? line.taxRate : 15);
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
-      return sum + ((gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100);
+      const taxable = gross - (gross * Number(line.discount || 0) / 100);
+      const tBase = Number(line.taxBase || taxable);
+      return sum + ((tBase * tRate) / 100);
     }, 0);
-    return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount };
+    
+    const irAmount = pricedItems.reduce((sum, line) => {
+      const wt = (line.withholdingType || 'NONE').toUpperCase();
+      if (wt === 'NONE') return sum;
+      const wRate = Number(line.withholdingRate || 0);
+      const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
+      const taxable = gross - (gross * Number(line.discount || 0) / 100);
+      const wBase = Number(line.withholdingBase || taxable);
+      return sum + ((wBase * wRate) / 100);
+    }, 0);
+    
+    return { 
+      items: pricedItems, 
+      subtotal, 
+      discountAmount, 
+      taxAmount, 
+      irAmount,
+      total: subtotal - discountAmount + taxAmount - irAmount 
+    };
   };
 
   const recalculateGlobalPricing = (items: any[]) => {
@@ -284,6 +337,84 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     const base = subtotal - discountAmount;
     const taxAmount = base * (Number(localRates.tRate || 0) / 100);
     return { items: normalizedItems, subtotal, discountAmount, taxAmount, total: base + taxAmount };
+  };
+
+  const handleItemChange = (idx: number, field: string, value: any) => {
+    if (!localDoc) return;
+    const newItems = [...(localDoc.items || [])] as any[];
+    newItems[idx] = { ...newItems[idx], [field]: value };
+    
+    if (field === 'withholdingType') {
+      newItems[idx].irTaxId = value === 'NONE' ? null : value;
+    }
+    if (field === 'withholdingRate') {
+      newItems[idx].irRate = value;
+    }
+    
+    if (field === 'productId') {
+      const selectedProd = (resolveItemType(newItems[idx]) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === value);
+      if (selectedProd) {
+        newItems[idx].code = selectedProd.code || '';
+        newItems[idx].name = selectedProd.name || '';
+        newItems[idx].description = selectedProd.name || '';
+        newItems[idx].category = selectedProd.category?.name || selectedProd.category || '';
+        newItems[idx].categoryId = selectedProd.categoryId || selectedProd.category?.id || '';
+        const baseSalePrice = Number(selectedProd.salePrice ?? selectedProd.price ?? 0);
+        newItems[idx].unitPrice = priceInCurrency(baseSalePrice, localDoc?.currency || 'NIO', Number(localDoc?.exchangeRate || globalRate || 1));
+      } else {
+        newItems[idx].code = '';
+        newItems[idx].name = '';
+        newItems[idx].description = '';
+        newItems[idx].category = '';
+        newItems[idx].categoryId = '';
+        newItems[idx].unitPrice = 0;
+      }
+    }
+    
+    const q = Number(newItems[idx].quantity || 0);
+    const p = Number(newItems[idx].unitPrice || 0);
+    const sub = q * p;
+    const discRate = Number(newItems[idx].discount || 0);
+    const net = sub - (sub * (discRate / 100));
+    
+    const tt = (newItems[idx].taxType || 'GRAVADO').toUpperCase();
+    if (isTaxExempt(tt)) {
+      newItems[idx].taxRate = 0;
+      newItems[idx].taxBase = 0;
+      newItems[idx].taxAmount = 0;
+    } else {
+      const tRate = Number(newItems[idx].taxRate !== undefined ? newItems[idx].taxRate : 15);
+      const tBase = Number(newItems[idx].taxBase || net);
+      newItems[idx].taxBase = tBase;
+      newItems[idx].taxAmount = (tBase * tRate) / 100;
+    }
+    
+    const wt = (newItems[idx].withholdingType || 'NONE').toUpperCase();
+    if (wt === 'NONE') {
+      newItems[idx].withholdingRate = 0;
+      newItems[idx].withholdingBase = 0;
+      newItems[idx].irRate = 0;
+    } else {
+      const wRate = Number(newItems[idx].withholdingRate || 0);
+      const wBase = Number(newItems[idx].withholdingBase || net);
+      newItems[idx].withholdingBase = wBase;
+      newItems[idx].irRate = wRate;
+    }
+    
+    newItems[idx].total = net + (newItems[idx].taxAmount || 0) - (wt === 'NONE' ? 0 : (newItems[idx].withholdingBase * newItems[idx].withholdingRate / 100));
+
+    const next = pricingMode === 'individual' ? recalculateIndividualPricing(newItems) : recalculateGlobalPricing(newItems);
+    setLocalDoc({ ...localDoc, ...next } as any);
+    void handleUpdate(localDoc!.id, next as any);
+  };
+
+  const handleDeleteItem = (idx: number) => {
+    if (!localDoc) return;
+    const newItems = [...(localDoc.items || [])] as any[];
+    newItems.splice(idx, 1);
+    const next = pricingMode === 'individual' ? recalculateIndividualPricing(newItems) : recalculateGlobalPricing(newItems);
+    setLocalDoc({ ...localDoc, ...next } as any);
+    void handleUpdate(localDoc!.id, next as any);
   };
 
 
@@ -705,219 +836,206 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="flex flex-wrap gap-2">
-                {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" onClick={() => {
-                  const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
-                  setLocalDoc({ ...localDoc, items: newItems } as any);
-                }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
+                {(['PRODUCT', 'SERVICE'] as const).map((itemType) => (
+                  <Button
+                    key={itemType}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const newItems = [
+                        ...(localDoc.items || []),
+                        {
+                          id: `new-${Date.now()}`,
+                          itemType,
+                          productId: '',
+                          code: '',
+                          name: '',
+                          category: '',
+                          categoryId: '',
+                          quantity: 1,
+                          unitPrice: 0,
+                          taxType: 'GRAVADO',
+                          taxRate: 15,
+                          taxBase: 0,
+                          taxAmount: 0,
+                          withholdingType: 'NONE',
+                          withholdingRate: 0,
+                          withholdingBase: 0,
+                          total: 0,
+                        },
+                      ] as any[];
+                      setLocalDoc({ ...localDoc, items: newItems } as any);
+                    }}
+                    className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"
+                  >
+                    <Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}
+                  </Button>
+                ))}
               </div>
             </div>
-            <div className="space-y-2">
-              <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn('col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>Descripción</div>
-                {pricingMode === 'individual' && <div className="col-span-2" />}
-                <div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Cant.</div>
-                <div className="col-span-2 text-right">Precio U.</div>
-                <div className="col-span-2 text-right">Total</div>
-              </div>
-              {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} data-item-layout="standard" className={cn('sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0', pricingMode === 'individual' && 'pricing-individual')}>
-                  <div className={cn('min-w-0 xl:col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>
-                    <div className="flex min-w-0 flex-wrap items-center gap-1">
-                      <div className="min-w-0 flex-1">
-                        <Combobox 
-                          options={getLineProductOptions(item)}
+            
+            <div className="space-y-3">
+              {(localDoc.items || []).map((item: any, idx: number) => {
+                const itemType = resolveItemType(item);
+                return (
+                  <div
+                    key={item.id || idx}
+                    className="group relative rounded-2xl border border-border/40 bg-background/60 backdrop-blur-sm p-4 space-y-3 hover:border-primary/30 hover:shadow-md transition-all duration-200"
+                  >
+                    {/* Header row: product selector + delete */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1.5">
+                          Vincular {itemType === 'SERVICE' ? 'servicio' : 'producto'} del inventario
+                          {item.productId && (
+                            <span className="ml-2 inline-flex items-center gap-1 text-primary font-black">
+                              <span className="size-1.5 rounded-full bg-primary inline-block" />
+                              Vinculado
+                            </span>
+                          )}
+                        </p>
+                        <Combobox
+                          options={
+                            itemType === 'SERVICE'
+                              ? serviceCatalog.map((p) => ({ label: p.name, value: p.id, description: `${p.code} · ${p.category?.name || 'Sin categoría'}` }))
+                              : productCatalog.map((p) => ({ label: p.name, value: p.id, description: `${p.code} · ${p.category?.name || 'Sin categoría'}` }))
+                          }
                           value={item.productId || ''}
-                          onChange={(val) => {
-                            const newItems = [...(localDoc.items || [])] as any[];
-                            const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
-                            newItems[idx].productId = val;
-                            if (selectedProd) {
-                              newItems[idx].description = selectedProd.name;
-                              const baseSalePrice = Number(selectedProd.salePrice ?? selectedProd.price ?? 0);
-                              newItems[idx].unitPrice = priceInCurrency(baseSalePrice, localDoc?.currency || 'NIO', Number(localDoc?.exchangeRate || globalRate || 1));
-                              newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
-                            } else {
-                              newItems[idx].description = 'Producto Customizado';
-                              newItems[idx].unitPrice = 0;
-                              newItems[idx].total = 0;
-                            }
-                            const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
-                            const dAmount = newSubtotal * (localRates.dRate / 100);
-                            const base = newSubtotal - dAmount;
-                            const tAmount = base * (localRates.tRate / 100);
-                            const newTotal = base + tAmount;
-                            setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                            void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                          }}
-                          placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
+                          onChange={(val) => handleItemChange(idx, 'productId', val)}
+                          placeholder={itemType === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                           disabled={!localDoc?.customerId}
                         />
                       </div>
-                      <SalesLinePriceListSelect 
-                        productId={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.id || item.productId} 
-                        productCode={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.code || item.code} 
-                        itemType={item.itemType}
-                        value={item.priceListId} 
-                        defaultPriceListId={localDoc?.priceListId} 
-                        currency={localDoc?.currency} 
-                        exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)} 
-                        onChange={(priceListId, result) => { 
-                          const currentItem = localDoc?.items?.[idx];
-                          // Guarda de idempotencia: no actualizar si el precio ya está aplicado
-                          if (
-                            currentItem &&
-                            currentItem.priceListId === priceListId &&
-                            Math.abs(Number(currentItem.unitPrice || 0) - Number(result.unitPrice || 0)) < 0.01 &&
-                            !!currentItem.priceMissing === !!result.priceMissing
-                          ) return;
-                          const nextItems = [...(localDoc.items || [])] as any[]; 
-                          nextItems[idx] = { 
-                            ...nextItems[idx],
-                            productId: (productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.id || nextItems[idx].productId,
-                            priceListId, 
-                            unitPrice: result.unitPrice ?? 0, 
-                            total: Number(nextItems[idx].quantity || 1) * Number(result.unitPrice ?? 0),
-                            priceMissing: result.priceMissing 
-                          }; 
-                          const next = pricingMode === 'individual' ? recalculateIndividualPricing(nextItems) : recalculateGlobalPricing(nextItems); 
-                          // Solo actualiza estado local — sin handleUpdate para evitar el loop
-                          // PATCH → onRefresh → deleteMany+create → IDs cambian → re-mount → loop
-                          // El precio se persiste en el próximo save explícito (cantidad, guardar borrador, etc.)
-                          setLocalDoc({ ...localDoc, ...next } as any); 
-                        }} 
-                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 shrink-0 text-muted-foreground/40 hover:bg-rose-500/10 hover:text-rose-500 rounded-xl transition-colors opacity-0 group-hover:opacity-100"
+                        onClick={() => handleDeleteItem(idx)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
                     </div>
 
-                    {item.productId && (
-                      <div className="mt-1 flex min-h-4 flex-wrap items-center gap-x-2 gap-y-1 px-1">
-                        {(() => {
-                          const p = products.find(x => x.id === item.productId);
-                          if (!p) return null;
-                          const stock = Number(p.stock || 0);
-                          return (
-                            <>
-                              <Badge variant="outline" className={cn(
-                                "text-[9px] font-black border-none px-1.5 py-0 h-4 bg-muted/20",
-                                stock <= 0 ? "text-rose-500 bg-rose-500/10" : "text-emerald-500 bg-emerald-500/10"
-                              )}>
-                                STOCK: {stock}
-                              </Badge>
-                              {item.priceMissing && <PriceMissingBadge />}
-                            </>
-                          );
-                        })()}
+                    {/* Fields grid */}
+                    <div className="sales-item-fields grid grid-cols-12 gap-2 items-end">
+                      <div className="col-span-2">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Código</p>
+                        <Input
+                          value={item.code || ''}
+                          onChange={(e) => handleItemChange(idx, 'code', e.target.value)}
+                          className="h-8 text-xs font-mono"
+                          placeholder="Código"
+                        />
                       </div>
-                    )}
-                  </div>
-                  {pricingMode === 'individual' && (
-                    <div className="col-span-2 mt-0 flex min-w-0 items-start gap-2 self-start text-[10px]">
-                      <label className="flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
-                        <span className="flex h-8 w-full items-center gap-1.5 rounded-md bg-muted/30 px-2">
-                          <input
-                            type="checkbox"
-                            checked={Number(item.taxRate || 0) > 0}
-                            onChange={(event) => {
-                              const nextItems = [...(localDoc.items || [])] as any[];
-                              nextItems[idx] = { ...nextItems[idx], taxRate: event.target.checked ? 15 : 0 };
-                              const next = recalculateIndividualPricing(nextItems);
-                              setLocalDoc({ ...localDoc, ...next } as any);
-                              void handleUpdate(localDoc!.id, next as any);
-                            }}
-                          />
-                          <span className="text-xs">Aplicar</span>
-                        </span>
-                      </label>
-                      <label className="relative flex-1">
-                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Desc.</span>
+                      <div className="col-span-2">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Nombre</p>
+                        <Input
+                          value={item.name || item.description || ''}
+                          onChange={(e) => {
+                            handleItemChange(idx, 'name', e.target.value);
+                            handleItemChange(idx, 'description', e.target.value);
+                          }}
+                          className="h-8 text-xs"
+                          placeholder={itemType === 'SERVICE' ? 'Servicio' : 'Producto'}
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Categoría</p>
+                        <select
+                          value={item.categoryId || ''}
+                          onChange={(e) => {
+                            const cat = categories.find((c: any) => String(c.id) === String(e.target.value));
+                            handleItemChange(idx, 'categoryId', e.target.value);
+                            handleItemChange(idx, 'category', cat?.name || '');
+                          }}
+                          className={cn("h-8 w-full rounded-md border border-input bg-background px-2 text-xs", item.categoryId ? "" : "text-muted-foreground/50")}
+                        >
+                          <option value="">Sin categoría</option>
+                          {categories.map((c: any) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-span-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Stock actual</p>
+                        <div className="h-8 flex items-center">
+                          {(() => {
+                            const p = products.find((x) => x.id === item.productId);
+                            if (itemType === 'SERVICE') return <span className="text-xs text-muted-foreground/40">—</span>;
+                            const stock = p ? Number(p.stock || 0) : 0;
+                            return (
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[9px] font-black border-none px-1.5 py-0 h-4",
+                                  stock <= 0 ? "text-rose-500 bg-rose-500/10" : "text-emerald-500 bg-emerald-500/10"
+                                )}
+                              >
+                                {stock}
+                              </Badge>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                      <div className="col-span-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Cant.</p>
                         <Input
                           type="number"
                           min="0"
-                          max="100"
-                          value={item.discount || ''}
-                          onChange={(event) => {
-                            const nextItems = [...(localDoc.items || [])] as any[];
-                            nextItems[idx] = { ...nextItems[idx], discount: Number(event.target.value) || 0 };
-                            const next = recalculateIndividualPricing(nextItems);
-                            setLocalDoc({ ...localDoc, ...next } as any);
-                            void handleUpdate(localDoc!.id, next as any);
-                          }}
-                          className="h-8 w-full rounded-md bg-muted/30 pl-12 text-right text-xs"
+                          value={item.quantity === 0 ? '' : item.quantity}
+                          onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
+                          className="h-8 text-xs text-right"
+                          placeholder="0"
                         />
-                      </label>
+                      </div>
+                      <div className="col-span-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Precio</p>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={item.unitPrice === 0 ? '' : item.unitPrice}
+                          onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
+                          className="h-8 text-xs text-right"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-1">Impuestos y Retenciones</p>
+                        <TaxDetail
+                          item={item}
+                          onItemChange={(field, value) => handleItemChange(idx, field, value)}
+                          lineTotal={Number(item.quantity || 0) * Number(item.unitPrice || 0)}
+                        />
+                      </div>
                     </div>
-                  )}
-                  <div className={cn('min-w-0 xl:col-span-2', pricingMode === 'individual' && 'xl:col-span-1')}>
-                    <Input 
-                      type="number" 
-                      min="0"
-                      max={Number(products.find(x => x.id === item.productId)?.stock || 1000000)}
-                      value={Number(item.quantity) || ''} 
-                      placeholder="0"
-                      onChange={(e) => {
-                        let newQty = Number(e.target.value);
-                        const p = products.find(x => x.id === item.productId);
-                        if (p && newQty > Number(p.stock || 0)) {
-                          toast.warning(`Stock insuficiente. Disponible: ${p.stock}`, { id: `stock-warn-${idx}` });
-                          newQty = Number(p.stock || 0);
-                        }
-                        const newItems = [...(localDoc.items || [])] as any[];
-                        newItems[idx].quantity = newQty;
-                        newItems[idx].total = newQty * Number(newItems[idx].unitPrice || 0);
-                        const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
-                        const dAmount = newSubtotal * (localRates.dRate / 100);
-                        const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
-                        setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                        void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                      }}
-                      onBlur={() => {
-                        handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total });
-                      }}
-                      className="h-8 text-xs text-right" 
-                    />
+
+                    {/* Subtotal + tax info footer */}
+                    <div className="flex items-center justify-end gap-4 pt-1 border-t border-border/30">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">Subtotal</span>
+                      <span className="text-sm font-black tabular-nums">
+                        {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.quantity * item.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                      {item.taxType && !isTaxExempt(item.taxType) && item.taxType !== '' && (
+                        <>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-rose-500/60">IVA</span>
+                          <span className="text-xs font-black tabular-nums text-rose-500">
+                            {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.taxAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </>
+                      )}
+                      {item.withholdingType && item.withholdingType !== 'NONE' && (
+                        <>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-amber-500/60">Ret.</span>
+                          <span className="text-xs font-black tabular-nums text-amber-500">
+                            -{localDoc.currency === 'USD' ? '$' : 'C$'} {Number((Number(item.quantity || 0) * Number(item.unitPrice || 0)) * (Number(item.withholdingRate || 0) / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="col-span-2 min-w-0">
-                    <Input 
-                      min="0"
-                      type="text"
-                      value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)} 
-                      placeholder="0"
-                      onChange={(e) => {
-                        const newItems = [...(localDoc.items || [])] as any[];
-                        newItems[idx].unitPrice = Number(String(e.target.value).replace(/,/g, ''));
-                        newItems[idx].total = Number(newItems[idx].quantity || 0) * Number(newItems[idx].unitPrice);
-                        const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
-                        const dAmount = newSubtotal * (localRates.dRate / 100);
-                        const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
-                        setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                      }}
-                      onBlur={() => {
-                        handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total });
-                      }}
-                      className="h-8 text-xs text-right" 
-                    />
-                  </div>
-                  <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black w-16 text-right">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(item.total)}</span>
-                    <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => {
-                        const newItems = [...(localDoc.items || [])] as any[];
-                        newItems.splice(idx, 1);
-                        const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
-                        const dAmount = newSubtotal * (localRates.dRate / 100);
-                        const base = newSubtotal - dAmount;
-                        const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
-                        setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                        void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
-                    }}>
-                      <Trash2 className="size-3" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {(!localDoc.items || localDoc.items.length === 0) && (
                 <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">
                   No hay productos o servicios asignados a esta orden. Haz clic en "Agregar Item".
