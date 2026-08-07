@@ -33,6 +33,7 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ALL_PERM_MODULES, normalizePermissions } from '../ConfiguracionPage';
 import { getPasswordError, isValidEmail, normalizeEmail } from '../../utils/accountValidation';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
+import { pendingUserCreate, clearPendingUserCreate } from '../../utils/pendingUserCreate';
 
 interface TenantSubscriptionViewProps {
   tenant: any;
@@ -87,6 +88,10 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [userEmailError, setUserEmailError] = useState('');
   const [checkingUserEmail, setCheckingUserEmail] = useState(false);
+  const [showEmployeeGuard, setShowEmployeeGuard] = useState(false);
+  const [userDialogMode, setUserDialogMode] = useState<'plain' | 'withEmployee'>('plain');
+  const [selectedCreateEmployeeId, setSelectedCreateEmployeeId] = useState('');
+  const [activeTab, setActiveTab] = useState('general');
 
   const { data: tenantData, isLoading: tenantDataLoading, refetch: refetchTenantData } = useTenantQuery(
     ['my-company-detail', tenant?.id || 'none'],
@@ -116,6 +121,34 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     setWarehouses(tenantData.warehouses);
     setIndustryOptions(tenantData.industries);
   }, [tenant, tenantData, tenantDataLoading]);
+
+  useEffect(() => {
+    if (pendingUserCreate.returnToUserModal && pendingUserCreate.returnToEmployeeId) {
+      setActiveTab('team');
+      setUserDialogMode('withEmployee');
+      setSelectedCreateEmployeeId(pendingUserCreate.returnToEmployeeId);
+      setUserForm((current) => ({
+        ...current,
+        name: pendingUserCreate.returnEmployee?.name || current.name,
+        email: pendingUserCreate.returnEmployee?.email || current.email,
+      }));
+      setIsUserDialogOpen(true);
+      clearPendingUserCreate();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (userDialogMode !== 'withEmployee' || !selectedCreateEmployeeId) return;
+    const employee = employees.find((e: any) => e.id === selectedCreateEmployeeId);
+    if (employee) {
+      const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim();
+      setUserForm((current) => ({
+        ...current,
+        name: fullName || current.name,
+        email: employee.email || current.email,
+      }));
+    }
+  }, [selectedCreateEmployeeId, employees, userDialogMode]);
 
   useEffect(() => {
     const email = normalizeEmail(userForm.email);
@@ -288,17 +321,38 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       toast.error(userEmailError || 'Escribe un correo válido y disponible');
       return;
     }
+    if (userDialogMode === 'withEmployee' && !selectedCreateEmployeeId) {
+      toast.error('Selecciona el empleado a vincular');
+      return;
+    }
     try {
       setUploading(true);
-      await tenantsService.addUser({
+      const createdResponse: any = await tenantsService.addUser({
         clientTenantId: tenant.id,
         name: userForm.name,
         email: normalizeEmail(userForm.email),
         password: userForm.password,
         role: userForm.role,
       });
-      toast.success('Usuario agregado correctamente');
+      const createdUser = createdResponse?.data || createdResponse;
+      const createdUserId = createdUser?.id || users.find((u) => normalizeEmail(u.email) === normalizeEmail(userForm.email))?.id;
+      let linked = false;
+      if (selectedCreateEmployeeId) {
+        if (createdUserId) {
+          try {
+            await tenantsService.linkUserToEmployee(tenant.id, createdUserId, selectedCreateEmployeeId);
+            linked = true;
+          } catch {
+            linked = false;
+          }
+        } else {
+          toast.error('Usuario creado pero no se pudo vincular el empleado automáticamente');
+        }
+      }
+      toast.success(linked ? 'Usuario creado y vinculado al empleado' : 'Usuario agregado correctamente');
       setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' });
+      setSelectedCreateEmployeeId('');
+      setUserDialogMode('plain');
       setIsUserDialogOpen(false);
       fetchUsers();
     } catch (error: any) {
@@ -380,7 +434,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         <TrialCountdownBanner />
       </motion.div>
 
-      <Tabs defaultValue="general" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-muted/20 border border-border/50 p-1 h-auto min-h-12 mb-8 flex flex-wrap">
           <TabsTrigger value="general" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
             <Building2 className="size-4" /> General
@@ -638,7 +692,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                   <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Users className="size-4 text-primary" /> Usuarios ({users.length})</CardTitle>
                   <CardDescription className="mt-1 text-xs">Administra las personas que tienen acceso a la empresa.</CardDescription>
                 </div>
-                <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={() => setIsUserDialogOpen(true)}>
+                <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={() => setShowEmployeeGuard(true)}>
                   <Plus className="size-4" /> Crear usuario
                 </Button>
               </CardHeader>
@@ -819,16 +873,58 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       </Dialog>
 
       {/* Add Member Dialog */}
-      <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
+      <Dialog open={showEmployeeGuard} onOpenChange={setShowEmployeeGuard}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black italic uppercase tracking-tighter flex items-center gap-3">
+              <UserRoundCheck className="size-6 text-primary" />
+              ¿El empleado ya está creado?
+            </DialogTitle>
+            <DialogDescription>Necesitamos saber si esta persona ya tiene un registro de empleado en Recursos Humanos para vincularla automáticamente al crear el acceso.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <Button variant="outline" className="h-12 gap-2 font-bold" onClick={() => { setShowEmployeeGuard(false); setUserDialogMode('withEmployee'); setSelectedCreateEmployeeId(''); setUserForm((current) => ({ ...current, name: '', email: '' })); setIsUserDialogOpen(true); }}>
+              <Check className="size-4 text-emerald-500" /> Sí, existe
+            </Button>
+            <Button className="h-12 gap-2 font-bold" onClick={() => {
+              setShowEmployeeGuard(false);
+              pendingUserCreate.returnToUserModal = true;
+              window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'rh', subModule: 'empleados' } }));
+            }}>
+              <Plus className="size-4" /> No, crearlo
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setShowEmployeeGuard(false)}>Cancelar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isUserDialogOpen} onOpenChange={(open) => { setIsUserDialogOpen(open); if (!open) { setSelectedCreateEmployeeId(''); setUserDialogMode('plain'); } }}>
         <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
               <Users className="size-6 text-primary" />
-              Nuevo Miembro
+              Nuevo Usuario
             </DialogTitle>
             <DialogDescription>Asigna un nuevo integrante al equipo de {tenant.name}.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {userDialogMode === 'withEmployee' && (
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empleado (vinculación automática)</Label>
+                <Select value={selectedCreateEmployeeId || '__none__'} onValueChange={(employeeId) => {
+                  setSelectedCreateEmployeeId(employeeId === '__none__' ? '' : employeeId);
+                }}>
+                  <SelectTrigger className="bg-muted/10 h-11"><SelectValue placeholder="Selecciona un empleado o sin empleado" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__" className="text-[10px] font-bold uppercase">Sin empleado</SelectItem>
+                    {employees.filter((employee: any) => !employee.user).map((employee: any) => <SelectItem key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName} · {employee.employeeNumber}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {!employees.some((employee: any) => !employee.user) && <p className="text-[10px] text-amber-600">No hay empleados sin vínculo disponibles para auto-vincular.</p>}
+              </div>
+            )}
             <div className="space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre Completo</Label>
               <Input 
@@ -874,10 +970,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 </p>
               )}
             </div>
-            <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
-              <Info className="mt-0.5 size-4 shrink-0 text-primary" />
-              <p><strong className="text-foreground">Recomendación:</strong> si esta persona debe estar relacionada con Recursos Humanos, nómina, ventas o comisiones, vincúlala a un empleado después de crear el usuario. El vínculo es opcional.</p>
-            </div>
             <div className="space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Contraseña Temporal *</Label>
               <Input
@@ -895,7 +987,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
             <Button 
               className="bg-primary text-primary-foreground font-bold h-11 px-8" 
               onClick={handleAddUser}
-              disabled={uploading || checkingUserEmail || !!userEmailError || !isValidEmail(userForm.email) || !!getPasswordError(userForm.password)}
+              disabled={uploading || checkingUserEmail || !!userEmailError || !isValidEmail(userForm.email) || !!getPasswordError(userForm.password) || (userDialogMode === 'withEmployee' && !selectedCreateEmployeeId)}
             >
               {uploading ? 'Creando...' : 'Crear Acceso'}
             </Button>
